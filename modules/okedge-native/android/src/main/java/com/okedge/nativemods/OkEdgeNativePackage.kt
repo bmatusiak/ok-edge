@@ -15,6 +15,8 @@ import com.okrn.specs.NativeOkSslSpec
 import com.okrn.specs.NativeRandomSpec
 import com.okrn.specs.NativeRsaGenSpec
 import com.okrn.specs.NativeSecretsSpec
+import com.okrn.specs.NativeUsbHidSpec
+import com.okrn.usb.NativeUsbHidModule
 
 /*
  * The modules this library holds, registered the way ok-rn's OkRnPackage registers them: the
@@ -30,11 +32,13 @@ class OkEdgeNativePackage : BaseReactPackage() {
       NativeOkSslSpec.NAME -> NativeOkSslModule(reactContext)
       NativeRsaGenSpec.NAME -> NativeRsaGenModule(reactContext)
       NativeSecretsSpec.NAME -> NativeSecretsModule(reactContext)
+      NativeUsbHidSpec.NAME -> NativeUsbHidModule(reactContext)
       else -> null
     }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
-    listOf(NativeRandomSpec.NAME, NativeKdfSpec.NAME, NativeOkSslSpec.NAME, NativeRsaGenSpec.NAME, NativeSecretsSpec.NAME)
+    listOf(NativeRandomSpec.NAME, NativeKdfSpec.NAME, NativeOkSslSpec.NAME, NativeRsaGenSpec.NAME, NativeSecretsSpec.NAME,
+      NativeUsbHidSpec.NAME)
       .associateWith { ReactModuleInfo(it, it, false, false, false, true) }
   }
 }

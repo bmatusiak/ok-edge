@@ -9,6 +9,8 @@ import NativeKdf from 'okedge-native/specs/NativeKdf';
 import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import NativeRsaGen from 'okedge-native/specs/NativeRsaGen';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
+import NativeUsbHid from 'okedge-native/specs/NativeUsbHid';
+import { VENDOR_ID, PRODUCT_ID } from '../transport/UsbPipe';
 
 const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
 const same = (got: string, want: string) => { if (got !== want) throw new Error(`got ${got.slice(0, 16)}…`); };
@@ -31,6 +33,12 @@ const CHECKS: [string, () => Promise<string>][] = [
     const t = Date.now();
     if (!(await NativeRsaGen.generatePrimes(2048, 65537))) throw new Error('no primes');
     return `2048-bit primes in ${Date.now() - t} ms`;
+  }],
+  /* no permission asked, nothing opened: the transport and what is on the bus */
+  ['usb', async () => {
+    const list = await NativeUsbHid.listDevices();
+    const ok = list.filter((d) => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID).length;
+    return `${NativeUsbHid.getTransport()}, ${list.length} device(s), ${ok ? `${ok} OnlyKey` : 'no OnlyKey'}`;
   }],
   ['keystore box', async () => {
     const alias = 'okedge-selftest';

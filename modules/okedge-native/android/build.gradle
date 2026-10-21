@@ -60,6 +60,11 @@ android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
 
+    /* BuildConfig.DEBUG, forwarded to the copies by src/main/java/com/okrn/BuildConfig.kt */
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         minSdkVersion rootProject.ext.minSdkVersion
         externalNativeBuild {

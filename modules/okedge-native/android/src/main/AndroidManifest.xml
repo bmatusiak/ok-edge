@@ -1,4 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- NativeSecrets: BiometricPrompt over a Keystore key made with setUserAuthenticationRequired -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- NativeUsbHid: USB host mode over OTG. required=false so the app still installs on phones
+         without host support; the app reports it at runtime. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
+    <application>
+        <!-- Merged into the app's own activity (expo prebuild writes it as <applicationId>.MainActivity):
+             brings the app forward when an OnlyKey is plugged in (res/xml/device_filter.xml), as
+             ok-rn's manifest does. -->
+        <activity android:name="${applicationId}.MainActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+        </activity>
+    </application>
 </manifest>
