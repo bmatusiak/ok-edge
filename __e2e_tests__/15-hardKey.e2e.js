@@ -1,0 +1,337 @@
+/**
+ * THE HARD KEY: a physical OnlyKey over USB OTG.
+ *
+ * Hard key and soft key, which is the app's own vocabulary - the Log tab has
+ * kept a buffer for each since before either could do this. They are two
+ * devices answering the same protocol, and everything above the byte pipe is
+ * the same code for both. That is the whole claim of the port, and this suite
+ * is where it stops being an assertion.
+ *
+ * This is the measurement FINDING #40 was written without. That finding says the
+ * device exposes four HID interfaces, that three of them are identical in class,
+ * subclass, protocol and endpoint width, and that the app claimed one of them by
+ * a scoring tie broken by descriptor order. Every word of it was read out of the
+ * firmware's descriptors; none of it had been seen on a wire.
+ *
+ * ## It SKIPS when there is no key, and that is the normal case
+ *
+ * The suite runs against the soft key on every ordinary run, where no USB device
+ * is attached at all. A skip with its reason is the honest outcome there - not a
+ * pass, because nothing was checked.
+ *
+ * ## Runs LAST, and hands the key back
+ *
+ * Claiming the interfaces detaches them from the kernel, including the keyboard,
+ * so while this suite holds them the key cannot type into any other app on the
+ * phone. It disconnects in the last test rather than leaving that state behind.
+ *
+ * ## What a failure here means
+ *
+ * `identifiedBy` is the field that matters. Anything other than `usagePage` says
+ * the transport guessed, and a guess routes the vendor protocol to the
+ * security-key interface, where every request times out and the message blames
+ * the device.
+ */
+'use strict';
+
+const {transport: oktransport} = require('node-onlykey-lib');
+
+const UsbPipeModule = require('../src/transport/UsbPipe');
+const UsbPipe = UsbPipeModule.default || UsbPipeModule.UsbPipe;
+const {getOnlyKey, resetOnlyKey} = require('../src/onlykey');
+
+const {usb, IFACE} = oktransport;
+
+let shared = null;
+/** Why the first test skipped, if it did; every later test skips on it. */
+let absent = null;
+
+module.exports = function hardKey({describe, it}) {
+  describe(hardKey.name, () => {
+    it('a real key is attached, or there is nothing to measure', async ({log, assert, skip}) => {
+
+      const devices = await UsbPipe.listDevices();
+      log(`usb devices visible: ${devices.length}`);
+      for (const d of devices) {
+        log(`  vid=0x${d.vendorId.toString(16)} pid=0x${d.productId.toString(16)}`
+          + ` "${d.productName}" interfaces=${d.interfaceCount}`
+          + ` permission=${d.hasPermission}`);
+      }
+
+      const key = devices.find(
+        d => d.vendorId === UsbPipeModule.VENDOR_ID && d.productId === UsbPipeModule.PRODUCT_ID);
+
+      if (!key) {
+        /*
+         * Recorded before the skip, so the tests after this one skip for the
+         * SAME reason instead of failing on "no key was found": a full run on
+         * a phone without a key read as seven red tests for a morning
+         * (2026-09-11) when it should have read as nine skipped.
+         */
+        absent = 'no OnlyKey on the USB bus. Attach one over OTG to measure what it ' +
+          'enumerates; the soft key cannot answer this.';
+        skip(absent);
+      }
+
+      if (!key.hasPermission) {
+        absent = 'the key is attached but this app has no USB permission for it. ' +
+          'Android asks on attach; accept it and run again.';
+        /*
+         * Asked for rather than skipped over: the grant is remembered, so one
+         * tap makes every later run work. It cannot be granted from here.
+         */
+        skip(
+          'the key is attached but this app has no USB permission for it. ' +
+            'Android asks on attach; accept it and run again.',
+        );
+      }
+
+      /*
+       * THREE INTERFACES OR FOUR, and both are correct. The debug console is
+       * compiled out of a production build, so the count says which build this
+       * is before anything has been asked of it.
+       */
+      log(`this key enumerates ${key.interfaceCount} interfaces`
+        + ` (3 = production, 4 = developer)`);
+      assert.ok(
+        key.interfaceCount === 3 || key.interfaceCount === 4,
+        `expected 3 or 4 HID interfaces, got ${key.interfaceCount}`,
+      );
+
+      shared = {key};
+    });
+
+    it('every interface is identified BY ITS USAGE PAGE, not by luck', async ({log, assert, skip}) => {
+      if (absent) skip(absent);
+      assert.ok(shared, 'no key was found');
+
+      /*
+       * THE PIPE, not the byte-level debug facade. This is the object the
+       * library is handed, so opening it here is opening it the way a real
+       * session does - and the session below then reuses it rather than
+       * racing a second open against the same device.
+       */
+      const result = await UsbPipe.start();
+      shared.result = result;
+
+      log(`transport=${result.transport} packetSize=${result.packetSize}`);
+      for (const info of result.interfaces || []) {
+        const spec = usb.describe(info.iface);
+        log(`  iface ${info.iface} (${spec ? spec.name : '?'})`
+          + ` bInterfaceNumber=${info.interfaceNumber}`
+          + ` usagePage=0x${info.usagePage.toString(16)}`
+          + ` usage=0x${info.usage.toString(16)}`
+          + ` in=${info.packetSizeIn} out=${info.packetSizeOut}`
+          + ` by=${info.identifiedBy}`);
+      }
+
+      const found = result.interfaces || [];
+      assert.ok(found.length > 0, 'connected but reported no interfaces at all');
+
+      /*
+       * The library's own check, rather than a second copy of the rules here.
+       * It knows which are required, that a duplicate is fatal, and that
+       * anything not identified by its usage page is a guess.
+       */
+      const problems = usb.problems(found);
+      log(`problems: ${problems.length ? JSON.stringify(problems) : 'none'}`);
+      assert.equal(problems.length, 0, problems.join('; '));
+    });
+
+    it('the vendor interface is there, which is the whole point', async ({log, assert, skip}) => {
+      if (absent) skip(absent);
+      assert.ok(shared && shared.result, 'the connect test did not run');
+      const found = shared.result.interfaces || [];
+
+      const vendor = found.find(i => i.iface === IFACE.VENDOR);
+      assert.ok(
+        vendor,
+        'no vendor interface - this is exactly what FINDING #40 describes, and ' +
+          'without it a real key can speak the security-key protocol and nothing else',
+      );
+      log(`vendor is bInterfaceNumber ${vendor.interfaceNumber},`
+        + ` usage page 0x${vendor.usagePage.toString(16)}`);
+
+      /*
+       * The two that a scoring function cannot tell apart. Proving they were
+       * separated correctly is proving the tie was broken by evidence.
+       */
+      const fido = found.find(i => i.iface === IFACE.FIDO);
+      assert.ok(fido, 'no security-key interface');
+      assert.notEqual(
+        vendor.interfaceNumber, fido.interfaceNumber,
+        'vendor and security key resolved to the same interface',
+      );
+      assert.equal(vendor.usagePage, usb.describe(IFACE.VENDOR).usagePage);
+      assert.equal(fido.usagePage, usb.describe(IFACE.FIDO).usagePage);
+    });
+
+    it('the VENDOR interface answers - a real device session', async ({log, assert, skip}) => {
+      if (absent) skip(absent);
+      assert.ok(shared && shared.result, 'the connect test did not run');
+
+      /*
+       * The first time this app has spoken the vendor protocol to a physical
+       * key. Everything below the call is the same code the soft key uses -
+       * same session, same device plugin, same parser - which is the whole
+       * claim of the port, tested rather than asserted.
+       */
+      const {device} = await getOnlyKey('usb');
+      const state = await device.connect();
+      const status = String(state.status || '').trim();
+      log(`status: ${JSON.stringify(status)}`);
+
+      assert.ok(
+        status.length > 0,
+        'the vendor interface was claimed but the device said nothing - ' +
+          'OKCONNECT went out and no reply came back',
+      );
+
+      /*
+       * A LOCKED key answers with no version at all, which is not a failure -
+       * it is the same thing the soft key does, and the reason capabilities()
+       * cannot report a build until the PIN is in.
+       */
+      const caps = device.capabilities;
+      log(`model=${device.deviceType} console=${caps ? caps.debugConsole : 'unknown'}`);
+      if (/UNLOCKED/i.test(status)) {
+        log(`identity: ${JSON.stringify(device.identity)}`);
+      } else {
+        log('locked, so no version in the status - expected');
+      }
+    });
+    it('the debug console can drive it, or says a finger is needed', async ({log, assert, skip}) => {
+      if (absent) skip(absent);
+      assert.ok(shared && shared.result, 'the connect test did not run');
+
+      /*
+       * THE QUESTION A SCREEN HAS TO ANSWER before it draws anything.
+       *
+       * A hard key has six buttons under a finger, so the app does not draw a
+       * keypad for it. What it may do instead is ask the firmware to press
+       * one - and only on a debug build newer than v3.0.2, where the console
+       * grew a parser. capabilities().consolePress is that answer.
+       */
+      const {device} = await getOnlyKey('usb');
+      const caps = device.capabilities;
+
+      if (!caps) {
+        log('locked, so no version and no capabilities - a screen shows the'
+          + ' keypad-free path until the PIN is in');
+        return;
+      }
+
+      /*
+       * THREE-VALUED, and it must be printed as three. debugConsole is null
+       * for UNKNOWN - a locked key carries no version, so the build cannot be
+       * read yet - and rendering null as "production" tells someone holding a
+       * developer key that they have a production one. A screen doing the same
+       * would be worse.
+       */
+      const build = caps.debugConsole === null ? 'unknown (locked)'
+        : caps.debugConsole ? 'debug' : 'production';
+      log(`build=${build}`
+        + ` consolePress=${caps.consolePress}`);
+
+      /*
+       * Not asserted true - a production key is a legitimate answer, and this
+       * suite runs against whichever key is plugged in. What IS asserted is
+       * that the two agree: a console that cannot press must not claim it.
+       */
+      if (caps.consolePress) {
+        assert.equal(
+          caps.debugConsole, true,
+          'consolePress without a console is impossible - the parser is inside'
+            + ' the same #ifdef DEBUG',
+        );
+      }
+    });
+    it('the console is ASKED whether it answers, pressing nothing', async ({log, assert, skip}) => {
+      if (absent) skip(absent);
+      assert.ok(shared && shared.result, 'the connect test did not run');
+
+      /*
+       * The measurement the lock screen keys on. capabilities() above could
+       * not answer - a locked key sends no version - so the app asks the
+       * console directly: one inert byte, wait for the firmware's own echo.
+       * This is device.consoleAnswers(), and it PRESSES NOTHING: a press on
+       * a locked key is a PIN attempt, and ten of those wipe it (FINDING
+       * #43). Either answer is a pass; what is asserted is that it answered
+       * within its own timeout and that a "yes" only comes with a debug
+       * interface to say it on.
+       */
+      const {device} = await getOnlyKey('usb');
+      const started = Date.now();
+      const answers = await device.consoleAnswers();
+      log(`console answers: ${answers} (${Date.now() - started}ms)`);
+      log(answers
+        ? 'a keypad may be drawn for this key; presses go through the console'
+        : 'no keypad for this key: its PIN goes in on its own buttons');
+
+      const found = shared.result.interfaces || [];
+      const hasDebug = found.some(i => i.iface === IFACE.SEREMU);
+      if (answers) {
+        assert.ok(hasDebug, 'the console answered on a key with no debug interface');
+      }
+    });
+    it('types a slot over the CLAIMED keyboard interface, and the phone reads it back', async ({log, assert, skip}) => {
+      if (absent) skip(absent);
+      assert.ok(shared && shared.result, 'the connect test did not run');
+      const {device} = await getOnlyKey('usb');
+
+      /*
+       * The measurement the whole keyboard capture rests on. Claiming
+       * interface 0 detaches the key from the kernel's HID driver, so what
+       * the key types reaches THIS app as 8-byte reports and nowhere else;
+       * the library's readSlot presses the button (through the console,
+       * which this suite has established answers) and decodes the reports
+       * with the same tables the soft key's capture uses.
+       *
+       * Needs an unlocked key: a locked one treats the press as a PIN digit.
+       * The hardKeyProvision suite leaves the bench key unlocked with a
+       * known PIN; anything else is a skip with the reason, not a press.
+       */
+      const status = String(device.status || '').trim();
+      if (!/UNLOCKED/i.test(status)) {
+        skip(`the key is ${status || 'silent'}, not unlocked; a press now would be a PIN digit`);
+      }
+      if (!(await device.consoleAnswers())) {
+        skip('this key does not read its console, so nothing here can press its button');
+      }
+
+      const SECRET = 'Hw&3e2e';
+      /*
+       * FROM A CLEAN SLOT. setSlot writes the fields it is given and leaves
+       * the rest; a two-factor secret left on 1a by the editor made the key
+       * type a code straight after the password, one segment instead of two,
+       * and this test failed against a slot that was working exactly as
+       * configured. The library's whole-slot wipe is what makes the test
+       * about what IT wrote.
+       */
+      await device.wipeSlot('1a');
+      await device.setSlot('1a', {label: 'hw-e2e', password: SECRET});
+      log(`slot 1a written: label hw-e2e, ${SECRET.length}-char password`);
+
+      const read = await device.readSlot('1a', {
+        press: (button, ticks) => device.press(`${button}#${ticks}`),
+        timeoutMs: 15000,
+      });
+      log(`readSlot: button ${read.button}, ${read.band}, ${read.reports} reports`);
+      log(`segments: ${JSON.stringify(read.segments)}`);
+
+      assert.ok(read.reports > 0, 'the key typed nothing the phone could see');
+      assert.ok(
+        read.segments.includes(SECRET),
+        `expected ${JSON.stringify(SECRET)} among what the key typed`,
+      );
+    });
+    it('and the key is handed back to the phone', async ({log, assert, skip}) => {
+      if (absent) skip(absent);
+      assert.ok(shared, 'no key was found');
+      await resetOnlyKey('usb');
+      await UsbPipe.stop();
+      log('interfaces released; the key can type into other apps again');
+      assert.equal(UsbPipe.isRunning(), false);
+    });
+  });
+};

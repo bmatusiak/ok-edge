@@ -84,4 +84,63 @@ const withActivityCalls = (config) => withMainActivity(config, (c) => {
   return c;
 });
 
-module.exports = (config) => withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config))));
+/*
+ * THE APP MODULE'S TWO ADDITIONS from ok-rn's android/app/build.gradle (its notes have the detail):
+ *   - the C++ object tree on a short path, Windows only: React Native's codegen objects embed the
+ *     whole mangled source path (~130 characters) and a RELEASE build under <project>/android/app/
+ *     .cxx/RelWithDebInfo passes MAX_PATH - ninja fails on react-native-safe-area-context. Skipped
+ *     when the drive is absent; OKEDGE_CXX_DIR overrides. Not ok-rn's folder, so the two apps
+ *     never share objects.
+ *   - the signed firmware releases (ok-edge/signed_firmware) bundled as assets under
+ *     signed_firmware/, the name the app asks for - an update works in airplane mode.
+ */
+const { withAppBuildGradle } = require('expo/config-plugins');
+
+const APP_GRADLE = `
+// okedge-native: the C++ staging path and the signed firmware assets (modules/okedge-native/app.plugin.js)
+def signedFirmwareAssets = file("$buildDir/signedFirmwareAssets")
+tasks.register('stageSignedFirmware', Copy) {
+    from "$rootDir/../signed_firmware"
+    into new File(signedFirmwareAssets, 'signed_firmware')
+}
+preBuild.dependsOn stageSignedFirmware
+android {
+    sourceSets {
+        main {
+            assets.srcDirs += [signedFirmwareAssets]
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            def onWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+            def staging = System.getenv('OKEDGE_CXX_DIR') ?: 'D:/okedgecxx'
+            if (onWindows && file(staging).parentFile?.exists()) {
+                buildStagingDirectory = file(staging)
+            }
+        }
+    }
+    /*
+     * ninja checks the path it is GIVEN, which is relative to the build folder - and that relative
+     * object path alone (CMakeFiles/<target>.dir/C_/Users/.../ok-edge/node_modules/react-native-
+     * safe-area-context/common/cpp/.../RNCSafeAreaViewShadowNode.cpp.o) passes 260, so no staging
+     * path can fix it. CMake sets no object-path limit when it cross-compiles for Android; with one
+     * it hashes the long object names. Windows hosts only.
+     */
+    defaultConfig {
+        externalNativeBuild {
+            cmake {
+                if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+                    arguments "-DCMAKE_OBJECT_PATH_MAX=250"
+                }
+            }
+        }
+    }
+}
+`;
+
+const withAppGradle = (config) => withAppBuildGradle(config, (c) => {
+  if (!c.modResults.contents.includes('// okedge-native: the C++ staging path')) c.modResults.contents += APP_GRADLE;
+  return c;
+});
+
+module.exports = (config) => withAppGradle(withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config)))));

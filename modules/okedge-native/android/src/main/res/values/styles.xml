@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      A stand-in so this library's own resource check can link the manifest's
+      @style/AppTheme (QrScanActivity, CredProviderActivity). The app defines
+      AppTheme too, and an app's resources override a library's at the final
+      merge, so those activities get the app's theme - as in ok-rn.
+    -->
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar" />
+</resources>

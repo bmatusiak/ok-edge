@@ -1,0 +1,6 @@
+{
+  "name": "okedge-autofill",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The Password Manager's Android Autofill service and sheet, copied from ok-rn's android/autofill - its own package so it stays removable with the passwords plugin"
+}

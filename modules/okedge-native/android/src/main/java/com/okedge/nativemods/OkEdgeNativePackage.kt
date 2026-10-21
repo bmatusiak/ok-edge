@@ -24,6 +24,16 @@ import com.okrn.specs.NativeEdgeAlertSpec
 import com.okrn.emu.NativeEdgeAlertModule
 import com.okrn.specs.NativeShareSpec
 import com.okrn.share.NativeShareModule
+import com.okrn.specs.NativeBtKeyboardSpec
+import com.okrn.btkbd.NativeBtKeyboardModule
+import com.okrn.specs.NativeContactLinkSpec
+import com.okrn.contact.NativeContactLinkModule
+import com.okrn.specs.NativeCredProviderSpec
+import com.okrn.credprovider.NativeCredProviderModule
+import com.okrn.specs.NativeQrScannerSpec
+import com.okrn.qr.NativeQrScannerModule
+import com.okrn.specs.NativeAppSignatureSpec
+import com.okrn.sig.NativeAppSignatureModule
 import com.okrn.usb.NativeUsbHidModule
 
 /*
@@ -45,12 +55,19 @@ class OkEdgeNativePackage : BaseReactPackage() {
       NativeFidoGattSpec.NAME -> NativeFidoGattModule(reactContext)
       NativeEdgeAlertSpec.NAME -> NativeEdgeAlertModule(reactContext)
       NativeShareSpec.NAME -> NativeShareModule(reactContext)
+      NativeBtKeyboardSpec.NAME -> NativeBtKeyboardModule(reactContext)
+      NativeContactLinkSpec.NAME -> NativeContactLinkModule(reactContext)
+      NativeCredProviderSpec.NAME -> NativeCredProviderModule(reactContext)
+      NativeQrScannerSpec.NAME -> NativeQrScannerModule(reactContext)
+      NativeAppSignatureSpec.NAME -> NativeAppSignatureModule(reactContext)
       else -> null
     }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
     listOf(NativeRandomSpec.NAME, NativeKdfSpec.NAME, NativeOkSslSpec.NAME, NativeRsaGenSpec.NAME, NativeSecretsSpec.NAME,
-      NativeUsbHidSpec.NAME, NativeOkEmuSpec.NAME, NativeFidoGattSpec.NAME, NativeEdgeAlertSpec.NAME, NativeShareSpec.NAME)
+      NativeUsbHidSpec.NAME, NativeOkEmuSpec.NAME, NativeFidoGattSpec.NAME, NativeEdgeAlertSpec.NAME, NativeShareSpec.NAME,
+      NativeBtKeyboardSpec.NAME, NativeContactLinkSpec.NAME, NativeCredProviderSpec.NAME, NativeQrScannerSpec.NAME,
+      NativeAppSignatureSpec.NAME)
       .associateWith { ReactModuleInfo(it, it, false, false, false, true) }
   }
 }

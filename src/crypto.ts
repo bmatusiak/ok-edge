@@ -14,7 +14,7 @@
 import { shell } from './platform';
 
 if (shell === 'android') {
-  require('./native/installRandom');
-  require('./native/installWebCrypto');
-  require('./native/okSslCrypto');
+  require('./installRandom');
+  require('./installWebCrypto');
+  require('./okSslCrypto');
 }

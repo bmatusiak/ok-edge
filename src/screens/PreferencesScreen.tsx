@@ -1,0 +1,942 @@
+import React, {useCallback, useEffect, useState} from 'react';
+import {AppState, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {device as okdevice} from 'node-onlykey-lib';
+import {Btn, Section} from '../ui/components';
+import {NEEDS_CONFIG_MODE, ON, type ConfigState} from '../ui/configModeNotes';
+import {ConfigModePanel} from '../ui/ConfigModePanel';
+import {theme} from '../ui/theme';
+import {useActiveKey, useBackend, useKeyName} from '../hooks/KeyContext';
+import {layoutNameForId, rememberLayout} from '../hooks/useKeyboardLayout';
+import * as biometrics from '../biometrics';
+import {SetupScreen} from './SetupScreen';
+import OkEmu from '../transport/OkEmu';
+import type {EmuSession} from '../hooks/useOkEmu';
+import {FidoGatt} from '../transport/FidoGatt';
+import type {PermissionStatus} from '../transport/FidoGatt';
+import {usePasskeyProvider} from '../hooks/usePasskeyProvider';
+
+const {keystrokes} = okdevice;
+
+/*
+ * Settings, rendered from the library's own table.
+ *
+ * Every one of these is the same operation - OKSETSLOT on the global slot with
+ * a field id and a byte - so the screen asks the library what there is rather
+ * than repeating a list that already exists twice (here and in the firmware).
+ *
+ * THEY ARE WRITE-ONLY. No command reads a preference back, so this screen
+ * cannot show what the key currently has, only change it. That is the same
+ * shape as slots and it is stated rather than papered over with a control that
+ * shows a default and implies it is the device's.
+ *
+ * AND THEY ARE NOT ALL EQUALLY WRITABLE. set_slot gates them field by field:
+ * four need config mode and answer "Error not in config mode" otherwise, and
+ * one is refused for ever once setup has finished. Presenting twelve identical
+ * controls would present four that silently do nothing.
+ */
+
+/** Layouts the firmware in this build can actually type. */
+function layoutOptions() {
+  return keystrokes.layouts();
+}
+
+export type PinKind = 'primary' | 'secondary' | 'selfDestruct';
+
+/**
+ * The panels on this screen. The Preferences tab shows the settings; Setup
+ * shows the PIN change, because the desktop App's Setup is where a PIN is
+ * changed ("Change Primary PIN" ...) and ok-rn follows the original apps.
+ */
+export type PrefsPart = 'prefs' | 'pins';
+/** The desktop App's own names for the three PIN changes. */
+export const PIN_TITLE: Record<PinKind, string> = {
+  primary: 'Change Primary PIN',
+  secondary: 'Change Secondary PIN',
+  selfDestruct: 'Change Self-Destruct PIN',
+};
+const ALL_PREFS_PARTS: readonly PrefsPart[] = ['prefs', 'pins'];
+const PIN_KINDS: readonly PinKind[] = ['primary', 'secondary', 'selfDestruct'];
+/*
+ * What each PIN does, said once per panel. The facts are SetupScreen's
+ * (its BLURB, for first-time setup) and the firmware's: a PIN is 7 to 10
+ * digits ("Error PIN is not between 7 - 10 digits"), the key reads it only
+ * at boot, and ten wrong tries on a locked key wipe it.
+ */
+const PIN_BLURB: Record<PinKind, string> = {
+  primary:
+    'The PIN that unlocks the key. It cannot be recovered: ten wrong tries wipe the key, and there is no reset that keeps what is on it.',
+  secondary:
+    'An optional second PIN that unlocks a separate profile — its own set of slots on the same key, apart from the first. Most keys never need one.',
+  selfDestruct:
+    'An optional PIN that WIPES THE KEY when entered — every slot, every private key — with no confirmation and nothing to undo.',
+};
+const PIN_RULES = '7 to 10 digits. The key reads its PINs only when it boots, so a change takes effect after a restart.';
+
+/** Each PIN's panel heading; the button inside keeps the desktop's name. */
+const PIN_PANEL: Record<PinKind, string> = {
+  primary: 'Primary PIN',
+  secondary: 'Secondary PIN',
+  selfDestruct: 'Self-Destruct PIN',
+};
+
+/*
+ * The library's `section` name for fields 21, 22 and 30 - the desktop App's
+ * panel title - which is also this screen's heading for them.
+ */
+const USER_INPUT_MODES = 'User Input Modes';
+
+export function PreferencesScreen({
+  emu,
+  configMode,
+  onWantConfigMode,
+  show = ALL_PREFS_PARTS,
+}: {
+  /** Which panels to draw. Unset: all of them. */
+  show?: readonly PrefsPart[];
+  emu: EmuSession;
+  /*
+   * Only the Config mode and User Input Modes groups. Their preferences carry
+   * `requires: 'configMode'`
+   * in the library's own table (plugins/device/index.js:418) - OKSETSLOT wants
+   * `configmode == true` on a provisioned key (okcore.cpp:452) - while the
+   * Settings group takes any unlocked key and the setup-only group is refused
+   * here whatever the mode.
+   *
+   * Changing a PIN is NOT gated, and it looks like it should be: the three PIN
+   * messages are on the config-mode allowlist, so that panel works either way.
+   */
+  configMode: ConfigState;
+  /** Asks App to want config mode. Nothing here writes the flag. */
+  onWantConfigMode: () => void;
+}) {
+  /* The ACTIVE key, not whichever one this file used to assume. */
+  const getKey = useActiveKey();
+  /* Named in every panel that states a fact about it. See useKeyName. */
+  const keyName = useKeyName();
+  const backend = useBackend();
+
+  const [bioStatus, setBioStatus] = useState<biometrics.BiometricStatus>('unavailable');
+  const [bioStored, setBioStored] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
+  const [bioError, setBioError] = useState<string | null>(null);
+  const [pinToSave, setPinToSave] = useState('');
+
+  /* Both asked WITHOUT prompting, so the section can render itself honestly. */
+  const refreshBiometrics = useCallback(async () => {
+    setBioStatus(await biometrics.status());
+    try {
+      setBioStored(await biometrics.has(biometrics.ALIAS.devicePin));
+    } catch {
+      setBioStored(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshBiometrics();
+  }, [refreshBiometrics]);
+
+  const savePin = useCallback(async () => {
+    setBioBusy(true);
+    setBioError(null);
+    try {
+      /*
+       * NOT checked against the device. The app cannot ask whether a PIN is
+       * correct without entering it, and entering a wrong one poisons a buffer
+       * that cannot be cleared except by running it to its rollover. So this
+       * saves what it is given, and a wrong PIN shows up as an unlock that does
+       * not unlock - the same as typing it wrong.
+       */
+      await biometrics.store(
+        biometrics.ALIAS.devicePin,
+        pinToSave,
+        'Save your PIN',
+        'It is encrypted under a key only your biometric can use.',
+      );
+      setPinToSave('');
+      await refreshBiometrics();
+    } catch (e) {
+      setBioError(String((e as Error)?.message ?? e));
+    } finally {
+      setBioBusy(false);
+    }
+  }, [pinToSave, refreshBiometrics]);
+
+  const forgetPin = useCallback(async () => {
+    setBioBusy(true);
+    setBioError(null);
+    try {
+      await biometrics.forget(biometrics.ALIAS.devicePin);
+      await refreshBiometrics();
+    } catch (e) {
+      setBioError(String((e as Error)?.message ?? e));
+    } finally {
+      setBioBusy(false);
+    }
+  }, [refreshBiometrics]);
+
+  const [table, setTable] = useState<
+    {
+      name: string;
+      label: string;
+      /* Only touchSense has one; every other preference floors at 0. */
+      min?: number;
+      max: number;
+      unit?: string;
+      requires: string;
+      note?: string;
+      bits?: Record<string, string>;
+      choices?: Record<string, string>;
+      /* Rows the desktop App shows as one panel - see the groups below. */
+      section?: string;
+      oneWay?: boolean;
+    }[]
+  >([]);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  /*
+   * PERMISSIONS, visible and re-askable. The security-key role asks for
+   * Bluetooth and, on Android 13+, notifications (the foreground service's
+   * "acting as a security key" line) the first time advertising starts. A
+   * dialog dismissed by accident left no way back in the app: Android does
+   * not ask twice on its own, and the service then runs with no notification
+   * to say so. This reads the state every time the screen is shown or the
+   * app returns from the system settings page, and offers the ask again.
+   */
+  const [perms, setPerms] = useState<PermissionStatus | null>(null);
+  const passkeys = usePasskeyProvider();
+  const [permNote, setPermNote] = useState<string | null>(null);
+  const readPerms = useCallback(() => {
+    FidoGatt.permissionStatus().then(setPerms).catch(e => setPermNote(String((e as Error)?.message ?? e)));
+  }, []);
+  useEffect(() => {
+    readPerms();
+    const sub = AppState.addEventListener('change', s => { if (s === 'active') readPerms(); });
+    return () => sub.remove();
+  }, [readPerms]);
+  const askBluetooth = useCallback(async () => {
+    setPermNote(null);
+    try {
+      const ok = await FidoGatt.requestPermissions();
+      if (!ok) setPermNote('Bluetooth was not granted. If no dialog appeared, Android has stopped asking; use the system settings.');
+    } catch (e) {
+      setPermNote(String((e as Error)?.message ?? e));
+    }
+    readPerms();
+  }, [readPerms]);
+  const askNotifications = useCallback(async () => {
+    setPermNote(null);
+    try {
+      const ok = await FidoGatt.requestNotificationPermission();
+      if (!ok) setPermNote('Notifications were not granted. If no dialog appeared, Android has stopped asking; use the system settings.');
+    } catch (e) {
+      setPermNote(String((e as Error)?.message ?? e));
+    }
+    readPerms();
+  }, [readPerms]);
+
+  /*
+   * CHANGE PINS, which the desktop offers on an initialized key and this app
+   * did not. The firmware accepts OKPIN on such a key only in config mode
+   * (okcore.cpp:362-374), so the section walks the same door the Keys tab
+   * does: enter config mode (the key locks), PIN again, then the setup
+   * bracket for the one PIN chosen, then a restart to leave config mode.
+   */
+  // PinKind is declared above the component: the Setup tab names one.
+  const [changing, setChanging] = useState<PinKind | null>(null);
+  const [changed, setChanged] = useState(false);
+  /*
+   * ONLY THE SOFT KEY CAN BE RESTARTED BY THE APP.
+   *
+   * `emu.restart()` on a hard key is device.press('8') on SEREMU, the debug
+   * interface - which production firmware does not have. It used to be called
+   * here as `void emu.restart()`, so the rejection was swallowed: the key was
+   * never restarted, config mode never ended, and the screen said the PIN was
+   * set and moved on. A PIN that the firmware only reads at boot, on a key
+   * that was never told to boot.
+   *
+   * So the app stops claiming it can. A hard key is unplugged by the hand
+   * holding it, which works on every build and needs no back door.
+   */
+  const canRestartKey = backend !== 'usb';
+  const restartKey = useCallback(() => {
+    /* The soft key's firmware cannot restart in place; the app can. */
+    if (backend !== 'usb') void OkEmu.restartApp();
+  }, [backend]);
+  const locked = emu.device !== 'unlocked';
+
+  /*
+   * RE-READ WHEN THE KEY UNLOCKS, because the table DEPENDS ON THE FIRMWARE
+   * VERSION and a locked key does not report one.
+   *
+   * Fields 21, 22 and 30 are a bitmask before firmware 3.1.0 and a 0/1/2 enum
+   * at and after it, so preferences() returns different rows for each - and it
+   * decides from capabilities, which are derived from the status string. A
+   * locked device broadcasts the bare word INITIALIZED, so capabilities read
+   * as the OLDEST firmware until it unlocks.
+   *
+   * Read once at mount, this screen therefore drew the legacy bitmask against
+   * a 3.1.0 key - complete with the "allow per-site derived keys without a
+   * touch" toggle, which writes value 8 and is REFUSED by that firmware with
+   * "Error invalid user input mode". Measured on the bench, after the gate
+   * itself was already correct: the gate was right and the call site was too
+   * early.
+   *
+   * `locked` is the dependency rather than a version, because it is the moment
+   * the version becomes knowable at all.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    getKey()
+      .then(({device}) => {
+        if (!cancelled) setTable(device.preferences());
+      })
+      .catch(e => {
+        if (!cancelled) setError(String((e as Error)?.message ?? e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [getKey, locked]);
+
+  const apply = useCallback(
+    async (name: string) => {
+      const raw = values[name];
+      if (raw === undefined || raw === '') {
+        setError(`${name}: enter a value first.`);
+        return;
+      }
+      setBusy(name);
+      setError(null);
+      setStatus(null);
+      try {
+        const {device} = await getKey();
+        const result = await device.setPreference(name, Number(raw));
+        setStatus(`${name}: ${result.response}`);
+        /*
+         * REMEMBERED, because it cannot be read back. The key takes the
+         * layout and never reports it, so the decoder that reads what the
+         * key types has to be told by whoever last wrote it - per key, since
+         * the soft and hard keys are different devices. See useKeyboardLayout.
+         */
+        if (name === 'keyboardLayout') {
+          const layoutName = layoutNameForId(Number(raw));
+          if (layoutName) await rememberLayout(backend, layoutName);
+        }
+      } catch (e) {
+        setError(String((e as Error)?.message ?? e));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [backend, getKey, values],
+  );
+
+
+  if (changing) {
+    return (
+      <SetupScreen
+        mode="change"
+        only={changing}
+        model={emu.model}
+        onProvision={emu.provision}
+        led={emu.led}
+        onDone={() => {
+          setChanging(null);
+          setChanged(true);
+        }}
+        /*
+         * Only when the app can actually do it. Undefined tells SetupScreen to
+         * say so instead of offering a button that presses nothing - see the
+         * note on restartKey above.
+         */
+        onRestart={canRestartKey ? restartKey : undefined}
+      />
+    );
+  }
+
+  /*
+   * LED brightness is a HARD KEY setting, and only that.
+   *
+   * The preference exists in the library because the firmware has it, and the
+   * firmware has it because a physical OnlyKey has a NeoPixel to dim. The soft
+   * key's light is a circle this app draws - the firmware still reports a
+   * colour and this screen still renders it, but nothing downstream of
+   * `ledBrightness` reaches a lamp. Offering it would be offering a control
+   * that writes a byte and changes nothing anyone can see.
+   *
+   * Dropped rather than disabled: a greyed-out row invites the question "why
+   * can't I set this", and the answer - there is no LED - is better expressed
+   * by the row not being there at all. The rest of the group applies to both
+   * keys and stays.
+   */
+  /*
+   * THIS TAB IS FOR THINGS YOU CAN CHANGE BACK. The Advanced screen is for
+   * things you cannot, and says so in its own header: "Things that cannot be
+   * undone, and settings the app will not change for you."
+   *
+   * Three rows broke that rule, and one of them said so itself - backupKeyMode
+   * has carried the note "cannot be undone afterwards" for as long as it has
+   * existed, rendered on the reversible tab. A tab whose meaning holds only
+   * most of the time teaches people to stop reading the warnings, which is
+   * exactly what the warnings are for.
+   *
+   *   webcryptPolicy  the first write ends the legacy field-21 inheritance
+   *                   permanently, in either direction, including a write of 0
+   *   backupKeyMode   locking it (1) cannot be undone
+   *   wipeMode        on a provisioned key only the destructive value is
+   *                   settable at all - the safe ones need first use - so it
+   *                   is one-way in practice
+   *
+   * They live on AdvancedScreen now, each stating its consequence and needing
+   * its exact word typed. Dropped here rather than disabled: a greyed row
+   * invites "why can't I set this", and the answer - it is on the other tab,
+   * behind a typed word, on purpose - is not something a disabled control can
+   * say.
+   *
+   * ASKED, NOT LISTED. This screen kept its own Set of the three names for a
+   * while, which made a FIRMWARE fact a property of one GUI - the nw desktop
+   * app and the CLI can write all three and would each have had to rediscover
+   * it. `oneWay` is on the library's table now, beside `requires`, so the next
+   * irreversible field is handled here without anyone remembering to come and
+   * add it.
+   */
+  const rowApplies = (p: {name: string; oneWay?: boolean}) =>
+    !p.oneWay &&
+    !(p.name === 'ledBrightness' && backend !== 'usb');
+
+  /*
+   * THE DESKTOP APP'S ORDER, as far as the gates allow. OnlyKey-App lists
+   * Keyboard Type Speed, Keyboard Layout, LED Brightness, Sysadmin Mode, HMAC
+   * User Input Mode, Full Wipe Mode, Inactivity Lockout Timer, Lock Button,
+   * User Input Modes, Webcrypt Access, Backup Key Mode. The one-way three live
+   * on the Advanced tab (above), and this tab groups by what a write needs -
+   * so the always-settable ones come first, then Sysadmin and HMAC, then User
+   * Input Modes last, which is where the desktop puts it among the rest.
+   *
+   * A panel is gated by `needsConfigMode`, not by its title: two panels need
+   * it now, and a title is wording the owner changes.
+   */
+  const groups: {
+    title: string;
+    note: string;
+    needsConfigMode: boolean;
+    rows: typeof table;
+  }[] = [
+    {
+      title: 'Settings',
+      note: 'These can be changed whenever the key is unlocked.',
+      needsConfigMode: false,
+      rows: table.filter(p => p.requires === 'always').filter(rowApplies),
+    },
+    {
+      /*
+       * WAS "Advanced", with the note "The firmware refuses these on a key that
+       * is already set up. They are shown so the key can be read, not so it
+       * can be changed here." Both halves were wrong for `configMode` rows:
+       * the firmware ACCEPTS them in config mode (set_slot's
+       * `configmode == true || !initcheck`), and nothing here reads them -
+       * the key cannot report any of them back. The name also collided with
+       * the Advanced tab, which is a different thing (one-way settings).
+       * Named for the mode a write needs, which is what the panel's dimmed
+       * state and the way-in panel at the foot are both about.
+       */
+      title: 'Config mode',
+      note:
+        'These can be changed only while the key is in config mode; out of it ' +
+        'the firmware refuses them. The key cannot report them, so the current ' +
+        'value is not shown - choose one and Set it.',
+      needsConfigMode: true,
+      /*
+       * Named by what is left rather than by the library's own word for the
+       * precondition. `requires` is the LIBRARY's description of a firmware
+       * rule and stays where it is; the app only needs to know these are not
+       * the two it can offer.
+       */
+      /*
+       * FILTERED TOO, which it was not. This group takes "everything left
+       * over", so it adopted every row the other two did not claim - and
+       * rowApplies was only ever applied to Settings above. That is how a
+       * one-way setting could sit here unnoticed, and how the NEXT one would
+       * have. Rows the library files under a `section` are left out too, or
+       * they would be drawn twice.
+       */
+      rows: table.filter(p => p.requires !== 'always' && p.requires !== 'firstUse')
+        .filter(p => !p.section)
+        .filter(rowApplies),
+    },
+    {
+      /*
+       * ASKED, NOT LISTED - the same argument as `oneWay`. The library files
+       * fields 21, 22 and 30 under this section, in the desktop's order, on
+       * every firmware line where they exist; this panel only draws it. On a
+       * key older than 3.1.0 field 30 is absent and 21 is still the bitmask,
+       * and the panel shows exactly what the library hands it.
+       *
+       * The first sentence of the note is the desktop App's own.
+       */
+      title: USER_INPUT_MODES,
+      note:
+        'How you confirm an operation on the device. Each family is its own ' +
+        'setting: SSH/GPG derived keys, stored keys, and web and agent derived ' +
+        'keys are each approved with a Challenge Code (enter 3 digits) or a ' +
+        'Button Press, and web and agent derived keys can also need none. ' +
+        'Changed in config mode. The key cannot report them, so the current ' +
+        'value is not shown. A new key starts on Button Press.',
+      needsConfigMode: true,
+      rows: table.filter(p => p.section === USER_INPUT_MODES).filter(rowApplies),
+    },
+    {
+      title: 'Set during setup only',
+      note:
+        'The firmware accepts these only before setup is finished. On a key ' +
+        'that is already provisioned they are refused, so they are shown for ' +
+        'completeness rather than offered.',
+      needsConfigMode: false,
+      rows: table.filter(p => p.requires === 'firstUse').filter(rowApplies),
+    },
+  ];
+
+  const has = (p: PrefsPart) => show.includes(p);
+  return (
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}>
+      {has('prefs') ? (<>
+      <Section title="Permissions">
+        <Text style={styles.body}>
+          What the security-key role needs from the phone. A dialog dismissed
+          by accident can be asked again here; once Android has stopped
+          asking, the system settings page is the only way back.
+        </Text>
+        <View style={styles.permRow}>
+          <Text style={styles.body}>Bluetooth (acting as a security key)</Text>
+          <Text style={perms?.bluetooth ? styles.permOn : styles.permOff}>
+            {perms ? (perms.bluetooth ? 'granted' : 'not granted') : '…'}
+          </Text>
+        </View>
+        {perms && !perms.bluetooth ? <Btn title="Ask for Bluetooth" onPress={() => void askBluetooth()} /> : null}
+        <View style={styles.permRow}>
+          <Text style={styles.body}>Notifications (the "acting as a security key" line)</Text>
+          <Text style={perms?.notifications ? styles.permOn : styles.permOff}>
+            {perms
+              ? perms.notificationsApply
+                ? perms.notifications ? 'granted' : 'not granted'
+                : 'not needed on this Android'
+              : '…'}
+          </Text>
+        </View>
+        {perms && perms.notificationsApply && !perms.notifications ? (
+          <Btn title="Ask for notifications" onPress={() => void askNotifications()} />
+        ) : null}
+        {permNote ? <Text style={styles.error}>{permNote}</Text> : null}
+        <Btn title="Open the system settings for this app" onPress={() => FidoGatt.openAppSettings()} />
+      </Section>
+
+      <Section title="Passkeys on this phone">
+        <Text style={styles.body}>
+          Chrome on this phone can use the OnlyKey for passkeys once Android
+          lists it as a passkey provider. Only Android's settings can switch
+          that on or off.
+        </Text>
+        <View style={styles.permRow}>
+          <Text style={styles.body}>OnlyKey as a passkey provider</Text>
+          <Text style={passkeys.status?.enabled ? styles.permOn : styles.permOff}>
+            {passkeys.status?.enabled ? 'on' : passkeys.status?.settingsAvailable ? 'off' : passkeys.status ? 'unavailable' : '…'}
+          </Text>
+        </View>
+        {passkeys.status && !passkeys.status.enabled ? (
+          <Text style={styles.body}>
+            {!passkeys.status.settingsAvailable
+              ? passkeys.text
+              : passkeys.stillOffAfterVisit
+                ? "Still off. If OnlyKey wasn't listed, this phone's settings can't switch it on."
+                : "Switch on OnlyKey there. If it isn't listed, this phone can't use it for passkeys."}
+          </Text>
+        ) : null}
+        {passkeys.status?.settingsAvailable ? (
+          <Btn title="Open Android's passkey settings" onPress={() => void passkeys.openSettings()} />
+        ) : null}
+      </Section>
+      </>) : null}
+
+      {/*
+        ONE PANEL PER PIN, in a list - not a row of sub-tabs that swaps one
+        panel for another (owner's call). Every PIN change is in sight at once,
+        in the desktop App's order, under the desktop App's button names.
+        After a change the list gives way to the one thing left to do:
+        restart, because the key reads its PIN only at boot.
+
+        CONFIG MODE GATES ALL THREE. Firmware 3.1.0 okcore.cpp:343-359 takes
+        OKPIN / OKPINSEC / OKPINSD only on first use or in config mode; on a
+        set-up key, outside config mode, it DROPS the message - no reply, no
+        error. So the panels go dim and inert until config mode is on, and the
+        panel at the foot of the tab is how to get there. (First-time setup,
+        where no config mode is needed, is This Key's job, not this tab's.)
+      */}
+      {has('pins') ? (<>
+      {changed ? (
+      <Section title={`Change PINs — ${keyName}`}>
+          <>
+            <Text style={styles.body}>
+              The PIN is set. The key is still in config mode, and only reads
+              its PIN when it boots — restart it to finish.
+            </Text>
+            {canRestartKey ? (
+              <Btn title="Restart the app" tone="primary" onPress={restartKey} />
+            ) : (
+              <Text style={styles.note}>
+                Unplug the key and plug it back in. The new PIN takes effect on
+                that boot, and unplugging is what ends config mode.
+              </Text>
+            )}
+          </>
+      </Section>
+      ) : emu.model === 'duo' ? (
+        <Section title={`PINs — ${keyName}`} unavailable={configMode === ON ? null : NEEDS_CONFIG_MODE}>
+          <Btn title="Set or change the DUO's PINs" tone="primary" onPress={() => setChanging('primary')} />
+        </Section>
+      ) : (
+        PIN_KINDS.map(kind => (
+          <Section key={kind} title={`${PIN_PANEL[kind]} — ${keyName}`} unavailable={configMode === ON ? null : NEEDS_CONFIG_MODE}>
+            <Text style={styles.body}>{PIN_BLURB[kind]}</Text>
+            <Btn title={PIN_TITLE[kind]} tone="primary" onPress={() => setChanging(kind)} />
+            <Text style={styles.note}>{PIN_RULES}</Text>
+          </Section>
+        ))
+      )}
+      </>) : null}
+
+      {has('prefs') ? (<>
+      <Section title={`Preferences — ${keyName}`}>
+        <Text style={styles.body}>
+          The key does not report its settings, so this screen changes them
+          without being able to show what they are now. A field left blank is
+          not written.
+        </Text>
+      </Section>
+
+      <Section title="Unlock with biometrics">
+        <Text style={styles.body}>
+          Save your PIN on this phone so unlocking is a fingerprint instead of
+          seven taps. It is encrypted under a key in Android&apos;s Keystore
+          that cannot be used without your biometric, so the saved value is
+          unreadable to anything that can read this app&apos;s files.
+        </Text>
+
+        {/*
+          The trade-off is STATED, not buried. This is not a preference like
+          typing speed, and someone turning it on should be able to see what
+          they are choosing.
+        */}
+        <Text style={styles.warn}>{biometrics.PIN_WARNING}</Text>
+
+        {bioStatus !== 'available' ? (
+          <Text style={styles.note}>
+            {biometrics.STATUS_TEXT[bioStatus]}
+          </Text>
+        ) : bioStored ? (
+          <>
+            <Text style={styles.note}>
+              A PIN is saved. Adding or removing a fingerprint on this phone
+              clears it — deliberately, so a finger enrolled later cannot open
+              what was saved before it.
+            </Text>
+            <Btn
+              title={bioBusy ? 'Working…' : 'Forget the saved PIN'}
+              tone="danger"
+              disabled={bioBusy}
+              onPress={forgetPin}
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>PIN</Text>
+            <TextInput
+              value={pinToSave}
+              onChangeText={setPinToSave}
+              secureTextEntry
+              keyboardType="number-pad"
+              autoCapitalize="none"
+              placeholder="the digits you press to unlock"
+              placeholderTextColor={theme.textDim}
+              style={styles.input}
+            />
+            <Btn
+              title={bioBusy ? 'Waiting…' : 'Save the PIN behind my biometric'}
+              tone="primary"
+              disabled={bioBusy || pinToSave.length < 7}
+              onPress={savePin}
+            />
+            <Text style={styles.note}>
+              {pinToSave.length}/7 digits minimum
+            </Text>
+          </>
+        )}
+        {bioError ? <Text style={styles.error}>{bioError}</Text> : null}
+      </Section>
+
+      {status ? <Text style={styles.status}>{status}</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {groups.map(group => (
+        <Section
+          key={group.title}
+          title={group.title}
+          unavailable={
+            group.needsConfigMode && configMode !== ON ? NEEDS_CONFIG_MODE : null
+          }>
+          <Text style={styles.note}>{group.note}</Text>
+
+          {/*
+            * GATED BY THE MODE EACH GROUP NEEDS, as a panel rather than row by
+            * row - a whole section that cannot be used should look it, and the
+            * reason sits directly above.
+            *
+            *   Settings   OKSETSLOT on any unlocked key
+            *   Config mode, User Input Modes
+            *              OKSETSLOT wants `configmode == true` on a
+            *              provisioned key (okcore.cpp:452)
+            *   setup only `!initcheck`, so refused here whatever we do -
+            *              shown for completeness, never offered
+            *
+            * Wipe mode and Backup key mode are the awkward pair: their
+            * DANGEROUS value needs config mode and their safe one needs first
+            * use, so `requires` names the stricter and the note says so.
+            */}
+            {group.rows.map(pref => (
+              <PrefRow
+                key={pref.name}
+                pref={pref}
+                value={values[pref.name] ?? ''}
+                onChange={v => setValues(prev => ({...prev, [pref.name]: v}))}
+                onApply={() => apply(pref.name)}
+                busy={busy === pref.name}
+                disabled={
+                  busy !== null ||
+                  locked ||
+                  pref.requires === 'firstUse'
+                }
+              />
+            ))}
+        </Section>
+      ))}
+
+      <Section title="Keyboard layout">
+        <Text style={styles.note}>
+          Which layout the key types in. Setting one this firmware does not
+          have tables for makes the key type NOTHING AT ALL, with no error, so
+          only the ones it can actually type are offered.
+        </Text>
+        <View style={styles.chips}>
+          {layoutOptions()
+            .filter(l => l.compiledIn)
+            .map(l => (
+              <Btn
+                key={l.name}
+                title={l.name.replace(/_/g, ' ').toLowerCase()}
+                tone={values.keyboardLayout === String(l.id) ? 'primary' : 'default'}
+                onPress={() =>
+                  setValues(prev => ({...prev, keyboardLayout: String(l.id)}))
+                }
+              />
+            ))}
+        </View>
+        <Text style={styles.note}>
+          {layoutOptions().filter(l => l.compiledIn).length} of{' '}
+          {layoutOptions().length} layouts are compiled into this build. Dvorak
+          is one of them only because it shares the US table — a key set to it
+          types US English, which is usable but not what was asked for.
+        </Text>
+        <Text style={styles.note}>
+          Pick one above, then use the Keyboard layout field under Settings to
+          write it.
+        </Text>
+      </Section>
+      </>) : null}
+      {/*
+        THE WAY IN, AT THE FOOT - after the panels it unlocks.
+    
+        The Config mode and User Input Modes groups only. Their preferences
+        carry `requires: configMode` in the library's own table; Settings takes
+        any unlocked key, and the setup-only group is refused here whatever the
+        mode.
+      */}
+      {/* On PIN Setup too: a set-up key takes a PIN change only in config mode. */}
+      {has('prefs') || has('pins') ? (
+        <ConfigModePanel
+          state={configMode}
+          emu={emu}
+          backend={backend}
+          onWant={onWantConfigMode}
+          purpose={has('prefs')
+            ? 'change a config-mode preference or a User Input Mode'
+            : 'change a PIN'}
+        />
+      ) : null}
+    </ScrollView>
+  );
+}
+
+function PrefRow({
+  pref,
+  value,
+  onChange,
+  onApply,
+  busy,
+  disabled,
+}: {
+  pref: {
+    name: string;
+    label: string;
+    min?: number;
+    max: number;
+    unit?: string;
+    note?: string;
+    bits?: Record<string, string>;
+    choices?: Record<string, string>;
+  };
+  value: string;
+  onChange: (v: string) => void;
+  onApply: () => void;
+  busy: boolean;
+  disabled: boolean;
+}) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.label}>
+        {pref.label}
+        <Text style={styles.range}>
+          {'  '}{pref.min ?? 0}–{pref.max}
+          {pref.unit ? ` ${pref.unit}` : ''}
+        </Text>
+      </Text>
+      {pref.note ? <Text style={styles.note}>{pref.note}</Text> : null}
+
+      {/*
+        * A BITMASK IS NOT A NUMBER TO TYPE. Each bit is a separate setting on a
+        * different code path, and asking for "8" means asking someone to know
+        * that bit 3 is what allows a derived key without a touch. The toggles
+        * write the same single byte.
+        */}
+      {pref.bits ? (
+        <View style={styles.bits}>
+          {Object.entries(pref.bits).map(([bit, meaning]) => {
+            const mask = 1 << Number(bit);
+            const on = (Number(value) & mask) !== 0;
+            return (
+              <Btn
+                key={bit}
+                title={`${on ? '✓' : '–'}  ${meaning}`}
+                tone={on ? 'primary' : 'default'}
+                disabled={disabled}
+                onPress={() =>
+                  onChange(String((Number(value) || 0) ^ mask))
+                }
+              />
+            );
+          })}
+        </View>
+      ) : null}
+
+      {/*
+        * AN ENUM IS NOT A NUMBER TO TYPE EITHER, and for the same reason the
+        * bitmask above is not: "2" means nothing without knowing the firmware
+        * calls it USER_INPUT_NONE. These three values are three different
+        * behaviours, not a scale, and one of them - "None (no confirmation)" - is the
+        * one that removes a confirmation step, so it had better be readable
+        * rather than arithmetic.
+        *
+        * A COLUMN OF BUTTONS, not the Segmented control. Segmented lays its
+        * options out with flex:1 across the row, and these labels are
+        * sentences - "Challenge Code (enter 3 digits)" in a third of a phone's width
+        * wraps to two cramped lines. The bits above already had this problem
+        * and already solved it this way, so this is the file's existing
+        * pattern rather than a second one.
+        */}
+      {pref.choices ? (
+        <View style={styles.bits}>
+          {Object.entries(pref.choices).map(([choice, meaning]) => {
+            const on = String(value) === String(choice);
+            return (
+              <Btn
+                key={choice}
+                title={`${on ? '●' : '○'}  ${meaning}`}
+                tone={on ? 'primary' : 'default'}
+                disabled={disabled}
+                onPress={() => onChange(String(choice))}
+              />
+            );
+          })}
+        </View>
+      ) : null}
+
+      <View style={styles.rowControls}>
+        {/*
+          * The raw byte stays visible for a bitmask (where the toggles compose
+          * a number worth seeing) and for a plain numeric preference. For an
+          * enum it is noise: the buttons above ARE the value, and a second
+          * control that can be set to 7 would be offering something the
+          * firmware refuses with "Error invalid user input mode".
+          */}
+        {pref.choices ? null : (
+          <TextInput
+            value={value}
+            onChangeText={onChange}
+            keyboardType="number-pad"
+            placeholder="—"
+            placeholderTextColor={theme.textDim}
+            editable={!disabled}
+            style={[styles.input, disabled && styles.inputDisabled]}
+          />
+        )}
+        <Btn
+          title={busy ? '…' : 'Set'}
+          disabled={disabled || value === ''}
+          onPress={onApply}
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  /* A trade-off worth reading, not a passing note. */
+  warn: {color: theme.warn, fontSize: 12, lineHeight: 18, marginTop: 10},
+  root: {flex: 1},
+  content: {padding: 16, gap: 16, paddingBottom: 48},
+
+  body: {color: theme.textSecondary, fontSize: theme.fontSize, lineHeight: theme.lineHeight},
+  note: {color: theme.textDim, fontSize: 12, lineHeight: 18},
+  status: {color: theme.ok, fontSize: 13, lineHeight: 20},
+  error: {color: theme.error, fontSize: 13, lineHeight: 20},
+
+  row: {gap: 6},
+  rowControls: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  label: {color: theme.textSecondary, fontSize: 13},
+  range: {color: theme.textDim, fontSize: 11, fontFamily: theme.mono},
+
+  input: {
+    /* Off the paragraph or field above it. See components.tsx btn. */
+    marginTop: 8,
+    flex: 1,
+    color: theme.text,
+    fontSize: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: theme.radius,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.inputBg,
+  },
+  inputDisabled: {opacity: 0.4},
+
+  chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 6},
+  permRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 6},
+  permOn: {color: theme.ok, fontSize: 13, fontWeight: '600'},
+  permOff: {color: theme.warn, fontSize: 13, fontWeight: '600'},
+  bits: {gap: 6},
+});

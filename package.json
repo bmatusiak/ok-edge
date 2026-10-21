@@ -18,23 +18,29 @@
   "dependencies": {
     "@bmatusiak/rectify": "github:bmatusiak/rectify#a0d9f0e6e537053122273b1f763ac87ae461361c",
     "@expo/metro-runtime": "~58.0.14",
-    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-async-storage/async-storage": "^3.1.1",
     "events": "^3.3.0",
     "expo": "~58.0.16",
     "expo-dev-client": "~58.0.14",
     "expo-status-bar": "~58.0.3",
     "node-onlykey-lib": "github:bmatusiak/node-onlykey-lib#fd00d3c0f32213d42c443a0e96df42f7ce481cda",
+    "okedge-autofill": "file:./modules/okedge-autofill",
     "okedge-native": "file:./modules/okedge-native",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.0",
-    "react-native-web": "~0.21.4"
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-web": "~0.21.4",
+    "test-moniker": "file:../test-moniker"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/react": "~19.3.0",
+    "@types/react-test-renderer": "^19.3.0",
     "cross-env": "^10.0.0",
     "electron": "^45.0.0",
     "electron-builder": "^26.0.0",
+    "react-test-renderer": "^19.3.0",
     "typescript": "~6.0.3"
   },
   "build": {

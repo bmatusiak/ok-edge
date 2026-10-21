@@ -1,0 +1,342 @@
+/**
+ * THE PRESS SHEET: every press is asked HERE, and nowhere else (Brad, 2026-10-10: "the confirm
+ * button ... needs to be removed, so the sheet is the notifier with press button"; "blind
+ * presses is a blocker, without it, it voids all security").
+ *
+ * Two kinds of press, each with what it is for (src/pressAsk.ts):
+ *   - a VENDOR press (ssh, gpg, decrypt, an Edge approval): what the FIRMWARE says it was handed
+ *     ("the firmware is the thing that is signing") - the operation, the key, the identity named
+ *     from the Key Chain by the label the firmware holds, the message's fingerprint. Nothing from
+ *     the computer that asks: "the confirm sheet should only get the data from firmware, the cli
+ *     should not be aware that we are checking the press" (Brad, 2026-10-10).
+ *   - a WEBAUTHN press (a passkey): the site, and on a register the user, from the request.
+ *
+ * An agent's budget keeps its own sheet (EdgeRequestSheet), which asks for its press itself;
+ * this one stays out of the way while that one is up.
+ *
+ * A CODE IS NEVER SHOWN. The 3 digits come from the computer that asked; a phone that displayed
+ * them would let a bad request supply its own code and the person just copy it in. So code mode
+ * says where the code is, and the keypad is on the sheet.
+ */
+import React, {useEffect, useRef, useState} from 'react';
+import {PixelRatio, StyleSheet, Text, View} from 'react-native';
+import OkEmu, {type KeyWaiting} from '../transport/OkEmu';
+import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
+import {describeWaiting} from '../hooks/useKeyWaiting';
+import {onSheet, type SheetState} from '../edgeAgents';
+import {
+  deriveNameOf, deriveWaitNow, fidoAskNow, firmwarePressFor, latestPressAt, nameOfLabel, onPressAsk, startPressRecords,
+  type DeriveWait, type FidoAsk, type FirmwarePress,
+} from '../pressAsk';
+import {consentRefusal} from '../debugGuard';
+import {buildInfo} from '../buildInfo';
+import {currentNet} from '../net';
+import {Btn} from './components';
+import {Sheet} from './Sheet';
+import {theme} from './theme';
+import {useQuietMotion} from './CountdownBar';
+
+/* the core firmware closes every wait at 20 s (okcore.cpp Usertimeout) */
+const WAIT_MS = 20_000;
+const OKSIGN = 0xed;
+const OKDECRYPT = 0xf0;
+
+const sameWait = (a: KeyWaiting | null, b: KeyWaiting | null) =>
+  a !== null && b !== null && a.what === b.what && a.opcode === b.opcode && a.slot === b.slot;
+
+const keyName = (slot: number) =>
+  slot >= 1 && slot <= 4 ? `RSA slot ${slot}` :
+  slot >= 101 && slot <= 116 ? `ECC slot ${slot - 100}` :
+  (slot >= 201 && slot <= 203) || (slot >= 221 && slot <= 223) ? `a derived key (code ${slot})` : `slot ${slot}`;
+const opName = (opcode: number, what: string) => (opcode === OKSIGN ? 'Sign' : opcode === OKDECRYPT ? 'Decrypt' : what === 'hmac' ? 'HMAC' : 'Use');
+/* the same format the CLI prints beside its prompt (lib protocol/challenge.js), so the two read side by side */
+const {challenge: {subjectFingerprint: fingerprint}} = require('node-onlykey-lib/protocol');
+
+/* the Key Chain's answer for the firmware's label */
+type Who = {label: string; listed: boolean; name: string | null};
+type Fido = {needed: boolean; canPress: boolean; confirm: () => void};
+
+export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: Fido}) {
+  /* the system bars (the A13's 3-button bar once covered a sheet's Close) are the Sheet's job */
+  useEffect(() => startPressRecords(), []);
+  /* the Edge request sheet asks for its own press: this one waits while that one is up */
+  const [edge, setEdge] = useState<SheetState | null>(null);
+  useEffect(() => onSheet(setEdge), []);
+  const edgeAsking = edge !== null && edge.phase !== 'done';
+  /* a firmware record or a FIDO request can land a moment after the wait is seen: redraw on each */
+  const [tick, setTick] = useState(0);
+  useEffect(() => onPressAsk(() => setTick(t => t + 1)), []);
+
+  /*
+   * One wait = one sheet, and its start (the countdown). Two signs in a row on the same slot (a
+   * certificate's two signatures) can look like ONE wait to a 400 ms poll that never sees the gap
+   * between them - the second sheet then showed "Pressed" with no button. The firmware hands over
+   * a record with every sign, so a new record while waiting is a new wait.
+   */
+  const [wait, setWait] = useState<{w: KeyWaiting; since: number} | null>(null);
+  const last = useRef<KeyWaiting | null>(null);
+  const lastRecord = useRef(0);
+  useEffect(() => {
+    const record = latestPressAt();
+    if (!waiting) {
+      last.current = null;
+      lastRecord.current = record;
+      setWait(null);
+      return;
+    }
+    const fresh = record > lastRecord.current;
+    if (sameWait(last.current, waiting) && !fresh) {
+      setWait(prev => (prev ? {...prev, w: waiting} : prev)); /* the code's progress, same wait */
+      return;
+    }
+    last.current = waiting;
+    lastRecord.current = record;
+    setWait({w: waiting, since: Date.now()});
+  }, [waiting, tick]);
+  const [fidoSince, setFidoSince] = useState(0);
+  useEffect(() => { setFidoSince(fido.needed ? Date.now() : 0); }, [fido.needed]);
+
+  const fw: FirmwarePress | null = wait ? firmwarePressFor(wait.w, wait.since) : null;
+  /* the identity the firmware holds, looked up in the Key Chain (undefined below: still looking) */
+  const [named, setNamed] = useState<{label: string; listed: boolean; name: string | null} | null>(null);
+  useEffect(() => {
+    if (!fw?.label) return;
+    let alive = true;
+    void nameOfLabel(fw.label).then(r => { if (alive) setNamed({label: fw.label!, ...r}); });
+    return () => { alive = false; };
+  }, [fw?.label]);
+
+  /* a derive's wait (the firmware's derive record): only when no sign or passkey is waiting */
+  void tick;
+  const derive: DeriveWait | null = !fido.needed && !wait ? deriveWaitNow() : null;
+  const since = fido.needed ? fidoSince : wait?.since ?? derive?.since ?? 0;
+  const [now, setNow] = useState(Date.now());
+  /*
+   * QUIET IN TESTING MODE (useQuietMotion): the countdown steps every 5 s there, not every second.
+   * A screen that changes every second never gives the UI tools a quiet read, and the press tool's
+   * testnet check then saw nothing and refused the press (Pixel + A13 swap, 2026-10-13).
+   */
+  const quiet = useQuietMotion();
+  useEffect(() => {
+    if (!since) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), quiet ? 5000 : 1000);
+    return () => clearInterval(t);
+  }, [since, quiet]);
+
+  /* no double taps: the buttons wake 1 s after the sheet appears, and one tap is all (EdgeRequestSheet) */
+  const [ready, setReady] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  useEffect(() => {
+    setReady(false);
+    setPressed(false);
+    const t = setTimeout(() => setReady(true), 1000);
+    return () => clearTimeout(t);
+  }, [since]);
+
+  const showFido = fido.needed;
+  const showVendor = !showFido && !!wait && !(wait.w.what === 'edge' && edgeAsking);
+  const showDerive = !showFido && !showVendor && !!derive;
+  if (!showFido && !showVendor && !showDerive) return null;
+  const exact = Math.max(0, Math.ceil((since + WAIT_MS - now) / 1000));
+  const left = quiet ? Math.ceil(exact / 5) * 5 : exact;
+  const hush = () => { try { NativeOkEmu.hushPress(); } catch { /* no native side (jest, an old build) */ } };
+
+  return (
+    /* not dismissable: it goes when the key stops waiting. extraBottom: in debug builds React Native's warning toasts sit along the bottom and catch taps */
+    <Sheet tone="edge" extraBottom={48}>
+            {currentNet() === 'test' ? <Text style={[styles.title, {color: theme.io}]}>TESTNET</Text> : null}
+            {showDerive ? (
+              <DeriveBody d={derive!} />
+            ) : showFido ? (
+              <FidoBody ask={fidoAskNow()} />
+            ) : (
+              <VendorBody w={wait!.w} fw={fw} named={fw?.label && named?.label === fw.label ? named : undefined} />
+            )}
+
+            {pressed ? (
+              <Text style={[styles.op, {color: theme.warn}]}>Pressed - the key is answering…</Text>
+            ) : (
+              <Text style={[styles.countdown, left <= 10 && {color: theme.error}]}>
+                {`${(showDerive ? derive!.mode === 'code' : !showFido && wait!.w.mode === 'code') ? 'Enter the code' : 'Press'} within 0:${String(left).padStart(2, '0')}`}
+              </Text>
+            )}
+
+            {showDerive ? (
+              /* a derive is not an Edge approval: no consent check (that one is the vendor branch's, below) */
+              <DeriveButtons d={derive!} ready={ready} pressed={pressed} onPress={(key: string) => {
+                if (!ready || (derive!.mode === 'press' && pressed)) return;
+                hush();
+                if (derive!.mode === 'press') setPressed(true);
+                void OkEmu.pressQueue(key);
+              }} />
+            ) : showFido ? (
+              fido.canPress ? (
+                !pressed ? (
+                  <View style={styles.row}>
+                    <Locate what={`passkey ${fidoAskNow()?.command ?? '?'} ${fidoAskNow()?.rpId ?? '?'}`}>
+                      <Btn large title="Press the soft key" tone="primary" disabled={!ready} onPress={() => { if (!ready || pressed) return; hush(); setPressed(true); fido.confirm(); }} />
+                    </Locate>
+                  </View>
+                ) : null
+              ) : (
+                <Text style={styles.op}>Press any button on the key itself.</Text>
+              )
+            ) : (
+              <VendorButtons w={wait!.w} what={vendorWhat(wait!.w, fw, fw?.label && named?.label === fw.label ? named : undefined)} ready={ready} pressed={pressed} onPress={(button: string) => {
+                const w = wait!.w;
+                if (!ready || (w.mode === 'press' && pressed) || (w.what === 'edge' && consentRefusal())) return;
+                hush();
+                if (w.mode === 'press') setPressed(true);
+                void OkEmu.pressQueue(button);
+              }} />
+            )}
+            <Text style={styles.dim}>This phone is also the key, so its press proves less than a hard key's.</Text>
+    </Sheet>
+  );
+}
+
+/*
+ * WHERE THE BUTTON IS, said by the phone (Brad, 2026-10-10: "this is why i want the sheet, to
+ * keep us from being blind"). A script driving the phone over adb waits for this line - the
+ * sheet is up, these are its words, the button is HERE in screen pixels - and taps there,
+ * instead of tapping where a button used to be on whatever screen is showing.
+ *
+ * Debug builds AND TEST builds (debugging lock off). The TEST build is the one the A13 gets
+ * when Claude is to drive it, and with this line off there Brad had to press for the script
+ * (2026-10-20: "if you controlling the a13, you press the buttons"). A real release keeps its
+ * lock and logs nothing.
+ */
+export function Locate({what, children}: {what: string; children: React.ReactNode}) {
+  const ref = useRef<any>(null);
+  return (
+    <View ref={ref} collapsable={false} onLayout={() => {
+      if (!__DEV__ && buildInfo.debugLock) return;
+      /* measured once the sheet has slid in and settled: at its first layout the Edge sheet's Approve read ~195 px high */
+      setTimeout(() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => {
+        const r = PixelRatio.get();
+        console.log(`[press] sheet up: ${what} - button at ${Math.round((x + w / 2) * r)},${Math.round((y + h / 2) * r)}`);
+      }), 800);
+    }}>
+      {children}
+    </View>
+  );
+}
+
+function FidoBody({ask}: {ask: FidoAsk | null}) {
+  const register = ask?.command === 'makeCredential';
+  return (
+    <>
+      <Text style={[styles.title, {color: theme.warn}]}>{register ? 'Register a passkey' : 'Sign in with a passkey'}</Text>
+      <View style={styles.reason}>
+        <Text style={styles.op}>{ask?.rpId ? ask.rpId : 'A site (it did not say which)'}</Text>
+        {register && ask?.user ? <Text style={styles.dim}>{`as ${ask.user}`}</Text> : null}
+      </View>
+      <Text style={styles.dim}>The site named in the request the key is answering. If it is not where you are signing in, let it run out.</Text>
+    </>
+  );
+}
+
+function VendorBody({w, fw, named}: {w: KeyWaiting; fw: FirmwarePress | null; named: Who | undefined}) {
+  return (
+    <>
+      <Text style={[styles.title, {color: theme.warn}]}>A press is needed</Text>
+      {fw ? (
+        <View style={styles.scope}>
+          <Text style={styles.dim}>The key was asked to</Text>
+          <Text style={styles.op}>
+            {`${opName(fw.opcode, w.what)} with ${fw.label ? (named === undefined ? '…' : named.name ?? (named.listed ? 'an unnamed identity in your Key Chain' : 'an identity not in your Key Chain')) : keyName(fw.slot)}`}
+          </Text>
+          {/* what the feature that derives this label uses it for (pressAsk nameDerive): Guest Book's swap, the Password Manager's store */}
+          {fw.label && deriveNameOf(fw.label) ? <Text style={styles.dim}>{deriveNameOf(fw.label)}</Text> : null}
+          {fw.label && named && !named.listed ? <Text style={[styles.dim, {color: theme.error}]}>{`identity ${fingerprint(fw.label)} - nobody listed it. If you did not ask for it, let it run out.`}</Text> : null}
+          <Text style={styles.dim}>{`${keyName(fw.slot)} · message ${fingerprint(fw.subject)}`}</Text>
+        </View>
+      ) : (
+        <View style={styles.reason}>
+          <Text style={styles.op}>{describeWaiting(w)}</Text>
+        </View>
+      )}
+    </>
+  );
+}
+
+/* the facts the sheet shows, in one line for the debug log */
+function vendorWhat(w: KeyWaiting, fw: FirmwarePress | null, named: Who | undefined): string {
+  const who = fw ? (fw.label ? named === undefined ? 'naming…' : named.name ?? `${named.listed ? 'unnamed' : 'unlisted'} ${fw.label.slice(0, 8)}` : keyName(fw.slot)) : 'no firmware record';
+  return `${w.what} slot ${w.slot} ${who}`;
+}
+
+/* A DERIVE: what it is for, as the feature that asked it named it; else the label's hash. */
+function DeriveBody({d}: {d: DeriveWait}) {
+  const what = deriveNameOf(d.label);
+  return (
+    <>
+      <Text style={[styles.title, {color: theme.warn}]}>{what ?? 'A derived key'}</Text>
+      <Text style={styles.op}>{what ? 'The key derives it from its label.' : `label ${d.label.slice(0, 16)}… - not one this app named`}</Text>
+    </>
+  );
+}
+
+/* press: one button; code: the 3 digits, worked out from the firmware's record as the key does */
+function DeriveButtons({d, ready, pressed, onPress}: {d: DeriveWait; ready: boolean; pressed: boolean; onPress: (b: string) => void}) {
+  if (d.mode === 'press') {
+    return pressed ? null : (
+      <View style={styles.row}>
+        <Locate what={`derive ${deriveNameOf(d.label) ?? d.label.slice(0, 8)}`}>
+          <Btn large title="Press the soft key" tone="primary" disabled={!ready} onPress={() => onPress('1')} />
+        </Locate>
+      </View>
+    );
+  }
+  return (
+    <>
+      <Text style={styles.op}>Enter this code on the key: <Text style={[styles.title, {color: theme.text}]}>{d.code?.join(' ')}</Text></Text>
+      <View style={styles.keypad}>
+        {['1', '2', '3', '4', '5', '6'].map(b => (
+          <Btn key={b} large title={b} disabled={!ready} onPress={() => onPress(b)} />
+        ))}
+      </View>
+    </>
+  );
+}
+
+function VendorButtons({w, what, ready, pressed, onPress}: {w: KeyWaiting; what: string; ready: boolean; pressed: boolean; onPress: (b: string) => void}) {
+  /* spec rule 10, the app's lock: an Edge approval is not pressed here while debugging is on (debugGuard) */
+  const refusal = w.what === 'edge' ? consentRefusal() : null;
+  return (
+    <>
+      {refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
+      {w.mode === 'press' && !pressed ? (
+        <View style={styles.row}>
+          <Locate what={what}>
+            <Btn large title="Press the soft key" tone="primary" disabled={!ready || refusal !== null} onPress={() => onPress('1')} />
+          </Locate>
+        </View>
+      ) : null}
+      {w.mode !== 'press' ? (
+        <>
+          <Text style={styles.dim}>
+            {w.mode === 'code' ? `Enter the code the computer shows (${w.entered} of 3 in).` : 'Press a button, or enter the code the computer shows.'}
+          </Text>
+          <View style={styles.keypad}>
+            {['1', '2', '3', '4', '5', '6'].map(b => (
+              <Btn key={b} large title={b} disabled={!ready || refusal !== null} onPress={() => onPress(b)} />
+            ))}
+          </View>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: {fontWeight: '600', fontSize: 17},
+  op: {color: theme.text, fontSize: theme.fontSize, lineHeight: theme.lineHeight},
+  dim: {color: theme.textDim, fontSize: 13, lineHeight: 19},
+  reason: {backgroundColor: theme.inputBg, borderRadius: theme.radius, padding: 10, gap: 4},
+  scope: {borderWidth: 1, borderColor: theme.border, borderRadius: theme.radius, padding: 8, gap: 2},
+  row: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10},
+  keypad: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  countdown: {color: theme.warn, fontSize: 20, fontWeight: '700', marginTop: 6},
+});

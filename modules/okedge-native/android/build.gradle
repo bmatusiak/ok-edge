@@ -69,6 +69,10 @@ android {
 
     defaultConfig {
         minSdkVersion rootProject.ext.minSdkVersion
+        /* NativeAppSignature: the certificates an OFFICIAL release is signed with (SHA-256,
+           comma-separated), so the app can say "UNOFFICIAL RELEASE" under any other. Empty until
+           a Play Store release keystore exists - as ok-rn's app build, from the same variable. */
+        buildConfigField "String", "OKRN_OFFICIAL_SIGNERS", "\"${System.getenv('OKRN_OFFICIAL_SIGNERS') ?: ''}\""
         externalNativeBuild {
             cmake {
                 arguments "-DOKSSL_OPENSSL=${new File(prefabDir, 'modules/openssl').absolutePath.replace('\\', '/')}"
@@ -96,4 +100,12 @@ dependencies {
     /* the soft key: node-onlykey-emulator's Android library (com.okrn.okemu.OkEmuNative), included
        by app.plugin.js from the emulator checkout */
     implementation project(':okemu')
+    /* NativeQrScanner: the camera and the QR decoder/encoder (ok-rn's versions) */
+    implementation "androidx.camera:camera-camera2:1.4.2"
+    implementation "androidx.camera:camera-lifecycle:1.4.2"
+    implementation "androidx.camera:camera-view:1.4.2"
+    implementation "com.google.zxing:core:3.5.3"
+    /* EXPERIMENT (ok-rn's REMOVAL.md): the system credential provider - every class under
+       credprovider is @RequiresApi(34); CredProviderGate guarantees none is made on an older phone */
+    implementation("androidx.credentials:credentials:1.5.0")
 }

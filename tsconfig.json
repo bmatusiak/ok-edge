@@ -1,6 +1,14 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    /*
+     * node-onlykey-lib is installed as a real package, and its plugins/* modules ship JavaScript
+     * without .d.ts. Inside node_modules TypeScript reads no JS by default (maxNodeModuleJsDepth
+     * 0) and reports TS7016 for each import; 1 lets it infer from the lib's own JS - one level,
+     * not the whole dependency tree. (As ok-rn's tsconfig.)
+     */
+    "maxNodeModuleJsDepth": 1,
+    "types": ["jest", "node"]
   }
 }

@@ -2,9 +2,10 @@ import './src/crypto';
 
 import { registerRootComponent } from 'expo';
 
-import App from './App';
+import { root, registerMore } from './src/entry';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+// The phone gets ok-rn's app (src/entry.android.ts); Electron and the web get the services
+// screen (src/entry.ts). registerRootComponent registers it as 'main' and sets the environment
+// up for a native build or the web alike.
+registerMore();
+registerRootComponent(root);
