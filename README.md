@@ -1,0 +1,38 @@
+# ok-edge
+
+**1 lib, 1 GUI, any platform**: a proof of concept.
+
+The goal is to make Edge, Key Chain, Guest Book and Passwords easy to clean up and improve. Each one now lives in **one library** ([node-onlykey-lib](https://github.com/bmatusiak/node-onlykey-lib)) behind **one app** that is built for every platform:
+
+| Platform | Reaches the key through |
+|---|---|
+| Android | the phone itself: hard key over USB, or the built-in soft key |
+| Desktop (Electron) | the hard key over USB, or the phone's soft key over Bluetooth |
+| Web | the hard key (WebHID), or the phone over Web Bluetooth |
+| CLI (`onlykey-js`) | the same library, in a terminal |
+
+No iOS: there is no way to test it.
+
+## The bucket
+
+Everything a front end keeps lives in **one portable file**: the Key Chain list, the Guest Book, password entries, the Edge chain copy, and settings.
+
+- **It moves** between the phone, the desktop app, the web page and the CLI.
+- **It is sealed by the key**, so it opens only with the OnlyKey that owns it. Development builds are unsealed.
+- **It merges on import**, taking what each copy lacks. A setting both copies changed is shown with its dates for the person to pick. An Edge fork is reported, never repaired.
+- **The audit dump** is the Edge chain only: blocks anyone can check with the device's public keys.
+
+The bucket is in the library: `node-onlykey-lib/bucket`.
+
+## Status
+
+ok-rn (the current Android app) stays in use until ok-edge can replace it. It is also the **oracle**: every ok-edge screen and flow is checked against it.
+
+| Stage | What | State |
+|---|---|---|
+| 0 | the bucket, in the library | done |
+| 1 | the four shells (Android, Electron, web, CLI), no features | next |
+| 2 | Android: hard key, soft key, Key Chain, Edge, the computer link; then the rest | |
+| 3 | the CLI on the bucket | |
+| 4 | desktop (Electron) | |
+| 5 | web | |
