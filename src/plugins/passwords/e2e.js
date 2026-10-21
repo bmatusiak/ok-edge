@@ -12,6 +12,7 @@
 const AsyncStorage = require('@react-native-async-storage/async-storage').default;
 const {getOnlyKey} = require('../../onlykey');
 const {pressDigits} = require('../../../__e2e_tests__/helpers/pressDigits');
+const {enableTouchFreeDerive} = require('../../../__e2e_tests__/helpers/touchFreeDerive');
 const {createStores, LABEL} = require('./stores');
 
 const OkEmuModule = require('../../transport/OkEmu');
@@ -38,8 +39,34 @@ async function ready(log) {
     await device.unlock(PIN, {timeoutMs: 20000, enterDigits: pressDigits({log})});
     state = await device.connect();
   }
-  shared = {okcrypto, state};
+  shared = {device, okcrypto, state};
   return shared;
+}
+
+/*
+ * A KEY THAT NEVER HAD THE TOUCH-FREE PREFERENCE SET (3.1.0: field 30 - a fresh test slot, the
+ * A13's testnet key on 2026-10-21) does not refuse a press-free derive: it waits for a press that
+ * never comes and answers CTAP2_ERR_ACTION_TIMEOUT. That is the key's setup, not this feature, so
+ * it is not a failure. As 10-derive does, the preference is set here once, in config mode (it
+ * persists in EEPROM), and the test skips: config mode silences CTAPHID until the runner restarts
+ * the app, and the next pass derives touch-free. The three-pass shape of the suites.
+ */
+let preferenceSet = false;
+async function touchFree(s, log, skip, run) {
+  /* set during this pass: the key is in config mode, silent on CTAPHID until the runner restarts the app */
+  if (preferenceSet) skip('the touch-free preference was set in config mode this pass - this runs on the next one');
+  try {
+    return await run();
+  } catch (e) {
+    if (!/ACTION_TIMEOUT|answered the derive with no data/.test(String(e && e.message))) throw e;
+    if (!preferenceSet) {
+      preferenceSet = true;
+      log('the derive waited for a press: this key has no touch-free preference - setting it in config mode');
+      await enableTouchFreeDerive(s.device, PIN, log);
+    }
+    skip('this key had no touch-free derive preference (it waited for a press); it is set now, '
+      + 'in config mode - CTAPHID is silent until the app restarts, so this runs on the next pass');
+  }
 }
 
 module.exports = function passwords({describe, it}) {
@@ -53,7 +80,7 @@ module.exports = function passwords({describe, it}) {
       s.okcrypto.deviceVault.lock(LABEL);
       stores = createStores({storage, randomBytes});
       /* a new store opens only from the button: Open with OnlyKey */
-      const r = await stores.openWithKey('embedded', s.okcrypto, {touchFree: 'preference'});
+      const r = await touchFree(s, log, skip, () => stores.openWithKey('embedded', s.okcrypto, {touchFree: 'preference'}));
       if (r.why !== 'touch-free') skip('this key refused the touch-free derive: a press store (the button, every time)');
       id = await stores.identify('embedded', s.okcrypto);
       assert.ok(/^[0-9a-f]{64}$/.test(id), 'the store id is not 64 hex characters');
@@ -91,10 +118,10 @@ module.exports = function passwords({describe, it}) {
      * A WALLET PHRASE on the real key: the same name twice gives the same 24 valid BIP39 words, and
      * its recipe opens them again (the check holds). The words are never logged.
      */
-    it('derives the same wallet phrase twice, and its recipe opens it', async ({log, assert}) => {
+    it('derives the same wallet phrase twice, and its recipe opens it', async ({log, assert, skip}) => {
       const {mnemonic} = require('node-onlykey-lib/passwords');
       const s = await ready(log);
-      const a = await mnemonic.deriveMnemonic({okcrypto: s.okcrypto, name: 'e2e-phrase', out: 'bip39-24', press: false});
+      const a = await touchFree(s, log, skip, () => mnemonic.deriveMnemonic({okcrypto: s.okcrypto, name: 'e2e-phrase', out: 'bip39-24', press: false}));
       const b = await mnemonic.deriveMnemonic({okcrypto: s.okcrypto, name: 'e2e-phrase', out: 'bip39-24', press: false});
       assert.equal(a.words.length, 24);
       assert.ok(mnemonic.isValidPhrase(a.words), 'not a valid BIP39 phrase');

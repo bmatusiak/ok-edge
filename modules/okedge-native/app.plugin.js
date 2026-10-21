@@ -180,4 +180,42 @@ const withAppGradle = (config) => withAppBuildGradle(config, (c) => {
   return c;
 });
 
-module.exports = (config) => withAppGradle(withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config)))));
+/*
+ * OK-RN'S LOOK (Brad, 2026-10-21: "the launcher icon stuff and other assets"): ok-rn's own
+ * resources, copied in app-res/ (same layout as res/), laid over what prebuild generates -
+ *   the launcher icon: the white O on black, an adaptive vector icon (mipmap-anydpi-v26) and its
+ *     Android 7 layer-list (mipmap-anydpi); anydpi wins over the density PNGs Expo writes
+ *   the launch window: drawable/splash_window (the logo on splash_background #1a1a1a), made the
+ *     window background of Expo's splash theme, as ok-rn's Theme.App.Main does
+ *   the name the launcher shows: OnlyKey, ok-rn's app_name
+ */
+const fs = require('fs');
+const { withDangerousMod, withAndroidStyles, withStringsXml } = require('expo/config-plugins');
+
+const withOkRnLook = (config) => {
+  config = withDangerousMod(config, ['android', async (c) => {
+    const from = path.join(__dirname, 'app-res');
+    const to = path.join(c.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res');
+    for (const dir of fs.readdirSync(from)) {
+      fs.mkdirSync(path.join(to, dir), { recursive: true });
+      for (const f of fs.readdirSync(path.join(from, dir))) fs.copyFileSync(path.join(from, dir, f), path.join(to, dir, f));
+    }
+    return c;
+  }]);
+  config = withAndroidStyles(config, (c) => {
+    const style = (c.modResults.resources.style || []).find((s) => s.$.name === 'Theme.App.SplashScreen');
+    if (style) {
+      const bg = style.item.find((i) => i.$.name === 'android:windowBackground');
+      if (bg) bg._ = '@drawable/splash_window';
+      else style.item.push({ $: { name: 'android:windowBackground' }, _: '@drawable/splash_window' });
+    }
+    return c;
+  });
+  return withStringsXml(config, (c) => {
+    const row = (c.modResults.resources.string || []).find((s) => s.$.name === 'app_name');
+    if (row) row._ = 'OnlyKey';
+    return c;
+  });
+};
+
+module.exports = (config) => withOkRnLook(withAppGradle(withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config))))));
