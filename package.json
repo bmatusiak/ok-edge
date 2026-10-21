@@ -41,10 +41,15 @@
     "files": [
       "electron/**",
       "dist/web/**",
-      "package.json"
+      "package.json",
+      "!node_modules/**"
     ],
     "directories": {
       "output": "dist/electron"
+    },
+    "npmRebuild": false,
+    "extraMetadata": {
+      "main": "electron/main.js"
     }
   }
 }

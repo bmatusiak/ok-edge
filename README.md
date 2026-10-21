@@ -24,6 +24,19 @@ Everything a front end keeps lives in **one portable file**: the Key Chain list,
 
 The bucket is in the library: `node-onlykey-lib/bucket`.
 
+## Running it
+
+Expo SDK 58 (React Native 0.88), Rectify 2.0, Electron 45. `npm install` first.
+
+| Shell | Run | Build |
+|---|---|---|
+| Web | `npm run web` (port 8090) | `npm run build:web`: `dist/web` |
+| Desktop | `npm run electron` (loads `dist/web`), or `npm run electron:dev` with `npm run web` running | `npm run build:electron`: `dist/electron/win-unpacked` |
+| Android | install the APK (`com.okedge`; it installs beside ok-rn's `com.okrn`) | `npm run build:android`, with `ANDROID_HOME` set to the SDK |
+| CLI | `npm run cli -- help` (the library's `onlykey-js`) | |
+
+`android/` is generated from `app.json` by `expo prebuild`; it is not in git. The desktop page has no Node: it reaches the main process only through `electron/preload.js` and its allowlisted channels.
+
 ## Status
 
 ok-rn (the current Android app) stays in use until ok-edge can replace it. It is also the **oracle**: every ok-edge screen and flow is checked against it.
@@ -31,7 +44,8 @@ ok-rn (the current Android app) stays in use until ok-edge can replace it. It is
 | Stage | What | State |
 |---|---|---|
 | 0 | the bucket, in the library | done |
-| 1 | the four shells (Android, Electron, web, CLI), no features | next |
+| 1 | the four shells (Android, Electron, web, CLI), no features | done |
+| 1b | one soft key: [node-onlykey-emulator](https://github.com/bm-ok/node-onlykey-emulator) built as a Node addon (CLI, desktop) and an Android library | next |
 | 2 | Android: hard key, soft key, Key Chain, Edge, the computer link; then the rest | |
 | 3 | the CLI on the bucket | |
 | 4 | desktop (Electron) | |

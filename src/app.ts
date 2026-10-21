@@ -44,7 +44,9 @@ const byShell: Record<typeof shell, Setup[]> = {
  */
 export const CAPABILITIES: Record<string, Partial<Record<typeof shell, number>>> = {
   'hard key (USB)': { android: 2, electron: 4, web: 5 },
-  'soft key': { android: 2 },
+  /* node-onlykey-emulator (stage 1b): its Android build on the phone, its Node addon in Electron's
+     main process; a browser reaches it only through the emulator's HID bridge, as a USB key */
+  'soft key': { android: 2, electron: 4 },
   'computer link (Bluetooth service)': { android: 2 },
   'phone over Bluetooth': { electron: 4, web: 5 },
 };
