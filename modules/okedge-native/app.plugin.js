@@ -134,6 +134,38 @@ android {
                 }
             }
         }
+        /*
+         * OKEDGE_APP_ID=com.okrn builds the REPLACEMENT: ok-edge installed over ok-rn as an update, so
+         * the app's data - the soft key's flash.bin/eeprom.bin, AsyncStorage, Keystore keys - is
+         * kept and tested as it is. Unset, ok-edge is com.okedge beside ok-rn. Read at build time,
+         * so switching needs no prebuild.
+         *
+         * versionCode = 1000 + this repo's commit count: above every ok-rn build (ok-rn's is its own
+         * commit count, 623 at 0.0.7), so the replacement installs as an update. Going back to ok-rn
+         * means an ok-rn build with a versionCode above it.
+         */
+        applicationId System.getenv('OKEDGE_APP_ID') ?: 'com.okedge'
+        def commits = 0
+        try {
+            commits = providers.exec { commandLine 'git', 'rev-list', '--count', 'HEAD' }.standardOutput.asText.get().trim().toInteger()
+        } catch (Exception ignored) {
+            logger.lifecycle("versionCode: no git history here, using 1000")
+        }
+        versionCode 1000 + commits
+    }
+    /*
+     * ONE SIGNING KEY WITH OK-RN: ok-rn's repo debug.keystore (signing/debug.keystore, a copy), the
+     * key its dev and pre-release builds carry - a replacement build must be signed by the same
+     * certificate as the app it updates, or Android refuses it. Every ok-edge build uses it, not
+     * the keystore expo prebuild generates.
+     */
+    signingConfigs {
+        debug {
+            storeFile file("$rootDir/../signing/debug.keystore")
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
     }
 }
 `;
