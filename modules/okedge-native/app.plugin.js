@@ -37,6 +37,9 @@ const withOkEmuProperties = (config) => withGradleProperties(config, (c) => {
   set('okemuPlugins', PLUGINS);
   /* a debug build loads its JS from ok-edge's Metro on 8082 (metro.pm2.config.js); ok-rn's keeps 8081 */
   set('reactNativeDevServerPort', '8082');
+  /* the debug build's KSP pass (Expo's modules; ok-rn has none) ran out of metaspace at the
+     template's 512 MB: java.lang.OutOfMemoryError: Metaspace */
+  set('org.gradle.jvmargs', '-Xmx2048m -XX:MaxMetaspaceSize=1024m');
   set('okemuAppOut', path.resolve(c.modRequest.projectRoot, 'src', 'generated').replace(/\\/g, '/'));
   return c;
 });

@@ -19,7 +19,9 @@ module.exports = {
       name: 'ok-edge-metro',
       cwd: __dirname,
       script: path.join(__dirname, 'node_modules', 'expo', 'bin', 'cli'),
-      args: 'start --port 8082 --localhost --max-workers 1 --clear',
+      /* no --localhost: with it Node on Windows listens on [::1] only, and adb reverse connects to
+         127.0.0.1 - the phone saw no Metro ("Unable to load script"). Bound as ok-rn's is. */
+      args: 'start --port 8082 --max-workers 1 --clear',
       interpreter: 'node',
       windowsHide: true,
       watch: ['package.json', 'package-lock.json'],
