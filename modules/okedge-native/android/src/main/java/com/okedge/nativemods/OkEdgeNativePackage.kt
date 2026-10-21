@@ -18,6 +18,12 @@ import com.okrn.specs.NativeSecretsSpec
 import com.okrn.specs.NativeUsbHidSpec
 import com.okrn.specs.NativeOkEmuSpec
 import com.okrn.emu.NativeOkEmuModule
+import com.okrn.specs.NativeFidoGattSpec
+import com.okrn.fido.NativeFidoGattModule
+import com.okrn.specs.NativeEdgeAlertSpec
+import com.okrn.emu.NativeEdgeAlertModule
+import com.okrn.specs.NativeShareSpec
+import com.okrn.share.NativeShareModule
 import com.okrn.usb.NativeUsbHidModule
 
 /*
@@ -36,12 +42,15 @@ class OkEdgeNativePackage : BaseReactPackage() {
       NativeSecretsSpec.NAME -> NativeSecretsModule(reactContext)
       NativeUsbHidSpec.NAME -> NativeUsbHidModule(reactContext)
       NativeOkEmuSpec.NAME -> NativeOkEmuModule(reactContext)
+      NativeFidoGattSpec.NAME -> NativeFidoGattModule(reactContext)
+      NativeEdgeAlertSpec.NAME -> NativeEdgeAlertModule(reactContext)
+      NativeShareSpec.NAME -> NativeShareModule(reactContext)
       else -> null
     }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
     listOf(NativeRandomSpec.NAME, NativeKdfSpec.NAME, NativeOkSslSpec.NAME, NativeRsaGenSpec.NAME, NativeSecretsSpec.NAME,
-      NativeUsbHidSpec.NAME, NativeOkEmuSpec.NAME)
+      NativeUsbHidSpec.NAME, NativeOkEmuSpec.NAME, NativeFidoGattSpec.NAME, NativeEdgeAlertSpec.NAME, NativeShareSpec.NAME)
       .associateWith { ReactModuleInfo(it, it, false, false, false, true) }
   }
 }

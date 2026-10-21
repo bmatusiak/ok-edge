@@ -6,10 +6,47 @@
          without host support; the app reports it at runtime. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
-    <!-- PressAlert: the soft key's press notification -->
+    <!-- PressAlert, EdgeAlert and the computer link's service: notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- NativeFidoGatt: the computer link, a BLE peripheral (as ok-rn's manifest) -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <!-- Android 12+ split the old BLUETOOTH/BLUETOOTH_ADMIN grants apart -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- pre-12, BLE work is gated behind location -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <!-- keeps the GATT server alive while a computer's session is open -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
     <application>
+        <!-- foreground while the GATT server is up; connectedDevice is the Android 14 type for a
+             Bluetooth peripheral. Started and stopped by NativeFidoGattModule with the server. -->
+        <service
+            android:name="com.okrn.fido.FidoGattService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- NativeShare: a staged backup handed to another app as a content:// URI -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_files" />
+        </provider>
+
+        <!-- an Edge alarm's Hold action: a broadcast, so it works from the lock screen; not
+             exported, only this app's own notifications can send it -->
+        <receiver
+            android:name="com.okrn.emu.NativeEdgeAlertModule$HoldReceiver"
+            android:exported="false" />
+
         <!-- NativeOkEmu's restart: the firmware's reboot starts a NEW process, from a helper
              in its own (see RestartActivity) - as in ok-rn's manifest -->
         <activity

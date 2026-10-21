@@ -10,6 +10,7 @@ import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import NativeRsaGen from 'okedge-native/specs/NativeRsaGen';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import NativeUsbHid from 'okedge-native/specs/NativeUsbHid';
+import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import { VENDOR_ID, PRODUCT_ID } from '../transport/UsbPipe';
 import OkEmu from '../transport/OkEmu';
 import { buildInfo } from '../buildInfo';
@@ -53,6 +54,11 @@ const CHECKS: [string, () => Promise<string>][] = [
     const rounds = (await OkEmu.rounds()) - before;
     if (rounds <= 0) throw new Error('booted, but the firmware loop is not running');
     return `${buildInfo.firmware}, ${rounds} rounds in 1.5 s`;
+  }],
+  /* the computer link: the module loads and reports; nothing is advertised */
+  ['computer link', async () => {
+    if (!(await NativeFidoGatt.isSupported())) throw new Error('no BLE peripheral support on this phone');
+    return `${NativeFidoGatt.getState()}, permissions ${JSON.stringify(await NativeFidoGatt.permissionStatus())}`;
   }],
   ['keystore box', async () => {
     const alias = 'okedge-selftest';
