@@ -32,7 +32,8 @@ const common: Setup[] = [
 
 /* per shell: only what that shell can run */
 const byShell: Record<typeof shell, Setup[]> = {
-  android: [],
+  /* the native modules copied from ok-rn (okedge-native), each checked once at start */
+  android: [plugin('native', () => require('./native/selfTest').selfTest())],
   web: [],
   electron: [plugin('desktop', async () => ({ about: await desktop!.invoke('okedge:about') }))],
 };

@@ -26,6 +26,7 @@ export default function App() {
 
   const services = app ? Object.keys(app.services).filter((n) => n !== 'app') : [];
   const lib = app ? (app.services.lib as { version: string }).version : '…';
+  const native = app && app.services.native ? (app.services.native as { checks: Record<string, string> }).checks : null;
   const about = app && app.services.desktop ? (app.services.desktop as { about: Record<string, string> }).about : null;
   const Row = ({ k, v }: { k: string; v: string }) => (
     <View style={styles.row}>
@@ -37,7 +38,7 @@ export default function App() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.page}>
       <Text style={styles.title}>ok-edge</Text>
-      <Text style={styles.sub}>1 lib, 1 GUI, any platform - stage 1</Text>
+      <Text style={styles.sub}>1 lib, 1 GUI, any platform - stage 2</Text>
 
       <View style={styles.card}>
         <Row k="shell" v={shell} />
@@ -48,8 +49,17 @@ export default function App() {
 
       <Text style={styles.head}>Services here</Text>
       <View style={styles.card}>
-        {services.map((s) => <Row key={s} k={s} v="present" />)}
+        {services.map((s) => <Row key={s} k={s} v={(app!.services[s] as { status?: string }).status ?? 'present'} />)}
       </View>
+
+      {native && (
+        <>
+          <Text style={styles.head}>Native modules</Text>
+          <View style={styles.card}>
+            {Object.entries(native).map(([k, v]) => <Row key={k} k={k} v={v} />)}
+          </View>
+        </>
+      )}
 
       <Text style={styles.head}>Capabilities</Text>
       <View style={styles.card}>
