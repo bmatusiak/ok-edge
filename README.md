@@ -45,8 +45,8 @@ ok-rn (the current Android app) stays in use until ok-edge can replace it. It is
 |---|---|---|
 | 0 | the bucket, in the library | done |
 | 1 | the four shells (Android, Electron, web, CLI), no features | done |
-| 1b | one soft key: [node-onlykey-emulator](https://github.com/bm-ok/node-onlykey-emulator) built as a Node addon (CLI, desktop) and an Android library | next |
-| 2 | Android: hard key, soft key, Key Chain, Edge, the computer link; then the rest | |
+| 1b | one soft key: [node-onlykey-emulator](https://github.com/bm-ok/node-onlykey-emulator) built as a Node addon (CLI, desktop) and an Android library | done (the phone run comes with stage 2) |
+| 2 | Android: hard key, soft key, Key Chain, Edge, the computer link; then the rest | next |
 | 3 | the CLI on the bucket | |
 | 4 | desktop (Electron) | |
 | 5 | web | |
