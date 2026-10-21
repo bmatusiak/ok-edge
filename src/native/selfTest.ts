@@ -11,6 +11,8 @@ import NativeRsaGen from 'okedge-native/specs/NativeRsaGen';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import NativeUsbHid from 'okedge-native/specs/NativeUsbHid';
 import { VENDOR_ID, PRODUCT_ID } from '../transport/UsbPipe';
+import OkEmu from '../transport/OkEmu';
+import { buildInfo } from '../buildInfo';
 
 const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b), (x) => x.toString(16).padStart(2, '0')).join('');
 const same = (got: string, want: string) => { if (got !== want) throw new Error(`got ${got.slice(0, 16)}…`); };
@@ -39,6 +41,18 @@ const CHECKS: [string, () => Promise<string>][] = [
     const list = await NativeUsbHid.listDevices();
     const ok = list.filter((d) => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID).length;
     return `${NativeUsbHid.getTransport()}, ${list.length} device(s), ${ok ? `${ok} OnlyKey` : 'no OnlyKey'}`;
+  }],
+  /* the soft key in its TEST slot (testnet), never the live one: libokemu loads, the firmware boots,
+     and its loop is running */
+  ['soft key', async () => {
+    if (!OkEmu.isAvailable()) throw new Error('libokemu.so did not load');
+    const r = await OkEmu.start('test');
+    if (!r.started) throw new Error(r.message);
+    const before = await OkEmu.rounds();
+    await new Promise((done) => setTimeout(done, 1500));
+    const rounds = (await OkEmu.rounds()) - before;
+    if (rounds <= 0) throw new Error('booted, but the firmware loop is not running');
+    return `${buildInfo.firmware}, ${rounds} rounds in 1.5 s`;
   }],
   ['keystore box', async () => {
     const alias = 'okedge-selftest';

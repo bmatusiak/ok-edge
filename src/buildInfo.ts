@@ -1,0 +1,282 @@
+/**
+ * What this build actually contains.
+ *
+ * The login screen leads with it, because "which firmware and which library am
+ * I running" is the first question worth answering on a device whose whole
+ * point is that it carries someone else's C compiled for Android. A version
+ * that is guessed is worse than none.
+ *
+ * `src/generated/firmware.json` is written by the staging step
+ * (android/okemu/scripts/stage.js) and is NOT committed, so a checkout that has
+ * never staged reports 'unknown' rather than somebody else's hash. The digest
+ * covers the staged tree AFTER patching - that is the source the .so is built
+ * from, and hashing the upstream checkouts instead would miss every fixup.
+ */
+const pkg = require('../package.json');
+const lib = require('node-onlykey-lib/package.json');
+
+type Staged = {
+  digest?: string;
+  files?: number;
+  firmware?: string | null;
+  libraries?: string | null;
+  /** A released version name when OKEMU_VERSION was set; null for the tree. */
+  version?: string | null;
+  /** What onlykey.h's version macros say, e.g. 'v3.1.0'. */
+  declaredVersion?: string | null;
+  production?: boolean;
+  /** False only on a TEST build made with OKRN_DEBUG_LOCK=off - see stage.js. */
+  debugLock?: boolean;
+  /** True when the debug trust-all return was cut - see stage.js. */
+  enforcingOrigins?: boolean;
+  edition?: string | null;
+  /** 'duo' or 'classic' - which model the staged firmware reports as. */
+  model?: string | null;
+  stagedAt?: string;
+  /** True when staged from an unpinned tree - see stage.js. */
+  unreleased?: boolean;
+  /** Soft-key firmware plugins staged in (okemu/plugins/); absent when none. */
+  plugins?: string[];
+  slotPlugins?: string[];
+};
+
+/*
+ * require() in a try/catch rather than a static import: the file genuinely may
+ * not exist, and Metro turns a missing static import into a build failure
+ * rather than a runtime one.
+ */
+let staged: Staged = {};
+try {
+  staged = require('./generated/firmware.json') as Staged;
+} catch {
+  staged = {};
+}
+
+export type BuildInfo = {
+  app: string;
+  library: string;
+  /** Digest of the staged firmware sources, or 'unknown'. */
+  firmware: string;
+  /** Upstream checkouts the staging read, when they were git repos. */
+  sources: string;
+  /**
+   * The released firmware version this was staged from, or null for the
+   * working tree. Set by OKEMU_VERSION - see
+   * android/okemu/scripts/versions/README.md.
+   */
+  version: string | null;
+  /** True when the DEBUG gate was off, as the firmware ships. */
+  production: boolean;
+  /**
+   * The app's debugging lock (debugGuard.consentRefusal). False only on a TEST
+   * build made with OKRN_DEBUG_LOCK=off (Brad, 2026-10-05) - a red banner says
+   * so, and release.js packages no pre-release from it. Missing = on.
+   */
+  debugLock: boolean;
+  /**
+   * Whether webcryptcheck() consults the trusted-origin table and the field 31
+   * webcrypt policy, instead of returning 2 for everything.
+   *
+   * An ordinary DEBUG build does the latter, and that is invisible from the
+   * wire in the permissive direction: it serves every origin and every
+   * stored-key request, so a test expecting a refusal and getting service
+   * cannot tell an unimplemented policy from an unenforcing build. Always true
+   * on a production build, where the return is not compiled.
+   *
+   * Set by OKEMU_ENFORCE_ORIGINS=1 at staging time.
+   */
+  enforcingOrigins: boolean;
+  /** model, version, build and edition in one line - see describeBuild(). */
+  builtFor: string;
+  /** 'standard' or 'travel'; null when the build predates the gate. */
+  edition: string | null;
+  /** 'duo' or 'classic'. A DUO is a different device, not a setting. */
+  model: string;
+  /**
+   * Whether this firmware is AHEAD of every release rather than being one.
+   *
+   * Read from `staged` DIRECTLY, never from `version === null` above: that
+   * field is coalesced with `?? null`, and `staged` is `{}` when the
+   * generated file is missing - so "working tree" and "never staged" would
+   * be indistinguishable. A build with no metadata must not claim to be an
+   * unreleased tree and switch on features that may not be there.
+   */
+  unreleased: boolean;
+  /**
+   * The version the SOURCES declare, e.g. 'v3.1.0' - read by stage.js from
+   * onlykey.h's OKversionmaj/min/pat, which are what the device's own
+   * `UNLOCKEDv3.1.0-testc` banner is built from.
+   *
+   * Not the same question as `version`. That one is which RELEASE this is a
+   * copy of and is null for a working tree; this one is the number the
+   * firmware answers with either way, and for a tree it is the release being
+   * worked towards. A tree can declare v3.1.0 months before a v3.1.0 exists,
+   * which is exactly when knowing the difference matters.
+   *
+   * null when the staging could not read it, or when there is no staging
+   * metadata at all.
+   */
+  declaredVersion: string | null;
+  /**
+   * SOFT-KEY FIRMWARE PLUGINS in this build (owner, 2026-10-01: "new okemu
+   * plugins will need to be under compatibility for softkey only"). Staged in
+   * by OKEMU_PLUGINS from android/okemu/plugins/<name>/. A plugin's feature is
+   * the soft key's alone: no hard key and no released firmware version has it,
+   * so it is never inferred from a version - only from this list, and only for
+   * the soft key backend (see hasSoftKeyPlugin).
+   */
+  plugins: string[];
+  slotPlugins: string[];
+};
+
+export const buildInfo: BuildInfo = {
+  app: String(pkg.version ?? '0.0.0'),
+  library: String(lib.version ?? 'unknown'),
+  firmware: staged.digest ?? 'unknown',
+  sources:
+    staged.firmware || staged.libraries
+      ? `${staged.firmware ?? '?'} / ${staged.libraries ?? '?'}`
+      : '',
+  version: staged.version ?? null,
+  declaredVersion: staged.declaredVersion ?? null,
+  production: staged.production === true,
+  debugLock: staged.debugLock !== false,
+  /*
+   * Defaults FALSE on a checkout that has never staged, which is the safe
+   * direction: a test that gates a refusal on this then skips rather than
+   * asserting something no build guaranteed. Production implies it, and
+   * stage.js writes true there for exactly that reason.
+   */
+  enforcingOrigins: staged.enforcingOrigins === true,
+  edition: staged.edition ?? null,
+  model: staged.model === 'duo' ? 'duo' : 'classic',
+  unreleased: staged.unreleased === true,
+  builtFor: '',
+  plugins: Array.isArray(staged.plugins) ? staged.plugins.filter(p => typeof p === 'string') : [],
+  /* the plugins that keep state - the storage slot's name (stateless ones like key_chain do not move it) */
+  slotPlugins: Array.isArray(staged.slotPlugins) ? staged.slotPlugins.filter(p => typeof p === 'string')
+    : Array.isArray(staged.plugins) ? staged.plugins.filter(p => typeof p === 'string') : [],
+};
+
+/**
+ * Whether the SOFT KEY in this build carries a firmware plugin. Only ever true
+ * for the soft key: a hard key runs its own firmware, which has no plugins, so
+ * a caller talking to a hard key must not ask this (it would describe the
+ * wrong device).
+ */
+export function hasSoftKeyPlugin(name: string): boolean {
+  return buildInfo.plugins.includes(name);
+}
+
+/* Assigned after the object exists, because it reads four of its own fields. */
+buildInfo.builtFor = describeBuild();
+
+/**
+ * What this firmware was BUILT FOR, in one line.
+ *
+ * The digest above says which bytes are running; this says what they were meant
+ * to be. Four things can vary independently, and every one of them changes what
+ * the device does:
+ *
+ *   model    a DUO has 24 slots across 4 profiles, three buttons and a PIN that
+ *            travels in the message body. A classic has 12, six, and buttons.
+ *   version  a pinned release from ok-versions.json, or the working tree
+ *   build    DEBUG or production - a production build has no debug console and
+ *            cannot be given a PIN at all
+ *   edition  standard or IN TRVL, which compiles out the encrypted profile
+ *
+ * Written out rather than left to the digest because a digest answers "is this
+ * the same build as before" and never "which build is this". The staging step
+ * knows all four (android/okemu/scripts/stage.js) and records them in
+ * src/generated/firmware.json.
+ *
+ * The ordinary case reads "classic · working tree · debug". Anything else is
+ * worth seeing at a glance, which is the whole point of this screen.
+ */
+function describeBuild(): string {
+  /*
+   * A working tree says WHICH working tree. 'working tree' alone was true and
+   * useless: it is the ordinary case, so the slot carried no information on
+   * almost every build, while the number the device answers with was sitting
+   * in the staging metadata unread. 'working tree v3.1.0' says which line of
+   * firmware this is ahead of, which is the thing that actually changes.
+   *
+   * A pinned release keeps its own name and does not repeat the declared
+   * version beside it - for a release the two agree by definition, and
+   * printing both would only draw the eye when they disagree, which is a
+   * mispinned row and belongs in stage.js's output rather than here.
+   */
+  const tree = buildInfo.declaredVersion
+    ? `working tree ${buildInfo.declaredVersion}`
+    : 'working tree';
+  const parts = [
+    buildInfo.model === 'duo' ? 'DUO' : 'classic',
+    buildInfo.version ?? tree,
+    buildInfo.production ? 'production' : 'debug',
+  ];
+  /*
+   * Only on a DEBUG build, because production enforces by construction and
+   * "production - enforcing" would be saying the same thing twice. On a debug
+   * build it is the difference between two devices that answer differently.
+   */
+  if (!buildInfo.production && buildInfo.enforcingOrigins) {
+    parts.push('enforcing origins');
+  }
+  /* Only when it is NOT the standard edition - saying "standard" every time
+   * teaches people to stop reading the line. */
+  if (buildInfo.edition && buildInfo.edition !== 'standard') {
+    parts.push(buildInfo.edition);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * WHICH DEVICE this build boots against.
+ *
+ * flash.bin and eeprom.bin are the device's entire persistent state, so a
+ * firmware version reading another version's flash measures neither of them.
+ * A pinned build therefore gets its own storage slot and finds what it left
+ * there last time.
+ *
+ * The working tree keeps the unnamed slot it has always used. That is not
+ * tidiness: moving it would strand the provisioned device on every phone that
+ * already has one, and nothing re-provisions itself
+ * (see the bench-state note in CLAUDE.md).
+ *
+ * Kept beside the version it comes from rather than computed at the call site,
+ * because two callers computing it differently is a device that boots against
+ * the wrong flash and looks perfectly healthy.
+ */
+export const storageSlot: string = (() => {
+  /*
+   * A DUO IS A DIFFERENT DEVICE, not a setting on this one. It has 24 slots
+   * across 4 profiles where a classic has 12 across 2, and its PIN travels in
+   * the message body rather than on the buttons - so the two cannot share a
+   * flash image any more than two firmware versions can. Emulating one is a
+   * build option (OKEMU_MODEL=duo), which makes it exactly the same hazard
+   * this slot exists to prevent.
+   */
+  const base = buildInfo.version ?? '';
+  const model = buildInfo.model !== 'duo' ? base : base ? base + '-duo' : 'duo';
+  /*
+   * A PLUGIN BUILD IS ANOTHER DEVICE TOO: a plugin may keep state of its own
+   * in flash or EEPROM, and the base soft key must never boot against that, or
+   * the other way round. No plugins = the slot it always had.
+   */
+  if (!buildInfo.slotPlugins.length) return model;
+  /* '.'-joined: NativeOkEmuModule takes [A-Za-z0-9._-] only */
+  const suffix = 'plugins-' + [...buildInfo.slotPlugins].sort().join('.');
+  return model ? `${model}-${suffix}` : suffix;
+})();
+
+/*
+ * THE TESTNET'S SOFT KEY (BLOCKS.md; Brad, 2026-10-07: "--test-mode where edge
+ * blockchain files are seperated from live and test (like how bitcoin does it)";
+ * "technically we change the storageSlot then for testnet"). The same firmware,
+ * started on its own flash.bin/eeprom.bin: a whole separate, throwaway key with
+ * its own keys, salt, device id and Edge chain - live and test can never mix, and
+ * clearing the testnet is deleting this folder. Derived here, beside storageSlot,
+ * for the same reason storageSlot is: one place, so no caller boots the wrong flash.
+ * A slot must start with a letter or digit (NativeOkEmuModule.slotIsPlain).
+ */
+export const testStorageSlot: string = storageSlot ? `${storageSlot}-test` : 'test';

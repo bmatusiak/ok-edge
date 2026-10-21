@@ -16,6 +16,8 @@ import com.okrn.specs.NativeRandomSpec
 import com.okrn.specs.NativeRsaGenSpec
 import com.okrn.specs.NativeSecretsSpec
 import com.okrn.specs.NativeUsbHidSpec
+import com.okrn.specs.NativeOkEmuSpec
+import com.okrn.emu.NativeOkEmuModule
 import com.okrn.usb.NativeUsbHidModule
 
 /*
@@ -33,12 +35,13 @@ class OkEdgeNativePackage : BaseReactPackage() {
       NativeRsaGenSpec.NAME -> NativeRsaGenModule(reactContext)
       NativeSecretsSpec.NAME -> NativeSecretsModule(reactContext)
       NativeUsbHidSpec.NAME -> NativeUsbHidModule(reactContext)
+      NativeOkEmuSpec.NAME -> NativeOkEmuModule(reactContext)
       else -> null
     }
 
   override fun getReactModuleInfoProvider() = ReactModuleInfoProvider {
     listOf(NativeRandomSpec.NAME, NativeKdfSpec.NAME, NativeOkSslSpec.NAME, NativeRsaGenSpec.NAME, NativeSecretsSpec.NAME,
-      NativeUsbHidSpec.NAME)
+      NativeUsbHidSpec.NAME, NativeOkEmuSpec.NAME)
       .associateWith { ReactModuleInfo(it, it, false, false, false, true) }
   }
 }

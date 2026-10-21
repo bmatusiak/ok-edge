@@ -55,12 +55,14 @@ if (!new File(prefabDir, "modules/openssl/libs").exists()) {
 }
 
 android {
-    namespace "com.okedge.nativemods"
+    /* com.okrn: the copies read com.okrn.R (icons, press sounds) and com.okrn.BuildConfig, as in
+       ok-rn - this namespace generates exactly those, so they stay byte copies */
+    namespace "com.okrn"
     compileSdk rootProject.ext.compileSdkVersion
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
 
-    /* BuildConfig.DEBUG, forwarded to the copies by src/main/java/com/okrn/BuildConfig.kt */
+    /* com.okrn.BuildConfig.DEBUG (NativeUsbHidModule's TCP transport on an emulator) */
     buildFeatures {
         buildConfig true
     }
@@ -91,4 +93,7 @@ dependencies {
     /* NativeSecrets: BiometricPrompt + the Keystore key that makes it mean something (ok-rn's note:
        the key is made with setUserAuthenticationRequired, so the secret cannot be decrypted without one) */
     implementation("androidx.biometric:biometric:1.1.0")
+    /* the soft key: node-onlykey-emulator's Android library (com.okrn.okemu.OkEmuNative), included
+       by app.plugin.js from the emulator checkout */
+    implementation project(':okemu')
 }

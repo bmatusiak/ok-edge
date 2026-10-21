@@ -6,7 +6,20 @@
          without host support; the app reports it at runtime. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
+    <!-- PressAlert: the soft key's press notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application>
+        <!-- NativeOkEmu's restart: the firmware's reboot starts a NEW process, from a helper
+             in its own (see RestartActivity) - as in ok-rn's manifest -->
+        <activity
+            android:name="com.okrn.RestartActivity"
+            android:process=":restart"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:exported="false" />
+
         <!-- Merged into the app's own activity (expo prebuild writes it as <applicationId>.MainActivity):
              brings the app forward when an OnlyKey is plugged in (res/xml/device_filter.xml), as
              ok-rn's manifest does. -->

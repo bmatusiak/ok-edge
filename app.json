@@ -6,7 +6,10 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "platforms": ["android", "web"],
+    "platforms": [
+      "android",
+      "web"
+    ],
     "android": {
       "package": "com.okedge",
       "adaptiveIcon": {
@@ -20,6 +23,9 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "output": "single"
-    }
+    },
+    "plugins": [
+      "okedge-native"
+    ]
   }
 }
