@@ -21,7 +21,6 @@
     "@react-native-async-storage/async-storage": "^3.1.1",
     "events": "^3.3.0",
     "expo": "~58.0.16",
-    "expo-dev-client": "~58.0.14",
     "expo-status-bar": "~58.0.3",
     "node-onlykey-lib": "github:bmatusiak/node-onlykey-lib#fd00d3c0f32213d42c443a0e96df42f7ce481cda",
     "okedge-autofill": "file:./modules/okedge-autofill",

@@ -35,6 +35,8 @@ const withOkEmuProperties = (config) => withGradleProperties(config, (c) => {
     else c.modResults.push({ type: 'property', key, value });
   };
   set('okemuPlugins', PLUGINS);
+  /* a debug build loads its JS from ok-edge's Metro on 8082 (metro.pm2.config.js); ok-rn's keeps 8081 */
+  set('reactNativeDevServerPort', '8082');
   set('okemuAppOut', path.resolve(c.modRequest.projectRoot, 'src', 'generated').replace(/\\/g, '/'));
   return c;
 });
