@@ -62,7 +62,7 @@ module.exports = function guestbook({describe, it}) {
       const message = await openpgp.encrypt({message: await openpgp.createMessage({text: 'hello from the e2e'}), encryptionKeys});
       assert.ok(/BEGIN PGP MESSAGE/.test(message), 'no PGP message came out');
       /* the source Messages asks reads the person's list, not this suite's - it answers either way */
-      assert.ok(Array.isArray(await recipientSource.pgpKeys()));
+      assert.ok(Array.isArray(await recipientSource.pgpContacts()));
     });
 
     it('deletes it again', async ({assert}) => {
