@@ -37,6 +37,15 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (!context.dev && /(^|[/\\])TestingScreen$/.test(moduleName)) {
     return { type: 'sourceFile', filePath: path.join(__dirname, 'src', 'screens', 'TestingScreen.release.tsx') };
   }
+  /*
+   * THE PHONE'S NATIVE MODULES ON THE DESKTOP (stage 4): the web bundle (Electron's page) gets
+   * each spec's desktop version, src/desktop/specs/<Native…>.ts - what that module really has on
+   * this shell (module.ts). The app code that imports the spec is the phone's, unchanged.
+   */
+  const spec = platform === 'web' && /^okedge-native\/specs\/(Native[A-Za-z]+)$/.exec(moduleName);
+  if (spec) {
+    return { type: 'sourceFile', filePath: path.join(__dirname, 'src', 'desktop', 'specs', `${spec[1]}.ts`) };
+  }
   return (resolveRequest || context.resolveRequest)(context, moduleName, platform);
 };
 

@@ -1,27 +1,11 @@
 /**
- * THE PHONE'S ROOT: ok-rn's app (PhoneApp.tsx, a copy of ok-rn's App.tsx) and the two other roots
- * ok-rn's index.js registers, with its notes. The other shells take entry.ts. Metro picks this
- * file by its .android extension, so the web and Electron bundles never contain the phone app.
+ * THE PHONE'S ROOT: ok-rn's app (phoneRoot.ts) and the two other roots ok-rn's index.js registers,
+ * with its notes. The other shells take entry.ts. Metro picks this file by its .android extension.
  */
-import React from 'react';
 import { AppRegistry } from 'react-native';
-import { startupFailure, StartupBoundary } from './StartupFailure';
+import { phoneRoot } from './phoneRoot';
 
-/*
- * App is required inside a guard, not imported: an error while its modules load
- * (a native module this APK lacks) would otherwise leave the launch splash up
- * forever with nothing to read. See src/StartupFailure.tsx.
- */
-let Root: React.ComponentType;
-try {
-  const App = require('../PhoneApp').default;
-  Root = function GuardedApp() {
-    return React.createElement(StartupBoundary, null, React.createElement(App));
-  };
-} catch (e) {
-  Root = startupFailure(e, 'loading the app');
-}
-export const root = Root;
+export const root = phoneRoot();
 
 export function registerMore(): void {
   /*

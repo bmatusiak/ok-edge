@@ -10,11 +10,25 @@
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
-const CHANNELS = new Set(['okedge:about']);
+/* what the page may ask for - the same names electron/main.js and electron/desktop register */
+const CHANNELS = new Set([
+  'okedge:about',
+  'NativeRsaGen:generatePrimes',
+  'NativeSecrets:boxSeal', 'NativeSecrets:boxOpen', 'NativeSecrets:boxForget',
+]);
+/* what the main process may push to the page: the native modules' events (src/desktop/specs) */
+const EVENTS = new Set([]);
 
 contextBridge.exposeInMainWorld('okedge', {
   invoke(channel, ...args) {
     if (!CHANNELS.has(channel)) return Promise.reject(new Error(`ok-edge: channel "${channel}" is not allowed`));
     return ipcRenderer.invoke(channel, ...args);
+  },
+  /* subscribe to one pushed event; returns the way to stop. The page never sees the IPC event object. */
+  on(channel, listener) {
+    if (!EVENTS.has(channel)) throw new Error(`ok-edge: event "${channel}" is not allowed`);
+    const handler = (_event, payload) => listener(payload);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeListener(channel, handler);
   },
 });

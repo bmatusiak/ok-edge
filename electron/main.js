@@ -29,6 +29,16 @@ ipcMain.handle('okedge:about', () => ({
   platform: `${process.platform}-${process.arch}`,
 }));
 
+/* the phone's native modules, the desktop's half (electron/desktop; the page's half: src/desktop/specs) */
+const desktopModules = require('./desktop');
+for (const [channel, fn] of Object.entries(desktopModules.handlers)) {
+  ipcMain.handle(channel, (_event, ...args) => fn(...args));
+}
+/* their events, pushed to every window (the page subscribes through the preload's on()) */
+desktopModules.attach((channel, payload) => {
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send(channel, payload);
+});
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 900,
