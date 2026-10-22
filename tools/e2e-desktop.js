@@ -94,6 +94,8 @@ async function main() {
       const tick = setInterval(() => {
         if (/TEST COMPLETE/.test(log)) { clearInterval(tick); setTimeout(resolve, 1500); return; }
         if (/\[drive\] FAILED/.test(log)) { clearInterval(tick); reject(new Error(lastLine)); return; }
+        /* the soft key's process died: no suite can finish, so do not wait out the stall timer */
+        if (/\[okemu\] the soft key's process ended/.test(log)) { clearInterval(tick); reject(new Error(`the soft key's process died: ${(log.match(/\[okemu\] (ACCESS VIOLATION[^\n]*|FATAL[^\n]*)/) || ['', 'see the log'])[1]}`)); return; }
         if (Date.now() - started > BUDGET_MS) { clearInterval(tick); reject(new Error(`the suite did not finish within ${BUDGET_MS / 1000}s. Last: ${lastLine}`)); return; }
         if (Date.now() - lastAt > STALL_MS) { clearInterval(tick); reject(new Error(`stuck after: ${lastLine}`)); }
       }, 500);

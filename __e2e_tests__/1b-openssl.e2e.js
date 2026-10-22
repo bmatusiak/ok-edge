@@ -25,6 +25,9 @@ const {sha256} = require('node-onlykey-lib/vendor/@noble/hashes/sha2.js');
 const NativeOkSsl = require('okedge-native/specs/NativeOkSsl').default;
 const NativeRsaGen = require('okedge-native/specs/NativeRsaGen').default;
 const NativeKdf = require('okedge-native/specs/NativeKdf').default;
+/* the app's own OpenSSL is the phone's (android/okssl); the desktop page has WebCrypto and none of its own */
+const {shell} = require('../src/platform');
+const ownOpenSsl = () => shell === 'android';
 
 const PASS = 'openssl-e2e-passphrase-00000001';
 const hex = b => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
@@ -218,7 +221,8 @@ module.exports = function openssl({describe, it}) {
       }
     });
 
-    it('OpenSSL is the pinned release, and its RNG says it is seeded', async ({log, assert}) => {
+    it('OpenSSL is the pinned release, and its RNG says it is seeded', async ({log, assert, skip}) => {
+      if (!ownOpenSsl()) skip(`the app links its own OpenSSL on the phone only - this is the ${shell} shell`);
       const version = await NativeOkSsl.version();
       log(`linked: ${version}`);
       assert.ok(new RegExp(`^OpenSSL ${OPENSSL_PINNED.replace(/\./g, '\\.')}\\b`).test(version),
@@ -227,7 +231,8 @@ module.exports = function openssl({describe, it}) {
     });
 
     it('RANDOMNESS: raw RAND_bytes, OpenSSL\'s primes, and the platform RNG all look random',
-      async ({log, assert}) => {
+      async ({log, assert, skip}) => {
+        if (!ownOpenSsl()) skip(`raw RAND_bytes is the phone's own OpenSSL - this is the ${shell} shell`);
         /* raw RAND_bytes: two draws must differ; 8 KiB of it through the checks */
         const one = fromHex(await NativeOkSsl.randomBytes(4096));
         const two = fromHex(await NativeOkSsl.randomBytes(4096));

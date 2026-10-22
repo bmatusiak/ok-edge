@@ -15,9 +15,15 @@ export default desktopModule<Spec>('NativeSecrets', {
   /* no screenshot block on a desktop window */
   async setScreenshotsBlocked() {},
   async screenshotsBlocked() { return false; },
-  /* no biometric prompt on the desktop: the biometric store is absent */
-  async biometricStatus() { return 'unavailable'; },
+  /*
+   * No biometric prompt on the desktop, so no biometric store: it holds nothing, and answers as
+   * the phone's does for an alias with nothing in it (src/biometrics.ts explains 'no-hardware').
+   */
+  async biometricStatus() { return 'no-hardware'; },
   async biometricHas() { return false; },
+  async biometricForget() { return true; },
+  async biometricLoad(alias: string) { throw new Error(`nothing is stored under "${alias}": this desktop has no biometric store`); },
+  async biometricStore() { throw new Error('this desktop has no biometric store - nothing was stored'); },
   /* the Keystore box: Electron's safeStorage (the OS keychain/DPAPI), in the main process */
   boxSeal: (alias: string, hex: string) => invoke<string>('NativeSecrets:boxSeal', alias, hex),
   boxOpen: (alias: string, hex: string) => invoke<string>('NativeSecrets:boxOpen', alias, hex),

@@ -58,6 +58,8 @@ async function touchFree(s, log, skip, run) {
   try {
     return await run();
   } catch (e) {
+    /* an earlier suite left the key in config mode this pass (it set the preference there): next pass */
+    if (/CONFIG MODE/.test(String(e && e.message))) skip('the key is in config mode this pass (an earlier suite set it up there) - this runs on the next one');
     if (!/ACTION_TIMEOUT|answered the derive with no data/.test(String(e && e.message))) throw e;
     if (!preferenceSet) {
       preferenceSet = true;
