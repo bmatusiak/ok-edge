@@ -71,6 +71,18 @@ function createWindow() {
       app.quit();
     }, Number(process.env.OKEDGE_SHOT_MS || 3000)));
   }
+  /*
+   * OKEDGE_DRIVE=<file>: a script run in the page once it has loaded - how tools/e2e-desktop.js
+   * walks the app to its test runner (tools/e2e-desktop-drive.js), as tools/e2e.js taps through
+   * adb on the phone. Only on a development page (OKEDGE_WEB_URL): a packaged app never runs one.
+   */
+  const drive = process.env.OKEDGE_DRIVE;
+  if (drive && dev) {
+    /* every load: a development page reloads (Fast Refresh, Metro after a change) and loses it */
+    win.webContents.on('did-finish-load', () => {
+      win.webContents.executeJavaScript(fs.readFileSync(drive, 'utf8')).catch((e) => console.error(`[drive] ${e.message}`));
+    });
+  }
   /* OKEDGE_CONSOLE=1: the page's console on this process's stdout - how a check reads what the page said */
   if (process.env.OKEDGE_CONSOLE === '1') {
     win.webContents.on('console-message', (e) => console.log(`[page ${e.level}] ${e.message}`));

@@ -49,3 +49,4 @@ yarn-error.*
 
 # firmware.json + plugin tests, written by node-onlykey-emulator's stage.js on every Android build
 src/generated/
+tools/.last-e2e*.json
