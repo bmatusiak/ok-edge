@@ -15,14 +15,23 @@ const CHANNELS = new Set([
   'okedge:about',
   'NativeRsaGen:generatePrimes',
   'NativeSecrets:boxSeal', 'NativeSecrets:boxOpen', 'NativeSecrets:boxForget',
+  ...['start', 'stop', 'writeHid', 'setButton', 'setButtonTicks', 'pressQueue', 'pressPending', 'confirmState',
+    'buttonTicksLeft', 'rounds', 'kbdSetReport', 'kbdGetReport', 'factoryReset', 'deleteSlot', 'restart', 'restartApp']
+    .map((m) => `NativeOkEmu:${m}`),
 ]);
+/* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
+const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn']);
 /* what the main process may push to the page: the native modules' events (src/desktop/specs) */
-const EVENTS = new Set([]);
+const EVENTS = new Set(['NativeOkEmu:onStream', 'NativeOkEmu:onLed', 'NativeOkEmu:onPluginEvent', 'NativeOkEmu:onRestartRequested']);
 
 contextBridge.exposeInMainWorld('okedge', {
   invoke(channel, ...args) {
     if (!CHANNELS.has(channel)) return Promise.reject(new Error(`ok-edge: channel "${channel}" is not allowed`));
     return ipcRenderer.invoke(channel, ...args);
+  },
+  invokeSync(channel, ...args) {
+    if (!SYNC_CHANNELS.has(channel)) throw new Error(`ok-edge: channel "${channel}" is not allowed`);
+    return ipcRenderer.sendSync(channel, ...args);
   },
   /* subscribe to one pushed event; returns the way to stop. The page never sees the IPC event object. */
   on(channel, listener) {

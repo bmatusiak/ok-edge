@@ -28,6 +28,12 @@ export function invoke<T = unknown>(channel: string, ...args: unknown[]): Promis
   return desktop.invoke(channel, ...args) as Promise<T>;
 }
 
+/* a spec's synchronous method, answered by the main process in place (preload invokeSync) */
+export function invokeSync<T = unknown>(channel: string, ...args: unknown[]): T | null {
+  const sync = (globalThis as any).okedge?.invokeSync as ((c: string, ...a: unknown[]) => T) | undefined;
+  return sync ? sync(channel, ...args) : null;
+}
+
 export function desktopModule<T extends object>(name: string, impl: Partial<Record<string, unknown>>, events: string[] = [], { pushed = false } = {}): T {
   const emitters: Record<string, (l: Listener) => Subscription> = {};
   for (const e of events) {

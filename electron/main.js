@@ -34,6 +34,12 @@ const desktopModules = require('./desktop');
 for (const [channel, fn] of Object.entries(desktopModules.handlers)) {
   ipcMain.handle(channel, (_event, ...args) => fn(...args));
 }
+/* a spec's synchronous methods: answered in place (a throw answers null rather than hanging the page) */
+for (const [channel, fn] of Object.entries(desktopModules.syncHandlers)) {
+  ipcMain.on(channel, (event, ...args) => {
+    try { event.returnValue = fn(...args); } catch { event.returnValue = null; }
+  });
+}
 /* their events, pushed to every window (the page subscribes through the preload's on()) */
 desktopModules.attach((channel, payload) => {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send(channel, payload);
@@ -63,7 +69,11 @@ function createWindow() {
     win.webContents.once('did-finish-load', () => setTimeout(async () => {
       fs.writeFileSync(shot, (await win.webContents.capturePage()).toPNG());
       app.quit();
-    }, 3000));
+    }, Number(process.env.OKEDGE_SHOT_MS || 3000)));
+  }
+  /* OKEDGE_CONSOLE=1: the page's console on this process's stdout - how a check reads what the page said */
+  if (process.env.OKEDGE_CONSOLE === '1') {
+    win.webContents.on('console-message', (e) => console.log(`[page ${e.level}] ${e.message}`));
   }
 }
 

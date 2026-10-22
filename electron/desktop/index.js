@@ -2,17 +2,19 @@
 
 /**
  * THE DESKTOP'S HALF OF THE PHONE'S NATIVE MODULES (stage 4): one file per capability, each giving
- * `handlers` - IPC channel -> function - that electron/main.js registers. The page reaches them
- * only through electron/preload.js, whose allowlist names the same channels (a test checks the
- * two agree). The page's half is src/desktop/specs.
+ *   handlers       IPC channel -> function (async on the page: window.okedge.invoke)
+ *   syncHandlers   IPC channel -> function, for a spec's synchronous methods (window.okedge.invokeSync)
+ *   attach(push)   optional: a way to push its events to the page
+ * electron/main.js registers them. The page reaches them only through electron/preload.js, whose
+ * allowlists name the same channels. The page's half is src/desktop/specs.
  */
-const MODULES = [require('./rsagen'), require('./secrets')];
+const MODULES = [require('./rsagen'), require('./secrets'), require('./okemu')];
 
-const handlers = Object.assign({}, ...MODULES.map((m) => m.handlers));
+const handlers = Object.assign({}, ...MODULES.map((m) => m.handlers || {}));
+const syncHandlers = Object.assign({}, ...MODULES.map((m) => m.syncHandlers || {}));
 
-/* main.js gives each module a way to push events to the page (the spec's on<Name> emitters) */
 function attach(send) {
   for (const m of MODULES) if (typeof m.attach === 'function') m.attach(send);
 }
 
-module.exports = { handlers, attach };
+module.exports = { handlers, syncHandlers, attach };

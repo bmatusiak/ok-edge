@@ -1,12 +1,19 @@
-/* the soft key: node-onlykey-emulator's Node addon in Electron's main process (stage 4, step 3) - not yet (module.ts: how a desktop module is made) */
+/* the soft key: node-onlykey-emulator's Node addon in Electron's main process (electron/desktop/okemu.js) (module.ts: how a desktop module is made) */
 import type {Spec} from 'okedge-native/specs/NativeOkEmu';
-import {desktopModule} from './module';
+import {desktopModule, invoke, invokeSync} from './module';
+
+const call = (m: string) => (...args: unknown[]) => invoke(`NativeOkEmu:${m}`, ...args);
+
 export default desktopModule<Spec>('NativeOkEmu', {
-  isAvailable: () => false,
-  isRunning: () => false,
+  isAvailable: () => invokeSync<boolean>('NativeOkEmu:isAvailable') === true,
+  isRunning: () => invokeSync<boolean>('NativeOkEmu:isRunning') === true,
+  debuggingOn: () => invokeSync<boolean>('NativeOkEmu:debuggingOn') === true,
+  /* the phone's attention sound and splash bookkeeping: nothing to do on the desktop */
   setAttention() {},
   hushPress() {},
   markSplashDone() {},
   splashDoneThisProcess: () => false,
-  debuggingOn: () => false,
-}, ['onStream', 'onLed', 'onPluginEvent', 'onRestartRequested']);
+  ...Object.fromEntries(['start', 'stop', 'writeHid', 'setButton', 'setButtonTicks', 'pressQueue', 'pressPending',
+    'confirmState', 'buttonTicksLeft', 'rounds', 'kbdSetReport', 'kbdGetReport', 'factoryReset', 'deleteSlot',
+    'restart', 'restartApp'].map((m) => [m, call(m)])),
+}, ['onStream', 'onLed', 'onPluginEvent', 'onRestartRequested'], {pushed: true});
