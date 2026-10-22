@@ -77,6 +77,20 @@ function createWindow() {
   }
 }
 
+/*
+ * ONE INSTANCE. A second ok-edge would start a second soft key on the same flash.bin - two
+ * firmwares writing one flash is data loss (ok-rn's manifest says the same of a second process).
+ * A second start brings the open window forward and quits.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+  });
+}
+
 app.whenReady().then(() => {
   protocol.handle('okedge', (request) => {
     const url = new URL(request.url);

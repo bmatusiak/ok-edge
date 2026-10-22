@@ -39,10 +39,11 @@ function startHost() {
     windowsHide: true,
   });
   ready = new Promise((resolve) => {
-    const fail = (why) => { hostFailed = why; host = null; resolve(false); };
+    const fail = (why) => { hostFailed = why; host = null; console.error(`[okemu] ${why}`); resolve(false); };
+    console.log(`[okemu] the soft key's Node process started (pid ${host.pid})`);
     host.once('error', (e) => fail(`the soft key's Node process did not start: ${e.message}`));
     host.on('message', (m) => {
-      if (m && m.ready === true) resolve(true);
+      if (m && m.ready === true) { console.log('[okemu] the soft key loaded'); resolve(true); }
       else if (m && m.ready === false) fail(`the soft key did not load: ${m.error}`);
       else if (m && m.event) send(m.event, m.payload);
       else if (m && m.id && waiting.has(m.id)) {
