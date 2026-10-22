@@ -39,6 +39,18 @@ const {transport: oktransport} = require('node-onlykey-lib');
 const UsbPipeModule = require('../src/transport/UsbPipe');
 const UsbPipe = UsbPipeModule.default || UsbPipeModule.UsbPipe;
 const {getOnlyKey, resetOnlyKey} = require('../src/onlykey');
+const {shell} = require('../src/platform');
+
+/*
+ * ON A DESKTOP the app cannot claim two of the key's interfaces, and neither is
+ * a fault: the OS keyboard driver owns the KEYBOARD (what the key types goes to
+ * the focused window), and Windows lists a security key's FIDO interface only to
+ * an elevated program (it keeps it for its WebAuthn service). The phone claims
+ * all four, so these are its rules, relaxed for those two on the desktop only.
+ */
+const onPhone = shell === 'android';
+const desktopCannotClaim = onPhone ? new Set() : new Set(
+  ['keyboard', 'fido'].map(name => `the ${name} interface is required and was not found`));
 
 const {usb, IFACE} = oktransport;
 
@@ -133,7 +145,11 @@ module.exports = function hardKey({describe, it}) {
        * It knows which are required, that a duplicate is fatal, and that
        * anything not identified by its usage page is a guess.
        */
-      const problems = usb.problems(found);
+      const all = usb.problems(found);
+      const problems = all.filter(p => !desktopCannotClaim.has(p));
+      if (all.length !== problems.length) {
+        log(`on the ${shell} shell, not claimable: ${JSON.stringify(all.filter(p => desktopCannotClaim.has(p)))}`);
+      }
       log(`problems: ${problems.length ? JSON.stringify(problems) : 'none'}`);
       assert.equal(problems.length, 0, problems.join('; '));
     });
@@ -157,6 +173,10 @@ module.exports = function hardKey({describe, it}) {
        * separated correctly is proving the tie was broken by evidence.
        */
       const fido = found.find(i => i.iface === IFACE.FIDO);
+      if (!fido && !onPhone) {
+        log(`no security-key interface on the ${shell} shell (hidden from this program) - the vendor half stands`);
+        return;
+      }
       assert.ok(fido, 'no security-key interface');
       assert.notEqual(
         vendor.interfaceNumber, fido.interfaceNumber,
@@ -276,6 +296,8 @@ module.exports = function hardKey({describe, it}) {
     });
     it('types a slot over the CLAIMED keyboard interface, and the phone reads it back', async ({log, assert, skip}) => {
       if (absent) skip(absent);
+      /* never pressed off the phone: unclaimed, the slot would be typed into whatever window has focus */
+      if (!onPhone) skip(`the ${shell} shell cannot claim the key's keyboard - a slot pressed here types into the focused window`);
       assert.ok(shared && shared.result, 'the connect test did not run');
       const {device} = await getOnlyKey('usb');
 
