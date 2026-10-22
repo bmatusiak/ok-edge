@@ -1,0 +1,52 @@
+# TODO: Edge on the hard key, and Stages 4-5 built around it
+
+Brad, 2026-10-22: "i want to see if we can add edge to a hardkey so we can focus on development using hardkey with edge, so stages 4 and 5 can be the proper direction instead of guessing".
+
+So the order is: **Edge runs on a developer hard key first**; then Stage 4 (desktop) and Stage 5 (web) are built as what that key needs from a computer, not guessed from the phone.
+
+Facts below are from the Edge plugin's own docs (`node-onlykey-emulator/emulator/plugins/edge`: README, WHITEPAPER §3, AUDIT, SPEC) unless marked otherwise.
+
+## A. Edge on a developer hard key (firmware)
+
+| # | Task | What we know | Done when |
+|---|---|---|---|
+| A1 | **Find the flash.** Edge keeps one 208-byte record (`OKEDGEv1`), double-buffered across two sectors. On the soft key they are `base + 0x1000` / `+ 0x1800` (`factorysectoradr - 0x4800`), which on a real Teensy is the **bootloader's** - so a hard key needs two free 2 KB sectors elsewhere in 3.1.0's flash map. | "A hard key has no free flash sector for the plugin's state today" (WHITEPAPER §3). Teensy 3.2: 256 KB flash, 2 KB sectors. | A flash map of 3.1.0 on Teensy 3.2 (code end, every data sector and its owner) and a chosen place, or a measured "no room" with what would have to move. |
+| A2 | **Fit the size.** 7,716 B code, 325 B constants, 2,761 B RAM (measured 2026-10-10 on the Pi, Teensy 1.6.5-r5, `-Os`). Trims if short: held links 8 → 4 (-544 B RAM), drop the record's latest link (64 B). | His dev hex is 209,016 B = 79.7% of 256 KB (`okt flash`, 2026-10-22), so ~52 KB code room - before data sectors are counted. RAM headroom on 3.1.0 not measured yet. | A Teensy 3.2 build of 3.1.0 + Edge that links, with its flash and RAM use printed. |
+| A3 | **Build it where firmware is built.** The Pi is the firmware build and flash station (Arduino 1.6.5-r5 + Teensyduino 1.27). The plugin's eight hooks are applied by the emulator's `stage.js`; a hard-key build needs the same hooks applied to `OnlyKey-Firmware 9fceea1` + `libraries 37aa531`. | `plugin.js` declares `minBase: '3.1.0'`, `backup: true`, eight hooks (okcore.cpp x6, OnlyKey.ino x2). | `ok-<fw>-<lib>-edge-test.hex`: his release commits + Edge, DEBUG on (console presses for tests), reproducible from one command. |
+| A4 | **Flash a developer key and test it.** We have two developer keys (2026-10-22). One stays on his plain dev hex for release testing; the other takes the Edge build. HalfKay only, never OKFWUPDATE. | The kit drives a physical key on Linux and now on Windows (kit `c7e1ed2`..`e4e9191`). | The plugin's own tests (`plugins/edge/tests`) and the kit's protocol sections pass against the hard key; a budget opened by a press on the key pays signs without presses. |
+| A5 | **Upstream stays his call.** "Any port is for the firmware maintainers to decide" (WHITEPAPER §3). Release hexes are signed by T. So an Edge hard key is a developer-key build for us, until the maintainer chooses otherwise. | | Written down in the plugin docs: what a hard-key port changes in the core, measured. |
+
+## B. Stage 4 - the desktop is the hard key's Edge host
+
+On the phone, the soft key's host is the phone itself: it shows the sheets and keeps the chain. A hard key has no screen, so **the desktop app takes that role** (SPEC H2, H7: "A hard key has no phone: the desktop app keeps the record (later)").
+
+| # | Task | What we know |
+|---|---|---|
+| B1 | **The hard key over USB** in the desktop app. | ✅ Done: the lib's node-hid pipe in Electron's main process (ok-edge `5c9d893`, lib `e80d233`); console presses on a DEBUG key. |
+| B2 | **The budget sheet on the desktop**: what is being approved (reason, scopes, uses, lifetime) shown on the computer before the press on the key. On the phone this is the yellow Edge sheet. | Design is Brad's call. A hard key "never exposes that record" (SPEC H2) - the host must show what it sent, and the press is the person's agreement to that. |
+| B3 | **The chain copy and the agent identity** kept by the desktop app (on the phone: the Edge tab's copy, and the identity record H7). | The bucket (Stage 0/3) already holds `edge.copies` / `.budgets` / `.pointers` for the CLI; the desktop app's bucket file is Stage 4's open item. |
+| B4 | **The agent runs against the hard key**: `onlykey-js edge budget/exec/receipt/end` over USB instead of Bluetooth, and the edge skill's `ship` through it. | Today every budget goes through a phone (A13 / Pixel) over Bluetooth. |
+| B5 | **The phone over Bluetooth** (the flipped role): still wanted, but after B2-B4, so the screens are designed once for "a key the desktop talks to", whichever key it is. | The lib's BLE pipe is exported for it (lib `e80d233`). |
+| B6 | The bucket as a file; packaging (Windows + Linux, a Node runtime for the soft key's process). | Unchanged from the plan. |
+
+## C. Stage 5 - the web, for a hard key with Edge
+
+| # | Task | What we know |
+|---|---|---|
+| C1 | **The transport is FIDO2 / WebAuthn only.** Chrome blocks the OnlyKey from WebHID (Brad's bug bounty, patched at Google). Edge is a vendor message (`0xF8`), so on the web it rides the vendor-over-WebAuthn path. | The lib has `transport/webauthn`; apps.onlykey.io's transit is the reference. |
+| C2 | **The origin.** A production key admits the vendor-over-WebAuthn path only from `apps.crp.to` / `apps.onlykey.io` (`webcryptcheck()`); a DEBUG build admits any origin. So development on a developer key works anywhere; a production key needs one of those two origins (the hosts-file + local CA plan in the plan file). | lib `src/protocol/ctap.js`. |
+| C3 | **Proof first**: one Edge round trip (status, then a budget opened by a press) from a page in Chrome to the Edge hard key over WebAuthn. Then the same screens as the desktop (B2, B3) on the web. | Web Bluetooth to the phone stays unproven (Chromium's blocklist to check). |
+| C4 | The bucket on the page: drop, merge, download. | Unchanged from the plan. |
+
+## Order
+
+1. Finish the 3.1.0 release-candidate deep test (in progress, `onlykey-RN/release-3.1.0-test/REPORT.md`).
+2. A1 → A2 → A3 → A4 (the Edge hard key).
+3. B2 → B3 → B4 (the desktop as its host), then B5, B6.
+4. C3 → C4.
+
+## Questions for Brad
+
+- A1: if 3.1.0 has no two free sectors, is moving or shrinking another region on **our developer builds** acceptable, or must the Edge build keep 3.1.0's flash layout byte for byte?
+- A4: which developer key becomes the Edge key, and which stays on his plain dev hex?
+- B2: how the desktop shows a budget request (window, notification, tray) - design call.
