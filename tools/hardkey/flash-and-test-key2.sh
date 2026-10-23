@@ -7,8 +7,8 @@
 # Every press after the bootloader one goes through the key's debug console.
 source ~/.nvm/nvm.sh >/dev/null 2>&1
 ROOT=~/project/onlykey
-HEX=$ROOT/fw-edge/images/v3.1.0-test-edge-fw9fceea1-lib2ce5fce.hex
-WANT=${WANT_SHA:-abba58e0c826410069a03262b6a932605c1f33927c48812a295a6db2b6946505}
+HEX=$ROOT/fw-edge/images/v3.1.0-test-edge-fw9fceea1-libb273489.hex
+WANT=${WANT_SHA:-fd555e5eda3db2d4fde148afd4c3c53cd82925bca0a88dcb20ab977c45a5ae28}
 LOGS=$ROOT/fw-edge/logs; mkdir -p "$LOGS"
 LOG=$LOGS/key2-edge-$(date +%Y%m%d-%H%M).log
 {
