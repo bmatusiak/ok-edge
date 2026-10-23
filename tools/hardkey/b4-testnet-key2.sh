@@ -20,12 +20,12 @@ rm -rf $R && git init -q $R && git -C $R -c user.name="Edge Testnet (zbox)" -c u
 git -C $R log --oneline -1
 
 step "3. budget"
-out=$($D edge --test-mode budget --reason "B4 testnet: sign one commit" --gpg 1 --ssh 0 --ttl 30 2>&1); echo "$out" | grep -av "^DEBUG"
+$D edge --test-mode budget --reason "B4 testnet: sign one commit" --gpg 1 --ssh 0 --ttl 30 2>&1 | grep -av --line-buffered "^DEBUG" | tee /tmp/b4-budget.out; out=$(cat /tmp/b4-budget.out)
 H=$(echo "$out" | grep -o 'head = [0-9a-f]\{64\}' | tail -1 | cut -c8-); echo "budget head: ${H:-none}"
 [ -n "$H" ] || { echo "B4-TESTNET-STOPPED: no budget"; exit 1; }
 
 step "4. exec: a signed commit"
-out=$($D edge --test-mode exec --head $H --intent "sign: b4 scratch" -- git -C $R -c user.name="Edge Testnet (zbox)" -c user.email=testnet@example.invalid commit --amend --no-edit -S 2>&1); echo "$out" | grep -av "^DEBUG"
+$D edge --test-mode exec --head $H --intent "sign: b4 scratch" -- git -C $R -c user.name="Edge Testnet (zbox)" -c user.email=testnet@example.invalid commit --amend --allow-empty --no-edit -S 2>&1 | grep -av --line-buffered "^DEBUG" | tee /tmp/b4-exec.out; out=$(cat /tmp/b4-exec.out)
 seq=$(echo "$out" | grep -o 'receipt owed for #[0-9]*' | grep -o '[0-9]*$' | tail -1); echo "owed: #${seq:-none}"
 git -C $R cat-file -p HEAD | grep -c "^gpgsig" | sed 's/^/gpgsig headers on the commit: /'
 
