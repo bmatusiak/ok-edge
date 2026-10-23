@@ -7,7 +7,7 @@ source ~/.nvm/nvm.sh >/dev/null 2>&1
 export NODE_PATH=~/project/onlykey/onlykey-testing/node_modules     # node-hid: the lib keeps it optional, the kit has it
 export CONSOLE_LINE=~/project/onlykey/release-3.1.0-test/tools/console-line.js
 LIB=~/project/onlykey/node-onlykey-lib/cli/index.js
-D="node $HOME/project/onlykey/fw-edge/edge-drive.js $LIB"
+D="timeout 240 node $HOME/project/onlykey/fw-edge/edge-drive.js $LIB"
 R=/tmp/b4-scratch
 step() { echo; echo "== $(date +%T) $*"; }
 (cd "$(dirname "$CONSOLE_LINE")" && node console-line.js 1111111 >/dev/null 2>&1); sleep 5
