@@ -3,7 +3,7 @@
 #   1. waits (up to 15 min) for key 2 in its HalfKay bootloader (16c0:0478) - press its bootloader button
 #   2. flashes the hex build-hardkey.sh made (HalfKay only, never OKFWUPDATE), after checking its SHA-256
 #   3. the kit's protocol + security sections, as the RC's final pass ran them, plus Edge's own tests
-#      through 38's hard-key gate - the kit provisions the wiped key itself (state 'initialized')
+#      through 37, the hard-key plugin gate - the kit provisions the wiped key itself (state 'initialized')
 # Every press after the bootloader one goes through the key's debug console.
 source ~/.nvm/nvm.sh >/dev/null 2>&1
 ROOT=~/project/onlykey
