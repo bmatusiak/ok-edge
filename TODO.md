@@ -8,6 +8,19 @@ Facts below are from the Edge plugin's own docs (`node-onlykey-emulator/emulator
 
 ## A. Edge on a developer hard key (firmware)
 
+**A1 result (2026-10-23, read from `OnlyKey-Firmware 9fceea1` + `libraries 37aa531`, and the dev hex itself):**
+
+| Region | Range | Owner |
+|---|---|---|
+| Dev hex (HalfKay, linked at 0: no OnlyKey bootloader) | `0x00000`-`0x33077`, 209,016 B, one image | code |
+| Free on a dev key | `0x33078`-`0x3A7FF`: whole sectors `0x33800`-`0x3A7FF` = 14 x 2 KB | nobody - nothing in either repo addresses it |
+| Data storage (`flashstorestart`-`flashend`) | `0x3A800`-`0x3FFFF`, 11 x 2 KB | sector 1: temp (wiped by the bootloader on firmware load); sectors 2-11: all have owners in `okcore.cpp` |
+| Production firmware window (`fwstartadr`) | `0x06060`-`0x3A05F` | `fw_hash()` (OnlyKey.ino) hashes all of it once, at first boot, into EEPROM 2-65 "for integrity verification"; nothing in the firmware reads it back - the signed bootloader does |
+
+**Chosen for the developer build:** Edge's two sectors at **`0x39000` and `0x39800`** - free on a dev key, below the sector that holds the production window's last bytes (`0x3A000`-`0x3A05F`), and a link-time check that the code ends below `0x39000` (today `0x33077`; Edge adds ~7.7 KB, leaving ~16 KB). No 3.1.0 region moves, so the A1 question below is moot for developer builds.
+
+**Not for production as is:** on a production key those sectors are inside the hashed firmware window, so every Edge write would change what the bootloader verifies. A production port needs its place chosen by the maintainer (A5).
+
 | # | Task | What we know | Done when |
 |---|---|---|---|
 | A1 | **Find the flash.** Edge keeps one 208-byte record (`OKEDGEv1`), double-buffered across two sectors. On the soft key they are `base + 0x1000` / `+ 0x1800` (`factorysectoradr - 0x4800`), which on a real Teensy is the **bootloader's** - so a hard key needs two free 2 KB sectors elsewhere in 3.1.0's flash map. | "A hard key has no free flash sector for the plugin's state today" (WHITEPAPER §3). Teensy 3.2: 256 KB flash, 2 KB sectors. | A flash map of 3.1.0 on Teensy 3.2 (code end, every data sector and its owner) and a chosen place, or a measured "no room" with what would have to move. |
@@ -47,6 +60,6 @@ On the phone, the soft key's host is the phone itself: it shows the sheets and k
 
 ## Questions for Brad
 
-- A1: if 3.1.0 has no two free sectors, is moving or shrinking another region on **our developer builds** acceptable, or must the Edge build keep 3.1.0's flash layout byte for byte?
+- ~~A1: moving another region~~ - not needed: a dev key has 14 free sectors above its code (A1 result).
 - A4: which developer key becomes the Edge key, and which stays on his plain dev hex?
 - B2: how the desktop shows a budget request (window, notification, tray) - design call.
