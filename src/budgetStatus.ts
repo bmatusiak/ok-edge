@@ -43,12 +43,21 @@ export function budgetStatus(b: EdgeBudget, live: boolean, view: EdgeView | null
     const t = r.receipt as Paired | undefined;
     return !answered(r) && t?.status !== 'no-receipt-owed' && t?.status !== 'settled';
   });
-  const owed = Math.max(owedRows.length, b.used - (b.receiptsFiled ?? 0));
+  /*
+   * USES THE KEY LOST, ACCEPTED AS LOST (a LOSS link, R24 - key 1's budget 387, 2026-10-24): not in
+   * the copy, so not here to pair with a receipt - and the LOSS accounts for them. They owe nothing
+   * and do not hold back Validated. Only for a budget whose links overlap an accepted loss.
+   */
+  const lostRanges = view?.verdict.kind === 'verified' ? view.verdict.lost ?? [] : [];
+  const span = {from: b.firstSeq ?? -1, to: b.lastSeq ?? -1};
+  const overlapsLoss = lostRanges.some(l => l.from <= span.to && span.from <= l.to);
+  const lostUses = overlapsLoss ? Math.max(0, b.used - uses.length) : 0;
+  const owed = Math.max(owedRows.length, b.used - lostUses - (b.receiptsFiled ?? 0));
   /* nothing more can be spent: every use gone, or the budget is no longer live (ended, expired, a lock) */
   const noUsesLeft = !live || (b.uses > 0 && b.used >= b.uses);
   if (live || owed > 0) return {kind: 'active', owed, live, noUsesLeft};
   /* every use answered by a link that verifies: its receipt, or the settle that cleared it */
-  const allChecked = uses.length === b.used && uses.every(r => {
+  const allChecked = uses.length === b.used - lostUses && uses.every(r => {
     if (!r.verified) return false;
     const t = answered(r);
     if (t) return bySeq.get(t.seq)?.verified === true;

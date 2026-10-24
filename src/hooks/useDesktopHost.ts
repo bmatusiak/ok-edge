@@ -9,6 +9,8 @@
 import {useEffect} from 'react';
 import {DESKTOP_FROM, handleEdgeMessage} from '../edgeAgents';
 import {desktop, shell} from '../platform';
+import {createComputerHold} from '../vendorBridge';
+import {getOnlyKey} from '../onlykey';
 
 type Shell = {on(channel: string, listener: (payload: any) => void): () => void};
 
@@ -16,10 +18,24 @@ export function useDesktopHost(): void {
   useEffect(() => {
     const bridge = (globalThis as {okedge?: Shell}).okedge;
     if (shell !== 'electron' || !desktop || !bridge) return undefined;
-    return bridge.on('okedge:edgeMessage', ({id, message, from}: {id: number; message: unknown; from: string}) => {
+    const offMessage = bridge.on('okedge:edgeMessage', ({id, message, from}: {id: number; message: unknown; from: string}) => {
       void handleEdgeMessage(message, `${DESKTOP_FROM}${from}`)
         .catch((e: unknown) => ({ok: false, refusal: 'invalid', detail: `the desktop app could not answer: ${String((e as Error)?.message ?? e)}`}))
         .then(answer => desktop!.invoke('okedge:edgeAnswer', id, answer ?? null));
     });
+    /*
+     * THE CLI IS ABOUT TO WRITE TO THE KEY: this app stands aside the way the phone's bridge does for a
+     * computer over Bluetooth (vendorBridge createComputerHold) - after its own request in flight, and
+     * until the key has been quiet - then says so, and the write goes (electron/desktop/hosting.js).
+     */
+    const hold = createComputerHold();
+    const offTalks = bridge.on('okedge:computerTalks', ({id}: {id: number}) => {
+      void getOnlyKey('usb')
+        .then(app => hold.holdForComputer(app.transport))
+        .then(() => hold.armRelease())
+        .catch(() => undefined)
+        .then(() => desktop!.invoke('okedge:computerHeld', id));
+    });
+    return () => { offMessage(); offTalks(); hold.releaseHold(' (the desktop host stopped)'); };
   }, []);
 }

@@ -17,9 +17,6 @@ import {grants, codes} from 'node-onlykey-lib/edge';
 import {Btn, Section, Segmented} from '../ui/components';
 import {theme} from '../ui/theme';
 import {EdgeList, EdgeListEntry, type EdgeListItem} from '../ui/EdgeList';
-import {HardKeyHistory} from '../ui/HardKeyHistory';
-import {HardKeyNameCard} from '../ui/HardKeyNameCard';
-import {HardKeyBlocksCard} from '../ui/HardKeyBlocksCard';
 import {BottomDrawer, DRAWER_HANDLE} from '../ui/BottomDrawer';
 import {BudgetBlock} from '../ui/BudgetBlock';
 import {budgetStatus, budgetStatusText, type BudgetStatus} from '../budgetStatus';
@@ -575,7 +572,10 @@ function BudgetView({b, edge, onBack, other}: {b: EdgeBudget; edge: ReturnType<t
      like the Presses tab, so a pending receipt shows at once (Brad, 2026-10-06) */
   const mine = budgetRows(v?.rows ?? [], b.grantId).slice().reverse();
   const steps = mine.filter(r => r.fields.decision === DECISION.SELF_PRESS).map(r => r.fields.grantStep);
-  const inOrder = steps.every((st, i) => st === i + 1);
+  /* steps the key lost and you accepted as lost (a LOSS over this budget's links) come first and are not here: the rest must follow on from them */
+  const lostHere = (v?.verdict.kind === 'verified' ? v.verdict.lost ?? [] : []).some(l => l.from <= (b.lastSeq ?? -1) && (b.firstSeq ?? -1) <= l.to);
+  const firstStep = lostHere && steps.length ? steps[0] : 1;
+  const inOrder = steps.every((st, i) => st === firstStep + i);
   const ended = mine.some(r => r.fields.op === OP.GRANT_END);
   /* the Presses tab's rows for this budget, drawn as that tab draws them (Brad, 2026-10-06) */
   const all = v?.rows ?? [];
@@ -610,7 +610,7 @@ function BudgetView({b, edge, onBack, other}: {b: EdgeBudget; edge: ReturnType<t
           {steps.length === 0
             ? 'Nothing spent from it yet.'
             : inOrder
-              ? `${steps.length === 1 ? 'Step 1' : `Steps 1–${steps.length}`} spent in order${ended ? '; ended' : ''}.`
+              ? `${firstStep > 1 ? `${firstStep === 2 ? 'Step 1' : `Steps 1–${firstStep - 1}`} lost (an accepted loss); ` : ''}${steps.length === 1 ? `Step ${firstStep}` : `Steps ${firstStep}–${firstStep + steps.length - 1}`} spent in order${ended ? '; ended' : ''}.`
               : `Steps out of order: ${steps.join(', ')}`}
         </Text>
       } />
@@ -964,22 +964,6 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
               )}
             </View>
           ))}
-          {/*
-            * THE KEY ON SCREEN, NOT ANOTHER ONE (Brad, 2026-10-24: a hard key, unlocked in the header, and
-            * this tab said "Unlock the key to sync"). This tab reads the soft key's chain only
-            * (useEdge: available = the soft key); its "locked" was the soft key's, left over. For a hard
-            * key it says what is true: onlykey-js hosts it through this app, and its requests come up
-            * as the yellow sheet. Showing the hard key's chain here is B3.
-            */}
-          {!edge.available ? (
-            <>
-              <Text style={styles.dim}>
-                This key is a hard key: its Edge is hosted for onlykey-js through this app - a budget it asks for comes up here as a yellow sheet, then the press on the key.
-              </Text>
-              {/* its history from the shared records (the desktop only - nothing on the web) */}
-              <HardKeyHistory />
-            </>
-          ) : null}
           {/* B3: a locked key says nothing - so say that, not "no budget" */}
           {edge.available && edge.view?.verdict.kind === 'locked' ? (
             <Text style={[styles.dim, {color: theme.warn}]}>Unlock the key to sync. A locked key answers nothing, so its budgets cannot be read.</Text>
@@ -1123,9 +1107,6 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
       {/* Brad, 2026-10-05: the drawer holds more than agents now */}
       <BottomDrawer title="Edge Management">
         {/* a hard key on the desktop: its nametag ("my device name"), its agent identity, its blocks - from its identity's records */}
-        {edge.available ? null : <HardKeyNameCard />}
-        {edge.available ? null : <AgentIdentityCard hardKey />}
-        {edge.available ? null : <HardKeyBlocksCard />}
         {!edge.available ? null : <EdgeAgentsCard onChanged={edge.sync} changed={edge.budgets} inDrawer testingMode={testingMode} />}
         {/* SPEC H7 (Brad, 2026-10-20): the agent identity the phone keeps, shown here */}
         {!edge.available ? null : <AgentIdentityCard />}

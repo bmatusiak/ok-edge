@@ -235,6 +235,61 @@ export function onKeyFree(listener: () => void): () => void {
   };
 }
 
+/*
+ * THE COMPUTER'S HOLD ON THE KEY (see startVendorBridge for why): one per bridge - the phone's Bluetooth
+ * bridge, and on the desktop the CLI behind the app's socket (src/hooks/useDesktopHost.ts). The same
+ * rules for both: the app's own reads wait while a computer talks, and go again once it is quiet.
+ */
+export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
+  let held: {release: () => void; timer: ReturnType<typeof setTimeout> | null; since: number} | null = null;
+  let holding: Promise<void> | null = null;
+  function armRelease() {
+    if (!held) return;
+    if (held.timer) clearTimeout(held.timer);
+    held.timer = setTimeout(() => {
+      void (async () => {
+        if (!held) return;
+        const waiting = isKeyWaiting ? await isKeyWaiting().catch(() => false) : false;
+        if (waiting) return armRelease(); /* a press is pending: the conversation is not over */
+        releaseHold('');
+      })();
+    }, COMPUTER_QUIET_MS);
+  }
+  function releaseHold(why: string) {
+    if (!held) return;
+    if (held.timer) clearTimeout(held.timer);
+    const h = held;
+    held = null;
+    holding = null;
+    computerHolding = false;
+    if (heldFrom !== null) heldDone += Date.now() - heldFrom;
+    heldFrom = null;
+    h.release();
+    /* how long the app's own key reads (the Edge tab's sync) could not get in */
+    console.log(`[vendor] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
+    for (const l of [...freeListeners]) l();
+  }
+  function holdForComputer(transport: any): Promise<void> {
+    if (holding) return holding;
+    holding = new Promise<void>(ready => {
+      const conversation = () => new Promise<void>(release => {
+        held = {release, timer: null, since: Date.now()};
+        computerHolding = true;
+        heldFrom = Date.now();
+        console.log('[vendor] the computer holds the key');
+        ready();
+        armRelease();
+      });
+      if (typeof transport.exclusive === 'function') {
+        void transport.exclusive(conversation);
+      } else {
+        void conversation();
+      }
+    });
+    return holding;
+  }
+  return {armRelease, releaseHold, holdForComputer, isHeld: () => !!held};
+}
 export function startVendorBridge({log, getKey, isApi, getTarget, isKeyWaiting, onEdgeRequest, transit = btTransit, isKeyHalted}: Options): () => void {
   /* EDGE_REQUEST pieces, by the computer sending them */
   const gathering = new Map<string, ReturnType<typeof edgeWire.createAssembler>>();
@@ -318,53 +373,8 @@ export function startVendorBridge({log, getKey, isApi, getTarget, isKeyWaiting, 
    * COMPUTER_QUIET_MS AND is not waiting for a press. The computer's later
    * writes (a chunked request) go straight in while it holds it.
    */
-  let held: {release: () => void; timer: ReturnType<typeof setTimeout> | null; since: number} | null = null;
-  let holding: Promise<void> | null = null;
-  function armRelease() {
-    if (!held) return;
-    if (held.timer) clearTimeout(held.timer);
-    held.timer = setTimeout(() => {
-      void (async () => {
-        if (!held) return;
-        const waiting = isKeyWaiting ? await isKeyWaiting().catch(() => false) : false;
-        if (waiting) return armRelease(); /* a press is pending: the conversation is not over */
-        releaseHold('');
-      })();
-    }, COMPUTER_QUIET_MS);
-  }
-  function releaseHold(why: string) {
-    if (!held) return;
-    if (held.timer) clearTimeout(held.timer);
-    const h = held;
-    held = null;
-    holding = null;
-    computerHolding = false;
-    if (heldFrom !== null) heldDone += Date.now() - heldFrom;
-    heldFrom = null;
-    h.release();
-    /* how long the app's own key reads (the Edge tab's sync) could not get in */
-    console.log(`[vendor] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
-    for (const l of [...freeListeners]) l();
-  }
-  function holdForComputer(transport: any): Promise<void> {
-    if (holding) return holding;
-    holding = new Promise<void>(ready => {
-      const conversation = () => new Promise<void>(release => {
-        held = {release, timer: null, since: Date.now()};
-        computerHolding = true;
-        heldFrom = Date.now();
-        console.log('[vendor] the computer holds the key');
-        ready();
-        armRelease();
-      });
-      if (typeof transport.exclusive === 'function') {
-        void transport.exclusive(conversation);
-      } else {
-        void conversation();
-      }
-    });
-    return holding;
-  }
+  const computerHold = createComputerHold(isKeyWaiting);
+  const {armRelease, releaseHold, holdForComputer} = computerHold;
 
   /*
    * The whole outbound gate: the API door open, and the computer that owns
@@ -426,7 +436,7 @@ export function startVendorBridge({log, getKey, isApi, getTarget, isKeyWaiting, 
       'report',
       ({iface, data}: {iface: number; data: Uint8Array}) => {
         if (iface !== IFACE_VENDOR) return;
-        if (held) armRelease(); /* the key is still answering: the conversation goes on */
+        if (computerHold.isHeld()) armRelease(); /* the key is still answering: the conversation goes on */
         if (!mayForward()) return;
         push(data);
       },
@@ -517,7 +527,7 @@ export function startVendorBridge({log, getKey, isApi, getTarget, isKeyWaiting, 
        * again: its hold ends here, the Hold runs, and this request waits behind
        * it (and the key refuses it, if it was the budget's next use).
        */
-      if (held && typeof transport.urgentWaiting === 'function' && transport.urgentWaiting()) releaseHold(' (a Hold or Revoke went first)');
+      if (computerHold.isHeld() && typeof transport.urgentWaiting === 'function' && transport.urgentWaiting()) releaseHold(' (a Hold or Revoke went first)');
       /* the computer's turn on the key: after any app conversation in flight, then held (holdForComputer) */
       await holdForComputer(transport);
       armRelease();

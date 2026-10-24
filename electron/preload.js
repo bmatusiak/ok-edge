@@ -20,11 +20,9 @@ const CHANNELS = new Set([
     .map((m) => `NativeOkEmu:${m}`),
   ...['listDevices', 'connect', 'disconnect', 'write'].map((m) => `NativeUsbHid:${m}`),
   /* the page's answer to one Edge message from the CLI (electron/desktop/hosting.js, src/hooks/useDesktopHost.ts) */
-  'okedge:edgeAnswer',
-  /* the hard key's budget history from the shared records (electron/desktop/hosting.js) */
-  'okedge:hardKeyHistory',
-  /* the hard key's "my device name" (electron/desktop/hosting.js -> the lib's nametag.js) */
-  'okedge:hardKeyName', 'okedge:hardKeySetName', 'okedge:hardKeyIdentity', 'okedge:hardKeyBlocks', 'okedge:sharedLinks',
+  'okedge:edgeAnswer', 'okedge:computerHeld',
+  /* the hard key's older links, openings and notes from the shared records (electron/desktop/hosting.js) */
+  'okedge:sharedLinks',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',
@@ -32,7 +30,7 @@ const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning
 /* what the main process may push to the page: the native modules' events (src/desktop/specs) */
 const EVENTS = new Set(['NativeOkEmu:onStream', 'NativeOkEmu:onLed', 'NativeOkEmu:onPluginEvent', 'NativeOkEmu:onRestartRequested',
   'NativeUsbHid:onStatus', 'NativeUsbHid:onData',
-  'okedge:edgeMessage']);
+  'okedge:edgeMessage', 'okedge:computerTalks']);
 
 contextBridge.exposeInMainWorld('okedge', {
   invoke(channel, ...args) {
