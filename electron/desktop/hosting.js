@@ -170,6 +170,29 @@ async function hardKeyName() {
   return { deviceId: keyIdHex, net, nametag: mine ? mine.nametag : null, at: mine ? mine.at : null, others: names.listNames(home).filter((n) => n.deviceId !== keyIdHex) };
 }
 
+/* the agent identity record the CLI's host keeps in the key's identity (local-host.js identityKv) - for the drawer's Agent identity card */
+async function hardKeyIdentity() {
+  const home = await idHomeFor(await netOfKey());
+  const t = require('node-onlykey-lib/edge/cli/local-host').identityKv(home).getItem('record');
+  return { record: t ? JSON.parse(t) : null };
+}
+
+/*
+ * The key's chain copy as blocks (the lib's copy.blocks - the same as `onlykey-js edge blocks`): cut at
+ * the key's seals, each verified - read from the identity's records only, never the key.
+ */
+async function hardKeyBlocks() {
+  const net = await netOfKey();
+  const home = await idHomeFor(net);
+  const found = require('node-onlykey-lib/edge/cli/copy').blocks(home, { net: net === 'test' ? 'test' : 'live' });
+  return {
+    devices: found.map((d) => ({
+      deviceId: d.deviceId, open: d.open, reason: d.reason || null,
+      blocks: d.blocks.map((b) => ({ from: b.block.start.seq, to: b.block.checkpoint.seq, links: b.block.links.length, id: b.id, ok: b.ok, reason: b.reason || null })),
+    })),
+  };
+}
+
 async function hardKeySetName(nametag) {
   const net = await netOfKey();
   const home = await idHomeFor(net);
@@ -200,6 +223,8 @@ module.exports = {
     'okedge:hostAnswer': (id, yes) => { if (asking && asking.id === id) asking.resolve(Boolean(yes)); return true; },
     'okedge:hardKeyHistory': () => hardKeyHistory().catch((e) => ({ error: (e && e.message) || String(e) })),
     'okedge:hardKeyName': () => hardKeyName().catch((e) => ({ error: (e && e.message) || String(e) })),
+    'okedge:hardKeyIdentity': () => hardKeyIdentity().catch((e) => ({ error: (e && e.message) || String(e) })),
+    'okedge:hardKeyBlocks': () => hardKeyBlocks().catch((e) => ({ error: (e && e.message) || String(e) })),
     'okedge:hardKeySetName': (nametag) => hardKeySetName(nametag).catch((e) => ({ error: (e && e.message) || String(e) })),
   },
 };
