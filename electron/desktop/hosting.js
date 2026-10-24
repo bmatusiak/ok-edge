@@ -134,14 +134,32 @@ async function hardKeyHistory() {
   const idHex = keyIdHex;
   const bucket = require('node-onlykey-lib/bucket/cli/home');
   const { history } = require('node-onlykey-lib/edge');
-  /* this key's identity's records, never another's (B3.0) */
-  for (const net of ['live', 'test']) {
-    const raw = bucket.kv(bucket.edgeAt(await idHomeFor(net), 'copies')).getItem(idHex.slice(0, 16));
-    if (!raw) continue;
-    const c = JSON.parse(raw);
-    return { deviceId: idHex, net, links: (c.links || []).length, history: history.budgetHistory(c) };
+  const names = require('node-onlykey-lib/edge/cli/nametag');
+  /*
+   * EVERY DEVICE OF THIS KEY'S IDENTITY (Brad, 2026-10-24: "sync so each team knows the budget history
+   * if using the same key identity - any combo of phones and hard keys"): the identity's records hold a
+   * copy per device - this key's, and each phone's or hard key's that edge sync brought in - and only
+   * that identity's (B3.0). This key first, then the others, each under its name: the nametag kept here,
+   * else the one in its own signed statement.
+   */
+  const net = await netOfKey();
+  const home = await idHomeFor(net);
+  const kv = bucket.kv(bucket.edgeAt(home, 'copies'));
+  const devices = [];
+  for (const k of kv.keys()) {
+    let c = null;
+    try { c = JSON.parse(kv.getItem(k)); } catch (_) { continue; }
+    const id = String(c.deviceId || k);
+    const kept = names.getName(home, id);
+    devices.push({
+      deviceId: id, self: id === idHex, links: (c.links || []).length,
+      name: kept ? kept.nametag : (c.statement && c.statement.nametag) || null,
+      history: history.budgetHistory(c),
+    });
   }
-  return { deviceId: idHex, net: null, links: 0, history: null };
+  devices.sort((a, b) => (b.self - a.self) || (b.links - a.links));
+  const mine = devices.find((d) => d.self);
+  return { deviceId: idHex, net, links: mine ? mine.links : 0, history: mine ? mine.history : null, devices };
 }
 
 /*

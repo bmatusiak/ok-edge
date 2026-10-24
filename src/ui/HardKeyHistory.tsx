@@ -24,7 +24,8 @@ type Budget = {
   spends: Spend[]; ended: {seq: number; how: string} | null;
 };
 type History = {budgets: Budget[]; presses: {seq: number; op: string; intent: string | null; receipt: Receipt}[]; losses: {seq: number; from: number; to: number}[]};
-type Answer = {deviceId?: string; net?: string | null; links?: number; history?: History | null; error?: string};
+type DeviceHistory = {deviceId: string; self: boolean; name: string | null; links: number; history: History};
+type Answer = {deviceId?: string; net?: string | null; links?: number; history?: History | null; devices?: DeviceHistory[]; error?: string};
 
 const when = (ms: number | null) => (ms ? new Date(ms).toLocaleString() : 'time not kept');
 
@@ -71,7 +72,7 @@ export function HardKeyHistory() {
   return (
     <View style={styles.box}>
       <View style={styles.head}>
-        <Text style={styles.title}>Budget history - this hard key</Text>
+        <Text style={styles.title}>Budget history - this key&apos;s identity</Text>
         <Btn title={busy ? 'Reading…' : 'Refresh'} onPress={() => void load()} disabled={busy} />
       </View>
       {answer?.error ? <Text style={styles.error}>{`Could not read the key: ${answer.error}`}</Text> : null}
@@ -96,7 +97,23 @@ export function HardKeyHistory() {
           </View>
         );
       })}
-      {h?.budgets.map((b) => (
+      {h ? <Budgets h={h} /> : null}
+      {/* THE OTHER DEVICES OF THIS KEY'S IDENTITY (phones, other hard keys - what edge sync brought in) */}
+      {(answer?.devices || []).filter((d) => !d.self).map((d) => (
+        <View key={d.deviceId} style={styles.other}>
+          <Text style={styles.otherTitle}>{`${d.name ? `"${d.name}"` : 'Another device'} · device ${d.deviceId.slice(0, 16)} · ${d.links} link(s)`}</Text>
+          <Budgets h={d.history} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/* one device's budgets and accepted losses (this key's, or another device's of the identity) */
+function Budgets({h}: {h: History}) {
+  return (
+    <>
+      {h.budgets.map((b) => (
         <View key={b.grantId} style={styles.card}>
           <Text style={styles.reason}>{b.reason ? `"${b.reason}"` : `Budget ${b.grantId}`}</Text>
           <Text style={styles.dim}>
@@ -112,10 +129,10 @@ export function HardKeyHistory() {
           <Text style={b.ended ? styles.ended : styles.live}>{b.ended ? `Ended at #${b.ended.seq}: ${b.ended.how}` : 'Not ended'}</Text>
         </View>
       ))}
-      {h?.losses.map((l) => (
+      {h.losses.map((l) => (
         <Text key={l.seq} style={styles.loss}>{`#${l.seq} LOSS: #${l.from}-#${l.to} accepted as lost`}</Text>
       ))}
-    </View>
+    </>
   );
 }
 
@@ -127,6 +144,8 @@ const styles = StyleSheet.create({
   error: {color: theme.error, fontSize: 13},
   card: {borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, gap: 3},
   activeCard: {borderColor: theme.warn, borderWidth: 2},
+  other: {marginTop: 14, gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border, paddingTop: 10},
+  otherTitle: {color: theme.text, fontSize: 14, fontWeight: '700'},
   activeTitle: {color: theme.warn, fontSize: 13, fontWeight: '700', textTransform: 'uppercase'},
   reason: {color: theme.text, fontSize: 14, fontWeight: '600'},
   scope: {color: theme.textDim, fontSize: 12, fontFamily: 'monospace'},
