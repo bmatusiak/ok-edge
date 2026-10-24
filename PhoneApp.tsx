@@ -206,7 +206,8 @@ const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
  */
 function shownTabs(testingOn: boolean): readonly Tab[] {
   const testingTabs = __DEV__ && testingOn;
-  const edge = testingTabs || hasSoftKeyPlugin('edge');
+  /* the desktop hosts the hard key's Edge (useEdge: the key is the hard key there), whatever its bundled soft key has */
+  const edge = testingTabs || hasSoftKeyPlugin('edge') || shell === 'electron';
   const [first, ...rest] = TABS.filter(t => t !== 'Settings');
   const all: Tab[] = [first, ...(edge ? [EDGE_TAB] : []), ...rest, ...(testingTabs ? [IN_DEV_TAB, TESTING_TAB] : []), 'Settings'];
   /* each plugin tab after the tab it names, else just before Settings */
