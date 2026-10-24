@@ -1,35 +1,34 @@
 'use strict';
 /*
  * THE CLI'S HOST, IN THE DESKTOP APP (ok-edge TODO B4b; Brad, 2026-10-23: "we treat --desktop like
- * --ble, where the desktop app does the usb talking"; "desktop and cli use the same bucket data").
+ * --ble, where the desktop app does the usb talking"; 2026-10-24: "i need this to be a 1 to 1 in how
+ * it works" - "cli -> mobile is the same as cli -> desktopapp").
  *
  * While the app runs, `onlykey-js --desktop` - and plain `onlykey-js` - reach the hard key through it:
  * node-onlykey-lib's desktop/serve.js listens on a local socket (trusted through ~/.onlykey-js/
- * desktop.json), relays the key's reports, and answers the CLI's Edge host messages with the CLI's
- * OWN host, local-host.js, and the CLI's own Edge homes in ~/.onlykey-js - one host and one set of
- * records, app or no app. What the app adds is the person's approval in THIS window (the yellow Edge
- * sheet, src/ui/DesktopHostSheet.tsx) instead of the terminal's y/N; the press is still the key's.
+ * desktop.json) and relays the key's reports. The CLI's Edge host messages go to the PAGE and are
+ * answered there by the phone's own host (src/hooks/useDesktopHost.ts -> edgeAgents.handleEdgeMessage),
+ * exactly as a computer's messages over Bluetooth are on the phone: the same request sheet, the same
+ * key code (on the desktop the hard key).
  *
  * THE KEY is the page's own USB pipe, shared (usbhid.shared): one open interface for both.
  *
- * THE ROUND TRIP with the page, per request:
- *   okedge:hostSay  {line, net}            what the host says (the request's view, "PRESS the key now")
- *   okedge:hostAsk  {id, net, lines, question}  the y/N, as a sheet; the window comes to the front
- *   okedge:hostAnswer (id, yes)             the page's answer (no answer in ASK_MS = no)
- *   okedge:hostDone {}                      the request is over: the sheet closes
+ * THE ROUND TRIP with the page, per message:
+ *   okedge:edgeMessage {id, message, from}   to the page: one Edge message from the CLI
+ *   okedge:edgeAnswer (id, answer)           the page's answer, back to the CLI
  */
 const os = require('os');
 const path = require('path');
 const { BrowserWindow } = require('electron');
 const usbhid = require('./usbhid');
 
-const ASK_MS = 120000;
+/* a budget waits for the person (2 min) and then a press: the longest a message is waited for */
+const ANSWER_MS = 240000;
 
 let send = () => {};
 let server = null;
-let stack = null; /* the lib's stack on the shared pipe: the key's Edge service, for the host */
-const hosts = {}; /* per net */
-let asking = null;
+let stack = null; /* the lib's stack on the shared pipe: the key's Edge service, for the reads below */
+const answers = new Map(); /* message id -> resolve */
 let nextId = 1;
 
 /* the CLI's Edge home for a net (edge/cli/control.js edgeHome(): ~/.onlykey-js/edge, or edge-test) */
@@ -72,37 +71,18 @@ function front() {
   win.focus();
 }
 
-function hostFor(net) {
+function hostFor() {
   return {
-    async send(message, opts) {
-      if (!hosts[net]) {
-        const { createLocalHost } = require('node-onlykey-lib/edge/cli/local-host');
-        const edge = await edgeService();
-        let lines = [];
-        hosts[net] = {
-          reset: () => { lines = []; },
-          host: createLocalHost({
-            edge,
-            home: await idHomeFor(net),
-            say: (line) => { lines.push(line); send('okedge:hostSay', { line, net }); },
-            confirm: (question) => new Promise((resolve) => {
-              const id = nextId++;
-              const timer = setTimeout(() => { if (asking && asking.id === id) asking = null; resolve(false); }, ASK_MS);
-              asking = { id, resolve: (yes) => { clearTimeout(timer); asking = null; resolve(yes); } };
-              front();
-              /* until: when no answer becomes a no - the sheet counts it down, as the phone's does */
-              send('okedge:hostAsk', { id, net, lines: lines.slice(), question: String(question).replace(/\s*\[y\/N\]\s*$/, ''), until: Date.now() + ASK_MS });
-            }),
-          }),
-        };
-      }
-      const h = hosts[net];
-      h.reset();
-      try {
-        return await h.host.send(message, opts);
-      } finally {
-        send('okedge:hostDone', { net });
-      }
+    send(message) {
+      /* a request the person answers brings the window to the front, as the phone's sheet does */
+      const { request: requestLib, identity: identityLib } = require('node-onlykey-lib/edge');
+      if (message && (message.type === requestLib.TYPE || message.type === identityLib.SET_TYPE)) front();
+      const id = nextId++;
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => { answers.delete(id); resolve({ ok: false, refusal: 'timeout', detail: 'the desktop app did not answer in time' }); }, ANSWER_MS);
+        answers.set(id, (answer) => { clearTimeout(timer); answers.delete(id); resolve(answer); });
+        send('okedge:edgeMessage', { id, message, from: os.hostname() });
+      });
     },
   };
 }
@@ -121,7 +101,6 @@ usbhid.shared.on('close', () => {
   keyIdHex = null;
   /* the stack on the old pipe is spent: the next request opens a fresh one */
   if (stack) { Promise.resolve(stack.app.destroy()).catch(() => {}); stack = null; }
-  for (const k of Object.keys(hosts)) delete hosts[k];
   for (const k of Object.keys(idHomes)) delete idHomes[k];
 });
 
@@ -262,7 +241,7 @@ module.exports = {
   stop,
   attach(push) { send = push; },
   handlers: {
-    'okedge:hostAnswer': (id, yes) => { if (asking && asking.id === id) asking.resolve(Boolean(yes)); return true; },
+    'okedge:edgeAnswer': (id, answer) => { const done = answers.get(id); if (done) done(answer); return true; },
     'okedge:hardKeyHistory': () => hardKeyHistory().catch((e) => ({ error: (e && e.message) || String(e) })),
     'okedge:hardKeyName': () => hardKeyName().catch((e) => ({ error: (e && e.message) || String(e) })),
     'okedge:hardKeyIdentity': () => hardKeyIdentity().catch((e) => ({ error: (e && e.message) || String(e) })),

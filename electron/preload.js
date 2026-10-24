@@ -19,8 +19,8 @@ const CHANNELS = new Set([
     'buttonTicksLeft', 'rounds', 'kbdSetReport', 'kbdGetReport', 'factoryReset', 'deleteSlot', 'restart', 'restartApp']
     .map((m) => `NativeOkEmu:${m}`),
   ...['listDevices', 'connect', 'disconnect', 'write'].map((m) => `NativeUsbHid:${m}`),
-  /* the person's answer to a CLI's request (electron/desktop/hosting.js) */
-  'okedge:hostAnswer',
+  /* the page's answer to one Edge message from the CLI (electron/desktop/hosting.js, src/hooks/useDesktopHost.ts) */
+  'okedge:edgeAnswer',
   /* the hard key's budget history from the shared records (electron/desktop/hosting.js) */
   'okedge:hardKeyHistory',
   /* the hard key's "my device name" (electron/desktop/hosting.js -> the lib's nametag.js) */
@@ -32,7 +32,7 @@ const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning
 /* what the main process may push to the page: the native modules' events (src/desktop/specs) */
 const EVENTS = new Set(['NativeOkEmu:onStream', 'NativeOkEmu:onLed', 'NativeOkEmu:onPluginEvent', 'NativeOkEmu:onRestartRequested',
   'NativeUsbHid:onStatus', 'NativeUsbHid:onData',
-  'okedge:hostSay', 'okedge:hostAsk', 'okedge:hostDone']);
+  'okedge:edgeMessage']);
 
 contextBridge.exposeInMainWorld('okedge', {
   invoke(channel, ...args) {

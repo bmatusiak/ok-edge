@@ -194,6 +194,18 @@ function stepsDone(what: string) {
  * The vendor bridge's hand-off: an assembled message from computer `from`.
  * -> the answer to send back, or null to answer nothing (dropped).
  */
+/*
+ * WHO ASKS: the paired computer behind a Bluetooth link - or, on the desktop, the CLI on this same
+ * computer (from = "desktop:<its name>"). The desktop needs no pairing (Brad, 2026-10-23: "the cli
+ * will communicate with the desktop app without pair because its running on same machine"): its
+ * socket is trusted through the file the app writes (node-onlykey-lib desktop/trust.js).
+ */
+export const DESKTOP_FROM = 'desktop:';
+async function computerOf(from: string): Promise<{id: string; name: string} | null> {
+  if (from.startsWith(DESKTOP_FROM)) return {id: 'desktop', name: from.slice(DESKTOP_FROM.length) || 'this computer'};
+  return btTransit.computer(from).catch(() => null);
+}
+
 export function handleEdgeMessage(msg: any, from: string): Promise<unknown | null> {
   /* B7 stage 2: a note changes nothing, so it never waits behind a sheet */
   if (msg?.type === noteLib.TYPE) return handleNote(msg, from).catch(() => null);
@@ -230,7 +242,7 @@ export function handleEdgeMessage(msg: any, from: string): Promise<unknown | nul
  */
 const notesSeen = new Set<string>();
 async function handleNote(msg: any, from: string): Promise<unknown | null> {
-  const computer = await btTransit.computer(from).catch(() => null);
+  const computer = await computerOf(from);
   if (!computer) return null;
   if (!noteLib.verify(msg, {seen: notesSeen}).ok) return null;
   notesSeen.add(String(msg.nonce).toLowerCase());
@@ -387,7 +399,7 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
  * The Requests switch off refuses a SET unread, as it refuses a budget; a GET still answers.
  */
 async function handleIdentity(msg: any, seen: Set<string>, from: string): Promise<unknown | null> {
-  const computer = await btTransit.computer(from).catch(() => null);
+  const computer = await computerOf(from);
   if (!computer) return null;
   const checked = identityLib.verify(msg, {seen});
   if (!checked.ok) {
@@ -422,7 +434,7 @@ async function handle(msg: any, from: string): Promise<unknown | null> {
     /* the Key Chain list is not Edge's (Brad, 2026-10-08: "Move it out of Edge"): Edge's sync carries device logs only */
     if ([syncLib.HAVE_TYPE, syncLib.LINKS_TYPE, syncLib.COMMIT_TYPE, syncLib.GIVE_TYPE, syncLib.OFFER_TYPE].includes(msg?.type)) {
       /* a sync is taken only from a paired computer - none behind this link, no answer (as a request below) */
-      const pc = await btTransit.computer(from).catch(() => null);
+      const pc = await computerOf(from);
       return pc ? await handleSync(msg, seen, {id: pc.id, name: pc.name}) : null;
     }
     if (identityLib.TYPES.includes(msg?.type)) return await handleIdentity(msg, seen, from);
@@ -430,7 +442,7 @@ async function handle(msg: any, from: string): Promise<unknown | null> {
     /* the Requests switch is off: refused unread */
     if (!(await agentRequestsOn())) return null;
     /* who asks: the paired computer behind this link - none, no answer (the bridge already took only encrypted traffic) */
-    const computer = await btTransit.computer(from).catch(() => null);
+    const computer = await computerOf(from);
     if (!computer) return null;
     step('computer');
     /* a timed-out sheet nobody has closed: nobody is there to press - refused at once, no new sheet */
