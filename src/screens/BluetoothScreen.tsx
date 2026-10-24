@@ -310,17 +310,13 @@ export function BluetoothScreen({
                   </View>
                   {h.connected ? (
                     <Text style={styles.connected}>connected</Text>
-                  ) : chosen && published ? (
-                    <Text style={styles.note}>connecting…</Text>
-                  ) : chosen ? (
+                  ) : chosen && (!published || !bt.forwarding) ? (
                     /*
-                     * "connecting…" was shown whenever a target was chosen and
-                     * the keyboard was not on it - including when the keyboard
-                     * was not published at all, where nothing is connecting
-                     * and nothing will. This row is about the KEYBOARD link;
-                     * the security key never shows as connected anywhere until
-                     * a browser is mid-ceremony, and saying "connecting…" here
-                     * sent people re-pairing to fix a link that was not broken.
+                     * No "connecting…" on this row (Brad, 2026-10-23): the target is the computer
+                     * for every Bluetooth door, not the keyboard's link, and the keyboard's own
+                     * section already says connecting / disconnected. It also read as the target
+                     * being broken while the API to it worked. With the keyboard switch off nothing
+                     * dials at all (useBtKeyboard.setForwarding), and the row says so.
                      */
                     <Text style={styles.note}>keyboard off</Text>
                   ) : null}

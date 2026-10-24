@@ -33,13 +33,29 @@ Facts below are from the Edge plugin's own docs (`node-onlykey-emulator/emulator
 
 On the phone, the soft key's host is the phone itself: it shows the sheets and keeps the chain. A hard key has no screen, so **the desktop app takes that role** (SPEC H2, H7: "A hard key has no phone: the desktop app keeps the record (later)").
 
+**ok-edge is three apps in one** - mobile, desktop, web app (over MCP) - **and the CLI talks to each, named by a flag** (Brad, 2026-10-23):
+
+| CLI | Talks to | The key | The host (sheet, records) | Pairing |
+|---|---|---|---|---|
+| (no flag) | a hard key on USB, directly | the hard key | the CLI itself: terminal y/N (`edge/cli/local-host.js`) | none |
+| `--ble` | ok-edge **mobile** | its soft key | the phone | Part T |
+| `--desktop` | ok-edge **desktop**, same machine | its hard key (USB) or its emulator soft key | the desktop app | none |
+| `--mcp` | the ok-edge **web app** | the page's key (WebAuthn) | the page | the CLI pairing |
+
+**Who talks to what** (Brad, 2026-10-23):
+- **The desktop app's keys are its own:** a hard key over USB, and the emulator as its own soft key - as the Android app has its own soft key. **The desktop app has no Bluetooth at all**; it does not reach phones.
+- **A phone manages itself through the CLI:** `onlykey-js --ble` to the Android app (Part T pairing; proven box ↔ Pixel on testnet, 2026-10-23).
+- **The CLI ↔ the desktop app: no pairing** - they run on the same machine; the desktop app is the host for the CLI's commands (its sheet, its records) in place of the terminal y/N.
+- **The web app needs the CLI pairing**, because it is reached over MCP, not on the same machine.
+
 | # | Task | What we know |
 |---|---|---|
 | B1 | **The hard key over USB** in the desktop app. | ✅ Done: the lib's node-hid pipe in Electron's main process (ok-edge `5c9d893`, lib `e80d233`); console presses on a DEBUG key. |
 | B2 | **The budget sheet on the desktop**: what is being approved (reason, scopes, uses, lifetime) shown on the computer before the press on the key. On the phone this is the yellow Edge sheet. | Design is Brad's call. A hard key "never exposes that record" (SPEC H2) - the host must show what it sent, and the press is the person's agreement to that. |
 | B3 | **The chain copy and the agent identity** kept by the desktop app (on the phone: the Edge tab's copy, and the identity record H7). | The bucket (Stage 0/3) already holds `edge.copies` / `.budgets` / `.pointers` for the CLI; the desktop app's bucket file is Stage 4's open item. |
-| B4 | **The agent runs against the hard key**: `onlykey-js edge budget/exec/receipt/end` over USB instead of Bluetooth, and the edge skill's `ship` through it. | Today every budget goes through a phone (A13 / Pixel) over Bluetooth. |
-| B5 | **The phone over Bluetooth** (the flipped role): still wanted, but after B2-B4, so the screens are designed once for "a key the desktop talks to", whichever key it is. | The lib's BLE pipe is exported for it (lib `e80d233`). |
+| B4 | **The agent runs against the hard key**: `onlykey-js edge budget/exec/receipt/end` over USB instead of Bluetooth, and the edge skill's `ship` through it. | ✅ Testnet key 2 on the box: the CLI is the host (`edge/cli/local-host.js`: terminal y/N, then the press). Live key 1 (Windows, Brad presses) still to run. |
+| B4b | **`onlykey-js --desktop`**: the CLI talks to the desktop app on the same machine, no pairing - the desktop app owns its keys (hard key, emulator soft key) and is their host (its sheet, B2; its records, B3), as the phone is for `--ble`. | No flag stays the CLI straight to a hard key, terminal y/N. **Design (Brad):** treated like `--ble` - the desktop app does the USB talking; the channel is a local **IPC socket**; its security is a **file the app writes and the CLI reads** (same user, file permissions = who may connect; no pairing). |
+| B5 | ~~The phone over Bluetooth to the desktop~~ - dropped (Brad, 2026-10-23): a phone manages itself through the CLI over BLE; the desktop app only has its own keys. | |
 | B6 | The bucket as a file; packaging (Windows + Linux, a Node runtime for the soft key's process). | Unchanged from the plan. |
 
 ## C. Stage 5 - the web, for a hard key with Edge
@@ -50,12 +66,13 @@ On the phone, the soft key's host is the phone itself: it shows the sheets and k
 | C2 | **The origin.** A production key admits the vendor-over-WebAuthn path only from `apps.crp.to` / `apps.onlykey.io` (`webcryptcheck()`); a DEBUG build admits any origin. So development on a developer key works anywhere; a production key needs one of those two origins (the hosts-file + local CA plan in the plan file). | lib `src/protocol/ctap.js`. |
 | C3 | **Proof first**: one Edge round trip (status, then a budget opened by a press) from a page in Chrome to the Edge hard key over WebAuthn. Then the same screens as the desktop (B2, B3) on the web. | Web Bluetooth to the phone stays unproven (Chromium's blocklist to check). |
 | C4 | The bucket on the page: drop, merge, download. | Unchanged from the plan. |
+| C5 | **`onlykey-js --mcp`**: the CLI and the web app over MCP, so it needs the CLI pairing (not on the same machine, unlike the desktop app). | PROPOSAL-webapp-mcp.md. **Design (Brad):** the pairing uses an **age identity public key**; **socket.io** finds the other side and carries the pairing over the internet. |
 
 ## Order
 
 1. Finish the 3.1.0 release-candidate deep test (in progress, `onlykey-RN/release-3.1.0-test/REPORT.md`).
 2. A1 → A2 → A3 → A4 (the Edge hard key).
-3. B2 → B3 → B4 (the desktop as its host), then B5, B6.
+3. B2 → B3 → B4 → B4b (the desktop as its host), then B6.
 4. C3 → C4.
 
 ## Questions for Brad

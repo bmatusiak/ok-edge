@@ -251,6 +251,18 @@ export function useBtKeyboard(): BtKeyboard {
     void AsyncStorage.setItem(FORWARD_KEY, next ? '1' : '0');
     /* Nothing held across the change, either way. */
     sendReport(RELEASE_ALL).catch(() => {});
+    /*
+     * OFF MEANS NO LINK, not a link that carries nothing. The target is the computer for every
+     * Bluetooth door (Brad, 2026-10-23); choosing it for the API used to dial the keyboard too,
+     * and a classic link the keyboard does not need is not harmless: on a host whose radio has no
+     * classic Secure Connections (the box's RTL8761BU) the host refuses it in a loop, and the
+     * radio busy with it drops new LE connections - the API's - before they are established.
+     * On again, the auto-connect below dials the target.
+     */
+    if (!next) {
+      attemptAtRef.current = 0;
+      void NativeBtKeyboard.disconnect().catch(() => {});
+    }
   }, []);
 
   /** The chosen host's address, or '' until storage has been read. */
@@ -613,12 +625,13 @@ export function useBtKeyboard(): BtKeyboard {
       /*
        * Otherwise release (a held modifier must not stay down on the old
        * host), disconnect - which also clears an attempt wedged half-open, the
-       * other thing None used to fix by accident - and dial the new one.
+       * other thing None used to fix by accident - and dial the new one, only
+       * with the keyboard switch on (see setForwarding: off means no link).
        */
       await sendReport(RELEASE_ALL).catch(() => {});
       await NativeBtKeyboard.disconnect().catch(() => {});
       attemptAtRef.current = 0;
-      void connect(address);
+      if (forwardingRef.current) void connect(address);
     },
     [connect],
   );
@@ -638,6 +651,8 @@ export function useBtKeyboard(): BtKeyboard {
   useEffect(() => {
     if (state === 'unregistered' || state === 'unsupported') return undefined;
     if (!chosenHost) return undefined;
+    /* the keyboard switch off: no dialling at all (setForwarding) */
+    if (!forwarding) return undefined;
     const timer = setInterval(() => {
       if (connectedRef.current || busyRef.current) return;
       /*
@@ -656,7 +671,7 @@ export function useBtKeyboard(): BtKeyboard {
       void connect(chosenHost);
     }, HOST_POLL_MS);
     return () => clearInterval(timer);
-  }, [state, chosenHost, connect]);
+  }, [state, chosenHost, forwarding, connect]);
 
   /*
    * Deliberately NOT gated on `typing`. That flag governs whether the KEY's
