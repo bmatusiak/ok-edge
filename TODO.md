@@ -70,6 +70,12 @@ On the phone, the soft key's host is the phone itself: it shows the sheets and k
 | C4 | The bucket on the page: drop, merge, download. | Unchanged from the plan. |
 | C5 | **`onlykey-js --mcp`**: the CLI and the web app over MCP, so it needs the CLI pairing (not on the same machine, unlike the desktop app). | PROPOSAL-webapp-mcp.md. **Design (Brad):** the pairing uses an **age identity public key**; **socket.io** finds the other side and carries the pairing over the internet. |
 
+## D. Later (with Guest Book)
+
+| # | Task | What we know |
+|---|---|---|
+| D1 | **`okedge://` links** (Brad, 2026-10-24): "used for guestbook stuff, so its easy to import contacts from websites into our bucket". The OS starts the app for an `okedge://` link and the app opens the Guest Book sheet for it. 1 to 1 on the desktop and the phone. | Desktop: `app.setAsDefaultProtocolClient('okedge')` plus the URL from argv in the existing `second-instance` handler (`electron/main.js`). Phone: an Android intent filter. The desktop page is now `https://apps.crp.to`, so `okedge://` is free to be only the link scheme. Built with Guest Book, not before. |
+
 ## Order
 
 1. Finish the 3.1.0 release-candidate deep test (in progress, `onlykey-RN/release-3.1.0-test/REPORT.md`).
