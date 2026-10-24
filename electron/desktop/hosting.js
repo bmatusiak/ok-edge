@@ -45,8 +45,23 @@ async function edgeService() {
     if (err) throw err;
     edge = s.edge;
   });
-  stack = { app, edge };
+  stack = { app, edge, okcrypto: app.services.okcrypto };
   return edge;
+}
+
+/*
+ * THE KEY'S IDENTITY HOME for a net (ok-edge B3.0: one identity, one store): the lib's identityHome() -
+ * the same function the CLI's openDevice uses - <net home>/<identity id>, with the first-time copy of
+ * the key's own records from before identities. Once per connection and net.
+ */
+const idHomes = {};
+async function idHomeFor(net) {
+  if (!idHomes[net]) {
+    const edge = await edgeService();
+    const { identityHome } = require('node-onlykey-lib/edge/cli/migrate-identity');
+    idHomes[net] = identityHome({ edge, okcrypto: stack.okcrypto, netHome: homeFor(net), say: (l) => console.log(`[hosting] ${l}`) });
+  }
+  return idHomes[net];
 }
 
 function front() {
@@ -68,7 +83,7 @@ function hostFor(net) {
           reset: () => { lines = []; },
           host: createLocalHost({
             edge,
-            home: homeFor(net),
+            home: await idHomeFor(net),
             say: (line) => { lines.push(line); send('okedge:hostSay', { line, net }); },
             confirm: (question) => new Promise((resolve) => {
               const id = nextId++;
@@ -107,6 +122,7 @@ usbhid.shared.on('close', () => {
   /* the stack on the old pipe is spent: the next request opens a fresh one */
   if (stack) { Promise.resolve(stack.app.destroy()).catch(() => {}); stack = null; }
   for (const k of Object.keys(hosts)) delete hosts[k];
+  for (const k of Object.keys(idHomes)) delete idHomes[k];
 });
 
 async function hardKeyHistory() {
@@ -118,8 +134,9 @@ async function hardKeyHistory() {
   const idHex = keyIdHex;
   const bucket = require('node-onlykey-lib/bucket/cli/home');
   const { history } = require('node-onlykey-lib/edge');
+  /* this key's identity's records, never another's (B3.0) */
   for (const net of ['live', 'test']) {
-    const raw = bucket.kv(bucket.edgeAt(homeFor(net), 'copies')).getItem(idHex.slice(0, 16));
+    const raw = bucket.kv(bucket.edgeAt(await idHomeFor(net), 'copies')).getItem(idHex.slice(0, 16));
     if (!raw) continue;
     const c = JSON.parse(raw);
     return { deviceId: idHex, net, links: (c.links || []).length, history: history.budgetHistory(c) };
