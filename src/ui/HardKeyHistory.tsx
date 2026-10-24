@@ -46,6 +46,26 @@ export function HardKeyHistory() {
 
   useEffect(() => { void load(); }, [load]);
 
+  /*
+   * BY ITSELF (Brad, 2026-10-24: "i dont see active budget"): again when a request this app hosted is
+   * over (a budget opened, an identity kept), and on a timer - every 5 s while a budget is live, so its
+   * uses show as the agent spends them, every 30 s otherwise. A refresh reads the shared records only
+   * (hosting.js keeps the device id), never the key.
+   */
+  const live = !!answer?.history?.budgets.some((b) => !b.ended);
+  useEffect(() => {
+    const shellOn = (globalThis as {okedge?: {on(c: string, l: () => void): () => void}}).okedge;
+    const off = shellOn ? shellOn.on('okedge:hostDone', () => { setTimeout(() => void load(), 1500); }) : () => {};
+    const timer = setInterval(() => void load(), live ? 5000 : 30000);
+    return () => { off(); clearInterval(timer); };
+  }, [load, live]);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!live) return undefined;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [live]);
+
   if (!desktop) return null;
   const h = answer?.history;
   return (
@@ -61,6 +81,21 @@ export function HardKeyHistory() {
       {h ? (
         <Text style={styles.dim}>{`Device ${answer?.deviceId?.slice(0, 16)}${answer?.net === 'test' ? ' - TESTNET' : ''} · ${answer?.links} link(s) in this computer's copy`}</Text>
       ) : null}
+      {/* THE LIVE ONE FIRST: uses and minutes left, before the history */}
+      {h?.budgets.filter((b) => !b.ended).map((b) => {
+        const usedUp = b.spends.length;
+        const minsLeft = b.opened && b.lifetime ? Math.max(0, Math.ceil((b.opened + b.lifetime * 60000 - Date.now()) / 60000)) : null;
+        return (
+          <View key={`live-${b.grantId}`} style={[styles.card, styles.activeCard]}>
+            <Text style={styles.activeTitle}>Active budget</Text>
+            <Text style={styles.reason}>{b.reason ? `"${b.reason}"` : `Budget ${b.grantId}`}</Text>
+            <Text style={styles.live}>
+              {`${b.uses !== null ? `${Math.max(0, b.uses - usedUp)} of ${b.uses} use(s) left` : `${usedUp} used`}${minsLeft !== null ? ` · ${minsLeft} min left` : ''}`}
+            </Text>
+            {b.scopes.map((s, i) => <Text key={i} style={styles.scope}>{`${s.identity ?? 'slot'}: up to ${s.cap}`}</Text>)}
+          </View>
+        );
+      })}
       {h?.budgets.map((b) => (
         <View key={b.grantId} style={styles.card}>
           <Text style={styles.reason}>{b.reason ? `"${b.reason}"` : `Budget ${b.grantId}`}</Text>
@@ -90,6 +125,8 @@ const styles = StyleSheet.create({
   dim: {color: theme.textDim, fontSize: 13},
   error: {color: theme.error, fontSize: 13},
   card: {borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, gap: 3},
+  activeCard: {borderColor: theme.warn, borderWidth: 2},
+  activeTitle: {color: theme.warn, fontSize: 13, fontWeight: '700', textTransform: 'uppercase'},
   reason: {color: theme.text, fontSize: 14, fontWeight: '600'},
   scope: {color: theme.textDim, fontSize: 12, fontFamily: 'monospace'},
   spend: {color: theme.text, fontSize: 12, fontFamily: 'monospace'},

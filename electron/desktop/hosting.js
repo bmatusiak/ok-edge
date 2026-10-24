@@ -96,12 +96,26 @@ function hostFor(net) {
  * THE HARD KEY'S BUDGET HISTORY, from the shared records (Brad, 2026-10-24: "the block chain storage
  * should be loaded by the desktop app"): the copy the CLI keeps of this key's chain in ~/.onlykey-js
  * (the live home, or the testnet's - whichever holds this device), told as budgets by the lib's
- * edge/src/history.js. The key is asked only for its device id (it must be unlocked).
+ * edge/src/history.js. The key is asked only for its device id (it must be unlocked) - ONCE per
+ * connection: the page refreshes this every few seconds while a budget is live, and a read slipped
+ * between the CLI's commands (a ship goes through this app) must not happen; a refresh reads the
+ * shared records only. The id goes when the key does (unplugged, restarted).
  */
+let keyIdHex = null;
+usbhid.shared.on('close', () => {
+  keyIdHex = null;
+  /* the stack on the old pipe is spent: the next request opens a fresh one */
+  if (stack) { Promise.resolve(stack.app.destroy()).catch(() => {}); stack = null; }
+  for (const k of Object.keys(hosts)) delete hosts[k];
+});
+
 async function hardKeyHistory() {
-  const edge = await edgeService();
-  const { deviceId } = await edge.publicKey();
-  const idHex = Buffer.from(deviceId).toString('hex');
+  if (!keyIdHex) {
+    const edge = await edgeService();
+    const { deviceId } = await edge.publicKey();
+    keyIdHex = Buffer.from(deviceId).toString('hex');
+  }
+  const idHex = keyIdHex;
   const bucket = require('node-onlykey-lib/bucket/cli/home');
   const { history } = require('node-onlykey-lib/edge');
   for (const net of ['live', 'test']) {
