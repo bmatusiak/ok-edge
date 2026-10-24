@@ -18,6 +18,7 @@ import {Btn, Section, Segmented} from '../ui/components';
 import {theme} from '../ui/theme';
 import {EdgeList, EdgeListEntry, type EdgeListItem} from '../ui/EdgeList';
 import {HardKeyHistory} from '../ui/HardKeyHistory';
+import {HardKeyNameCard} from '../ui/HardKeyNameCard';
 import {BottomDrawer, DRAWER_HANDLE} from '../ui/BottomDrawer';
 import {BudgetBlock} from '../ui/BudgetBlock';
 import {budgetStatus, budgetStatusText, type BudgetStatus} from '../budgetStatus';
@@ -1120,6 +1121,8 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
       <MergeSheet visible={mergeOpen} onClose={() => setMergeOpen(false)} />
       {/* Brad, 2026-10-05: the drawer holds more than agents now */}
       <BottomDrawer title="Edge Management">
+        {/* a hard key on the desktop: its nametag ("my device name"), kept in its identity's records */}
+        {edge.available ? null : <HardKeyNameCard />}
         {!edge.available ? null : <EdgeAgentsCard onChanged={edge.sync} changed={edge.budgets} inDrawer testingMode={testingMode} />}
         {/* SPEC H7 (Brad, 2026-10-20): the agent identity the phone keeps, shown here */}
         {!edge.available ? null : <AgentIdentityCard />}
