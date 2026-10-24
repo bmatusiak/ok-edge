@@ -618,6 +618,40 @@ export async function mergeOffered(source: EdgeSource, offered: EdgeLinkRecord[]
 }
 
 /**
+ * Take links offered for THIS key's own chain - from a computer over Bluetooth (edgeAgents), or
+ * on the desktop from this computer's shared records - by one set of rules: no fork, the copy
+ * verifies with them, every added link checked against the key. Kept only then.
+ */
+export async function takeOwnLinks(source: EdgeSource, offered: EdgeLinkRecord[]):
+  Promise<{ok: true; count: number} | {ok: false; refusal: string; detail: string}> {
+  const m = await mergeOffered(source, offered);
+  if (m.conflicts.length) {
+    return {ok: false, refusal: 'invalid', detail: `a fork: this copy holds different links at #${m.conflicts.join(', #')} - nothing taken; settle it in the app`};
+  }
+  if (m.added.length && m.view.verdict.kind !== 'verified' && m.view.verdict.kind !== 'gap') {
+    return {ok: false, refusal: 'copy_unverified', detail: `with those links this copy would not verify (${m.view.verdict.kind}) - nothing taken`};
+  }
+  /*
+   * EVERY LINK TAKEN IS A CHECKED ONE (Brad, 2026-10-11: "checking every field in a token means
+   * nothing if we never check the signature"). A "gap" verdict means part of the copy cannot be
+   * checked; links offered INSIDE such a gap were kept unchecked, and the real links at those
+   * seqs refused later as a "fork". Each added link must be verified in the copy it lands in -
+   * welded to the key's signed checkpoint - or nothing is taken.
+   */
+  const verifiedSeqs = new Set(m.view.rows.filter(r => r.verified).map(r => r.seq));
+  const unchecked = m.added.map(seqOf).filter(seq => !verifiedSeqs.has(seq));
+  if (unchecked.length) {
+    return {ok: false, refusal: 'copy_unverified', detail: `#${unchecked.slice(0, 5).join(', #')}${unchecked.length > 5 ? '…' : ''} cannot be checked against the key - nothing taken`};
+  }
+  /* Brad, 2026-10-08 ("Own links direct"): the key's OWN links merge at once - its own, checked against its signature */
+  if (m.added.length) {
+    await keepOffered(source.deviceId, m.added);
+    await sync(source).catch(() => undefined);
+  }
+  return {ok: true, count: m.added.length};
+}
+
+/**
  * Keep another device's links and the checkpoint they were merged up to - once that device's
  * log checked with your key (edgeDevices.receiveLog). In the sync queue.
  */

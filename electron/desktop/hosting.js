@@ -211,6 +211,29 @@ async function hardKeyBlocks() {
   };
 }
 
+/*
+ * THE KEY'S OWN LINKS FROM THE SHARED RECORDS (Brad, 2026-10-24: "i need this to be a 1 to 1"): the
+ * desktop runs the phone's Edge tab on the hard key, and the key holds only its newest links. What
+ * the CLI picked up before is in ~/.onlykey-js - this computer's copy - and is offered to the tab's
+ * copy the way a computer offers links to a phone (edgeStore.mergeOffered: checked against the key,
+ * kept only if it verifies). Records only, never the key. -> [[link, head, reveal|null]] hex
+ */
+async function sharedLinks(deviceIdHex) {
+  /* the identity home that holds this device's copy - found in the records, so the tab stays the key's only reader */
+  const fs = require('fs');
+  const bucket = require('node-onlykey-lib/bucket/cli/home');
+  const id = String(deviceIdHex).toLowerCase();
+  const homes = ['live', 'test'].flatMap((net) => {
+    const base = homeFor(net);
+    try { return fs.readdirSync(base).filter((d) => /^[0-9a-f]{32}$/.test(d)).map((d) => path.join(base, d)); } catch (_) { return []; }
+  });
+  const home = homes.find((h) => bucket.kv(bucket.edgeAt(h, 'copies')).getItem(id.slice(0, 16)));
+  if (!home) return [];
+  const c = require('node-onlykey-lib/edge/cli/copy').load(home, Buffer.from(id, 'hex'));
+  const hex = (b) => Buffer.from(b).toString('hex');
+  return (c.links || []).map((r) => [hex(r.link), hex(r.head), r.reveal ? hex(r.reveal) : null]);
+}
+
 async function hardKeySetName(nametag) {
   const net = await netOfKey();
   const home = await idHomeFor(net);
@@ -243,6 +266,7 @@ module.exports = {
     'okedge:hardKeyName': () => hardKeyName().catch((e) => ({ error: (e && e.message) || String(e) })),
     'okedge:hardKeyIdentity': () => hardKeyIdentity().catch((e) => ({ error: (e && e.message) || String(e) })),
     'okedge:hardKeyBlocks': () => hardKeyBlocks().catch((e) => ({ error: (e && e.message) || String(e) })),
+    'okedge:sharedLinks': (deviceIdHex) => sharedLinks(deviceIdHex).catch(() => []),
     'okedge:hardKeySetName': (nametag) => hardKeySetName(nametag).catch((e) => ({ error: (e && e.message) || String(e) })),
   },
 };

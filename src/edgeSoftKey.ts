@@ -16,8 +16,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {approve as approveLib, chain, codes, request as requestLib, receipts} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import {getOnlyKey} from './onlykey';
+import {shell} from './platform';
 import OkEmu from './transport/OkEmu';
-import {chainState, evaluate, loadMirror, type EdgeView} from './edgeStore';
+import {chainState, evaluate, loadMirror, takeOwnLinks, type EdgeView} from './edgeStore';
+/* keys whose shared records this app run has offered already (desktop) */
+const takenShared = new Set<string>();
 import type {EdgeBudget, EdgeCopyCheck, EdgeCopyKey, EdgeEnded, EdgeInbox, EdgeKeyState, EdgeLinkRecord, EdgeRequest, EdgeSource} from './edgeFake';
 import {edgeKey} from './net';
 
@@ -107,8 +110,13 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     publicKeysPq.clear();
   }
 
+  /*
+   * THE KEY: the soft key on the phone; on the desktop, the hard key on USB (Brad, 2026-10-24: "i
+   * need this to be a 1 to 1 in how it works"). Both run the same Edge firmware plugin, so the
+   * phone's Edge code - the tab, the host, the background sync, the nametag - drives either one.
+   */
   static async open(): Promise<SoftKeyEdge | null> {
-    const app = await getOnlyKey('embedded');
+    const app = await getOnlyKey(shell === 'electron' ? 'usb' : 'embedded');
     /* 4 s: right after start the background sync's chain reads go first (lib client.js deviceIdentity, 2026-10-04) */
     if ((await app.edge.probe({timeoutMs: 4000})) !== 'edge') return null;
     const {deviceId} = await app.edge.publicKey();
@@ -120,7 +128,25 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
      * opens Edge Management. Once per phone; a nametag set by hand is never replaced.
      */
     void require('./edgeDevices').ensureNametag(soft).catch(() => undefined);
+    await soft.takeShared().catch((e: any) => console.log(`[edge] shared records: not read - ${String(e?.message ?? e)}`));
     return soft;
+  }
+
+  /*
+   * ON THE DESKTOP, THE KEY'S OLDER LINKS COME FROM THIS COMPUTER'S SHARED RECORDS (~/.onlykey-js):
+   * a hard key holds only its newest links, and what the CLI picked up before is there. Offered
+   * the way a computer offers links to a phone, under the same rules (edgeStore.takeOwnLinks).
+   * Once per key per app run: later links the tab reads from the key itself.
+   */
+  private async takeShared(): Promise<void> {
+    if (shell !== 'electron' || takenShared.has(toHex(this.deviceId))) return;
+    takenShared.add(toHex(this.deviceId));
+    const {desktop} = require('./platform');
+    const rows = ((await desktop.invoke('okedge:sharedLinks', toHex(this.deviceId))) ?? []) as [string, string, string | null][];
+    if (!rows.length) return;
+    const offered = rows.map(([l, h, r]) => ({link: fromHex(l), head: fromHex(h), reveal: r ? fromHex(r) : null}));
+    const t = await takeOwnLinks(this, offered);
+    console.log(`[edge] shared records: ${t.ok ? `${t.count} link(s) taken` : `nothing taken - ${t.detail}`}`);
   }
 
   /*

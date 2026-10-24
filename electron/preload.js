@@ -24,7 +24,7 @@ const CHANNELS = new Set([
   /* the hard key's budget history from the shared records (electron/desktop/hosting.js) */
   'okedge:hardKeyHistory',
   /* the hard key's "my device name" (electron/desktop/hosting.js -> the lib's nametag.js) */
-  'okedge:hardKeyName', 'okedge:hardKeySetName', 'okedge:hardKeyIdentity', 'okedge:hardKeyBlocks',
+  'okedge:hardKeyName', 'okedge:hardKeySetName', 'okedge:hardKeyIdentity', 'okedge:hardKeyBlocks', 'okedge:sharedLinks',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',

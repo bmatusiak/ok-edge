@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {approve as approveLib, chain, identity as identityLib, note as noteLib, request as requestLib, sync as syncLib} from 'node-onlykey-lib/edge';
 import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
-import {addNote, keepOffered, loadMirror, mergeOffered, sync as syncCopy} from './edgeStore';
+import {addNote, loadMirror, sync as syncCopy, takeOwnLinks} from './edgeStore';
 import {ensureNametag, receiveLog, loadHeld} from './edgeDevices';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
@@ -374,31 +374,9 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
   syncStaged.delete(p.sid);
   if (st.links.size !== p.linkParts) return {ok: false, refusal: 'invalid', detail: `parts missing (links ${st.links.size}/${p.linkParts}) - sync again`};
   const offered = [...st.links.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, r]) => r);
-  const m = await mergeOffered(soft, offered);
-  if (m.conflicts.length) {
-    return {ok: false, refusal: 'invalid', detail: `a fork: this phone's copy holds different links at #${m.conflicts.join(', #')} - nothing taken; settle it on the phone`};
-  }
-  if (m.added.length && m.view.verdict.kind !== 'verified' && m.view.verdict.kind !== 'gap') {
-    return {ok: false, refusal: 'copy_unverified', detail: `with those links this phone's copy would not verify (${m.view.verdict.kind}) - nothing taken`};
-  }
-  /*
-   * EVERY LINK TAKEN IS A CHECKED ONE (Brad, 2026-10-11: "checking every field in a token means
-   * nothing if we never check the signature"). A "gap" verdict means part of the copy cannot be
-   * checked; links a computer offered INSIDE such a gap were kept unchecked, and the real links
-   * at those seqs refused later as a "fork". Each added link must be verified in the copy it
-   * lands in - welded to the key's signed checkpoint - or nothing is taken.
-   */
-  const verifiedSeqs = new Set(m.view.rows.filter(r => r.verified).map(r => r.seq));
-  const unchecked = m.added.map(seqOfLink).filter(seq => !verifiedSeqs.has(seq));
-  if (unchecked.length) {
-    return {ok: false, refusal: 'copy_unverified', detail: `#${unchecked.slice(0, 5).join(', #')}${unchecked.length > 5 ? '…' : ''} cannot be checked against the key - nothing taken`};
-  }
-  /* Brad, 2026-10-08 ("Own links direct"): this phone's OWN links merge at once - its own key's, checked against its signature */
-  if (m.added.length) {
-    await keepOffered(soft.deviceId, m.added);
-    await syncCopy(soft).catch(() => undefined);
-  }
-  return {ok: true, count: m.added.length, seq: null};
+  /* the same rules wherever this copy is filled from (edgeStore.takeOwnLinks): here a computer over Bluetooth */
+  const t = await takeOwnLinks(soft, offered);
+  return t.ok ? {ok: true, count: t.count, seq: null} : {ok: false, refusal: t.refusal, detail: t.detail};
 }
 /*
  * THE AGENT IDENTITY (SPEC H7; Brad, 2026-10-20: "computer sets, phone keeps"). From a PAIRED

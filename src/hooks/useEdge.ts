@@ -13,6 +13,7 @@ import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, typ
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {computerHoldsKey, onKeyFree} from '../vendorBridge';
 import {hasSoftKeyPlugin} from '../buildInfo';
+import {shell} from '../platform';
 import {useBackend} from './KeyContext';
 import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
 import NativeShare from 'okedge-native/specs/NativeShare';
@@ -26,7 +27,8 @@ let real: SoftKeyEdge | null = null;
 
 export function useEdge() {
   const backend = useBackend();
-  const wantReal = backend === 'embedded' && hasSoftKeyPlugin('edge');
+  /* the phone's soft key with the Edge plugin, or the desktop's hard key (the same plugin; SoftKeyEdge.open picks it) */
+  const wantReal = (backend === 'embedded' && hasSoftKeyPlugin('edge')) || shell === 'electron';
   const [view, setView] = useState<EdgeView | null>(null);
   const [budgets, setBudgets] = useState<EdgeBudget[]>([]);
   const [past, setPast] = useState<EdgeBudget[]>([]);
