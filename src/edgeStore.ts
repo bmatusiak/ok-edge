@@ -618,8 +618,8 @@ export async function mergeOffered(source: EdgeSource, offered: EdgeLinkRecord[]
 }
 
 /**
- * Keep another device's links and the checkpoint they were merged up to - only once you
- * approved that device's held log (edgeDevices.approveHeld). In the sync queue.
+ * Keep another device's links and the checkpoint they were merged up to - once that device's
+ * log checked with your key (edgeDevices.receiveLog). In the sync queue.
  */
 export function keepMerged(chainId: Uint8Array, publicKey: Uint8Array, publicKeyPq: Uint8Array, added: EdgeLinkRecord[], point: NonNullable<Mirror['merged']>[number], now = Date.now()): Promise<void> {
   const run = syncing.then(() => keepMergedNow(chainId, publicKey, publicKeyPq, added, point, now), () => keepMergedNow(chainId, publicKey, publicKeyPq, added, point, now));

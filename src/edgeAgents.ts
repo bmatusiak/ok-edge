@@ -20,7 +20,7 @@ import {approve as approveLib, chain, identity as identityLib, note as noteLib, 
 import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {addNote, keepOffered, loadMirror, mergeOffered, sync as syncCopy} from './edgeStore';
-import {ensureNametag, holdLog, loadHeld} from './edgeDevices';
+import {ensureNametag, receiveLog, loadHeld} from './edgeDevices';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import {btTransit} from './btTransit';
@@ -60,7 +60,7 @@ async function saveSeen(seen: Set<string>) {
 /* ---------------------------------------------------------------- the sheet */
 
 export type SheetAsk =
-  /* no peer, sync, sibling or anchor sheet since 2026-10-08: the phone's own links merge at once; another device's log is HELD and approved from the Edge tab's banner (MergeSheet) */
+  /* no peer, sync, sibling or anchor sheet since 2026-10-08: the phone's own links merge at once; another device's log merges when its signatures check and is listed as new (ReviewSheet, 2026-10-24) */
   /* blocked: why Approve is off - this phone's copy does not verify (R27); Decline still answers */
   | {kind: 'request'; computer: string | null; view: any; blocked: string | null; at: number}
   /* SPEC H7 (2026-10-20): a computer sets the agent identity this phone keeps - a tap, no press; `was` = the record it replaces */
@@ -340,9 +340,10 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
   }
   if (msg.type === syncLib.OFFER_TYPE) {
     /*
-     * ANOTHER DEVICE'S LOG, HELD (Brad, 2026-10-08: "we should hold these blocks in the app
-     * until approved and merged"): kept in edgeDevices' held area with its checkpoint and
-     * statement - no sheet, nothing merged. The Edge tab's banner opens the Approve sheet.
+     * ANOTHER DEVICE'S LOG (Brad, 2026-10-24: "i should not be asked to merge anything.. i should
+     * just open a log and see everything"): merged at once when its signatures check
+     * (edgeDevices.receiveLog), listed as new in your log for you to notice and mark seen; one that
+     * does not check is kept apart and listed as a warning.
      */
     syncStaged.delete(p.sid);
     if (st.links.size !== p.linkParts) return {ok: false, refusal: 'invalid', detail: `parts missing (links ${st.links.size}/${p.linkParts}) - sync again`};
@@ -355,7 +356,7 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
     const c = p.checkpoint;
     const st2 = p.statement;
     /* hybrid (2026-10-10): the offer's checkpoint is that log's newest - both halves - and its statement names both checkpoint keys (lib sync.verify checked the lengths) */
-    const r = await holdLog({
+    const r = await receiveLog({
       deviceId: fromHexId(String(p.chain)), publicKey: fromHexId(st2.publicKey), publicKeyPq: fromHexId(st2.publicKeyPq), records: all.links,
       checkpoint: {seq: c.seq, head: fromHexId(c.head), signature: fromHexId(c.signature), signaturePq: fromHexId(c.signaturePq)},
       statement: {

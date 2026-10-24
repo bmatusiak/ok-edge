@@ -292,7 +292,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * YOUR OTHER DEVICES' BUDGETS (Brad, 2026-10-09: "full cards, i want to see them in the budget
    * history list"): the same cards, built the same way from that device's merged log and the
    * opening words it sent - kept only after they checked against the log (edgeDevices
-   * approveHeld). Its live budgets are not known here: one not ended in the log shows as it
+   * receiveLog). Its live budgets are not known here: one not ended in the log shows as it
    * stood at the last merge. device: its nametag, for the card's corner.
    */
   async deviceBudgets(deviceIdHex: string, device: string): Promise<EdgeBudget[]> {

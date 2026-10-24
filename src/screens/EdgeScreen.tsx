@@ -28,7 +28,7 @@ import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import {onSheet} from '../edgeAgents';
 import {consentRefusal} from '../debugGuard';
 import {YourDevicesCard} from '../ui/YourDevicesCard';
-import {MergeSheet} from '../ui/MergeSheet';
+import {ReviewSheet} from '../ui/ReviewSheet';
 import {useYourDevices, type DeviceLink, type YourDevice} from '../hooks/useYourDevices';
 import {bannerLine, onDevicesChanged, waitingCount} from '../edgeDevices';
 import {EdgeAgentsCard} from '../ui/EdgeAgentsCard';
@@ -718,10 +718,10 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
   const devices = useYourDevices(edge.view?.headSeq);
   /* a device's log opened in full */
   const [allOf, setAllOf] = useState<Set<string>>(new Set());
-  /* THE SYNC BANNER (Brad, 2026-10-08): logs a sync brought, held until you answer - the sheet opens only from the banner */
+  /* NEW IN YOUR LOG (Brad, 2026-10-24: "a way to NOTICE and REVIEW what gets merged"): already merged; the banner says what came, the sheet lists it, "Seen" clears it */
   const [waiting, setWaiting] = useState(0);
   const [bannerTitle, setBannerTitle] = useState<string | null>(null);
-  const [mergeOpen, setMergeOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   useEffect(() => {
     const read = () => {
       void waitingCount().then(setWaiting).catch(() => undefined);
@@ -798,7 +798,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
    */
   const items: EdgeListItem[] = [];
   if (waiting > 0) {
-    items.push({key: 'merge-banner', kind: 'row', title: bannerTitle ?? 'Sync wants to merge new devices', subtitle: `${waiting} waiting for your answer - tap to review`, tone: 'warn', onPress: () => setMergeOpen(true), accessibilityLabel: 'Review what a sync brought'});
+    items.push({key: 'new-banner', kind: 'row', title: bannerTitle ?? 'New in your log', subtitle: 'Already in your log - tap to see it', tone: 'warn', onPress: () => setReviewOpen(true), accessibilityLabel: 'See what is new in your log'});
   }
   /*
    * PAST ITS LIFETIME = NOT LIVE, whatever the key still lists (Brad, 2026-10-06:
@@ -1119,7 +1119,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
         items={items.filter(it => it.key === 'status' || it.key === 'merge-banner' || (pane === 'Presses') === (it.key === 's-history' || it.key === 'live-hold' || it.key === 'live-refused' || /^h\d/.test(it.key) || it.key.startsWith('dv-')))}
         bottomInset={DRAWER_HANDLE} refreshing={edge.busy} onRefresh={edge.sync}
       />
-      <MergeSheet visible={mergeOpen} onClose={() => setMergeOpen(false)} />
+      <ReviewSheet visible={reviewOpen} onClose={() => setReviewOpen(false)} />
       {/* Brad, 2026-10-05: the drawer holds more than agents now */}
       <BottomDrawer title="Edge Management">
         {/* a hard key on the desktop: its nametag ("my device name"), its agent identity, its blocks - from its identity's records */}

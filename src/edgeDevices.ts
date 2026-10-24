@@ -65,13 +65,9 @@ export type HeldLog = {
   /* that log's newest checkpoint: both halves (its one hybrid anchor) */
   checkpoint: {seq: number; head: string; signature: string; signaturePq: string};
   statement: StoredStatement;
-  declined?: boolean;
-  /* declined while it checked out (made with your OnlyKey, its chain checks, complete): your answer to a good log */
-  declinedValid?: boolean;
-  leak?: boolean;
 };
-/** What the Approve sheet shows for one held device. */
-export type HeldView = {complete: boolean; missing: string[]; deviceId: string; nametag: string | null; claimed: string; class: 'mine-known' | 'mine-new' | 'forged'; count: number; from: string; at: number; checkOk: boolean; alarm: string | null; declined: boolean; leak: boolean};
+/** One log a computer brought, judged: whose it is, whether its chain checks, what words are missing. */
+export type HeldView = {complete: boolean; missing: string[]; deviceId: string; nametag: string | null; claimed: string; class: 'mine-known' | 'mine-new' | 'forged'; count: number; from: string; at: number; checkOk: boolean; alarm: string | null};
 
 /* a missing half reads as empty bytes: it fails every check (no fallback) */
 const bytesOf = (h: string | undefined | null) => fromHex(h ?? '');
@@ -229,35 +225,50 @@ async function saveHeld(list: HeldLog[]): Promise<void> {
   notify();
 }
 
-/**
- * A log offered by a computer: HELD, never merged here. A newer offer of the same device
- * replaces an older one; an older one never replaces a newer one. -> {held, count}
+/*
+ * ------------------------------------------------ new in your log (to notice and review - never a gate)
+ *
+ * Brad, 2026-10-24: "i should not be asked to merge anything.. i should just open a log and see
+ * everything"; "a way to NOTICE and REVIEW what gets merged ... approve what i see, as in, i
+ * confirmed i seen it". A log merges the moment its signatures check; this list only says what
+ * came in, and "Seen" is your word that you looked. It never holds anything back.
  */
-export async function holdLog(o: {deviceId: Uint8Array; publicKey: Uint8Array; publicKeyPq: Uint8Array; records: EdgeLinkRecord[]; checkpoint: {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq: Uint8Array}; statement: Statement; from: string; openings?: unknown[]; notes?: HeldLog['notes']}, now = Date.now()): Promise<{held: boolean; count: number}> {
+export type NewItem = {deviceId: string; nametag: string; links: number; from: string; at: number; newDevice: boolean; missing: string[]; warning: string | null};
+const NEWS = (): string => edgeKey('newInLog');
+
+export async function loadNew(): Promise<NewItem[]> {
+  return readJson<NewItem[]>(NEWS(), []);
+}
+
+/* one row per device: a later arrival before you looked adds to that row */
+async function addNew(item: NewItem): Promise<void> {
+  const list = await loadNew();
+  const was = list.find(n => n.deviceId === item.deviceId);
+  const row = was ? {...item, links: was.links + item.links, newDevice: was.newDevice || item.newDevice, warning: item.warning ?? was.warning} : item;
+  await AsyncStorage.setItem(NEWS(), JSON.stringify([row, ...list.filter(n => n.deviceId !== item.deviceId)]));
+  notify();
+}
+
+/** "Seen": you looked at what came in from that device (or from all, with no device). */
+export async function markSeen(deviceId?: string): Promise<void> {
+  const list = deviceId ? (await loadNew()).filter(n => n.deviceId !== deviceId.toLowerCase()) : [];
+  await AsyncStorage.setItem(NEWS(), JSON.stringify(list));
+  notify();
+}
+
+/**
+ * A log a computer brought (another device of your key: a hard key, another phone). Its
+ * signatures checked here (devices.classify with THIS key's owner key - the statement, the
+ * chain, the checkpoint): merged at once and listed as new. One that does not check is never
+ * merged: kept apart and listed as a warning - a finding, not a question. -> {held, count}
+ * (`held`: whether anything new came, the reply the computer prints).
+ */
+export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array; publicKeyPq: Uint8Array; records: EdgeLinkRecord[]; checkpoint: {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq: Uint8Array}; statement: Statement; from: string; openings?: unknown[]; notes?: HeldLog['notes']}, now = Date.now()): Promise<{held: boolean; count: number}> {
   const id = toHex(o.deviceId);
-  const list = await loadHeld();
-  const was = list.find(h => h.deviceId === id);
-  if (was && was.checkpoint.seq > o.checkpoint.seq) return {held: false, count: 0};
-  /*
-   * NOTHING NEW, NOTHING ASKED AGAIN (two-phone testnet walk, 2026-10-11). A computer offers every
-   * log it holds at every sync, most of them with nothing new. Held again, the same log came
-   * back as "waiting": a declined log or one kept as evidence lost its answer, and a log already
-   * merged asked to be merged again. An offer at the checkpoint already held, or at one this
-   * phone has already merged for that device, changes nothing; a newer checkpoint is new blocks
-   * and asks again.
-   *
-   * EXCEPT A LOG KEPT ONLY BECAUSE IT FAILED A CHECK (live A13, 2026-10-11). The Pixel's log came
-   * to the A13 failing a check that was a bug of that build (its statement had no ML-DSA halves),
-   * so the sheet offered only "Keep as evidence"; once kept, the same checkpoint was "nothing new"
-   * for good and the Pixel's history never showed. A log declined while it did NOT check out is
-   * judged again when it comes back: checking out now, it waits for an answer like any new log.
-   * A good log you declined, and a "not mine", keep their answer.
-   */
+  /* nothing new: a checkpoint this phone has merged already (a computer gives every log it holds, every time) */
   const head = toHex(o.checkpoint.head).toLowerCase();
-  const same = !!was && was.checkpoint.seq === o.checkpoint.seq && was.checkpoint.head.toLowerCase() === head;
-  if (same && (!was!.declined || was!.declinedValid || was!.leak)) return {held: false, count: 0};
-  const merged = (await loadMirror(o.deviceId)).merged ?? [];
-  if (merged.some(m => m.seq > o.checkpoint.seq || (m.seq === o.checkpoint.seq && toHex(m.head).toLowerCase() === head))) return {held: false, count: 0};
+  const mirror = await loadMirror(o.deviceId);
+  if ((mirror.merged ?? []).some(m => m.seq > o.checkpoint.seq || (m.seq === o.checkpoint.seq && toHex(m.head).toLowerCase() === head))) return {held: false, count: 0};
   const entry: HeldLog = {
     deviceId: id, publicKey: toHex(o.publicKey), publicKeyPq: hexOf(o.publicKeyPq), from: o.from, at: now,
     records: o.records.map(r => [toHex(r.link), toHex(r.head), r.reveal ? toHex(r.reveal) : null]),
@@ -266,9 +277,32 @@ export async function holdLog(o: {deviceId: Uint8Array; publicKey: Uint8Array; p
     ...(o.openings && o.openings.length ? {openings: o.openings.slice(0, 500)} : {}),
     ...(o.notes ? {notes: o.notes} : {}),
   };
-  if (same && !checksOut(await judge(entry))) return {held: false, count: 0};
-  await saveHeld([...list.filter(h => h.deviceId !== id), entry]);
-  return {held: true, count: entry.records.length};
+  const v = await judge(entry);
+  const list = await loadHeld();
+  if (v.class === 'forged' || !v.checkOk) {
+    /* the same failing log again: listed once */
+    const was = list.find(h => h.deviceId === id);
+    if (was && was.checkpoint.seq === o.checkpoint.seq && was.checkpoint.head.toLowerCase() === head) return {held: false, count: 0};
+    await saveHeld([...list.filter(h => h.deviceId !== id), entry]);
+    const warning = v.class === 'forged' ? `is not made with your OnlyKey - ${o.from} sent it; never merged` : `does not check (${v.alarm}); never merged`;
+    await addNew({deviceId: id, nametag: o.statement.nametag, links: entry.records.length, from: o.from, at: now, newDevice: false, missing: [], warning});
+    /* a finding about your key: the phone says so out loud too */
+    NativeEdgeAlert?.post(parseInt(id.slice(0, 6), 16), netTag() + 'Edge: a log that does not check',
+      `A log from "${o.statement.nametag}" (${id.slice(0, 8)}…, brought by ${o.from}) ${warning}.`, 'Edge alarm', false);
+    return {held: true, count: entry.records.length};
+  }
+  const log = logOf(entry);
+  const had = mirror.links.length;
+  /* the merge point is that log's newest checkpoint: kept with both halves - the copy's hybrid anchor */
+  await keepMerged(log.deviceId, log.publicKey, log.publicKeyPq, log.records, {seq: entry.checkpoint.seq, head: log.checkpoint.head, signature: log.checkpoint.signature, signaturePq: log.checkpoint.signaturePq, at: now});
+  await AsyncStorage.setItem(DEVICES(), JSON.stringify(devicesLib.remember(await loadDevices(), log.statement)));
+  await keepOpenings(id, log.publicKey, entry.openings ?? []);
+  await keepNotes(log.deviceId, entry.notes ?? null);
+  /* an earlier copy of it that failed a check is answered by this one */
+  if (list.some(h => h.deviceId === id)) await saveHeld(list.filter(h => h.deviceId !== id));
+  const came = Math.max(0, (await loadMirror(o.deviceId)).links.length - had);
+  await addNew({deviceId: id, nametag: v.nametag ?? o.statement.nametag, links: came, from: o.from, at: now, newDevice: v.class === 'mine-new', missing: v.complete ? [] : v.missing, warning: null});
+  return {held: true, count: came};
 }
 
 const recordsOf = (h: HeldLog): EdgeLinkRecord[] => h.records.map(([l, hd, r]) => ({link: fromHex(l), head: fromHex(hd), reveal: r ? fromHex(r) : null}));
@@ -278,16 +312,7 @@ const logOf = (h: HeldLog) => ({
   statement: toStatement(h.statement),
 });
 
-/** The held logs as the sheet shows them, sorted by the lib with THIS key's owner key. */
-export async function reviewHeld(): Promise<HeldView[]> {
-  const owner = await ownerKey();
-  const known = await loadDevices();
-  const out: HeldView[] = [];
-  for (const h of await loadHeld()) out.push(await judge(h, owner, known));
-  return out;
-}
-
-/* one held log as the sheet shows it: sorted by the lib with THIS key's owner key, and checked complete */
+/* one log a computer brought: sorted by the lib with THIS key's owner key, and checked complete */
 async function judge(h: HeldLog, owner?: Awaited<ReturnType<typeof ownerKey>>, known?: Device[]): Promise<HeldView> {
   if (owner === undefined) owner = await ownerKey();
   if (known === undefined) known = await loadDevices();
@@ -295,61 +320,27 @@ async function judge(h: HeldLog, owner?: Awaited<ReturnType<typeof ownerKey>>, k
   const c = owner ? devicesLib.classify({log: logOf(h), ownerKey: owner.ownerKey, ownerKeyPq: owner.ownerKeyPq, known, merged}) : {class: 'forged', nametag: null, check: {ok: false, alarm: 'no-nametag'}};
   return {
     deviceId: h.deviceId, nametag: c.nametag, claimed: h.statement.nametag, class: c.class as HeldView['class'], count: h.records.length, from: h.from, at: h.at,
-    checkOk: !!c.check.ok, alarm: c.check.ok ? null : c.check.alarm ?? 'bad', declined: !!h.declined, leak: !!h.leak,
+    checkOk: !!c.check.ok, alarm: c.check.ok ? null : c.check.alarm ?? 'bad',
     ...(await completenessOf(h)),
   };
 }
 
-/* made with your OnlyKey, its chain checks, and complete: a log that could be merged */
-const checksOut = (v: HeldView): boolean => v.class !== 'forged' && v.checkOk && v.complete;
-
-/** How many held items still wait for an answer (the banner): device logs, and a Key Chain list. */
+/** How many devices have something new in your log you have not looked at yet (the banner). */
 export async function waitingCount(): Promise<number> {
-  return (await loadHeld()).filter(h => !h.declined && !h.leak).length;
+  return (await loadNew()).length;
 }
 
 /**
- * The Edge tab's banner: WHO wants to merge WHAT (Brad, 2026-10-08: "the banner should say
- * {computer} wants to merge a unknown backup device {device_name}" - "nitro16 wants to merge a
- * unknown backup device Pixel"). Names the first thing waiting; the subtitle keeps the count.
- * The known-device and forged lines follow the same shape (not his words yet). No Key Chain
- * line: the Key Chain list is not Edge's (Brad, 2026-10-08: "Move it out of Edge").
+ * The Edge tab's banner: WHAT came into your log, from WHICH device - a warning first. Tapping it
+ * opens the list; "Seen" there is your word that you looked (it never holds anything back).
  */
 export async function bannerLine(): Promise<string | null> {
-  const first = (await reviewHeld()).find(r => !r.declined && !r.leak);
-  if (first) {
-    const name = first.nametag ?? first.claimed;
-    if (first.class === 'forged') return `${first.from} sent a log not made with your OnlyKey`;
-    if (first.class === 'mine-new') return `${first.from} wants to merge a unknown backup device ${name}`;
-    return `${first.from} wants to merge new blocks from ${name}`;
-  }
-  return null;
-}
-
-/**
- * Approve a held device's log: merge it into this phone's view of that device and keep it
- * among your devices. A mine-new device needs \`isMine\` (the "is it yours?" answer); a
- * forged log, or one whose chain does not check, is never merged.
- */
-export async function approveHeld(deviceId: string, {isMine = false}: {isMine?: boolean} = {}): Promise<{merged: number}> {
-  const id = deviceId.toLowerCase();
-  const list = await loadHeld();
-  const h = list.find(x => x.deviceId === id);
-  if (!h) throw new Error('nothing held for that device');
-  const view = (await reviewHeld()).find(v => v.deviceId === id)!;
-  if (view.class === 'forged') throw new Error('not made with your OnlyKey - it is kept as evidence, never merged');
-  if (!view.checkOk) throw new Error(`its chain does not check (${view.alarm}) - kept, not merged`);
-  if (view.class === 'mine-new' && !isMine) throw new Error('say whether this device is yours first');
-  if (!view.complete) throw new Error(`not complete - nothing merged: ${view.missing.slice(0, 3).join('; ')}`);
-  const log = logOf(h);
-  /* the merge point is that log's newest checkpoint: kept with both halves - the copy's hybrid anchor */
-  await keepMerged(log.deviceId, log.publicKey, log.publicKeyPq, log.records, {seq: h.checkpoint.seq, head: log.checkpoint.head, signature: log.checkpoint.signature, signaturePq: log.checkpoint.signaturePq, at: Date.now()});
-  const known = devicesLib.remember(await loadDevices(), log.statement);
-  await AsyncStorage.setItem(DEVICES(), JSON.stringify(known));
-  await keepOpenings(id, log.publicKey, h.openings ?? []);
-  await keepNotes(log.deviceId, h.notes ?? null);
-  await saveHeld(list.filter(x => x.deviceId !== id));
-  return {merged: log.records.length};
+  const list = await loadNew();
+  if (!list.length) return null;
+  const w = list.find(n => n.warning);
+  if (w) return `Warning: a log from "${w.nametag}" ${(w.warning ?? '').split(';')[0]}`;
+  const names = list.map(n => `"${n.nametag}"${n.newDevice ? ' (a new device of your key)' : ''}`);
+  return `New in your log: ${names.join(', ')}`;
 }
 
 /*
@@ -405,31 +396,6 @@ async function completenessOf(h: HeldLog): Promise<{complete: boolean; missing: 
   } catch (e: any) {
     return {complete: false, missing: [`could not be checked: ${String(e?.message ?? e)}`]};
   }
-}
-
-/** Decline: kept as evidence, out of your view. */
-export async function declineHeld(deviceId: string): Promise<void> {
-  const id = deviceId.toLowerCase();
-  const list = await loadHeld();
-  const h = list.find(x => x.deviceId === id);
-  if (!h) return;
-  /* whether it checked out when declined: a log kept only because it failed a check is judged again when it comes back */
-  const declinedValid = checksOut(await judge(h));
-  await saveHeld(list.map(x => (x.deviceId === id ? {...x, declined: true, declinedValid} : x)));
-}
-
-/**
- * "Is it yours?" - No: a device made with YOUR OnlyKey secret that you do not know. Someone
- * holds your secret (a leak): the red alarm, and the log kept as evidence.
- */
-export async function notMine(deviceId: string): Promise<void> {
-  const id = deviceId.toLowerCase();
-  const list = await loadHeld();
-  const h = list.find(x => x.deviceId === id);
-  if (!h) return;
-  await saveHeld(list.map(x => (x.deviceId === id ? {...x, leak: true} : x)));
-  NativeEdgeAlert?.post(parseInt(id.slice(0, 6), 16), netTag() + 'Edge: someone else holds your OnlyKey',
-    `A device made with your OnlyKey secret that is not yours ("${h.statement.nametag}", ${id.slice(0, 8)}…, from ${h.from}). Its log is kept as evidence.`, 'Edge alarm', false);
 }
 
 /* ------------------------------------------------ change notices (the banner refreshes on them) */
