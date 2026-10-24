@@ -350,10 +350,11 @@ export async function bannerLine(): Promise<string | null> {
  * signature from the press) and filed like this phone's own budget records, under that device.
  * Words that do not check are dropped. A record kept before keeps its local fields.
  */
-async function keepOpenings(deviceIdHex: string, publicKey: Uint8Array, openings: unknown[]): Promise<number> {
+/* records: what to check them against - by default this phone's copy of that log; the desktop passes its copy with the links being offered (edgeSoftKey.takeShared) */
+export async function keepOpenings(deviceIdHex: string, publicKey: Uint8Array, openings: unknown[], records?: EdgeLinkRecord[]): Promise<number> {
   if (!openings.length) return 0;
   const {budgetRecordKey} = require('./edgeSoftKey');
-  const records = (await loadMirror(fromHex(deviceIdHex))).links;
+  if (!records) records = (await loadMirror(fromHex(deviceIdHex))).links;
   const good = (devicesLib as any).checkOpenings({deviceId: fromHex(deviceIdHex), publicKey, records, openings}) as any[];
   for (const o of good) {
     const key = budgetRecordKey(deviceIdHex, o.grantId);
@@ -367,7 +368,7 @@ async function keepOpenings(deviceIdHex: string, publicKey: Uint8Array, openings
 }
 
 /* that device's notes into this phone's copy of its log - drawn, and checked against the chain's hashes, exactly as on that device */
-async function keepNotes(deviceId: Uint8Array, notes: HeldLog['notes']): Promise<void> {
+export async function keepNotes(deviceId: Uint8Array, notes: HeldLog['notes']): Promise<void> {
   if (!notes) return;
   const {addNote} = require('./edgeStore');
   for (const [k, text] of Object.entries(notes.reasons ?? {})) if (typeof text === 'string') await addNote(deviceId, {computer: '', seq: Number(k), reason: text});

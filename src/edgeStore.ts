@@ -625,6 +625,14 @@ export async function mergeOffered(source: EdgeSource, offered: EdgeLinkRecord[]
 export async function takeOwnLinks(source: EdgeSource, offered: EdgeLinkRecord[]):
   Promise<{ok: true; count: number} | {ok: false; refusal: string; detail: string}> {
   const m = await mergeOffered(source, offered);
+  /*
+   * A LINK INSIDE A RANGE THE KEY ACCEPTED AS LOST (a LOSS link, R24) cannot be checked against the
+   * key, and the LOSS accounts for it - it is not refused for that, and it stays: the link after it
+   * welds to it (key 1, 2026-10-24: a second LOSS #387-#390 covered #390, which this computer's copy
+   * still held; left out, #391 could not be checked either).
+   */
+  const losses = copy.lossesIn(m.candidate.links);
+  const lost = (seq: number) => losses.some((l: {from: number; to: number}) => l.from <= seq && seq <= l.to);
   if (m.conflicts.length) {
     return {ok: false, refusal: 'invalid', detail: `a fork: this copy holds different links at #${m.conflicts.join(', #')} - nothing taken; settle it in the app`};
   }
@@ -639,8 +647,10 @@ export async function takeOwnLinks(source: EdgeSource, offered: EdgeLinkRecord[]
    * welded to the key's signed checkpoint - or nothing is taken.
    */
   const verifiedSeqs = new Set(m.view.rows.filter(r => r.verified).map(r => r.seq));
-  const unchecked = m.added.map(seqOf).filter(seq => !verifiedSeqs.has(seq));
+  const unchecked = m.added.map(seqOf).filter(seq => !verifiedSeqs.has(seq) && !lost(seq));
   if (unchecked.length) {
+    const seqs = m.candidate.links.map(seqOf);
+    console.log(`[edge] take: copy #${seqs[0]}..#${seqs[seqs.length - 1]} (${seqs.length}), verdict ${JSON.stringify(m.view.verdict)}, ${unchecked.length} unchecked from #${unchecked[0]}`);
     return {ok: false, refusal: 'copy_unverified', detail: `#${unchecked.slice(0, 5).join(', #')}${unchecked.length > 5 ? '…' : ''} cannot be checked against the key - nothing taken`};
   }
   /* Brad, 2026-10-08 ("Own links direct"): the key's OWN links merge at once - its own, checked against its signature */

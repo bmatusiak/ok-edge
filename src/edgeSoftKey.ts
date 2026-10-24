@@ -13,7 +13,7 @@
  * chain's own self-press links.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {approve as approveLib, chain, codes, request as requestLib, receipts} from 'node-onlykey-lib/edge';
+import {approve as approveLib, chain, codes, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import {getOnlyKey} from './onlykey';
 import {shell} from './platform';
@@ -142,9 +142,19 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     if (shell !== 'electron' || takenShared.has(toHex(this.deviceId))) return;
     takenShared.add(toHex(this.deviceId));
     const {desktop} = require('./platform');
-    const rows = ((await desktop.invoke('okedge:sharedLinks', toHex(this.deviceId))) ?? []) as [string, string, string | null][];
-    if (!rows.length) return;
-    const offered = rows.map(([l, h, r]) => ({link: fromHex(l), head: fromHex(h), reveal: r ? fromHex(r) : null}));
+    const shared = (await desktop.invoke('okedge:sharedLinks', toHex(this.deviceId))) as {links: [string, string, string | null][]; openings: unknown[]; notes: any} | null;
+    if (!shared || !shared.links.length) return;
+    const offered = shared.links.map(([l, h, r]) => ({link: fromHex(l), head: fromHex(h), reveal: r ? fromHex(r) : null}));
+    /*
+     * ITS BUDGETS' OPENING WORDS AND ITS NOTES FIRST: a use is checked against its budget's opening,
+     * and these budgets were opened through this computer, not this app. Filed by the phone's own
+     * functions for a log a computer brings (edgeDevices) - checked against the copy with these links.
+     */
+    const {keepOpenings, keepNotes} = require('./edgeDevices');
+    const records = syncLib.merge((await loadMirror(this.deviceId)).links, offered).links;
+    const opened = await keepOpenings(toHex(this.deviceId), (await this.copyKey({checkpoint: false})).publicKey, shared.openings ?? [], records);
+    await keepNotes(this.deviceId, shared.notes);
+    console.log(`[edge] shared records: ${opened} budget opening(s) and the notes filed`);
     const t = await takeOwnLinks(this, offered);
     console.log(`[edge] shared records: ${t.ok ? `${t.count} link(s) taken` : `nothing taken - ${t.detail}`}`);
   }
