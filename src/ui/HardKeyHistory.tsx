@@ -105,7 +105,8 @@ export function HardKeyHistory() {
           {b.scopes.map((s, i) => <Text key={i} style={styles.scope}>{`${s.identity ?? 'slot'}: up to ${s.cap}`}</Text>)}
           {b.spends.map((s) => (
             <Text key={s.seq} style={styles.spend}>
-              {`#${s.seq} ${s.op}${s.intent ? ` - "${s.intent}"` : ''}${s.receipt ? ` · receipt ${s.receipt.name}${s.receipt.message ? ` "${s.receipt.message}"` : ''}` : ' · no receipt yet'}`}
+              {/* the receipt's words only when they say more than the intent (edge control files the intent as both) */}
+              {`#${s.seq} ${s.op}${s.intent ? ` - "${s.intent}"` : ''}${s.receipt ? ` · receipt ${s.receipt.name}${s.receipt.message && s.receipt.message !== s.intent ? ` "${s.receipt.message}"` : ''}` : ' · no receipt yet'}`}
             </Text>
           ))}
           <Text style={b.ended ? styles.ended : styles.live}>{b.ended ? `Ended at #${b.ended.seq}: ${b.ended.how}` : 'Not ended'}</Text>
