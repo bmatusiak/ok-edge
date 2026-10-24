@@ -21,6 +21,8 @@ const CHANNELS = new Set([
   ...['listDevices', 'connect', 'disconnect', 'write'].map((m) => `NativeUsbHid:${m}`),
   /* the person's answer to a CLI's request (electron/desktop/hosting.js) */
   'okedge:hostAnswer',
+  /* the hard key's budget history from the shared records (electron/desktop/hosting.js) */
+  'okedge:hardKeyHistory',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',

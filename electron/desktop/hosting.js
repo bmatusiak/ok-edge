@@ -92,6 +92,27 @@ function hostFor(net) {
   };
 }
 
+/*
+ * THE HARD KEY'S BUDGET HISTORY, from the shared records (Brad, 2026-10-24: "the block chain storage
+ * should be loaded by the desktop app"): the copy the CLI keeps of this key's chain in ~/.onlykey-js
+ * (the live home, or the testnet's - whichever holds this device), told as budgets by the lib's
+ * edge/src/history.js. The key is asked only for its device id (it must be unlocked).
+ */
+async function hardKeyHistory() {
+  const edge = await edgeService();
+  const { deviceId } = await edge.publicKey();
+  const idHex = Buffer.from(deviceId).toString('hex');
+  const bucket = require('node-onlykey-lib/bucket/cli/home');
+  const { history } = require('node-onlykey-lib/edge');
+  for (const net of ['live', 'test']) {
+    const raw = bucket.kv(bucket.edgeAt(homeFor(net), 'copies')).getItem(idHex.slice(0, 16));
+    if (!raw) continue;
+    const c = JSON.parse(raw);
+    return { deviceId: idHex, net, links: (c.links || []).length, history: history.budgetHistory(c) };
+  }
+  return { deviceId: idHex, net: null, links: 0, history: null };
+}
+
 async function start() {
   if (server) return;
   const { createDesktopServer } = require('node-onlykey-lib/desktop/serve');
@@ -113,5 +134,6 @@ module.exports = {
   attach(push) { send = push; },
   handlers: {
     'okedge:hostAnswer': (id, yes) => { if (asking && asking.id === id) asking.resolve(Boolean(yes)); return true; },
+    'okedge:hardKeyHistory': () => hardKeyHistory().catch((e) => ({ error: (e && e.message) || String(e) })),
   },
 };

@@ -17,6 +17,7 @@ import {grants, codes} from 'node-onlykey-lib/edge';
 import {Btn, Section, Segmented} from '../ui/components';
 import {theme} from '../ui/theme';
 import {EdgeList, EdgeListEntry, type EdgeListItem} from '../ui/EdgeList';
+import {HardKeyHistory} from '../ui/HardKeyHistory';
 import {BottomDrawer, DRAWER_HANDLE} from '../ui/BottomDrawer';
 import {BudgetBlock} from '../ui/BudgetBlock';
 import {budgetStatus, budgetStatusText, type BudgetStatus} from '../budgetStatus';
@@ -969,9 +970,13 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
             * as the yellow sheet. Showing the hard key's chain here is B3.
             */}
           {!edge.available ? (
-            <Text style={styles.dim}>
-              This key is a hard key: its Edge is hosted for onlykey-js through this app - a budget it asks for comes up here as a yellow sheet, then the press on the key. This tab shows the soft key&apos;s chain only, for now.
-            </Text>
+            <>
+              <Text style={styles.dim}>
+                This key is a hard key: its Edge is hosted for onlykey-js through this app - a budget it asks for comes up here as a yellow sheet, then the press on the key.
+              </Text>
+              {/* its history from the shared records (the desktop only - nothing on the web) */}
+              <HardKeyHistory />
+            </>
           ) : null}
           {/* B3: a locked key says nothing - so say that, not "no budget" */}
           {edge.available && edge.view?.verdict.kind === 'locked' ? (
