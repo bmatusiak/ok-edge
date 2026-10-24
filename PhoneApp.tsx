@@ -77,6 +77,7 @@ import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import {btTransit} from './src/btTransit';
 import {EdgeScreen} from './src/screens/EdgeScreen';
 import {EdgeRequestSheet} from './src/ui/EdgeRequestSheet';
+import {DesktopHostSheet} from './src/ui/DesktopHostSheet';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
@@ -1088,6 +1089,9 @@ function Shell() {
       <StatusBar barStyle="light-content" />
       {/* an agent's budget request (Edge step 2): over whatever tab is open */}
       {hasSoftKeyPlugin('edge') ? <EdgeRequestSheet /> : null}
+      {/* the CLI's request for the hard key, on the desktop (electron/desktop/hosting.js); nothing elsewhere */}
+      <DesktopHostSheet />
+
       {/* app plugins' watches run whatever tab is open (the Password Manager closes a key's store when it locks) */}
       {pluginWatches().map((Watch, i) => (
         <Watch

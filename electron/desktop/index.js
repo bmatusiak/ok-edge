@@ -8,7 +8,7 @@
  * electron/main.js registers them. The page reaches them only through electron/preload.js, whose
  * allowlists name the same channels. The page's half is src/desktop/specs.
  */
-const MODULES = [require('./rsagen'), require('./secrets'), require('./okemu'), require('./usbhid')];
+const MODULES = [require('./rsagen'), require('./secrets'), require('./okemu'), require('./usbhid'), require('./hosting')];
 
 const handlers = Object.assign({}, ...MODULES.map((m) => m.handlers || {}));
 const syncHandlers = Object.assign({}, ...MODULES.map((m) => m.syncHandlers || {}));
@@ -17,4 +17,8 @@ function attach(send) {
   for (const m of MODULES) if (typeof m.attach === 'function') m.attach(send);
 }
 
-module.exports = { handlers, syncHandlers, attach };
+/* what runs for the app's life (hosting: the CLI's socket) - started once the app is ready, stopped at quit */
+const start = () => Promise.all(MODULES.map((m) => (typeof m.start === 'function' ? m.start() : null)));
+const stop = () => Promise.all(MODULES.map((m) => (typeof m.stop === 'function' ? m.stop() : null)));
+
+module.exports = { handlers, syncHandlers, attach, start, stop };

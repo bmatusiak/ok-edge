@@ -114,6 +114,10 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(file).toString());
   });
   createWindow();
+  /* the CLI's way in (electron/desktop/hosting.js): onlykey-js reaches the key through this app while it runs */
+  desktopModules.start().catch((e) => console.error(`[desktop] ${e.message}`));
 });
 
 app.on('window-all-closed', () => app.quit());
+/* desktop.json leaves with the app, so the CLI goes back to the key directly */
+app.on('will-quit', () => { desktopModules.stop().catch(() => {}); });

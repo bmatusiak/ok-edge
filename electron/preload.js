@@ -19,13 +19,16 @@ const CHANNELS = new Set([
     'buttonTicksLeft', 'rounds', 'kbdSetReport', 'kbdGetReport', 'factoryReset', 'deleteSlot', 'restart', 'restartApp']
     .map((m) => `NativeOkEmu:${m}`),
   ...['listDevices', 'connect', 'disconnect', 'write'].map((m) => `NativeUsbHid:${m}`),
+  /* the person's answer to a CLI's request (electron/desktop/hosting.js) */
+  'okedge:hostAnswer',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',
   'NativeUsbHid:isConnected']);
 /* what the main process may push to the page: the native modules' events (src/desktop/specs) */
 const EVENTS = new Set(['NativeOkEmu:onStream', 'NativeOkEmu:onLed', 'NativeOkEmu:onPluginEvent', 'NativeOkEmu:onRestartRequested',
-  'NativeUsbHid:onStatus', 'NativeUsbHid:onData']);
+  'NativeUsbHid:onStatus', 'NativeUsbHid:onData',
+  'okedge:hostSay', 'okedge:hostAsk', 'okedge:hostDone']);
 
 contextBridge.exposeInMainWorld('okedge', {
   invoke(channel, ...args) {

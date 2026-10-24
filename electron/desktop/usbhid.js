@@ -25,6 +25,33 @@ let send = () => {};
 let pipe = null;
 let offs = [];
 
+/*
+ * ONE KEY, TWO USERS: the page (this module's NativeUsbHid channels) and the CLI through the desktop
+ * app (electron/desktop/hosting.js -> node-onlykey-lib desktop/serve.js). They must share ONE open
+ * pipe - a second open of the same interface fails on Windows - and the pipe is replaced on every
+ * reconnect, so the CLI's side holds this stable stand-in instead: it forwards to whichever pipe is
+ * open now, and opens one on start(). Same contract as cli/transport-hid's pipe.
+ */
+const sharedStream = new Set();
+const sharedClose = new Set();
+const shared = {
+  isRunning: () => !!pipe && pipe.isRunning(),
+  async start() { await connect(); return { started: true, path: pipe.device.path }; },
+  async stop() { /* the page decides when the key closes */ },
+  async write(iface, bytes) {
+    if (!pipe) throw new Error('the OnlyKey is not open');
+    return pipe.write(iface, bytes);
+  },
+  on(event, listener) {
+    const set = event === 'stream' ? sharedStream : event === 'close' ? sharedClose : null;
+    if (!set) throw new Error(`the shared pipe has no "${event}" event`);
+    set.add(listener);
+    return () => set.delete(listener);
+  },
+  get device() { return pipe ? pipe.device : null; },
+  interfaces() { return pipe ? pipe.interfaces() : []; },
+};
+
 const status = (state, message = '') => send('NativeUsbHid:onStatus', { state, transport: 'usb', message });
 const isUsb = (d) => d.interface >= 0;
 
@@ -73,12 +100,14 @@ async function connect() {
   pipe = p;
   offs = [
     p.on('stream', (e) => {
+      for (const l of [...sharedStream]) l(e);
       if (e.dir !== DIR.OUT) return;
       send('NativeUsbHid:onData', { iface: e.iface, hex: Buffer.from(e.bytes).toString('hex'), length: e.bytes.length });
     }),
     p.on('close', (err) => {
       if (pipe !== p) return;
       drop();
+      for (const l of [...sharedClose]) l(err);
       status('disconnected', err && err.message);
     }),
   ];
@@ -115,6 +144,7 @@ async function write(iface, hex) {
 }
 
 module.exports = {
+  shared,
   attach(push) { send = push; },
   syncHandlers: {
     'NativeUsbHid:isConnected': () => !!pipe && pipe.isRunning(),
