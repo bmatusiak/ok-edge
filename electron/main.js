@@ -9,8 +9,13 @@
  * and only for the channels listed there.
  *
  * The page: in development the Expo web server (OKEDGE_WEB_URL, `npm run web`); otherwise the web
- * export in dist/web, served under okedge://app/ - the export's paths start at "/_expo/...", which
- * a file:// load cannot resolve and an app scheme can.
+ * export in dist/web, served by THIS process as https://apps.crp.to/ (the export's paths start at
+ * "/_expo/...", which a file:// load cannot resolve). Why that address: the key's CTAP tunnel - the
+ * Passwords tab's derives, the vault - answers only the admitted origins (node-onlykey-lib
+ * src/protocol/ctap.js RP_IDS), and on Windows an app cannot open the key's FIDO interface: it goes
+ * through Windows' WebAuthn, which a page reaches with navigator.credentials only for its own origin.
+ * Served from these files, never fetched: protocol.handle answers every request for that host here,
+ * and any other https address goes to the network as usual.
  */
 const path = require('path');
 const fs = require('fs');
@@ -19,7 +24,6 @@ const { pathToFileURL } = require('url');
 
 const WEB_ROOT = path.join(__dirname, '..', 'dist', 'web');
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'okedge', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 /* one channel per thing the page may ask for; preload.js lists the same names */
 ipcMain.handle('okedge:about', () => ({
@@ -59,7 +63,7 @@ function createWindow() {
   });
   const dev = process.env.OKEDGE_WEB_URL;
   if (dev) win.loadURL(dev);
-  else win.loadURL('okedge://app/index.html');
+  else win.loadURL('https://apps.crp.to/index.html');
   /*
    * OKEDGE_SHOT=<file.png>: a picture of THIS window once the page has rendered, then quit - how a
    * test or a check looks at the desktop shell without capturing the person's whole screen.
@@ -104,8 +108,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.whenReady().then(() => {
-  protocol.handle('okedge', (request) => {
+  protocol.handle('https', (request) => {
     const url = new URL(request.url);
+    if (url.hostname !== 'apps.crp.to') return net.fetch(request, { bypassCustomProtocolHandlers: true });
     /* inside dist/web only, whatever the path says */
     const file = path.normalize(path.join(WEB_ROOT, decodeURIComponent(url.pathname)));
     if (!file.startsWith(WEB_ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {

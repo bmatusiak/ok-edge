@@ -20,9 +20,11 @@ import sessionPlugin from 'node-onlykey-lib/plugins/session';
 import devicePlugin from 'node-onlykey-lib/plugins/device';
 import okcryptoPlugin from 'node-onlykey-lib/plugins/okcrypto';
 import edgePlugin from 'node-onlykey-lib/plugins/edge';
+import {createWebAuthnCtap} from 'node-onlykey-lib/transport/webauthn';
 
 import OkEmu, {type Iface} from './transport/OkEmu';
 import UsbPipe from './transport/UsbPipe';
+import {shell} from './platform';
 
 /**
  * The pipe contract, as `plugins/transport/embedded` defines it.
@@ -149,6 +151,17 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
         pipe: (backend === 'usb' ? UsbPipe : OkEmu) as unknown as BytePipe,
       },
       host: {store: storeFor(backend)},
+      /*
+       * THE HARD KEY'S CTAP ON WINDOWS GOES THROUGH WINDOWS' WEBAUTHN (Brad, 2026-10-24: the Passwords
+       * tab did not work in the desktop app on Windows). An app cannot open the key's FIDO interface
+       * there - Windows keeps it - so okcrypto's tunnel (every derive, the vault) is carried by
+       * navigator.credentials instead, as in the web app (lib transport/webauthn). The page is served
+       * as https://apps.crp.to (electron/main.js), the origin the tunnel asserts. Linux opens the FIDO
+       * interface itself and keeps the CTAPHID path.
+       */
+      ...(backend === 'usb' && shell === 'electron' && /Windows/.test(navigator.userAgent)
+        ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials})}}
+        : {}),
     };
 
     const app = Rectify.build(plugins, (err: Error | null, started: any) => {
