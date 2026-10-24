@@ -78,6 +78,7 @@ import {btTransit} from './src/btTransit';
 import {EdgeScreen} from './src/screens/EdgeScreen';
 import {EdgeRequestSheet} from './src/ui/EdgeRequestSheet';
 import {DesktopHostSheet} from './src/ui/DesktopHostSheet';
+import {shell} from './src/platform';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
@@ -192,6 +193,13 @@ const HIDDEN_TABS: readonly Tab[] = ['PIN Setup', 'Preferences', 'Backup/Restore
 const DEV_ONLY_TABS: readonly Tab[] = ['Log'];
 
 /*
+ * THE PHONE'S ONLY (Brad, 2026-10-24: "desktop app has no need for bluetooth status menu at top, or
+ * bluetooth menu tab, and webapp doesnt need it also"): the desktop app has no Bluetooth, and the web
+ * app reaches keys through WebAuthn - only the Android app is a Bluetooth keyboard and authenticator.
+ */
+const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
+
+/*
  * The drawer's tabs: testing mode adds its own; Edge also comes with a soft key that has it.
  * EDGE SECOND, SETTINGS LAST (Brad, 2026-10-11: "Settings Tab,, should be at the Bottom, in the
  * list of tabs,, and Edge should be 2nd").
@@ -206,7 +214,7 @@ function shownTabs(testingOn: boolean): readonly Tab[] {
     const at = p.after ? all.indexOf(p.after as Tab) : -1;
     all.splice(at >= 0 ? at + 1 : all.length - 1, 0, p.name as PluginTab);
   }
-  return all.filter(t => !HIDDEN_TABS.includes(t) && (__DEV__ || !DEV_ONLY_TABS.includes(t)));
+  return all.filter(t => !HIDDEN_TABS.includes(t) && (__DEV__ || !DEV_ONLY_TABS.includes(t)) && (shell === 'android' || !ANDROID_ONLY_TABS.includes(t)));
 }
 
 /** Splash until the device can answer, then a door, then the app. */
@@ -1148,13 +1156,16 @@ function Shell() {
 
               Blue is armed, green is connected, grey is off.
             */}
-            <RadioStatus
-              on={btOn}
-              setOn={setBtOn}
-              fido={fido}
-              auto={auto}
-              onPress={() => setTab('Bluetooth')}
-            />
+            {/* the phone's only: no Bluetooth on the desktop, none needed on the web (ANDROID_ONLY_TABS) */}
+            {shell === 'android' ? (
+              <RadioStatus
+                on={btOn}
+                setOn={setBtOn}
+                fido={fido}
+                auto={auto}
+                onPress={() => setTab('Bluetooth')}
+              />
+            ) : null}
 
             <Pressable
               onPress={() => setTab('This Key')}

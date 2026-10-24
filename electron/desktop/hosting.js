@@ -75,7 +75,8 @@ function hostFor(net) {
               const timer = setTimeout(() => { if (asking && asking.id === id) asking = null; resolve(false); }, ASK_MS);
               asking = { id, resolve: (yes) => { clearTimeout(timer); asking = null; resolve(yes); } };
               front();
-              send('okedge:hostAsk', { id, net, lines: lines.slice(), question: String(question).replace(/\s*\[y\/N\]\s*$/, '') });
+              /* until: when no answer becomes a no - the sheet counts it down, as the phone's does */
+              send('okedge:hostAsk', { id, net, lines: lines.slice(), question: String(question).replace(/\s*\[y\/N\]\s*$/, ''), until: Date.now() + ASK_MS });
             }),
           }),
         };

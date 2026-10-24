@@ -961,11 +961,23 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
               )}
             </View>
           ))}
+          {/*
+            * THE KEY ON SCREEN, NOT ANOTHER ONE (Brad, 2026-10-24: a hard key, unlocked in the header, and
+            * this tab said "Unlock the key to sync"). This tab reads the soft key's chain only
+            * (useEdge: available = the soft key); its "locked" was the soft key's, left over. For a hard
+            * key it says what is true: onlykey-js hosts it through this app, and its requests come up
+            * as the yellow sheet. Showing the hard key's chain here is B3.
+            */}
+          {!edge.available ? (
+            <Text style={styles.dim}>
+              This key is a hard key: its Edge is hosted for onlykey-js through this app - a budget it asks for comes up here as a yellow sheet, then the press on the key. This tab shows the soft key&apos;s chain only, for now.
+            </Text>
+          ) : null}
           {/* B3: a locked key says nothing - so say that, not "no budget" */}
-          {edge.view?.verdict.kind === 'locked' ? (
+          {edge.available && edge.view?.verdict.kind === 'locked' ? (
             <Text style={[styles.dim, {color: theme.warn}]}>Unlock the key to sync. A locked key answers nothing, so its budgets cannot be read.</Text>
           ) : null}
-          {edge.view?.verdict.kind !== 'locked' && liveCards.length === 0 && owing.length === 0 && edge.requests.length === 0 && edge.ended.length === 0 ? (
+          {edge.available && edge.view?.verdict.kind !== 'locked' && liveCards.length === 0 && owing.length === 0 && edge.requests.length === 0 && edge.ended.length === 0 ? (
             <Text style={styles.dim}>
               No budget. A budget lets an agent use the key a set number of times without a press; you approve it once.
             </Text>

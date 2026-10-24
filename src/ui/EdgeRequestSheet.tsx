@@ -78,7 +78,7 @@ function until(minutes: number, from: number): string {
  * Red when the loud sound starts (PressAlert): the question's second minute, the
  * press after its first 10 s - the colour and the sound say the same thing.
  */
-function useSecondsLeft(until: number | null): number | null {
+export function useSecondsLeft(until: number | null): number | null {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!until) return;
@@ -88,7 +88,7 @@ function useSecondsLeft(until: number | null): number | null {
   }, [until]);
   return until ? Math.max(0, Math.ceil((until - now) / 1000)) : null;
 }
-const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+export const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 
 /*
  * AFTER APPROVE (Brad, 2026-10-07): the new budget's progress card - the Edge tab's
