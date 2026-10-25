@@ -75,10 +75,13 @@ export function isTradeMessage(msg: any): boolean {
 
 /** Answer one round of a trade from a paired computer. */
 export async function handleTrade(msg: any, from: string): Promise<unknown> {
+  console.log(`[bucket] ${msg.type} arrived (${JSON.stringify(msg).length} bytes)`);
   if (msg.type === bucketLib.trade.TYPES.HELLO) await ensureMe().catch((e: unknown) => { me = null; console.log(`[bucket] no proof material: ${String((e as Error)?.message ?? e)}`); });
   let out: any;
   try {
     out = answer(msg, from);
+    /* the trade's steps, in the app log (types and counts only - a GIVE's values are never logged) */
+    console.log(`[bucket] ${msg.type}: ${out?.ok ? 'answered' : 'refused'}${out?.taken ? ` - took ${JSON.stringify(out.taken)}` : ''}`);
   } catch (e) {
     /* said here: the computer only learns that no answer came (the box, 2026-10-25: a give that vanished silently) */
     console.log(`[bucket] a trade message failed (${msg.type}): ${String((e as Error)?.stack ?? e).slice(0, 400)}`);
