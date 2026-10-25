@@ -19,7 +19,7 @@
  */
 const path = require('path');
 const fs = require('fs');
-const { app, BrowserWindow, ipcMain, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, net, session } = require('electron');
 const { pathToFileURL } = require('url');
 
 const WEB_ROOT = path.join(__dirname, '..', 'dist', 'web');
@@ -123,6 +123,14 @@ app.whenReady().then(() => {
   desktopModules.start().catch((e) => console.error(`[desktop] ${e.message}`));
 });
 
-app.on('window-all-closed', () => app.quit());
+/*
+ * THE PAGE'S STORAGE IS WRITTEN OUT WHEN THE WINDOW CLOSES (box, 2026-10-24: on Linux the app can hang after
+ * quitting and be stopped by force - and what the page had just stored, the identity's sealed bucket, the agent
+ * identity, never reached the disk). Flushed here, before anything that can hang.
+ */
+app.on('window-all-closed', () => {
+  try { session.defaultSession.flushStorageData(); } catch (e) { console.error(`[storage] flush: ${e.message}`); }
+  app.quit();
+});
 /* desktop.json leaves with the app, so the CLI goes back to the key directly */
 app.on('will-quit', () => { desktopModules.stop().catch(() => {}); });
