@@ -25,7 +25,7 @@
     "expo": "~58.0.16",
     "expo-status-bar": "~58.0.3",
     "node-hid": "^3.4.0",
-    "node-onlykey-lib": "github:bmatusiak/node-onlykey-lib#d9b14237a283e1959acc80ec5bf58c48879c8210",
+    "node-onlykey-lib": "github:bmatusiak/node-onlykey-lib#51455706bc51841164ce09aeaa253a91d2f8e9d3",
     "okedge-autofill": "file:./modules/okedge-autofill",
     "okedge-native": "file:./modules/okedge-native",
     "react": "19.3.0",
