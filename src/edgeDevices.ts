@@ -29,7 +29,18 @@ import type {EdgeLinkRecord} from './edgeFake';
 import {edgeKey, netTag} from './net';
 
 const DEVICES = (): string => edgeKey('devices');
-const OWN = (): string => edgeKey('ownStatement');
+/*
+ * ONE STATEMENT PER DEVICE (box + Pixel, 2026-10-24: a hard key plugged into the Pixel was shown as "Pixel 6a" - the
+ * phone kept ONE statement, so another key's re-sign wrote over the soft key's, and the phone's owner key flipped
+ * to the hard key's identity while it was plugged in). Each key's statement is kept under its own device id;
+ * "this device" is the key the app is using now (setCurrentDevice, from SoftKeyEdge.open).
+ */
+const OWN = (deviceIdHex: string): string => edgeKey(`ownStatement.${deviceIdHex.toLowerCase()}`);
+const LEGACY_OWN = (): string => edgeKey('ownStatement');
+let currentDevice: string | null = null;
+export function setCurrentDevice(deviceIdHex: string): void {
+  currentDevice = deviceIdHex.toLowerCase();
+}
 const HELD = (): string => edgeKey('held');
 
 /*
@@ -94,9 +105,18 @@ async function readJson<T>(key: string, fallback: T): Promise<T> {
 
 /* ------------------------------------------------ this phone */
 
-/** This phone's own latest statement (its nametag), or null before one is set. */
-export async function ownStatement(): Promise<StoredStatement | null> {
-  return readJson<StoredStatement | null>(OWN(), null);
+/** A key's own latest statement (its nametag) - by default the key the app is using now - or null before one is set. */
+export async function ownStatement(deviceIdHex: string | null = currentDevice): Promise<StoredStatement | null> {
+  if (!deviceIdHex) return null;
+  const kept = await readJson<StoredStatement | null>(OWN(deviceIdHex), null);
+  if (kept) return kept;
+  /* the one statement kept before per-device statements: it belongs to the device it names, and moves there */
+  const legacy = await readJson<StoredStatement | null>(LEGACY_OWN(), null);
+  if (legacy && legacy.deviceId.toLowerCase() === deviceIdHex.toLowerCase()) {
+    await AsyncStorage.setItem(OWN(deviceIdHex), JSON.stringify(legacy));
+    return legacy;
+  }
+  return null;
 }
 
 /**
@@ -142,7 +162,7 @@ export async function setNametag(soft: {statement(nametag: string): Promise<any>
   const s = store(st);
   /* signed by the key just now: its owner key is the key's for this session */
   if (s.ownerKey && s.ownerKeyPq) ownerConfirmed.add(`${s.ownerKey}.${s.ownerKeyPq}`.toLowerCase());
-  await AsyncStorage.setItem(OWN(), JSON.stringify(s));
+  await AsyncStorage.setItem(OWN(s.deviceId), JSON.stringify(s));
   notify();
   return s;
 }
@@ -163,8 +183,8 @@ export async function deviceName(): Promise<string> {
  * name the first time one is needed - the drawer opening, or a computer asking for its log.
  * A nametag set by hand is never replaced. -> this phone's statement, or null (no key, no name)
  */
-export async function ensureNametag(soft: {statement(nametag: string): Promise<any>; deviceId?: Uint8Array} | null): Promise<StoredStatement | null> {
-  const have = await ownStatement();
+export async function ensureNametag(soft: {statement(nametag: string): Promise<any>; deviceId?: Uint8Array; backend?: string} | null): Promise<StoredStatement | null> {
+  const have = await ownStatement(soft?.deviceId ? toHex(soft.deviceId) : currentDevice);
   /*
    * A STATEMENT FOR ANOTHER CHAIN IS SIGNED AGAIN (2026-10-08, walking the setup flow): after the
    * key's Edge region was reset (or restored - a new device id), the phone kept giving the old
@@ -185,6 +205,8 @@ export async function ensureNametag(soft: {statement(nametag: string): Promise<a
     }
   }
   if (have || !soft) return have;
+  /* only the phone's own soft key takes the phone's name: a hard key is another device, named by the person */
+  if (soft.backend === 'usb') return null;
   const name = await deviceName();
   if (!name) return null;
   try {

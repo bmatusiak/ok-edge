@@ -993,14 +993,18 @@ function Shell() {
    */
   const doorKey = `${keys.backend}:${String(keys.attached)}`;
   const lastDoorKey = useRef(doorKey);
+  /* after a switch, the door waits for THIS key's unlock - testing mode too (Brad, 2026-10-24: hard key out of the Pixel, soft key not logged in, and the app was still inside) */
+  const awaitingUnlock = useRef(false);
   useEffect(() => {
     if (lastDoorKey.current === doorKey) return;
     lastDoorKey.current = doorKey;
+    awaitingUnlock.current = true;
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
   }, [doorKey]);
 
   useEffect(() => {
-    if (testing.enabled) {
+    if (emu.device === 'unlocked') awaitingUnlock.current = false;
+    if (testing.enabled && !awaitingUnlock.current) {
       /* testing mode skips the PIN, not the identity check: which identity the key is matters on the testnet too */
       setPhase(prev => (prev === 'main' || prev === 'identity' ? prev : 'identity'));
       return;

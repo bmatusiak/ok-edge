@@ -132,6 +132,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const {deviceId} = await app.edge.publicKey();
     const soft = new SoftKeyEdge(app.edge, deviceId);
     soft.backend = backend;
+    /* "this device" for the statements (edgeDevices: one per device id) is the key the app opened just now */
+    require('./edgeDevices').setCurrentDevice(toHex(deviceId));
     /*
      * THE DEFAULT NAMETAG, MADE EARLY (Brad, 2026-10-08: "i still had to click change name tag"):
      * the first time the app reaches the key after login (the background sync does, within
