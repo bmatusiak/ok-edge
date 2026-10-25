@@ -56,7 +56,14 @@ function startHost() {
     proc.on('message', (m) => {
       if (m && m.ready === true) { console.log('[okemu] the soft key loaded'); resolve(true); }
       else if (m && m.ready === false) fail(`the soft key did not load: ${m.error}`);
-      else if (m && m.event) send(m.event, m.payload);
+      else if (m && m.event) {
+        send(m.event, m.payload);
+        /* the CLI's side too (hosting.js): the key's reports as the lib's pipe gives them */
+        if (m.event === 'NativeOkEmu:onStream' && m.payload) {
+          const ev = { iface: m.payload.iface, dir: m.payload.dir, bytes: Buffer.from(m.payload.hex || '', 'hex') };
+          for (const l of sharedStream) l(ev);
+        }
+      }
       else if (m && m.id && waiting.has(m.id)) {
         const { ok, ko } = waiting.get(m.id);
         waiting.delete(m.id);
@@ -66,6 +73,7 @@ function startHost() {
     proc.once('exit', (code) => {
       if (!current()) return;
       for (const { ko } of waiting.values()) ko(new Error(`the soft key's process ended (${code})`));
+      for (const l of sharedClose) l(new Error('the soft key stopped'));
       waiting.clear();
       runningDir = null;
       if (!hostFailed) fail(`the soft key's process ended (${code})`);
@@ -146,7 +154,40 @@ const relayed = (method) => async (...args) => { needRunning(); return call(meth
 /* the polls an app makes all the time: a quiet answer while the firmware is not running */
 const polled = (method, idle) => async (...args) => (runningDir ? call(method, ...args) : idle);
 
+/*
+ * THE SOFT KEY FOR THE CLI (Brad, 2026-10-25: "cli talks to the desktop if its open, so the desktop app does the work
+ * ... its so we can use the softkey in the desktop, and the cli should not need to know what the desktop app is
+ * talking to"). The same contract as usbhid.shared - the lib's pipe (isRunning, start, write, on 'stream' / 'close',
+ * device, interfaces) - over the soft key's own process: writes go to its HID, its reports come back. It never starts
+ * the soft key: the page does, when the person logs in to it.
+ */
+const sharedStream = new Set();
+const sharedClose = new Set();
+const SOFT_PATH = 'ok-edge desktop soft key';
+const shared = {
+  isRunning: () => !!runningDir,
+  async start() {
+    if (!runningDir) throw new Error('the desktop app\'s soft key is not running - log in to it in the app first');
+    return { started: true, path: SOFT_PATH };
+  },
+  async stop() { /* the page decides when the soft key stops */ },
+  async write(iface, bytes) {
+    if (!runningDir) throw new Error('the desktop app\'s soft key is not running');
+    return call('writeHid', iface, Buffer.from(bytes).toString('hex'));
+  },
+  on(event, listener) {
+    const set = event === 'stream' ? sharedStream : event === 'close' ? sharedClose : null;
+    if (!set) throw new Error(`the soft key's pipe has no "${event}" event`);
+    set.add(listener);
+    return () => set.delete(listener);
+  },
+  get device() { return runningDir ? { path: SOFT_PATH, product: 'OnlyKey (soft key)', serialNumber: '' } : null; },
+  /* the vendor and FIDO interfaces, as the lib numbers them (src/protocol/msg.js IFACE) */
+  interfaces() { return runningDir ? [{ iface: 2, path: SOFT_PATH }, { iface: 1, path: SOFT_PATH }] : []; },
+};
+
 module.exports = {
+  shared,
   attach(push) {
     send = push;
     startHost();

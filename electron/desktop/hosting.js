@@ -99,11 +99,29 @@ function pageHolds() {
     send('okedge:computerTalks', { id });
   });
 }
-/* the handover runs before the CLI counts as speaking (node-onlykey-lib desktop/serve.js beforeWrite): a report meanwhile is not its */
-const cliPipe = Object.create(usbhid.shared, {
-  beforeWrite: { value: pageHolds },
-  write: { value: (iface, bytes) => usbhid.shared.write(iface, bytes) },
-});
+/*
+ * THE KEY THE PAGE HAS OPEN, whichever it is (Brad, 2026-10-25: "the cli should not need to know what the desktop app
+ * is talking to"): a hard key on USB or the app's soft key. The page says which (okedge:activeKey, from KeyContext)
+ * every time it changes; the CLI's pipe forwards to that one, and only that one's reports reach the CLI.
+ * The handover runs before the CLI counts as speaking (node-onlykey-lib desktop/serve.js beforeWrite): a report
+ * meanwhile is not its.
+ */
+let activeKey = 'usb';
+const softKey = () => require('./okemu').shared;
+const current = () => (activeKey === 'embedded' ? softKey() : usbhid.shared);
+const cliPipe = {
+  isRunning: () => current().isRunning(),
+  start: () => current().start(),
+  async stop() { /* the page decides when its key closes */ },
+  beforeWrite: pageHolds,
+  write: (iface, bytes) => current().write(iface, bytes),
+  on(event, listener) {
+    const offs = [usbhid.shared, softKey()].map((p) => p.on(event, (ev) => { if (p === current()) listener(ev); }));
+    return () => { for (const off of offs) off(); };
+  },
+  get device() { return current().device; },
+  interfaces: () => current().interfaces(),
+};
 
 async function start() {
   if (server) return;
@@ -126,6 +144,8 @@ module.exports = {
   stop,
   attach(push) { send = push; },
   handlers: {
+    /* the page's active key: 'usb' (a hard key) or 'embedded' (the app's soft key) */
+    'okedge:activeKey': (backend) => { activeKey = backend === 'embedded' ? 'embedded' : 'usb'; return activeKey; },
     'okedge:edgeAnswer': (id, answer) => { const done = answers.get(id); if (done) done(answer); return true; },
     'okedge:computerHeld': (id) => { const done = holdAcks.get(id); if (done) done(); return true; },
     'okedge:sharedLinks': (deviceIdHex) => sharedLinks(deviceIdHex).catch(() => ({ links: [], openings: [], notes: null })),

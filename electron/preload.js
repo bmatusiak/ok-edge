@@ -25,6 +25,8 @@ const CHANNELS = new Set([
   'okedge:sharedLinks',
   /* this identity's bucket, opened once and kept with the CLI's in ~/.onlykey-js (node-onlykey-lib bucket/cli/home.js) */
   'okedge:bucketHas', 'okedge:bucketKeep', 'okedge:bucketGet', 'okedge:bucketSet', 'okedge:bucketMove',
+  /* which key the page has open, so a CLI reaches the same one (electron/desktop/hosting.js) */
+  'okedge:activeKey',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',

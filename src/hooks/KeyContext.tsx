@@ -2,6 +2,7 @@ import React, {createContext, useCallback, useContext, useMemo} from 'react';
 
 import {getOnlyKey, type OnlyKeyApp} from '../onlykey';
 import {BACKEND_NAME, type Backend} from './keySession';
+import {desktop} from '../platform';
 
 /**
  * WHICH KEY THE REST OF THE APP IS TALKING TO.
@@ -40,6 +41,7 @@ const KeyBackendContext = createContext<Backend>('embedded');
  * key or a hard key, on the phone and the desktop the same.
  */
 let active: Backend = 'embedded';
+let told = false;
 export function activeBackend(): Backend {
   return active;
 }
@@ -51,6 +53,11 @@ export function KeyBackendProvider({
   backend: Backend;
   children: React.ReactNode;
 }) {
+  if (active !== backend || !told) {
+    told = true;
+    /* the desktop: a CLI reaching the app reaches this same key (electron/desktop/hosting.js okedge:activeKey) */
+    void desktop?.invoke('okedge:activeKey', backend).catch(() => {});
+  }
   active = backend;
   return (
     <KeyBackendContext.Provider value={backend}>
