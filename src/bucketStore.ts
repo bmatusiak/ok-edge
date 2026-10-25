@@ -58,6 +58,19 @@ let door: Door = {kind: 'closed'};
 /* one sealed write at a time, so the last stored is the newest bucket (writes arrive back to back) */
 let writes: Promise<unknown> = Promise.resolve();
 
+/**
+ * THE BUCKET A TRADE WORKS ON (src/bucketTrade.ts): the phone's, opened in memory - null with the door shut, or on a
+ * computer, where the CLI trades the kept file itself (lib bucket/cli/trade.js).
+ */
+export function tradeBucket(): {identity: string; bucket: Bucket} | null {
+  return door.kind === 'sealed' ? {identity: door.identity, bucket: door.bucket} : null;
+}
+
+/** A trade changed the opened bucket: stored sealed again. */
+export function saveTradedBucket(): Promise<void> {
+  return persist();
+}
+
 /** The door closed (a lock, another key): an opened bucket in memory goes with it. */
 export function closeBucket(): void {
   door = {kind: 'closed'};

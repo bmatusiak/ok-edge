@@ -24,6 +24,7 @@ import {ensureNametag, receiveLog, loadHeld} from './edgeDevices';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import {btTransit} from './btTransit';
+import {handleTrade, isTradeMessage} from './bucketTrade';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 import {edgeKey} from './net';
 
@@ -207,6 +208,8 @@ async function computerOf(from: string): Promise<{id: string; name: string} | nu
 }
 
 export function handleEdgeMessage(msg: any, from: string): Promise<unknown | null> {
+  /* a paired computer trading buckets (src/bucketTrade.ts): no sheet - proven both ways, then the newer wins */
+  if (isTradeMessage(msg)) return handleTrade(msg, from).catch(() => null);
   /* B7 stage 2: a note changes nothing, so it never waits behind a sheet */
   if (msg?.type === noteLib.TYPE) return handleNote(msg, from).catch(() => null);
   /* a sheet the person answers: a budget, or the agent identity (a sync is held, never asked - 2026-10-08) */
