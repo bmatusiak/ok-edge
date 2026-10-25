@@ -76,9 +76,16 @@ export function isTradeMessage(msg: any): boolean {
 /** Answer one round of a trade from a paired computer. */
 export async function handleTrade(msg: any, from: string): Promise<unknown> {
   if (msg.type === bucketLib.trade.TYPES.HELLO) await ensureMe().catch((e: unknown) => { me = null; console.log(`[bucket] no proof material: ${String((e as Error)?.message ?? e)}`); });
-  const out: any = answer(msg, from);
+  let out: any;
+  try {
+    out = answer(msg, from);
+  } catch (e) {
+    /* said here: the computer only learns that no answer came (the box, 2026-10-25: a give that vanished silently) */
+    console.log(`[bucket] a trade message failed (${msg.type}): ${String((e as Error)?.stack ?? e).slice(0, 400)}`);
+    throw e;
+  }
   if (msg.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
-    await saveTradedBucket();
+    await saveTradedBucket().catch((e: unknown) => { console.log(`[bucket] the traded bucket was not stored: ${String((e as Error)?.message ?? e)}`); throw e; });
     const n = Object.values(out.taken || {}).reduce((a: number, b: any) => a + Number(b), 0);
     console.log(`[bucket] traded with a paired computer: took ${n}`);
   }
