@@ -3,6 +3,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {formats, refresh, sources, store} from 'node-onlykey-lib/guestbook';
 import NativeShare from 'okedge-native/specs/NativeShare';
 import {guestBookChanged, onGuestBookChanged, openBook, openpgp} from './service';
+import {onBucketTraded} from '../../bucketEvents';
 
 /*
  * GUEST BOOK'S STATE (onlykey-edge/features/GUEST-BOOK-SPEC.md): the contacts list, kept by the
@@ -50,9 +51,15 @@ export function useGuestBook() {
     read();
     /* a key saved from Messages (service.ts): the list on screen reads it in */
     const off = onGuestBookChanged(() => void read());
+    /*
+     * contacts that arrived from a sync (src/bucketEvents.ts): read in at once - public keys, nothing to decrypt
+     * (Passwords asks first; the Guest Book has no secret to open)
+     */
+    const offSync = onBucketTraded(stores => { if (stores.some(s => s.startsWith('guestbook'))) void read(); });
     return () => {
       live = false;
       off();
+      offSync();
     };
   }, [book]);
 
