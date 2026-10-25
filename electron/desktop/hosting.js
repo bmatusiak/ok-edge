@@ -119,6 +119,8 @@ async function stop() {
   if (s) await s.stop().catch(() => {});
 }
 
+const bucketHome = () => require('node-onlykey-lib/bucket/cli/home');
+
 module.exports = {
   start,
   stop,
@@ -127,5 +129,21 @@ module.exports = {
     'okedge:edgeAnswer': (id, answer) => { const done = answers.get(id); if (done) done(answer); return true; },
     'okedge:computerHeld': (id) => { const done = holdAcks.get(id); if (done) done(); return true; },
     'okedge:sharedLinks': (deviceIdHex) => sharedLinks(deviceIdHex).catch(() => ({ links: [], openings: [], notes: null })),
+    /*
+     * THE IDENTITY'S BUCKET IN THE CLI'S FOLDER (Brad, 2026-10-24: "cli and desktop decrypt once, share same bucket
+     * stored in filesystem"): the page's identity check opens it once with the key and keeps it here; after that the
+     * page's stores read and write this file, as the CLI does - each write a locked read-modify-write, so the two
+     * never drop each other's change. The lib names the file from the identity id and refuses any other name.
+     */
+    'okedge:bucketHas': (identity, net) => bucketHome().hasIdentityBucket(identity, net),
+    'okedge:bucketKeep': (identity, net, text) =>
+      bucketHome().keepIdentityBucket(identity, net, require('node-onlykey-lib/bucket').open(text, { allowUnsealed: true }).bucket),
+    'okedge:bucketGet': (identity, net, store, key) => bucketHome().kv(bucketHome().identityAt(identity, net, store)).getItem(key),
+    'okedge:bucketSet': (identity, net, store, key, value) => {
+      const kv = bucketHome().kv(bucketHome().identityAt(identity, net, store));
+      if (value === null) kv.removeItem(key);
+      else kv.setItem(key, String(value));
+      return true;
+    },
   },
 };

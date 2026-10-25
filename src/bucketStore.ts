@@ -2,18 +2,24 @@
  * THIS IDENTITY'S BUCKET, opened by the key (Brad, 2026-10-24: after the identity check's Continue, "a button
  * press here is needed to decrypt the container").
  *
- * One sealed bucket per identity, kept in the app's storage only in its sealed form: an age file to the key's
- * own X-Wing recipient (node-onlykey-lib bucket sealToKey). Opening it is the key's X-Wing step - the key asks
- * for a press - and the opened bucket lives in memory only, until the door closes (a lock, another key).
- * The first time an identity is seen, an empty bucket is sealed for it: sealing needs no key and no press.
+ * One bucket per identity per net. It travels sealed: an age file to the key's own X-Wing recipient
+ * (node-onlykey-lib bucket sealToKey), which only the key opens - the key's X-Wing step, with a press. Where the
+ * OPENED bucket lives is the shell's (Brad, 2026-10-24: "the webapp has no way to save decrypted stuff, the desktop
+ * cli share the same file system, identity check switch to the decrypted bucket on desktop, while webapp always has
+ * an encrypted bucket"):
+ *   - the phone keeps it sealed in its storage and opens it in memory, at every identity check;
+ *   - the desktop opens it ONCE and keeps it opened in the CLI's folder (~/.onlykey-js/buckets/<net>/<id>.json,
+ *     lib bucket/cli/home.js), so the desktop and the CLI share one bucket; its identity check after that switches
+ *     to that file with no press;
+ *   - the web app (plan S5) only ever holds it sealed, and keeps nothing opened.
+ * The first time an identity is seen, an empty bucket is made for it: no key, no press.
  *
  * THE APP'S STORES SIT ON IT (plan S2): bucketStorage(store) is the feature's storage while the door is open.
- * Every write changes the bucket in memory and stores it sealed again - to the recipient read when it opened,
- * so a write needs no key and no press. Nothing a store keeps is written anywhere in the clear.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {currentNet} from './net';
+import {desktop} from './platform';
 
 type Bucket = ReturnType<typeof bucketLib.create>;
 type Okcrypto = {
@@ -25,32 +31,34 @@ type Okcrypto = {
 };
 
 /*
- * ONE BUCKET PER IDENTITY PER NET: the testnet's records stay apart from the live ones, as every other record
- * does - and okrn.bucket.test.<identity> is a feature's test record by its name (testnet.ts TEST_KEYS), so
- * Clear testnet removes the testnet's bucket with the rest, without having to open it.
+ * THE PHONE'S SEALED BUCKET, one per identity per net: the testnet's records stay apart from the live ones, as
+ * every other record does - and okrn.bucket.test.<identity> is a feature's test record by its name (testnet.ts
+ * TEST_KEYS), so Clear testnet removes the testnet's bucket with the rest, without having to open it.
+ * (The desktop kept its sealed bucket here too before the shared file; the identity check moves it.)
  */
 const KEY = (identity: string): string => `okrn.bucket.${currentNet() === 'test' ? 'test.' : ''}${identity.toLowerCase()}`;
 
 /*
- * The door's state. 'bucket': this identity's bucket is open, the stores read and write it. 'legacy': the key
- * has no Edge identity (stock v3.0.4 firmware: nothing to seal a bucket to), so the stores keep today's plain
- * storage. 'closed': no door is open - nothing is read, and a write is refused rather than put in the clear.
+ * The door's state.
+ *   'sealed': the phone - this identity's bucket opened in memory; every write stores it sealed again, to the
+ *             recipient read when it opened, so a write needs no key and no press.
+ *   'kept':   the desktop - the bucket is the shared file; every read and write goes to it (a locked
+ *             read-modify-write in the main process, as the CLI's).
+ *   'legacy': the key has no Edge identity (stock v3.0.4 firmware: nothing to seal a bucket to), so the stores
+ *             keep today's plain storage.
+ *   'closed': no door is open - nothing is read, and a write is refused.
  */
 type Door =
   | {kind: 'closed'}
   | {kind: 'legacy'}
-  | {kind: 'bucket'; identity: string; bucket: Bucket; recipient: Uint8Array; encrypt: (p: Uint8Array, r: Uint8Array | string) => Uint8Array; movedPrefixes: Set<string>};
+  | {kind: 'sealed'; identity: string; bucket: Bucket; recipient: Uint8Array; encrypt: (p: Uint8Array, r: Uint8Array | string) => Uint8Array; movedPrefixes: Set<string>}
+  | {kind: 'kept'; identity: string; net: string; movedPrefixes: Set<string>};
 let door: Door = {kind: 'closed'};
 
 /* one sealed write at a time, so the last stored is the newest bucket (writes arrive back to back) */
 let writes: Promise<unknown> = Promise.resolve();
 
-/** The bucket opened for this session, or null - nothing of it is kept unsealed anywhere else. */
-export function openedBucket(): {identity: string; bucket: Bucket} | null {
-  return door.kind === 'bucket' ? {identity: door.identity, bucket: door.bucket} : null;
-}
-
-/** The door closed (a lock, another key): the opened bucket goes with it. */
+/** The door closed (a lock, another key): an opened bucket in memory goes with it. */
 export function closeBucket(): void {
   door = {kind: 'closed'};
 }
@@ -60,35 +68,52 @@ export function openLegacyStorage(): void {
   door = {kind: 'legacy'};
 }
 
-/* store the opened bucket sealed again; the in-memory bucket is already changed */
+/* the phone: store the opened bucket sealed again; the in-memory bucket is already changed */
 function persist(): Promise<void> {
   const d = door;
-  if (d.kind !== 'bucket') return Promise.resolve();
+  if (d.kind !== 'sealed') return Promise.resolve();
   const text = bucketLib.sealToKey(d.bucket, d.recipient, d.encrypt);
   const run = writes.then(() => AsyncStorage.setItem(KEY(d.identity), text));
   writes = run.catch(() => {});
   return run;
 }
 
+/* one store's key in the open bucket, wherever the door keeps it (null value = removed) */
+async function getIn(store: string, key: string): Promise<string | null> {
+  if (door.kind === 'sealed') return bucketLib.kv(door.bucket, store).getItem(key);
+  if (door.kind === 'kept') return (await desktop!.invoke('okedge:bucketGet', door.identity, door.net, store, key)) as string | null;
+  return null;
+}
+async function setIn(store: string, key: string, value: string | null): Promise<void> {
+  if (door.kind === 'kept') {
+    await desktop!.invoke('okedge:bucketSet', door.identity, door.net, store, key, value);
+    return;
+  }
+  if (door.kind !== 'sealed') return;
+  const kv = bucketLib.kv(door.bucket, store);
+  if (value === null) kv.removeItem(key);
+  else kv.setItem(key, value);
+  await persist();
+}
+
 /*
  * WHAT MOVES IN (copy first, as B3.0 did): a feature's old plain record, on the current net, into its store in
- * the bucket. Stored sealed first, then the plain one removed - a stop between the two leaves both, never
- * neither. A store the bucket already has is not overwritten: the old record is left for the next look.
+ * the bucket. Stored in the bucket first, then the plain one removed - a stop between the two leaves both, never
+ * neither. A key the bucket already has is not overwritten: the old record is left for the next look.
  * The old records were the phone's, not an identity's: the first identity opened on this net takes them.
  * Each feature names its own (bucketStorage's moves), so core never names a plugin's records.
  */
 type Move = {legacy: () => string; store: () => string; key: string};
 const MOVES: Move[] = [];
 
-/* old plain records -> keys of one store in the open bucket: sealed first, then the plain ones removed */
 async function moveIn(store: string, pairs: {legacy: string; key: string}[]): Promise<void> {
-  if (door.kind !== 'bucket') return;
-  const kv = bucketLib.kv(door.bucket, store);
+  if (door.kind !== 'sealed' && door.kind !== 'kept') return;
   const moved: string[] = [];
   for (const {legacy, key} of pairs) {
     const old = await AsyncStorage.getItem(legacy);
-    if (old === null || kv.getItem(key) !== null) continue;
-    kv.setItem(key, old);
+    if (old === null || (await getIn(store, key)) !== null) continue;
+    if (door.kind === 'sealed') bucketLib.kv(door.bucket, store).setItem(key, old);
+    else await setIn(store, key, old);
     moved.push(legacy);
   }
   if (!moved.length) return;
@@ -125,24 +150,21 @@ export function bucketStorage(store: () => string, legacy: (key: string) => stri
     Object.assign(new Error('no bucket is open: unlock the key and continue past the identity check'), {code: 'EBUCKET_CLOSED'});
   return {
     async getItem(key) {
-      if (door.kind === 'bucket') return bucketLib.kv(door.bucket, store()).getItem(key);
       if (door.kind === 'legacy') return AsyncStorage.getItem(legacy(key));
-      return null;
+      return getIn(store(), key);
     },
     async setItem(key, value) {
       if (door.kind === 'legacy') return AsyncStorage.setItem(legacy(key), value);
-      if (door.kind !== 'bucket') throw refused();
-      bucketLib.kv(door.bucket, store()).setItem(key, value);
-      await persist();
+      if (door.kind === 'closed') throw refused();
+      await setIn(store(), key, value);
     },
     async removeItem(key) {
       if (door.kind === 'legacy') return AsyncStorage.removeItem(legacy(key));
-      if (door.kind !== 'bucket') throw refused();
-      bucketLib.kv(door.bucket, store()).removeItem(key);
-      await persist();
+      if (door.kind === 'closed') throw refused();
+      await setIn(store(), key, null);
     },
     async moveInPrefix(prefix) {
-      if (door.kind !== 'bucket') return;
+      if (door.kind !== 'sealed' && door.kind !== 'kept') return;
       const name = store();
       const done = `${name} ${prefix}`;
       if (door.movedPrefixes.has(done)) return;
@@ -171,22 +193,8 @@ export async function ensureBucketOpen(
   await openIdentityBucket(await app.edge.identityId(), app.okcrypto as Okcrypto, onPress);
 }
 
-/**
- * Open this identity's bucket with the key - or seal a new, empty one the first time (no press).
- * onPress: the key is waiting for the press (the soft key's is the app's to give).
- */
-export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<{created: boolean}> {
-  const text = await AsyncStorage.getItem(KEY(identity));
-  console.log(`[bucket] ${identity.slice(0, 12)}: ${text ? 'a sealed bucket is stored - the key opens it' : 'none stored - sealing a new one'}`);
-  /* the recipient is public: read once here, every later write seals to it with no key and no press */
-  const {recipient} = await okcrypto.deviceAge.identity(bucketLib.AGE_LABEL);
-  const encrypt = (p: Uint8Array, r: Uint8Array | string) => okcrypto.deviceAge.encrypt(p, r);
-  if (!text) {
-    door = {kind: 'bucket', identity, bucket: bucketLib.create({owner: identity}), recipient, encrypt, movedPrefixes: new Set()};
-    await persist();
-    await moveOldRecords();
-    return {created: true};
-  }
+/* the key opens a sealed bucket - always with its press */
+async function openSealed(text: string, identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<Bucket> {
   const {bucket} = await bucketLib.openWithKey(text, {
     owner: identity,
     /*
@@ -196,7 +204,48 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
      */
     decrypt: (age: Uint8Array, label: string) => okcrypto.deviceAge.decrypt(age, label, {requirePress: true, confirm: () => onPress?.(), onKeepAlive: () => onPress?.()}),
   });
-  door = {kind: 'bucket', identity, bucket, recipient, encrypt, movedPrefixes: new Set()};
+  return bucket;
+}
+
+/**
+ * Open this identity's bucket: the identity check's Continue.
+ * onPress: the key is waiting for the press (the soft key's is the app's to give).
+ * -> created: a new, empty bucket was made; pressed: the key opened a sealed one.
+ */
+export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<{created: boolean; pressed: boolean}> {
+  const id = identity.toLowerCase();
+  if (desktop) return openKept(id, okcrypto, onPress);
+  const text = await AsyncStorage.getItem(KEY(id));
+  console.log(`[bucket] ${id.slice(0, 12)}: ${text ? 'a sealed bucket is stored - the key opens it' : 'none stored - sealing a new one'}`);
+  /* the recipient is public: read once here, every later write seals to it with no key and no press */
+  const {recipient} = await okcrypto.deviceAge.identity(bucketLib.AGE_LABEL);
+  const encrypt = (p: Uint8Array, r: Uint8Array | string) => okcrypto.deviceAge.encrypt(p, r);
+  const bucket = text ? await openSealed(text, id, okcrypto, onPress) : bucketLib.create({owner: id});
+  door = {kind: 'sealed', identity: id, bucket, recipient, encrypt, movedPrefixes: new Set()};
+  if (!text) await persist();
   await moveOldRecords();
-  return {created: false};
+  return {created: !text, pressed: !!text};
+}
+
+/*
+ * THE DESKTOP: switch to the bucket this computer already keeps opened (no press); else open the sealed one it kept
+ * in the page before (the key's press) or make a new one, and keep it in the shared file from now on.
+ */
+async function openKept(id: string, okcrypto: Okcrypto, onPress?: () => void): Promise<{created: boolean; pressed: boolean}> {
+  const net = currentNet();
+  const kept = {kind: 'kept' as const, identity: id, net, movedPrefixes: new Set<string>()};
+  if (await desktop!.invoke('okedge:bucketHas', id, net)) {
+    console.log(`[bucket] ${id.slice(0, 12)}: kept opened on this computer (shared with the CLI) - no press`);
+    door = kept;
+    await moveOldRecords();
+    return {created: false, pressed: false};
+  }
+  const sealed = await AsyncStorage.getItem(KEY(id));
+  console.log(`[bucket] ${id.slice(0, 12)}: ${sealed ? 'a sealed bucket from the page - the key opens it once' : 'none kept - a new one'}`);
+  const bucket = sealed ? await openSealed(sealed, id, okcrypto, onPress) : bucketLib.create({owner: id});
+  await desktop!.invoke('okedge:bucketKeep', id, net, bucketLib.serialize(bucket));
+  if (sealed) await AsyncStorage.removeItem(KEY(id));
+  door = kept;
+  await moveOldRecords();
+  return {created: !sealed, pressed: !!sealed};
 }
