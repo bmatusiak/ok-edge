@@ -24,7 +24,7 @@ const CHANNELS = new Set([
   /* the hard key's older links, openings and notes from the shared records (electron/desktop/hosting.js) */
   'okedge:sharedLinks',
   /* this identity's bucket, opened once and kept with the CLI's in ~/.onlykey-js (node-onlykey-lib bucket/cli/home.js) */
-  'okedge:bucketHas', 'okedge:bucketKeep', 'okedge:bucketGet', 'okedge:bucketSet',
+  'okedge:bucketHas', 'okedge:bucketKeep', 'okedge:bucketGet', 'okedge:bucketSet', 'okedge:bucketMove',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',

@@ -136,6 +136,8 @@ module.exports = {
      * never drop each other's change. The lib names the file from the identity id and refuses any other name.
      */
     'okedge:bucketHas': (identity, net) => bucketHome().hasIdentityBucket(identity, net),
+    /* the owner moved once, from the key's Edge identity id to its bucket identity id (lib home.moveIdentityBucket) */
+    'okedge:bucketMove': (fromId, toId, net) => bucketHome().moveIdentityBucket(fromId, toId, net),
     'okedge:bucketKeep': (identity, net, text) =>
       bucketHome().keepIdentityBucket(identity, net, require('node-onlykey-lib/bucket').open(text, { allowUnsealed: true }).bucket),
     'okedge:bucketGet': (identity, net, store, key) => bucketHome().kv(bucketHome().identityAt(identity, net, store)).getItem(key),

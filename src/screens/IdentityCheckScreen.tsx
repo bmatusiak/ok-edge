@@ -1,10 +1,11 @@
 /*
  * THE IDENTITY CHECK (Brad, 2026-10-24): login (versions) -> PIN -> IDENTITY CHECK -> the app.
  *
- * Right after the key unlocks, before any tab opens, this view reads WHICH identity the key is:
- * its owner key's id (the same on every device restored from one backup, lib edge identityId) and
- * this device's nametag (signed by that owner key, edgeDevices.ensureNametag). Everything the app
- * then keeps belongs to that identity.
+ * Right after the key unlocks, before any tab opens, this view reads WHICH identity the key is: its BUCKET
+ * IDENTITY - the key's agent key of the empty label "" (lib bucket-identity; Brad, 2026-10-25: "\"\" is the identity
+ * of the key, not tied to edge"), the same on every device restored from one backup, on any OnlyKey since 2.1.0.
+ * Everything the app then keeps belongs to it. A key with Edge also shows this device's nametag - Edge's own
+ * statement (edgeDevices.ensureNametag), signed by Edge's owner key, a different thing.
  *
  * It is also the place to ask the person things before the app opens - pairing a remote, opening a
  * bucket the web app was handed (plan S5/S6). Nothing asked yet: it shows what it read, then Continue.
@@ -19,22 +20,15 @@ import {netTag} from '../net';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {ensureNametag} from '../edgeDevices';
 import {bucketState, openIdentityBucket, openLegacyStorage} from '../bucketStore';
+import * as bucketLib from 'node-onlykey-lib/bucket';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 
 type Read =
   | {kind: 'checking'}
-  | {kind: 'read'; identity: string; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'}
+  | {kind: 'read'; identity: string; edgeIdentity: string | null; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'}
   | {kind: 'none'; why: string};
 
-/*
- * WHY NOTHING WAS READ, said as it is (box, 2026-10-24: a hard key just plugged back in and unlocked did not
- * answer the first question in time, and this said "no Edge" - a key with Edge). The probe tells them apart.
- */
-const whyNone = (probe: string | null): string =>
-  probe === 'none' ? 'The key did not answer in time - it may still be settling after being plugged in.'
-    : probe === 'no-pin' ? 'The key is locked.'
-      : 'This key has no Edge: there is no identity to read.';
 
 /* opening the bucket after Continue: asking the key, waiting for its press, or what went wrong */
 type Open = {kind: 'idle'} | {kind: 'opening'} | {kind: 'press'} | {kind: 'failed'; why: string};
@@ -45,15 +39,15 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
 
   /*
    * THE BUTTON OPENS THIS IDENTITY'S BUCKET (Brad, 2026-10-24: "a button press here is needed to decrypt the
-   * container"): the key decapsulates it and asks for its press; then the app opens. A key with no identity
-   * to read (no Edge) has no bucket here, and goes on.
+   * container"): the key decapsulates it and asks for its press; then the app opens. A key whose bucket identity
+   * could not be read (firmware with no agent derive) has no bucket here, and goes on with plain storage.
    */
   const continueAndOpen = async () => {
     if (read.kind !== 'read') { openLegacyStorage(); onContinue(); return; }
     setOpen({kind: 'opening'});
     try {
       const {okcrypto} = await getOnlyKey(activeBackend());
-      await openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}));
+      await openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}), read.edgeIdentity);
       onContinue();
     } catch (e: unknown) {
       setOpen({kind: 'failed', why: String((e as Error)?.message ?? e)});
@@ -68,25 +62,33 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
       /*
        * A KEY JUST UNLOCKED IS STILL SETTLING (box, 2026-10-24): the hard key re-connects right after its unlock
        * (useHardKey), and a question asked in that moment timed out - asked again a moment later, it answered.
-       * So "no answer in time" is asked twice more, 1.5 s apart, before it is said.
+       * So the bucket identity is asked twice more, 1.5 s apart, before "could not read" is said.
        */
-      let soft = await SoftKeyEdge.open().catch(() => null);
-      for (let n = 0; !soft && live && SoftKeyEdge.lastProbe === 'none' && n < 2; n++) {
-        await new Promise(r => setTimeout(r, 1500));
-        soft = await SoftKeyEdge.open().catch(() => null);
+      const {okcrypto} = await getOnlyKey(activeBackend());
+      let identity: string | null = null;
+      let why = '';
+      for (let n = 0; n < 3 && live && !identity; n++) {
+        try {
+          identity = (await bucketLib.bucketIdentity.readIdentity(okcrypto as any)).id;
+        } catch (e: unknown) {
+          why = String((e as Error)?.message ?? e);
+          if (n < 2) await new Promise(r => setTimeout(r, 1500));
+        }
       }
       if (!live) return;
-      if (!soft) {
-        if (live) setRead({kind: 'none', why: whyNone(SoftKeyEdge.lastProbe)});
+      if (!identity) {
+        setRead({kind: 'none', why: `Could not read this key's bucket identity: ${why}`});
         return;
       }
-      const identity = await soft.identityId();
-      const statement = await ensureNametag(soft).catch(() => null);
+      /* Edge, when the key has it: this device's nametag, and its Edge identity - only to move a bucket kept under it */
+      const soft = await SoftKeyEdge.open().catch(() => null);
+      const edgeIdentity = soft ? (await soft.identityId().catch(() => null))?.toLowerCase() ?? null : null;
+      const statement = soft ? await ensureNametag(soft).catch(() => null) : null;
       /* asked here so the button says what it will do; unknown is treated as the press it may need */
-      const bucket = await bucketState(identity).catch(() => 'sealed' as const);
-      if (live) setRead({kind: 'read', identity, nametag: statement?.nametag ?? null, bucket});
+      const bucket = await bucketState(identity, edgeIdentity).catch(() => 'sealed' as const);
+      if (live) setRead({kind: 'read', identity, edgeIdentity, nametag: statement?.nametag ?? null, bucket});
     })().catch((e: unknown) => {
-      if (live) setRead({kind: 'none', why: `Could not read the identity: ${String((e as Error)?.message ?? e)}`});
+      if (live) setRead({kind: 'none', why: `Could not read this key's bucket identity: ${String((e as Error)?.message ?? e)}`});
     });
     return () => { live = false; };
   }, [attempt]);
@@ -117,15 +119,15 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         <Row label="chain" value={netTag() ? 'testnet' : 'live'} />
         {read.kind === 'read' ? (
           <>
-            <Row label="identity" value={`${read.identity.slice(0, 12)}…`} />
-            <Row label="this device" value={read.nametag ? `"${read.nametag}"` : 'no nametag yet'} />
+            <Row label="bucket identity" value={`${read.identity.slice(0, 12)}…`} />
+            {read.edgeIdentity ? <Row label="this device" value={read.nametag ? `"${read.nametag}"` : 'no nametag yet'} /> : null}
           </>
         ) : null}
         {read.kind === 'checking' ? <ActivityIndicator style={styles.spinner} color={theme.textDim} /> : null}
       </View>
       {read.kind === 'none' ? <Text style={styles.hint}>{read.why}</Text> : null}
       {read.kind === 'read' ? (
-        <Text style={styles.hint}>Everything this app keeps for this key belongs to this identity - every device restored from the same backup shares it.</Text>
+        <Text style={styles.hint}>Everything this app keeps for this key belongs to this bucket identity - every device restored from the same backup shares it.</Text>
       ) : null}
       <View style={styles.action}>
         {open.kind === 'opening' ? <Text style={styles.hint}>Opening this identity's bucket…</Text> : null}

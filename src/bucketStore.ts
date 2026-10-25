@@ -179,38 +179,64 @@ export function bucketStorage(store: () => string, legacy: (key: string) => stri
 /**
  * A FLOW THAT STARTS WITHOUT THE DOOR (the autofill sheet: Android opens it over another app, the identity check
  * may never have run in this process): open the bucket of the key it talks to, as the identity check does - the
- * key's press included. A door already open is used as it is; a key with no Edge identity keeps plain storage.
+ * key's press included. A door already open is used as it is.
  */
 export async function ensureBucketOpen(
-  app: {edge: {probe(o?: {timeoutMs?: number}): Promise<string>; identityId(): Promise<string>}; okcrypto: unknown},
+  app: {edge?: {probe(o?: {timeoutMs?: number}): Promise<string>; identityId(): Promise<string>}; okcrypto: unknown},
   onPress?: () => void,
 ): Promise<void> {
   if (door.kind !== 'closed') return;
-  if ((await app.edge.probe({timeoutMs: 4000})) !== 'edge') {
-    openLegacyStorage();
-    return;
-  }
-  await openIdentityBucket(await app.edge.identityId(), app.okcrypto as Okcrypto, onPress);
+  const okcrypto = app.okcrypto as Okcrypto & {agent: {publicKey: Function}};
+  const {id} = await bucketLib.bucketIdentity.readIdentity(okcrypto);
+  await openIdentityBucket(id, okcrypto, onPress, await edgeIdentityOf(app));
 }
+
+/** The key's Edge identity id when it has Edge - only to move a bucket kept under it before (null otherwise). */
+export async function edgeIdentityOf(app: {edge?: {probe(o?: {timeoutMs?: number}): Promise<string>; identityId(): Promise<string>}}): Promise<string | null> {
+  try {
+    if (!app.edge || (await app.edge.probe({timeoutMs: 4000})) !== 'edge') return null;
+    return (await app.edge.identityId()).toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/*
+ * THE OWNER MOVED ONCE (Brad, 2026-10-25: the bucket identity - the key's "" agent key - owns the bucket, "nothing to
+ * do with edge"). A bucket stored before under the key's Edge identity id (`previous`) is this identity's: on the
+ * phone it is opened with the key under its old owner and stored again under the new one; on the desktop the kept
+ * file is renamed by the main process (lib home.moveIdentityBucket). Only when nothing is stored under the new id.
+ */
+const sealedUnder = async (id: string, previous?: string | null): Promise<{text: string; owner: string} | null> => {
+  const now = await AsyncStorage.getItem(KEY(id));
+  if (now !== null) return {text: now, owner: id};
+  if (!previous || previous === id) return null;
+  const before = await AsyncStorage.getItem(KEY(previous));
+  return before === null ? null : {text: before, owner: previous};
+};
 
 /**
  * What opening this identity's bucket will take, asked before it is opened (the identity check's button):
  * 'kept' - this computer already keeps it opened (the desktop, after its first open): no key, no press;
  * 'sealed' - stored sealed: the key decrypts it, with a press; 'none' - not made yet: a new one, no press.
+ * previous: the key's Edge identity id, under which a bucket may still be stored from before the move.
  */
-export async function bucketState(identity: string): Promise<'kept' | 'sealed' | 'none'> {
+export async function bucketState(identity: string, previous?: string | null): Promise<'kept' | 'sealed' | 'none'> {
   const id = identity.toLowerCase();
-  if (desktop && (await desktop.invoke('okedge:bucketHas', id, currentNet()))) return 'kept';
-  return (await AsyncStorage.getItem(KEY(id))) !== null ? 'sealed' : 'none';
+  if (desktop) {
+    if (await desktop.invoke('okedge:bucketHas', id, currentNet())) return 'kept';
+    if (previous && previous !== id && (await desktop.invoke('okedge:bucketHas', previous, currentNet()))) return 'kept';
+  }
+  return (await sealedUnder(id, previous)) !== null ? 'sealed' : 'none';
 }
 
 /* the key opens a sealed bucket - always with its press */
-async function openSealed(text: string, identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<Bucket> {
+async function openSealed(text: string, owner: string, okcrypto: Okcrypto, onPress?: () => void): Promise<Bucket> {
   /* the press sheet names this ask as the app's own, not "an identity nobody listed" (required here, not imported:
      pressAsk reads the Key Chain, which sits on this store) */
   require('./pressAsk').noteOwnAsk(bucketLib.AGE_LABEL, "this identity's bucket");
   const {bucket} = await bucketLib.openWithKey(text, {
-    owner: identity,
+    owner,
     /*
      * ALWAYS A PRESS (Brad: "a button press here is needed"): 3.1.0's device-custody decrypt asks for one by
      * itself (confirm); the older X-Wing path is a shared-secret derive, asked here in its press-first form
@@ -223,43 +249,53 @@ async function openSealed(text: string, identity: string, okcrypto: Okcrypto, on
 
 /**
  * Open this identity's bucket: the identity check's Continue.
- * onPress: the key is waiting for the press (the soft key's is the app's to give).
+ * identity: the BUCKET IDENTITY id (lib bucket-identity: the key's "" agent key);
+ * onPress: the key is waiting for the press (the soft key's is the app's to give);
+ * previous: the key's Edge identity id, for the one-time move of a bucket stored under it.
  * -> created: a new, empty bucket was made; pressed: the key opened a sealed one.
  */
-export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<{created: boolean; pressed: boolean}> {
+export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, onPress?: () => void, previous?: string | null): Promise<{created: boolean; pressed: boolean}> {
   const id = identity.toLowerCase();
-  if (desktop) return openKept(id, okcrypto, onPress);
-  const text = await AsyncStorage.getItem(KEY(id));
-  console.log(`[bucket] ${id.slice(0, 12)}: ${text ? 'a sealed bucket is stored - the key opens it' : 'none stored - sealing a new one'}`);
+  const prev = previous ? previous.toLowerCase() : null;
+  if (desktop) return openKept(id, okcrypto, onPress, prev);
+  const stored = await sealedUnder(id, prev);
+  console.log(`[bucket] ${id.slice(0, 12)}: ${stored ? `a sealed bucket is stored${stored.owner !== id ? ' (under the Edge identity - moved now)' : ''} - the key opens it` : 'none stored - sealing a new one'}`);
   /* the recipient is public: read once here, every later write seals to it with no key and no press */
   const {recipient} = await okcrypto.deviceAge.identity(bucketLib.AGE_LABEL);
   const encrypt = (p: Uint8Array, r: Uint8Array | string) => okcrypto.deviceAge.encrypt(p, r);
-  const bucket = text ? await openSealed(text, id, okcrypto, onPress) : bucketLib.create({owner: id});
+  const bucket = stored ? await openSealed(stored.text, stored.owner, okcrypto, onPress) : bucketLib.create({owner: id});
+  bucket.owner = id;
   door = {kind: 'sealed', identity: id, bucket, recipient, encrypt, movedPrefixes: new Set()};
-  if (!text) await persist();
+  if (!stored || stored.owner !== id) await persist();
+  if (stored && stored.owner !== id) await AsyncStorage.removeItem(KEY(stored.owner));
   await moveOldRecords();
-  return {created: !text, pressed: !!text};
+  return {created: !stored, pressed: !!stored};
 }
 
 /*
- * THE DESKTOP: switch to the bucket this computer already keeps opened (no press); else open the sealed one it kept
- * in the page before (the key's press) or make a new one, and keep it in the shared file from now on.
+ * THE DESKTOP: switch to the bucket this computer already keeps opened (no press) - moved first from the Edge identity
+ * id it was kept under before, if so; else open the sealed one it kept in the page before (the key's press) or make a
+ * new one, and keep it in the shared file from now on.
  */
-async function openKept(id: string, okcrypto: Okcrypto, onPress?: () => void): Promise<{created: boolean; pressed: boolean}> {
+async function openKept(id: string, okcrypto: Okcrypto, onPress?: () => void, previous?: string | null): Promise<{created: boolean; pressed: boolean}> {
   const net = currentNet();
   const kept = {kind: 'kept' as const, identity: id, net, movedPrefixes: new Set<string>()};
+  if (previous && previous !== id && (await desktop!.invoke('okedge:bucketMove', previous, id, net))) {
+    console.log(`[bucket] ${id.slice(0, 12)}: the bucket kept under the Edge identity ${previous.slice(0, 12)} moved to the bucket identity`);
+  }
   if (await desktop!.invoke('okedge:bucketHas', id, net)) {
     console.log(`[bucket] ${id.slice(0, 12)}: kept opened on this computer (shared with the CLI) - no press`);
     door = kept;
     await moveOldRecords();
     return {created: false, pressed: false};
   }
-  const sealed = await AsyncStorage.getItem(KEY(id));
-  console.log(`[bucket] ${id.slice(0, 12)}: ${sealed ? 'a sealed bucket from the page - the key opens it once' : 'none kept - a new one'}`);
-  const bucket = sealed ? await openSealed(sealed, id, okcrypto, onPress) : bucketLib.create({owner: id});
+  const stored = await sealedUnder(id, previous);
+  console.log(`[bucket] ${id.slice(0, 12)}: ${stored ? 'a sealed bucket from the page - the key opens it once' : 'none kept - a new one'}`);
+  const bucket = stored ? await openSealed(stored.text, stored.owner, okcrypto, onPress) : bucketLib.create({owner: id});
+  bucket.owner = id;
   await desktop!.invoke('okedge:bucketKeep', id, net, bucketLib.serialize(bucket));
-  if (sealed) await AsyncStorage.removeItem(KEY(id));
+  if (stored) await AsyncStorage.removeItem(KEY(stored.owner));
   door = kept;
   await moveOldRecords();
-  return {created: !sealed, pressed: !!sealed};
+  return {created: !stored, pressed: !!stored};
 }
