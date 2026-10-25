@@ -12,9 +12,10 @@
  *
  * The places data crosses the wire call ioPulse (transport/FidoGatt.ts: requests
  * in, replies out; vendorBridge.ts: vendor frames out; hooks/useBtKeyboard.ts:
- * keystroke reports). Nothing here is read back - it is only for the eye.
+ * keystroke reports; src/sync.ts: the sync service trading, the desktop's 🔁). Nothing here is read back - it is only
+ * for the eye.
  */
-export type IoChannel = 'key' | 'keyboard';
+export type IoChannel = 'key' | 'keyboard' | 'sync';
 
 export const IO_SHOW_MS = 1000;
 export const IO_STEP_MS = 250;

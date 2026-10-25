@@ -61,6 +61,8 @@ import {KeysScreen} from './src/screens/KeysScreen';
 import {KeyChainScreen} from './src/screens/KeyChainScreen';
 import {BackupScreen} from './src/screens/BackupScreen';
 import {BluetoothScreen} from './src/screens/BluetoothScreen';
+import {SyncScreen} from './src/screens/SyncScreen';
+import {sync, useSync} from './src/sync';
 import {CryptoScreen} from './src/screens/CryptoScreen';
 import {EncryptDecryptScreen} from './src/screens/EncryptDecryptScreen';
 import {EncryptDecryptTabScreen} from './src/screens/EncryptDecryptTabScreen';
@@ -136,6 +138,7 @@ const TABS = [
   'Firmware',
   'Preferences',
   'Bluetooth',
+  'Sync',
   'Advanced',
   'Log',
 ] as const;
@@ -200,6 +203,8 @@ const DEV_ONLY_TABS: readonly Tab[] = ['Log'];
  * app reaches keys through WebAuthn - only the Android app is a Bluetooth keyboard and authenticator.
  */
 const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
+/* the cli pair and the sync service (src/sync.ts): the phone and the desktop; the web app has neither yet */
+const NOT_WEB_TABS: readonly Tab[] = ['Sync'];
 
 /*
  * The drawer's tabs: testing mode adds its own; Edge also comes with a soft key that has it.
@@ -223,7 +228,7 @@ function shownTabs(testingOn: boolean, testingLocked = false): readonly Tab[] {
     const at = p.after ? all.indexOf(p.after as Tab) : -1;
     all.splice(at >= 0 ? at + 1 : all.length - 1, 0, p.name as PluginTab);
   }
-  return all.filter(t => !HIDDEN_TABS.includes(t) && (__DEV__ || !DEV_ONLY_TABS.includes(t)) && (shell === 'android' || !ANDROID_ONLY_TABS.includes(t)));
+  return all.filter(t => !HIDDEN_TABS.includes(t) && (__DEV__ || !DEV_ONLY_TABS.includes(t)) && (shell === 'android' || !ANDROID_ONLY_TABS.includes(t)) && (shell !== 'web' || !NOT_WEB_TABS.includes(t)));
 }
 
 /** Splash until the device can answer, then a door, then the app. */
@@ -307,6 +312,35 @@ function useIoPurple(match: (c: IoChannel) => boolean, solid: boolean): boolean 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solid]);
   return purple;
+}
+
+/*
+ * THE SYNC SERVICE'S ICON, the desktop's in the place of the phone's Bluetooth icons (Brad, 2026-10-25: "the feel to
+ * have some icon status bar at the top for desktop"). A text glyph like ᛒ ⌨ ⚿, so it takes the same colours (an emoji
+ * such as 🔁 draws in its own):
+ *   grey   - sync turned off (the Sync tab's switch);
+ *   yellow - on, not synced with a phone yet (or the last try did not reach it);
+ *   green  - on, and its last sync reached the phone;
+ *   purple flashing - a sync in progress (src/btActivity.ts, the 'sync' channel): it lasts as long as the sync, as
+ *     the key's ⚿ flash lasts as long as its traffic.
+ * It leads to the Sync tab, as the radio icons lead to Bluetooth.
+ */
+function SyncStatus({onPress}: {onPress: () => void}) {
+  const s = useSync();
+  const io = useIoPurple(c => c === 'sync', false);
+  const color = io ? theme.io
+    : !s || !s.enabled ? theme.textDim
+    : s.service === 'running' && s.last?.ok ? theme.ok
+    : theme.warn;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Sync status"
+      style={({pressed}) => [styles.barMid, pressed && styles.pressed]}>
+      <Text style={[styles.barIcon, {color}]}>{'⇄'}</Text>
+    </Pressable>
+  );
 }
 
 /* ⚿: a session silent this long counts as gone (its command was killed without a goodbye) */
@@ -884,7 +918,7 @@ function Shell() {
   useEffect(() => {
     const look = () => {
       const s = takeOpenedAlarm();
-      if (s !== null && s >= BT_SEQ_BASE) setTab('Bluetooth'); /* Part T: a cli pair alarm */
+      if (s !== null && s >= BT_SEQ_BASE) setTab('Sync'); /* Part T: a cli pair alarm - the paired devices are on Sync */
       else if (s !== null) { setTab(EDGE_TAB); setEdgeFocus(s); }
     };
     look();
@@ -1012,6 +1046,12 @@ function Shell() {
     closeBucket();
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
   }, [doorKey]);
+  /*
+   * THE SYNC SERVICE RUNS WHILE THE BUCKET IS OPEN (src/sync.ts; the desktop hosts it): once the identity check let
+   * the person in, for this net; locked, it stops. A shell that hosts none ignores this.
+   */
+  const bucketOpen = phase === 'main' && passed;
+  useEffect(() => { void sync.setNet(bucketOpen ? net : null).catch(() => {}); }, [bucketOpen, net]);
 
   useEffect(() => {
     if (emu.device === 'unlocked') awaitingUnlock.current = false;
@@ -1233,6 +1273,8 @@ function Shell() {
                 onPress={() => setTab('Bluetooth')}
               />
             ) : null}
+            {/* the desktop's status icon in the same place (Brad, 2026-10-25): the sync service it hosts */}
+            {shell === 'electron' ? <SyncStatus onPress={() => setTab('Sync')} /> : null}
 
             <Pressable
               onPress={() => setTab('This Key')}
@@ -1465,7 +1507,9 @@ function Shell() {
           ) : tab === 'Keys' ? (
             <KeysScreen emu={emu} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} />
           ) : tab === 'Bluetooth' ? (
-            <BluetoothScreen fido={fido} on={btOn} setOn={setBtOn} auto={auto} canPress={emu.canPress === true} testing={testing.enabled} />
+            <BluetoothScreen fido={fido} on={btOn} setOn={setBtOn} auto={auto} canPress={emu.canPress === true} testing={testing.enabled} onOpenSync={() => setTab('Sync')} />
+          ) : tab === 'Sync' ? (
+            <SyncScreen testing={testing.enabled} />
           ) : tab === 'Settings' ? (
             <SettingsScreen render={settingsPage} hidden={keys.hard.state === 'running' ? [] : ['Firmware']} />
           ) : tab === 'PIN Setup' ? (

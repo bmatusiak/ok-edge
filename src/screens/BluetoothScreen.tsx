@@ -6,7 +6,6 @@ import {useSharedBtKeyboard} from '../hooks/BtKeyboardContext';
 import {useKeyName} from '../hooks/KeyContext';
 import type {FidoSession} from '../hooks/useFidoGatt';
 import type {BtAuto} from '../hooks/useBtAuto';
-import {PairedComputersCard} from '../ui/PairedComputersCard';
 
 /*
  * ONE TAB, ONE FLOW: turn it on, choose a target, use it.
@@ -66,8 +65,11 @@ export function BluetoothScreen({
   auto,
   canPress = false,
   testing = false,
+  onOpenSync,
 }: {
   fido: FidoSession;
+  /** Opens the Sync tab: the paired computers and pairing a new one live there. */
+  onOpenSync?: () => void;
   /**
    * Whether the ACTIVE key takes presses from the app.
    *
@@ -467,8 +469,16 @@ export function BluetoothScreen({
             ) : null}
           </Section>
 
-          {/* Part T: who the API link answers (src/btTransit.ts) */}
-          <PairedComputersCard testing={testing} />
+          {/*
+            Part T: who the API link answers - the paired computers moved to the Sync tab (Brad, 2026-10-25: "the cli
+            pair panel moved to sync tab - add a button to take us to sync panel in bluetooth panel")
+          */}
+          {onOpenSync ? (
+            <Section title="Paired devices">
+              <Text style={styles.note}>The computers this phone answers, and pairing a new one, are on the Sync tab.</Text>
+              <Btn title="Open Sync" tone="primary" onPress={onOpenSync} />
+            </Section>
+          ) : null}
         </>
       ) : null}
     </ScrollView>
