@@ -1,10 +1,10 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, BackHandler, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 
 import {legacy, totp as totpLib} from 'node-onlykey-lib/passwords';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import NativeShare from 'okedge-native/specs/NativeShare';
-import {bucketPending, clearBucketPending, onBucketTraded} from '../../bucketEvents';
+import {bucketTradedAt, onBucketTraded} from '../../bucketEvents';
 import {missingNote} from '../../firmwareFeatures';
 import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import {BACKEND_NAME} from '../../hooks/keySession';
@@ -85,6 +85,17 @@ async function copy(text: string | undefined, what: string) {
   Alert.alert('Copied', `${what} copied. The clipboard is cleared in ${CLIPBOARD_TTL_MS / 1000} seconds.`);
 }
 
+/*
+ * WHEN EACH OPEN STORE WAS DECRYPTED: first seen by this screen, which is where it opens (Open with OnlyKey, the
+ * banner's Decrypt). A store reopened is a new object, so a new time.
+ */
+const openedTimes = new WeakMap<object, number>();
+function openedAt(manager: object): number {
+  let t = openedTimes.get(manager);
+  if (t === undefined) { t = Date.now(); openedTimes.set(manager, t); }
+  return t;
+}
+
 export function PasswordsScreen({ctx}: {ctx: TabContext}) {
   const {view, pressAsked, openWithKey, touch, lockNow, retry, oldVault, phraseKey, policy, timeLeft, choosePolicy} = usePasswordManager({
     backend: ctx.backend,
@@ -104,15 +115,12 @@ export function PasswordsScreen({ctx}: {ctx: TabContext}) {
    * decrypted before they came, so a banner asks to decrypt again - Decrypt locks the store and opens it with the key,
    * and the arrived entries are in the list.
    */
-  const [incoming, setIncoming] = useState(() => bucketPending('passwords'));
+  /* a sync newer than this open store's decrypt (the store object outlives the screen: openedAt keys on it) */
+  const [, setSyncTick] = useState(0);
   const [reopen, setReopen] = useState(false);
-  useEffect(() => onBucketTraded(stores => { if (stores.includes('passwords')) setIncoming(true); }), []);
-  /* the store opened fresh (with the key) reads everything the sync brought: the mark goes */
-  const wasOpen = useRef(view.state === 'open');
+  useEffect(() => onBucketTraded(stores => { if (stores.includes('passwords')) setSyncTick(t => t + 1); }), []);
+  const incoming = view.state === 'open' && bucketTradedAt('passwords') > openedAt(view.manager);
   useEffect(() => {
-    const isOpen = view.state === 'open';
-    if (isOpen && !wasOpen.current) { clearBucketPending('passwords'); setIncoming(false); }
-    wasOpen.current = isOpen;
     if (reopen && view.state === 'button') { setReopen(false); openWithKey(); }
   }, [view.state, reopen, openWithKey]);
   const decryptIncoming = () => { setReopen(true); lockNow(); };
