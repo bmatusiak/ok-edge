@@ -19,6 +19,7 @@ const SERVICE_TEXT: Record<SyncState['service'], string> = {
   'no-peers': 'Waiting - no phone is paired with this computer yet.',
   'running': 'Running - this computer\'s bucket is synced with the phones below.',
   'stopped': 'Not reaching a phone right now - trying again in a minute.',
+  'elsewhere': 'Another sync service on this computer has it - one per computer.',
 };
 
 function when(at: number): string {
@@ -40,7 +41,9 @@ export function SyncScreen({testing = false}: {testing?: boolean}) {
               <Switch value={state.enabled} onValueChange={on => void sync.setEnabled(on)} />
             </View>
             <Text style={state.service === 'running' ? styles.on : styles.note}>
-              {state.enabled ? SERVICE_TEXT[state.service] : 'Turned off - nothing is synced until it is turned on.'}
+              {state.enabled
+                ? `${SERVICE_TEXT[state.service]}${state.service === 'elsewhere' && state.elsewhere ? ` (${state.elsewhere})` : ''}`
+                : 'Turned off - nothing is synced until it is turned on.'}
             </Text>
             {state.net ? <Text style={styles.note}>Net: {state.net === 'test' ? 'testnet' : 'live'}</Text> : null}
             <Text style={styles.note}>

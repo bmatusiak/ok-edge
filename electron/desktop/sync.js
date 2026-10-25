@@ -72,10 +72,10 @@ function changed(next) {
 }
 
 /*
- * WHICH CLI: OKEDGE_CLI (a path to a node-onlykey-lib checkout's cli/index.js), else the lib this app is built with.
- * The lib does not list its Bluetooth stack as a dependency (dbus-next on Linux, @stoprocent/noble on Windows - each
- * installed by hand into the CLI's own checkout), so the copy inside this app cannot reach a phone; the person's CLI
- * can. Until the lib lists them, a desktop that syncs is started with OKEDGE_CLI set.
+ * WHICH CLI: the lib this app is built with. Its Bluetooth stack (the noble fork on Windows, dbus-next on Linux) is the
+ * lib's optional peer, never downloaded with it - so the web app and ok-rn carry nothing native - and this app lists
+ * it as its own (package.json optionalDependencies; Brad, 2026-10-25), so the lib inside the app reaches the phone.
+ * OKEDGE_CLI (a path to a node-onlykey-lib checkout's cli/index.js) is a developer's override.
  */
 const cliEntry = () => process.env.OKEDGE_CLI || require.resolve('node-onlykey-lib/cli/index');
 
@@ -83,6 +83,8 @@ const cliEntry = () => process.env.OKEDGE_CLI || require.resolve('node-onlykey-l
 function runCli(args, onLine) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  /* how this app's sync service is named to a second one on this computer (lib bucket/cli/service.js's lock) */
+  env.OKEDGE_SYNC_WHO = 'the desktop app';
   const proc = spawn(process.env.OKEDGE_NODE || 'node', [cliEntry(), ...args], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -115,10 +117,21 @@ function startService() {
      *                                  of one ask to decrypt again (src/bucketEvents.ts)
      *   "sync: in sync" / "traded"     it reached the phone: the last sync, green
      *   "sync: not traded"             it did not
+     *   "sync: runs in pid N (who)"    another sync service on this computer has it (the lib's one-per-computer lock)
      */
     const s = line.replace(/^edge: /, '');
     const took = /^sync: took (\{.*\})$/.exec(s);
-    if (/^sync: trading\b/.test(s)) changed({ lines: keep(line), trading: true });
+    const elsewhere = /^sync: runs in pid (\d+) \((.*)\)/.exec(s);
+    if (elsewhere) {
+      /*
+       * not ours to run: this child would only hold a Bluetooth link to the same phone - and a phone answers the computer
+       * that connected last. It goes; whether the other one still runs is looked at again later.
+       */
+      changed({ lines: keep(line), service: 'elsewhere', elsewhere: `${elsewhere[2]}, pid ${elsewhere[1]}` });
+      child = null;
+      proc.kill();
+      retry = setTimeout(startService, RETRY_MS);
+    } else if (/^sync: trading\b/.test(s)) changed({ lines: keep(line), trading: true });
     else if (took) {
       /* held until the trade ends: the CLI writes the kept file after its last round, and a screen reading it now would read it old */
       try { for (const st of Object.keys(JSON.parse(took[1]))) tookStores.add(st); } catch { /* not a count line */ }

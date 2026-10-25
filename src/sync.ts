@@ -22,7 +22,9 @@ export type SyncState = {
   /* the person's switch on the Sync tab ("sync can be disabled") */
   enabled: boolean;
   /* off: turned off, or the app is locked; no-peers: nothing paired to sync with; running; stopped: ended, tried again later */
-  service: 'off' | 'no-peers' | 'running' | 'stopped';
+  service: 'off' | 'no-peers' | 'running' | 'stopped' | 'elsewhere';
+  /* elsewhere: who runs this computer's sync service instead (a terminal `onlykey-js --service`) */
+  elsewhere?: string;
   net: Net | null;
   /* the service's last sync line, when, and whether it reached the phone */
   last: {line: string; at: number; ok: boolean} | null;

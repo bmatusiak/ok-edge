@@ -61,5 +61,9 @@
     "extraMetadata": {
       "main": "electron/main.js"
     }
+  },
+  "optionalDependencies": {
+    "@stoprocent/noble": "github:bmatusiak/noble-ble#d41c7dd91130ae04603858249dd91edf2a324053",
+    "dbus-next": "^0.10.2"
   }
 }

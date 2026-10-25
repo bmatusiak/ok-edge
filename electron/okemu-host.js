@@ -33,7 +33,8 @@ const push = (event, payload) => process.send({ event, payload });
    to host, IN 1: host to device) - where the emulator's Node API says 'out' / 'in' */
 const DIR = { out: 0, in: 1 };
 emu.on('stream', ({ buffer, iface, dir }) => push('NativeOkEmu:onStream', { iface, dir: DIR[dir] ?? dir, hex: buffer.toString('hex'), length: buffer.length }));
-emu.on('led', (pixels) => push('NativeOkEmu:onLed', { pixels: Array.from(pixels) }));
+/* packed 0xRRGGBB, as the phone's native module gives them (the emulator's own event has {r, g, b} objects) */
+emu.on('led', (pixels) => push('NativeOkEmu:onLed', { pixels: Array.from(pixels, (p) => (typeof p === 'number' ? p : ((p.r & 0xff) << 16) | ((p.g & 0xff) << 8) | (p.b & 0xff))) }));
 emu.on('plugin', (name, data) => push('NativeOkEmu:onPluginEvent', { name, hex: Buffer.from(data || []).toString('hex') }));
 emu.on('restart', () => push('NativeOkEmu:onRestartRequested', null));
 
