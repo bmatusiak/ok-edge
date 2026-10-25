@@ -9,6 +9,12 @@
  * A launch is never allowed to show older code than the tree holds.
  *
  * With OKEDGE_WEB_URL (Metro's live page, as tools/e2e-desktop.js runs it) nothing is built.
+ *
+ * THE TEST BUILD (OKEDGE_FLAVOR=test, `npm run electron:test`; Brad, 2026-10-25: "test build and testing mode and
+ * test net works on the desktop app, so desktop app can run its on device suite e2e, matching how the phone works"):
+ * the same page as a DEVELOPMENT export in dist/web-test (`npm run build:web:test`) - the phone's debug build, with
+ * no server to run: testing mode, the Testing tab and its on-device suite, Login Bypass, the testnet. Rebuilt the same
+ * way when stale.
  */
 const fs = require('fs');
 const path = require('path');
@@ -16,7 +22,9 @@ const { spawn, spawnSync } = require('child_process');
 const electron = require('electron');
 
 const ROOT = path.join(__dirname, '..');
-const EXPORT = path.join(ROOT, 'dist', 'web', 'index.html');
+const TEST = process.env.OKEDGE_FLAVOR === 'test';
+const EXPORT = path.join(ROOT, 'dist', TEST ? 'web-test' : 'web', 'index.html');
+const BUILD = TEST ? 'build:web:test' : 'build:web';
 
 /* what the web export is built from: the app's JavaScript and assets, and the lockfile (a lib re-pin) */
 const SOURCE_FILES = ['App.tsx', 'PhoneApp.tsx', 'index.ts', 'app.json', 'metro.config.js', 'tsconfig.json',
@@ -47,8 +55,8 @@ function exportIsStale() {
 if (!process.env.OKEDGE_WEB_URL) {
   const why = exportIsStale();
   if (why) {
-    console.log(`[start] ${why} - rebuilding dist/web first (npm run build:web)`);
-    const r = spawnSync('npm', ['run', 'build:web'], { cwd: ROOT, stdio: 'inherit', shell: true });
+    console.log(`[start] ${why} - rebuilding ${path.relative(ROOT, path.dirname(EXPORT))} first (npm run ${BUILD})`);
+    const r = spawnSync('npm', ['run', BUILD], { cwd: ROOT, stdio: 'inherit', shell: true });
     if (r.status !== 0) {
       console.error('[start] the web export failed to build - not opening an older one');
       process.exit(r.status || 1);

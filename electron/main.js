@@ -22,7 +22,14 @@ const fs = require('fs');
 const { app, BrowserWindow, ipcMain, protocol, net, session } = require('electron');
 const { pathToFileURL } = require('url');
 
-const WEB_ROOT = path.join(__dirname, '..', 'dist', 'web');
+/*
+ * THE TEST BUILD (OKEDGE_FLAVOR=test, electron/start.js): the development export in dist/web-test, the phone's debug
+ * build - and its OWN page storage (a separate profile), so a test run never reads or writes what the prod build kept.
+ * The origin stays https://apps.crp.to, so WebAuthn works the same.
+ */
+const TEST = process.env.OKEDGE_FLAVOR === 'test';
+const WEB_ROOT = path.join(__dirname, '..', 'dist', TEST ? 'web-test' : 'web');
+if (TEST) app.setPath('userData', `${app.getPath('userData')}-test`);
 
 
 /* one channel per thing the page may ask for; preload.js lists the same names */
