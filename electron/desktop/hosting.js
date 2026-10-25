@@ -99,8 +99,10 @@ function pageHolds() {
     send('okedge:computerTalks', { id });
   });
 }
+/* the handover runs before the CLI counts as speaking (node-onlykey-lib desktop/serve.js beforeWrite): a report meanwhile is not its */
 const cliPipe = Object.create(usbhid.shared, {
-  write: { value: async (iface, bytes) => { await pageHolds(); return usbhid.shared.write(iface, bytes); } },
+  beforeWrite: { value: pageHolds },
+  write: { value: (iface, bytes) => usbhid.shared.write(iface, bytes) },
 });
 
 async function start() {
