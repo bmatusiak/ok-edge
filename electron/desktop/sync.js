@@ -34,6 +34,8 @@ let child = null;
 let retry = null;
 let pairing = null;
 let cancelled = false;
+/* the stores the running trade took changes into (its "sync: took" lines), said to the page when it ends */
+const tookStores = new Set();
 let state = { enabled: true, service: 'off', net: null, last: null, trading: false, took: null, lines: [], pair: null };
 
 const store = () => require('node-onlykey-lib/cli/clipair-store');
@@ -118,11 +120,17 @@ function startService() {
     const took = /^sync: took (\{.*\})$/.exec(s);
     if (/^sync: trading\b/.test(s)) changed({ lines: keep(line), trading: true });
     else if (took) {
-      let stores = [];
-      try { stores = Object.keys(JSON.parse(took[1])); } catch { /* not a count line */ }
-      changed({ lines: keep(line), took: { stores, at: Date.now() } });
+      /* held until the trade ends: the CLI writes the kept file after its last round, and a screen reading it now would read it old */
+      try { for (const st of Object.keys(JSON.parse(took[1]))) tookStores.add(st); } catch { /* not a count line */ }
+      changed({ lines: keep(line) });
     } else if (/^sync: (in sync|(not )?traded)\b/.test(s)) {
-      changed({ lines: keep(line), trading: false, last: { line: s, at: Date.now(), ok: !/^sync: not traded\b/.test(s) && !/NOT settled/.test(s) } });
+      const stores = [...tookStores];
+      tookStores.clear();
+      changed({
+        lines: keep(line), trading: false,
+        last: { line: s, at: Date.now(), ok: !/^sync: not traded\b/.test(s) && !/NOT settled/.test(s) },
+        ...(stores.length ? { took: { stores, at: Date.now() } } : {}),
+      });
     } else changed({ lines: keep(line) });
   });
   child = proc;
