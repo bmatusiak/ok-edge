@@ -40,6 +40,11 @@ import {DEVICE_WORD} from '../platform';
 
 /* the core firmware closes every wait at 20 s (okcore.cpp Usertimeout) */
 const WAIT_MS = 20_000;
+/*
+ * the key_chain plugin's derive gate closes at 19 s from its press record (measured on the desktop's soft key,
+ * 2026-10-25: the record, then its end 19.0 s later) - its sheet counts down from that, not the core's 20
+ */
+const DERIVE_WAIT_MS = 19_000;
 const OKSIGN = 0xed;
 const OKDECRYPT = 0xf0;
 
@@ -140,7 +145,7 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
   const showVendor = !showFido && !!wait && !(wait.w.what === 'edge' && edgeAsking);
   const showDerive = !showFido && !showVendor && !!derive;
   if (!showFido && !showVendor && !showDerive) return null;
-  const exact = Math.max(0, Math.ceil((since + WAIT_MS - now) / 1000));
+  const exact = Math.max(0, Math.ceil((since + (showDerive ? DERIVE_WAIT_MS : WAIT_MS) - now) / 1000));
   const left = quiet ? Math.ceil(exact / 5) * 5 : exact;
   const hush = () => { try { NativeOkEmu.hushPress(); } catch { /* no native side (jest, an old build) */ } };
 
