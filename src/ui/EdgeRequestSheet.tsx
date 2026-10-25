@@ -24,6 +24,7 @@ import {budgetStatus} from '../budgetStatus';
 import {openBudget} from '../edgeNav';
 import {currentNet} from '../net';
 import {identity as identityLib} from 'node-onlykey-lib/edge';
+import {DEVICE_WORD} from '../platform';
 
 /* what each typed refusal means, in the person's words (the agent gets the code) */
 const REFUSAL_TEXT: Record<string, string> = {
@@ -251,7 +252,7 @@ export function EdgeRequestSheet() {
                   <Text style={[styles.countdown, left <= 15 && {color: theme.error}]}>{`Press within ${mmss(left)}`}</Text>
                 ) : null}
                 <Text style={styles.dim}>
-                  This phone is also the key, so its press proves less than a hard key's.
+                  This {DEVICE_WORD} is also the key, so its press proves less than a hard key's.
                 </Text>
                 {refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
                 <View style={styles.row}>

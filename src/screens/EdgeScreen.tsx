@@ -32,6 +32,7 @@ import {EdgeAgentsCard} from '../ui/EdgeAgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
 import type {EdgeRow, EdgeView, Verdict} from '../edgeStore';
 import type {EdgeBudget, EdgeCopyCheck, EdgeRequest} from '../edgeFake';
+import {DEVICE_WORD} from '../platform';
 
 const {OP, DECISION, END, FLAG} = codes;
 
@@ -508,7 +509,7 @@ function PendingCard({r, busy, waiting, blocked, onApprove, onPress, onDecline}:
         <>
           <Text style={[styles.op, {color: theme.warn}]}>Press the key to confirm</Text>
           <Text style={styles.dim}>
-            {'This phone is also the key, so its press proves less than a hard key\'s. The key stops waiting after 20 s.'}
+            {`This ${DEVICE_WORD} is also the key, so its press proves less than a hard key's. The key stops waiting after 20 s.`}
           </Text>
           <View style={styles.row}>
             {/* not disabled while busy: the request IS what is in flight, waiting for this */}

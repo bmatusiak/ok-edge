@@ -10,6 +10,7 @@
 import {useEffect, useState} from 'react';
 import {IO_SHOW_MS, IO_STEP_MS, ioPulse} from './btActivity';
 import {btTransit, type PairingView} from './btTransit';
+import {bucketTraded} from './bucketEvents';
 import type {Net} from './net';
 import {shell} from './platform';
 import type {PairGate} from './ui/PairedDevicesCard';
@@ -27,6 +28,8 @@ export type SyncState = {
   last: {line: string; at: number; ok: boolean} | null;
   /* a sync in progress: the 🔁 flashes */
   trading: boolean;
+  /* the stores this computer's last sync took changes into, and when (screens with a decrypted copy ask again) */
+  took?: {stores: string[]; at: number} | null;
   /* the latest run's lines (the service, or a pairing) */
   lines: string[];
   pair: {running: boolean; code: string | null; line: string | null; ok: boolean | null; startedAt: number; codeAt: number | null} | null;
@@ -71,6 +74,8 @@ const listeners = new Set<() => void>();
  */
 let pulsing: ReturnType<typeof setInterval> | null = null;
 function take(s: SyncState) {
+  /* a sync took changes in since the last state: say which stores (src/bucketEvents.ts - Passwords' banner) */
+  if (s.took && s.took.at !== latest?.took?.at && latest) bucketTraded(s.took.stores);
   latest = s;
   if (s.trading && !pulsing) { ioPulse('sync'); pulsing = setInterval(() => ioPulse('sync'), IO_SHOW_MS - IO_STEP_MS); }
   if (!s.trading && pulsing) { clearInterval(pulsing); pulsing = null; }

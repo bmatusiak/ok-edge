@@ -34,7 +34,7 @@ let child = null;
 let retry = null;
 let pairing = null;
 let cancelled = false;
-let state = { enabled: true, service: 'off', net: null, last: null, trading: false, lines: [], pair: null };
+let state = { enabled: true, service: 'off', net: null, last: null, trading: false, took: null, lines: [], pair: null };
 
 const store = () => require('node-onlykey-lib/cli/clipair-store');
 
@@ -106,13 +106,23 @@ function startService() {
   const proc = runCli(['--ble', '--service', ...(net === 'test' ? ['--test-mode'] : [])], (line) => {
     if (child !== proc) return;
     /*
-     * The sync service's own lines (node-onlykey-lib bucket/cli/service.js): "sync: trading" when one starts (the icon
-     * flashes), "sync: traded" / "sync: not traded" when it ends - the page's last sync, and whether it reached the phone. The
-     * agent prefixes its own logs with "edge: ", so the line is matched after that.
+     * The sync service's own lines (node-onlykey-lib bucket/cli/service.js, bucket/cli/trade.js), after the agent's
+     * "edge: " prefix:
+     *   "sync: trading - ..."          records are moving: the icon flashes
+     *   "sync: took {...}"             what this computer took, per store: the page's screens holding a decrypted copy
+     *                                  of one ask to decrypt again (src/bucketEvents.ts)
+     *   "sync: in sync" / "traded"     it reached the phone: the last sync, green
+     *   "sync: not traded"             it did not
      */
-    if (/^(edge: )?sync: trading\b/.test(line)) changed({ lines: keep(line), trading: true });
-    else if (/^(edge: )?sync: (not )?traded\b/.test(line)) {
-      changed({ lines: keep(line), trading: false, last: { line, at: Date.now(), ok: /^(edge: )?sync: traded\b/.test(line) } });
+    const s = line.replace(/^edge: /, '');
+    const took = /^sync: took (\{.*\})$/.exec(s);
+    if (/^sync: trading\b/.test(s)) changed({ lines: keep(line), trading: true });
+    else if (took) {
+      let stores = [];
+      try { stores = Object.keys(JSON.parse(took[1])); } catch { /* not a count line */ }
+      changed({ lines: keep(line), took: { stores, at: Date.now() } });
+    } else if (/^sync: (in sync|(not )?traded)\b/.test(s)) {
+      changed({ lines: keep(line), trading: false, last: { line: s, at: Date.now(), ok: !/^sync: not traded\b/.test(s) && !/NOT settled/.test(s) } });
     } else changed({ lines: keep(line) });
   });
   child = proc;

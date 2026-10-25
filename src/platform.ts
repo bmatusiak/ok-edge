@@ -21,5 +21,8 @@ const bridge: DesktopBridge | null = (globalThis as { okedge?: DesktopBridge }).
 
 export const shell: Shell = Platform.OS === 'android' ? 'android' : bridge ? 'electron' : 'web';
 
+/** What this device is called in the app's sentences ("this phone is also the key"): the desktop is a computer. */
+export const DEVICE_WORD = shell === 'android' ? 'phone' : 'computer';
+
 /** The desktop bridge, on the electron shell only. */
 export const desktop: DesktopBridge | null = shell === 'electron' ? bridge : null;

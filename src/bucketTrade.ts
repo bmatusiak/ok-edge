@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {bytes as okbytes} from 'node-onlykey-lib';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
+import {bucketTraded} from './bucketEvents';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
@@ -91,6 +92,8 @@ export async function handleTrade(msg: any, from: string): Promise<unknown> {
     await saveTradedBucket().catch((e: unknown) => { console.log(`[bucket] the traded bucket was not stored: ${String((e as Error)?.message ?? e)}`); throw e; });
     const n = Object.values(out.taken || {}).reduce((a: number, b: any) => a + Number(b), 0);
     console.log(`[bucket] traded with a paired computer: took ${n}`);
+    /* a screen holding a decrypted copy of a changed store asks to decrypt again (Passwords' banner) */
+    bucketTraded(Object.keys(out.taken || {}).filter(k => Number(out.taken[k]) > 0));
   }
   if (out && out.ok === false) console.log(`[bucket] a trade was refused (${msg.type})`);
   return out;

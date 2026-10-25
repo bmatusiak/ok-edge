@@ -36,6 +36,7 @@ import {Btn} from './components';
 import {Sheet} from './Sheet';
 import {theme} from './theme';
 import {useQuietMotion} from './CountdownBar';
+import {DEVICE_WORD} from '../platform';
 
 /* the core firmware closes every wait at 20 s (okcore.cpp Usertimeout) */
 const WAIT_MS = 20_000;
@@ -192,7 +193,7 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
                 void OkEmu.pressQueue(button);
               }} />
             )}
-            <Text style={styles.dim}>This phone is also the key, so its press proves less than a hard key's.</Text>
+            <Text style={styles.dim}>This {DEVICE_WORD} is also the key, so its press proves less than a hard key's.</Text>
     </Sheet>
   );
 }

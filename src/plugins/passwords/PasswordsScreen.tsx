@@ -4,6 +4,7 @@ import {Alert, BackHandler, ScrollView, StyleSheet, Text, TextInput, View} from 
 import {legacy, totp as totpLib} from 'node-onlykey-lib/passwords';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import NativeShare from 'okedge-native/specs/NativeShare';
+import {onBucketTraded} from '../../bucketEvents';
 import {missingNote} from '../../firmwareFeatures';
 import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import {BACKEND_NAME} from '../../hooks/keySession';
@@ -98,7 +99,20 @@ export function PasswordsScreen({ctx}: {ctx: TabContext}) {
     const {device} = await getOnlyKey(ctx.backend);
     await device.setSlot(slotId, device.totpFields(secret));
   };
-  if (view.state === 'open') return <OpenStore manager={view.manager} keyName={keyName} touch={touch} lockNow={lockNow} oldVault={oldVault} phraseKey={phraseKey} timeLeft={timeLeft} policy={policy} choosePolicy={choosePolicy} writeSlot={writeSlot} />;
+  /*
+   * PASSWORDS ARRIVED FROM ANOTHER DEVICE while this store is open (src/bucketEvents.ts): the list on screen was
+   * decrypted before they came, so a banner asks to decrypt again - Decrypt locks the store and opens it with the key,
+   * and the arrived entries are in the list.
+   */
+  const [incoming, setIncoming] = useState(false);
+  const [reopen, setReopen] = useState(false);
+  useEffect(() => onBucketTraded(stores => { if (stores.includes('passwords')) setIncoming(true); }), []);
+  useEffect(() => {
+    if (view.state !== 'open') setIncoming(false);
+    if (reopen && view.state === 'button') { setReopen(false); openWithKey(); }
+  }, [view.state, reopen, openWithKey]);
+  const decryptIncoming = () => { setReopen(true); lockNow(); };
+  if (view.state === 'open') return <OpenStore manager={view.manager} keyName={keyName} touch={touch} lockNow={lockNow} oldVault={oldVault} phraseKey={phraseKey} timeLeft={timeLeft} policy={policy} choosePolicy={choosePolicy} writeSlot={writeSlot} incoming={incoming} onDecrypt={decryptIncoming} />;
 
   return (
     <ScrollView contentContainerStyle={styles.pad}>
@@ -147,7 +161,12 @@ function OpenStore({
   policy,
   choosePolicy,
   writeSlot,
+  incoming = false,
+  onDecrypt,
 }: {
+  /* passwords arrived from a sync since this list was decrypted (src/bucketEvents.ts) */
+  incoming?: boolean;
+  onDecrypt?: () => void;
   manager: Manager;
   keyName: string;
   touch: () => boolean;
@@ -524,6 +543,12 @@ function OpenStore({
 
   return (
     <View style={styles.root}>
+      {incoming ? (
+        <View style={styles.incoming}>
+          <Text style={styles.incomingText}>New passwords arrived from sync. Decrypt to merge them into this list.</Text>
+          <Btn title="Decrypt" tone="primary" onPress={() => onDecrypt?.()} />
+        </View>
+      ) : null}
       <View style={styles.bar}>
         <TextInput
           value={search}
@@ -726,6 +751,8 @@ function EntryView({
 const styles = StyleSheet.create({
   firstNote: {color: theme.warn, marginBottom: 12},
   root: {flex: 1},
+  incoming: {flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 8, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: theme.accent},
+  incomingText: {flex: 1, color: theme.text, fontSize: 13},
   pad: {padding: 16},
   row: {flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 16, paddingTop: 16},
   titleBox: {marginTop: 10, marginLeft: 16, justifyContent: 'center', flex: 1},
