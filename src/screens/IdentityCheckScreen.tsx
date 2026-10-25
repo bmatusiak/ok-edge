@@ -17,6 +17,9 @@ import {theme} from '../ui/theme';
 import {netTag} from '../net';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {ensureNametag} from '../edgeDevices';
+import {openIdentityBucket} from '../bucketStore';
+import {getOnlyKey} from '../onlykey';
+import {activeBackend} from '../hooks/KeyContext';
 
 type Read =
   | {kind: 'checking'}
@@ -32,8 +35,29 @@ const whyNone = (probe: string | null): string =>
     : probe === 'no-pin' ? 'The key is locked.'
       : 'This key has no Edge: there is no identity to read.';
 
-export function IdentityCheckScreen({keyName, onContinue}: {keyName: string; onContinue: () => void}) {
+/* opening the bucket after Continue: asking the key, waiting for its press, or what went wrong */
+type Open = {kind: 'idle'} | {kind: 'opening'} | {kind: 'press'} | {kind: 'failed'; why: string};
+
+export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: string; onContinue: () => void; onPress?: () => void}) {
   const [read, setRead] = useState<Read>({kind: 'checking'});
+  const [open, setOpen] = useState<Open>({kind: 'idle'});
+
+  /*
+   * CONTINUE OPENS THIS IDENTITY'S BUCKET (Brad, 2026-10-24: "a button press here is needed to decrypt the
+   * container"): the key decapsulates it and asks for its press; then the app opens. A key with no identity
+   * to read (no Edge) has no bucket here, and goes on.
+   */
+  const continueAndOpen = async () => {
+    if (read.kind !== 'read') { onContinue(); return; }
+    setOpen({kind: 'opening'});
+    try {
+      const {okcrypto} = await getOnlyKey(activeBackend());
+      await openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}));
+      onContinue();
+    } catch (e: unknown) {
+      setOpen({kind: 'failed', why: String((e as Error)?.message ?? e)});
+    }
+  };
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -84,8 +108,17 @@ export function IdentityCheckScreen({keyName, onContinue}: {keyName: string; onC
         <Text style={styles.hint}>Everything this app keeps for this key belongs to this identity - every device restored from the same backup shares it.</Text>
       ) : null}
       <View style={styles.action}>
+        {open.kind === 'opening' ? <Text style={styles.hint}>Opening this identity's bucket…</Text> : null}
+        {open.kind === 'press' ? <Text style={[styles.hint, styles.press]}>Press the key to open this identity's bucket</Text> : null}
+        {open.kind === 'press' && onPress ? <Btn title="Press the soft key" tone="primary" onPress={onPress} /> : null}
+        {open.kind === 'failed' ? <Text style={[styles.hint, {color: theme.error}]}>{`The bucket did not open: ${open.why}`}</Text> : null}
         {read.kind === 'none' ? <Btn title="Try again" onPress={() => setAttempt(n => n + 1)} /> : null}
-        <Btn title="Continue" tone="primary" onPress={onContinue} disabled={read.kind === 'checking'} />
+        <Btn
+          title={open.kind === 'failed' ? 'Try again' : 'Continue'}
+          tone="primary"
+          onPress={() => void continueAndOpen()}
+          disabled={read.kind === 'checking' || open.kind === 'opening' || open.kind === 'press'}
+        />
       </View>
     </View>
   );
@@ -118,6 +151,7 @@ const styles = StyleSheet.create({
   rowLabel: {color: theme.textDim, fontSize: 12},
   rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1},
   spinner: {paddingVertical: 8},
+  press: {color: theme.warn, fontSize: 14, fontWeight: '600'},
   hint: {marginTop: 14, maxWidth: 320, color: theme.textDim, fontSize: 12, textAlign: 'center', lineHeight: 17},
   action: {marginTop: 28, width: '100%', maxWidth: 320, gap: 12},
 });

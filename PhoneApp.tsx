@@ -79,6 +79,7 @@ import {EdgeScreen} from './src/screens/EdgeScreen';
 import {EdgeRequestSheet} from './src/ui/EdgeRequestSheet';
 import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
+import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
@@ -999,6 +1000,7 @@ function Shell() {
     if (lastDoorKey.current === doorKey) return;
     lastDoorKey.current = doorKey;
     awaitingUnlock.current = true;
+    closeBucket();
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
   }, [doorKey]);
 
@@ -1039,6 +1041,8 @@ function Shell() {
       }
       // It relocked while we were inside (or at the identity check).
       if (prev === 'main' || prev === 'identity') {
+        /* the door closed: the opened bucket goes with it */
+        closeBucket();
         /*
          * WHY THE DOOR CLOSED, to logcat.
          *
@@ -1346,7 +1350,7 @@ function Shell() {
               led={keys.backend === 'embedded' ? emu.led : undefined}
             />
           ) : phase === 'identity' ? (
-            <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => setPhase('main')} />
+            <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => setPhase('main')} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
           ) : phase === 'pin' ? (
             <PinScreen
               onBypass={keys.backend === 'embedded' && keys.soft.state === 'running' ? () => void devLogin() : undefined}
