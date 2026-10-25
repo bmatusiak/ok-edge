@@ -15,7 +15,7 @@ type Okcrypto = {
   deviceAge: {
     identity(label: string): Promise<{recipient: Uint8Array}>;
     encrypt(plaintext: Uint8Array, recipient: Uint8Array | string): Uint8Array;
-    decrypt(age: Uint8Array, label: string, opts?: {confirm?: () => void}): Promise<Uint8Array>;
+    decrypt(age: Uint8Array, label: string, opts?: {confirm?: () => void; onKeepAlive?: () => void; requirePress?: boolean}): Promise<Uint8Array>;
   };
 };
 
@@ -48,7 +48,12 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   }
   const {bucket} = await bucketLib.openWithKey(text, {
     owner: identity,
-    decrypt: (age: Uint8Array, label: string) => okcrypto.deviceAge.decrypt(age, label, {confirm: () => onPress?.()}),
+    /*
+     * ALWAYS A PRESS (Brad: "a button press here is needed"): 3.1.0's device-custody decrypt asks for one by
+     * itself (confirm); the older X-Wing path is a shared-secret derive, asked here in its press-first form
+     * (requirePress) - the box key opened the bucket without one before. Either wait says "press".
+     */
+    decrypt: (age: Uint8Array, label: string) => okcrypto.deviceAge.decrypt(age, label, {requirePress: true, confirm: () => onPress?.(), onKeepAlive: () => onPress?.()}),
   });
   opened = {identity, bucket};
   return {created: false};
