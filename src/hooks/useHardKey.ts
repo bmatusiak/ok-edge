@@ -61,6 +61,15 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
 
   /** See useOkEmu: the same 1 Hz broadcast races the one-off UNLOCKED. */
   const unlockedAt = useRef(0);
+  /*
+   * A CONNECT MADE WHILE UNLOCKED (box, 2026-10-24): a hard key plugged in locked and then unlocked answered
+   * no Edge request - it did once a connect was sent after the unlock, which a key plugged in already
+   * unlocked gets at once. So when the broadcast turns to unlocked and the last connect was made while
+   * locked, it is sent again, once - as the soft key's code does after the PIN (useOkEmu).
+   */
+  const connectedUnlocked = useRef(false);
+  const reconnecting = useRef(false);
+  const connectRef = useRef<(() => Promise<unknown>) | null>(null);
 
   useEffect(() => {
     const offStream = UsbPipe.on('stream', event => {
@@ -96,6 +105,10 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
         if (parsed.state === 'unlocked') {
           unlockedAt.current = Date.now();
           setDevice('unlocked');
+          if (!connectedUnlocked.current && !reconnecting.current && connectRef.current) {
+            reconnecting.current = true;
+            void connectRef.current().finally(() => { reconnecting.current = false; });
+          }
           const info = device_.version.parseStatus(String(parsed.raw));
           setIdentity(info);
           setCapabilities(device_.version.capabilities(info));
@@ -290,6 +303,7 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
     try {
       const {device: dev} = await getOnlyKey('usb');
       const result = await dev.connect();
+      connectedUnlocked.current = /^UNLOCKED/.test(String(result.status ?? '').trim());
       log('info', `OKCONNECT -> "${String(result.status ?? '').trim()}"`);
       console.log(`[hardkey] OKCONNECT ok: ${JSON.stringify(String(result.status ?? '').trim())}`);
 
@@ -361,6 +375,7 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
       setBusy(false);
     }
   }, [log]);
+  connectRef.current = connect;
 
   const send = useCallback(
     async (iface: number, msg: number) => {
