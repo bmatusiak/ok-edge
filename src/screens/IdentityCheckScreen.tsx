@@ -13,6 +13,7 @@ import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import {Logo} from '../ui/Logo';
 import {Btn} from '../ui/components';
+import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
 import {netTag} from '../net';
 import {SoftKeyEdge} from '../edgeSoftKey';
@@ -130,6 +131,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         {open.kind === 'opening' ? <Text style={styles.hint}>Opening this identity's bucket…</Text> : null}
         {open.kind === 'press' ? <Text style={[styles.hint, styles.press]}>Press the key to open this identity's bucket</Text> : null}
         {open.kind === 'press' && onPress ? <Btn title="Press the soft key" tone="primary" onPress={onPress} /> : null}
+        {/* the bucket opens by a decapsulation on slot 128: field 30 decides its press */}
+        {open.kind === 'press' ? <SkipPressHint /> : null}
         {open.kind === 'failed' ? <Text style={[styles.hint, {color: theme.error}]}>{`The bucket did not open: ${open.why}`}</Text> : null}
         {read.kind === 'none' ? <Btn title="Try again" onPress={() => setAttempt(n => n + 1)} /> : null}
         <Btn

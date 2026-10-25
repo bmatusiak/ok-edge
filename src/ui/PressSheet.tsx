@@ -23,6 +23,7 @@ import {PixelRatio, StyleSheet, Text, View} from 'react-native';
 import OkEmu, {type KeyWaiting} from '../transport/OkEmu';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 import {describeWaiting} from '../hooks/useKeyWaiting';
+import {SkipPressHint, WEB_AGENT_DERIVATION_SLOT} from './SkipPressHint';
 import {onSheet, type SheetState} from '../edgeAgents';
 import {
   deriveNameOf, deriveWaitNow, fidoAskNow, firmwarePressFor, latestPressAt, nameOfLabel, onPressAsk, startPressRecords,
@@ -282,11 +283,15 @@ function DeriveBody({d}: {d: DeriveWait}) {
 function DeriveButtons({d, ready, pressed, onPress}: {d: DeriveWait; ready: boolean; pressed: boolean; onPress: (b: string) => void}) {
   if (d.mode === 'press') {
     return pressed ? null : (
-      <View style={styles.row}>
-        <Locate what={`derive ${deriveNameOf(d.label) ?? d.label.slice(0, 8)}`}>
-          <Btn large title="Press the soft key" tone="primary" disabled={!ready} onPress={() => onPress('1')} />
-        </Locate>
-      </View>
+      <>
+        <View style={styles.row}>
+          <Locate what={`derive ${deriveNameOf(d.label) ?? d.label.slice(0, 8)}`}>
+            <Btn large title="Press the soft key" tone="primary" disabled={!ready} onPress={() => onPress('1')} />
+          </Locate>
+        </View>
+        {/* a label derive is slot 128: field 30 decides its press */}
+        <SkipPressHint />
+      </>
     );
   }
   return (
@@ -326,6 +331,8 @@ function VendorButtons({w, what, ready, pressed, onPress}: {w: KeyWaiting; what:
           </View>
         </>
       ) : null}
+      {/* a decrypt or sign on slot 128 (the bucket, the vault, age): field 30 decides its press */}
+      {w.slot === WEB_AGENT_DERIVATION_SLOT && !pressed ? <SkipPressHint /> : null}
     </>
   );
 }
