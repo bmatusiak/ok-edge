@@ -158,12 +158,18 @@ function startService() {
   });
 }
 
+/* stop the service's child; the promise settles once it has exited (killed outright if it lingers) */
 function stopService() {
   clearTimeout(retry);
   retry = null;
   const proc = child;
   child = null;
-  if (proc) proc.kill();
+  if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const hard = setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* gone */ } }, 8000);
+    proc.once('exit', () => { clearTimeout(hard); resolve(); });
+    proc.kill();
+  });
 }
 
 /* the page's net, once its bucket is open; null when the app locks */
@@ -190,16 +196,27 @@ function setEnabled(on) {
  * PAIR A PHONE, FROM THE APP (Brad, 2026-10-25: "this is where we can pair a new device (phone) without cli"): the lib's
  * cli-pair 6-digit flow, `onlykey-js --ble pair`. Its lines go to the page; the code line is picked out to show large.
  */
-function pairPhone() {
+/*
+ * The service's child is let go FIRST, and the pairing starts only once it has exited and the link has settled (the box,
+ * 2026-10-25: the two overlapped - the service's child said goodbye as the pairing's first message went out, and its
+ * exit took the computer's one Bluetooth connection to the phone down 2 s later; the phone's approval then found "the
+ * target is not connected" and the pairing window closed).
+ */
+const SETTLE_MS = 1500;
+async function pairPhone() {
   if (pairing) return snapshot();
-  stopService();
   cancelled = false;
+  pairing = 'starting';
+  changed({ pair: { running: true, code: null, line: 'letting the sync service go first', ok: null, startedAt: Date.now(), codeAt: null }, lines: [] });
+  await stopService();
+  await new Promise((res) => setTimeout(res, SETTLE_MS));
+  if (cancelled) { pairing = null; changed({ pair: null }); startService(); return snapshot(); }
   const proc = runCli(['--ble', 'pair'], (line) => {
     const code = /^code\s+(\d{6})\b/.exec(line);
     changed({ lines: keep(line), pair: { ...state.pair, ...(code ? { code: code[1], codeAt: Date.now() } : {}), line } });
   });
   pairing = proc;
-  changed({ pair: { running: true, code: null, line: null, ok: null, startedAt: Date.now(), codeAt: null }, lines: [] });
+  changed({ pair: { running: true, code: null, line: null, ok: null, startedAt: Date.now(), codeAt: null } });
   const done = (ok, why) => {
     if (pairing !== proc) return;
     pairing = null;
@@ -213,7 +230,7 @@ function pairPhone() {
 }
 
 function cancelPair() {
-  if (pairing) { cancelled = true; pairing.kill(); }
+  if (pairing) { cancelled = true; if (pairing !== 'starting') pairing.kill(); }
   return snapshot();
 }
 
@@ -227,7 +244,7 @@ function forget(address) {
 
 module.exports = {
   attach(push) { send = push; },
-  stop: async () => { wantNet = null; stopService(); if (pairing) pairing.kill(); },
+  stop: async () => { wantNet = null; await stopService(); if (pairing && pairing !== 'starting') pairing.kill(); },
   handlers: {
     'okedge:syncState': () => snapshot(),
     'okedge:syncNet': (net) => setNet(net),
