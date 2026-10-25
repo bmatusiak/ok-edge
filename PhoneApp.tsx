@@ -985,6 +985,20 @@ function Shell() {
    * locking itself - the idle timer, or a two-second hold on button 3 - puts
    * the door back.
    */
+  /*
+   * A KEY SWITCH CLOSES THE DOOR (box, 2026-10-24: a hard key plugged in while the soft key was open showed
+   * "Hard Key" with the SOFT key's identity - and the hard key still locked). Another key - the other
+   * backend, a hard key plugged in or out - goes through the door again: its own unlock, its own identity
+   * check. Before the door effect below, which re-evaluates on it.
+   */
+  const doorKey = `${keys.backend}:${String(keys.attached)}`;
+  const lastDoorKey = useRef(doorKey);
+  useEffect(() => {
+    if (lastDoorKey.current === doorKey) return;
+    lastDoorKey.current = doorKey;
+    setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
+  }, [doorKey]);
+
   useEffect(() => {
     if (testing.enabled) {
       setPhase('main');
@@ -1018,8 +1032,8 @@ function Shell() {
       if (prev === 'splash' && splashDone && (emu.state !== 'stopped' || __DEV__) && emu.state !== 'starting') {
         return 'login';
       }
-      // It relocked while we were inside.
-      if (prev === 'main') {
+      // It relocked while we were inside (or at the identity check).
+      if (prev === 'main' || prev === 'identity') {
         /*
          * WHY THE DOOR CLOSED, to logcat.
          *
@@ -1042,7 +1056,7 @@ function Shell() {
      * 'unlocked' since the PIN landed - so without it the door would never
      * reopen and the check button would look dead.
      */
-  }, [testing.enabled, emu.device, emu.state, configMode, splashDone]);
+  }, [testing.enabled, emu.device, emu.state, configMode, splashDone, doorKey]);
 
   const ready = phase === 'main';
 
@@ -1327,7 +1341,7 @@ function Shell() {
               led={keys.backend === 'embedded' ? emu.led : undefined}
             />
           ) : phase === 'identity' ? (
-            <IdentityCheckScreen keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => setPhase('main')} />
+            <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => setPhase('main')} />
           ) : phase === 'pin' ? (
             <PinScreen
               onBypass={keys.backend === 'embedded' && keys.soft.state === 'running' ? () => void devLogin() : undefined}
