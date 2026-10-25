@@ -878,7 +878,7 @@ function Shell() {
   useEffect(() => {
     const look = () => {
       const s = takeOpenedAlarm();
-      if (s !== null && s >= BT_SEQ_BASE) setTab('Bluetooth'); /* Part T: a Bluetooth pairing alarm */
+      if (s !== null && s >= BT_SEQ_BASE) setTab('Bluetooth'); /* Part T: a cli pair alarm */
       else if (s !== null) { setTab(EDGE_TAB); setEdgeFocus(s); }
     };
     look();

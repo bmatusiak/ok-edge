@@ -7,7 +7,7 @@
  * TEXT and the NAMES here, on the sheet (EdgeRequestSheet), and the library's
  * one implementation makes every hash from them (approve.approveRequest).
  *
- * WHO ASKS is the Bluetooth pairing (Brad, 2026-10-08: "so the claude key thing is
+ * WHO ASKS is the cli pair (Brad, 2026-10-08: "so the claude key thing is
  * overkill"; "lets cut it out"): the vendor bridge hands over only what came inside a paired
  * computer's encrypted session, and `from` names that link - btTransit.computer() gives the
  * pairing's id and name. No agent key, no registration, no agent-add link.
@@ -260,7 +260,7 @@ async function handleNote(msg: any, from: string): Promise<unknown | null> {
 
 /*
  * onlykey-js edge sync phase 2 (Brad, 2026-10-05): a place that keeps copies fills this
- * phone's copy. Since 2026-10-08 the gate is the Bluetooth pairing (the vendor bridge
+ * phone's copy. Since 2026-10-08 the gate is the cli pair (the vendor bridge
  * hands over only a paired computer's encrypted traffic), not a place on the KEY's list
  * (R20). HAVE is a read (what this copy holds); LINKS parts are staged in memory,
  * changing nothing. COMMIT: this phone's OWN links are merged into a candidate, checked

@@ -1,6 +1,6 @@
 /*
- * PART T: THE PHONE'S SIDE OF BLUETOOTH PAIRING (onlykey-edge
- * features/BLUETOOTH-PAIRING-SPEC.md; proposal PROPOSAL-part-t-bluetooth-transit.md).
+ * PART T: THE PHONE'S SIDE OF THE CLI PAIR (onlykey-edge
+ * features/CLI-PAIR-SPEC.md; proposal PROPOSAL-part-t-bluetooth-transit.md).
  *
  * ONLY THE VENDOR INTERFACE. This gate sits in vendorBridge, which only ever
  * sees writes on the vendor (API) service - the one onlykey-js --ble and Edge
@@ -13,7 +13,7 @@
  * only a CLI user it has PAIRED with, and only over frames sealed with keys
  * made fresh for each connection.
  *
- * The crypto is all in the lib (node-onlykey-lib/btpair) - the same code the
+ * The crypto is all in the lib (node-onlykey-lib/clipair) - the same code the
  * CLI runs on the other side. What lives here is the phone's state:
  *
  *   - the phone's X-Wing identity and the paired computers, sealed in the
@@ -35,7 +35,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {bytes as okbytes} from 'node-onlykey-lib';
-import * as bt from 'node-onlykey-lib/btpair';
+import * as bt from 'node-onlykey-lib/clipair';
 import {sha256} from 'node-onlykey-lib/vendor/@noble/hashes/sha2.js';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
@@ -57,9 +57,17 @@ export const CTRL_BATCH = 0x30;
 export const CTRL_BYE = 0x31;
 const REPORT_BYTES = 64;
 
-const STORE_KEY = 'okt.btpair.v1';
-const BOX_ALIAS = 'btpair';
-const TRANSIT_OFF_KEY = 'okt.btpair.transitOff';
+const STORE_KEY = 'okt.clipair.v1';
+const BOX_ALIAS = 'clipair';
+const TRANSIT_OFF_KEY = 'okt.clipair.transitOff';
+/*
+ * ONE NAME PER THING (Brad, 2026-10-25: "we can't call 2 different things the same thing, this is how bugs happen"):
+ * these are cli pairs, not Bluetooth's own pairings, and were stored under btpair names before. A phone paired
+ * then keeps its computers: load() opens the old record once, seals it under the new names, then removes the old.
+ */
+const OLD_STORE_KEY = 'okt.btpair.v1';
+const OLD_BOX_ALIAS = 'btpair';
+const OLD_TRANSIT_OFF_KEY = 'okt.btpair.transitOff';
 const NOTICES_MAX = 20;
 
 /** A paired computer as the lib makes it (phonePairApprove), secrets included. */
@@ -125,7 +133,7 @@ type Log = (level: 'info' | 'error' | 'rx', text: string) => void;
 
 export type Deps = {
   storage?: {getItem(k: string): Promise<string | null>; setItem(k: string, v: string): Promise<void>; removeItem(k: string): Promise<void>};
-  box?: {boxSeal(a: string, hex: string): Promise<string>; boxOpen(a: string, hex: string): Promise<string>};
+  box?: {boxSeal(a: string, hex: string): Promise<string>; boxOpen(a: string, hex: string): Promise<string>; boxForget?(a: string): Promise<boolean>};
   now?: () => number;
   isTestingMode?: () => boolean;
   log?: Log;
@@ -178,11 +186,26 @@ export function createBtTransit(deps: Deps = {}) {
     if (state) return state;
     if (loading) return loading;
     loading = (async () => {
-      transitOffWanted = (await storage.getItem(TRANSIT_OFF_KEY)) === '1';
-      const sealed = await storage.getItem(STORE_KEY);
+      const off = await storage.getItem(TRANSIT_OFF_KEY);
+      transitOffWanted = (off ?? (await storage.getItem(OLD_TRANSIT_OFF_KEY))) === '1';
+      let sealed = await storage.getItem(STORE_KEY);
+      let alias = BOX_ALIAS;
+      if (!sealed) {
+        sealed = await storage.getItem(OLD_STORE_KEY);
+        alias = OLD_BOX_ALIAS;
+      }
       if (sealed) {
         try {
-          state = JSON.parse(fromHexText(await box.boxOpen(BOX_ALIAS, sealed))) as Stored;
+          state = JSON.parse(fromHexText(await box.boxOpen(alias, sealed))) as Stored;
+          if (alias === OLD_BOX_ALIAS) {
+            /* sealed under the new names first, then the old record goes - a stop between leaves both, never neither */
+            await save();
+            if (off === null) await storage.setItem(TRANSIT_OFF_KEY, transitOffWanted ? '1' : '0');
+            await storage.removeItem(OLD_STORE_KEY);
+            await storage.removeItem(OLD_TRANSIT_OFF_KEY);
+            await box.boxForget?.(OLD_BOX_ALIAS).catch(() => false);
+            log('info', '[bt] cli pairs moved from their old btpair names');
+          }
           return state;
         } catch (e) {
           /*
