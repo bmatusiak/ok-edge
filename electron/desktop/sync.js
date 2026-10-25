@@ -107,11 +107,12 @@ function startService() {
     if (child !== proc) return;
     /*
      * The sync service's own lines (node-onlykey-lib bucket/cli/service.js): "sync: trading" when one starts (the icon
-     * flashes), "sync: traded" / "sync: not traded" when it ends - the page's last sync, and whether it reached the phone.
+     * flashes), "sync: traded" / "sync: not traded" when it ends - the page's last sync, and whether it reached the phone. The
+     * agent prefixes its own logs with "edge: ", so the line is matched after that.
      */
-    if (/^sync: trading\b/.test(line)) changed({ lines: keep(line), trading: true });
-    else if (/^sync: (not )?traded\b/.test(line)) {
-      changed({ lines: keep(line), trading: false, last: { line, at: Date.now(), ok: /^sync: traded\b/.test(line) } });
+    if (/^(edge: )?sync: trading\b/.test(line)) changed({ lines: keep(line), trading: true });
+    else if (/^(edge: )?sync: (not )?traded\b/.test(line)) {
+      changed({ lines: keep(line), trading: false, last: { line, at: Date.now(), ok: /^(edge: )?sync: traded\b/.test(line) } });
     } else changed({ lines: keep(line) });
   });
   child = proc;

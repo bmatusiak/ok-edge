@@ -44,7 +44,7 @@ export function SyncScreen({testing = false}: {testing?: boolean}) {
             </Text>
             {state.net ? <Text style={styles.note}>Net: {state.net === 'test' ? 'testnet' : 'live'}</Text> : null}
             <Text style={styles.note}>
-              {state.last ? `Last sync ${when(state.last.at)}: ${state.last.line.replace(/^(sync|bucket):\s*/, '')}` : 'No sync yet.'}
+              {state.last ? `Last sync ${when(state.last.at)}: ${state.last.line.replace(/^(edge: )?sync:\s*/, '')}` : 'No sync yet.'}
             </Text>
             {testing && state.lines.length ? (
               <Text style={styles.mono}>{state.lines.slice(-8).join('\n')}</Text>
