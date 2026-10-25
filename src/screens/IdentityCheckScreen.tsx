@@ -40,7 +40,17 @@ export function IdentityCheckScreen({keyName, onContinue}: {keyName: string; onC
     let live = true;
     setRead({kind: 'checking'});
     void (async () => {
-      const soft = await SoftKeyEdge.open().catch(() => null);
+      /*
+       * A KEY JUST UNLOCKED IS STILL SETTLING (box, 2026-10-24): the hard key re-connects right after its unlock
+       * (useHardKey), and a question asked in that moment timed out - asked again a moment later, it answered.
+       * So "no answer in time" is asked twice more, 1.5 s apart, before it is said.
+       */
+      let soft = await SoftKeyEdge.open().catch(() => null);
+      for (let n = 0; !soft && live && SoftKeyEdge.lastProbe === 'none' && n < 2; n++) {
+        await new Promise(r => setTimeout(r, 1500));
+        soft = await SoftKeyEdge.open().catch(() => null);
+      }
+      if (!live) return;
       if (!soft) {
         if (live) setRead({kind: 'none', why: whyNone(SoftKeyEdge.lastProbe)});
         return;
