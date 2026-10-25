@@ -23,15 +23,26 @@ type Read =
   | {kind: 'read'; identity: string; nametag: string | null}
   | {kind: 'none'; why: string};
 
+/*
+ * WHY NOTHING WAS READ, said as it is (box, 2026-10-24: a hard key just plugged back in and unlocked did not
+ * answer the first question in time, and this said "no Edge" - a key with Edge). The probe tells them apart.
+ */
+const whyNone = (probe: string | null): string =>
+  probe === 'none' ? 'The key did not answer in time - it may still be settling after being plugged in.'
+    : probe === 'no-pin' ? 'The key is locked.'
+      : 'This key has no Edge: there is no identity to read.';
+
 export function IdentityCheckScreen({keyName, onContinue}: {keyName: string; onContinue: () => void}) {
   const [read, setRead] = useState<Read>({kind: 'checking'});
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
+    setRead({kind: 'checking'});
     void (async () => {
       const soft = await SoftKeyEdge.open().catch(() => null);
       if (!soft) {
-        if (live) setRead({kind: 'none', why: 'This key has no Edge: there is no identity to read.'});
+        if (live) setRead({kind: 'none', why: whyNone(SoftKeyEdge.lastProbe)});
         return;
       }
       const identity = await soft.identityId();
@@ -41,7 +52,7 @@ export function IdentityCheckScreen({keyName, onContinue}: {keyName: string; onC
       if (live) setRead({kind: 'none', why: `Could not read the identity: ${String((e as Error)?.message ?? e)}`});
     });
     return () => { live = false; };
-  }, []);
+  }, [attempt]);
 
   return (
     <View style={styles.root}>
@@ -63,6 +74,7 @@ export function IdentityCheckScreen({keyName, onContinue}: {keyName: string; onC
         <Text style={styles.hint}>Everything this app keeps for this key belongs to this identity - every device restored from the same backup shares it.</Text>
       ) : null}
       <View style={styles.action}>
+        {read.kind === 'none' ? <Btn title="Try again" onPress={() => setAttempt(n => n + 1)} /> : null}
         <Btn title="Continue" tone="primary" onPress={onContinue} disabled={read.kind === 'checking'} />
       </View>
     </View>
@@ -97,5 +109,5 @@ const styles = StyleSheet.create({
   rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1},
   spinner: {paddingVertical: 8},
   hint: {marginTop: 14, maxWidth: 320, color: theme.textDim, fontSize: 12, textAlign: 'center', lineHeight: 17},
-  action: {marginTop: 28, width: '100%', maxWidth: 320},
+  action: {marginTop: 28, width: '100%', maxWidth: 320, gap: 12},
 });

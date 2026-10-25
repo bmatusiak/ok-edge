@@ -120,11 +120,15 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * the same Edge firmware plugin, so the Edge code - the tab, the host, the background sync, the
    * nametag - drives either one.
    */
+  /* why the last open() gave null: 'no-pin' (locked), 'none' (no answer in time), anything else (no Edge) - for a screen that must SAY which */
+  static lastProbe: string | null = null;
+
   static async open(): Promise<SoftKeyEdge | null> {
     const backend = activeBackend();
     const app = await getOnlyKey(backend);
     /* 4 s: right after start the background sync's chain reads go first (lib client.js deviceIdentity, 2026-10-04) */
-    if ((await app.edge.probe({timeoutMs: 4000})) !== 'edge') return null;
+    SoftKeyEdge.lastProbe = await app.edge.probe({timeoutMs: 4000});
+    if (SoftKeyEdge.lastProbe !== 'edge') return null;
     const {deviceId} = await app.edge.publicKey();
     const soft = new SoftKeyEdge(app.edge, deviceId);
     soft.backend = backend;
