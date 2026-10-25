@@ -18,24 +18,43 @@ export function useDesktopHost(): void {
   useEffect(() => {
     const bridge = (globalThis as {okedge?: Shell}).okedge;
     if (shell !== 'electron' || !desktop || !bridge) return undefined;
-    const offMessage = bridge.on('okedge:edgeMessage', ({id, message, from}: {id: number; message: unknown; from: string}) => {
-      void handleEdgeMessage(message, `${DESKTOP_FROM}${from}`)
-        .catch((e: unknown) => ({ok: false, refusal: 'invalid', detail: `the desktop app could not answer: ${String((e as Error)?.message ?? e)}`}))
-        .then(answer => desktop!.invoke('okedge:edgeAnswer', id, answer ?? null));
-    });
     /*
-     * THE CLI IS ABOUT TO WRITE TO THE KEY: this app stands aside the way the phone's bridge does for a
-     * computer over Bluetooth (vendorBridge createComputerHold) - after its own request in flight, and
-     * until the key has been quiet - then says so, and the write goes (electron/desktop/hosting.js).
+     * THE CLI'S WHOLE CONVERSATION HOLDS THE KEY (box, 2026-10-24: with the Edge tab open, edge setup's
+     * certificate came back with a self-signature that did not verify). The phone's bridge holds the key
+     * for a computer until the key is quiet AND not waiting for a press - its soft key says when it waits.
+     * A hard key cannot say so: during a press the line is quiet, the hold let go, and the tab's own read
+     * landed in the middle of the signature. So on the desktop the hold lasts the CLI's connection
+     * (onClient, node-onlykey-lib desktop/serve.js) and is let go only to ANSWER that CLI's host messages -
+     * the CLI is waiting on the answer then, so nothing of its can collide.
      */
     const hold = createComputerHold();
+    let connected = false;
+    let answering = 0;
+    const take = () => getOnlyKey('usb').then(app => hold.holdForComputer(app.transport, connected)).catch(() => undefined);
+    const offConnected = bridge.on('okedge:computerConnected', ({connected: c}: {connected: boolean}) => {
+      connected = !!c;
+      if (connected && !answering) void take();
+      if (!connected) hold.releaseHold(' (the CLI went away)');
+    });
+    const offMessage = bridge.on('okedge:edgeMessage', ({id, message, from}: {id: number; message: unknown; from: string}) => {
+      answering++;
+      hold.releaseHold(' (answering the CLI)');
+      void handleEdgeMessage(message, `${DESKTOP_FROM}${from}`)
+        .catch((e: unknown) => ({ok: false, refusal: 'invalid', detail: `the desktop app could not answer: ${String((e as Error)?.message ?? e)}`}))
+        .then(answer => desktop!.invoke('okedge:edgeAnswer', id, answer ?? null))
+        .finally(() => {
+          answering--;
+          if (connected && !answering) void take();
+        });
+    });
+    /*
+     * THE CLI IS ABOUT TO WRITE TO THE KEY: held already for its connection, said at once; otherwise taken
+     * first - after this app's own request in flight (vendorBridge createComputerHold) - then said.
+     */
     const offTalks = bridge.on('okedge:computerTalks', ({id}: {id: number}) => {
-      void getOnlyKey('usb')
-        .then(app => hold.holdForComputer(app.transport))
-        .then(() => hold.armRelease())
-        .catch(() => undefined)
+      void (hold.isHeld() ? Promise.resolve() : take().then(() => { if (!connected) hold.armRelease(); }))
         .then(() => desktop!.invoke('okedge:computerHeld', id));
     });
-    return () => { offMessage(); offTalks(); hold.releaseHold(' (the desktop host stopped)'); };
+    return () => { offConnected(); offMessage(); offTalks(); hold.releaseHold(' (the desktop host stopped)'); };
   }, []);
 }

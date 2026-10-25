@@ -269,7 +269,8 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
     console.log(`[vendor] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
     for (const l of [...freeListeners]) l();
   }
-  function holdForComputer(transport: any): Promise<void> {
+  /* sticky: held until releaseHold - a desktop CLI's whole connection (useDesktopHost), not until the key is quiet */
+  function holdForComputer(transport: any, sticky = false): Promise<void> {
     if (holding) return holding;
     holding = new Promise<void>(ready => {
       const conversation = () => new Promise<void>(release => {
@@ -278,7 +279,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
         heldFrom = Date.now();
         console.log('[vendor] the computer holds the key');
         ready();
-        armRelease();
+        if (!sticky) armRelease();
       });
       if (typeof transport.exclusive === 'function') {
         void transport.exclusive(conversation);

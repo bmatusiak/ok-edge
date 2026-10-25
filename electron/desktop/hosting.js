@@ -106,7 +106,8 @@ const cliPipe = Object.create(usbhid.shared, {
 async function start() {
   if (server) return;
   const { createDesktopServer } = require('node-onlykey-lib/desktop/serve');
-  server = createDesktopServer({ pipe: cliPipe, hostFor, log: (l) => console.log(`[hosting] ${l}`) });
+  /* a CLI's whole conversation: the page holds the key for it, and lets go only to answer it (useDesktopHost) */
+  server = createDesktopServer({ pipe: cliPipe, hostFor, log: (l) => console.log(`[hosting] ${l}`), onClient: (connected) => send('okedge:computerConnected', { connected }) });
   await server.start();
 }
 
