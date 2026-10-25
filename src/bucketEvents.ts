@@ -8,9 +8,23 @@
  */
 const listeners = new Set<(stores: string[]) => void>();
 
+/*
+ * WHAT A SYNC CHANGED STAYS MARKED UNTIL A SCREEN READS IT AGAIN (the A13, 2026-10-25: a password arrived while the
+ * Passwords screen was not shown; its store stays open 30 min, so coming back showed the old list and no banner - the
+ * mark had lived in the screen). The mark lives here; the screen clears it when it has decrypted again.
+ */
+const pending = new Set<string>();
+export function bucketPending(store: string): boolean {
+  return pending.has(store);
+}
+export function clearBucketPending(store: string): void {
+  pending.delete(store);
+}
+
 /** Stores a sync just changed (bucket store names, e.g. 'passwords'). */
 export function bucketTraded(stores: string[]): void {
   if (!stores.length) return;
+  for (const s of stores) pending.add(s);
   for (const l of [...listeners]) {
     try { l(stores); } catch { /* a screen's banner never breaks a sync */ }
   }

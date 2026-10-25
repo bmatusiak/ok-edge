@@ -1,10 +1,10 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, BackHandler, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 
 import {legacy, totp as totpLib} from 'node-onlykey-lib/passwords';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import NativeShare from 'okedge-native/specs/NativeShare';
-import {onBucketTraded} from '../../bucketEvents';
+import {bucketPending, clearBucketPending, onBucketTraded} from '../../bucketEvents';
 import {missingNote} from '../../firmwareFeatures';
 import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import {BACKEND_NAME} from '../../hooks/keySession';
@@ -104,11 +104,15 @@ export function PasswordsScreen({ctx}: {ctx: TabContext}) {
    * decrypted before they came, so a banner asks to decrypt again - Decrypt locks the store and opens it with the key,
    * and the arrived entries are in the list.
    */
-  const [incoming, setIncoming] = useState(false);
+  const [incoming, setIncoming] = useState(() => bucketPending('passwords'));
   const [reopen, setReopen] = useState(false);
   useEffect(() => onBucketTraded(stores => { if (stores.includes('passwords')) setIncoming(true); }), []);
+  /* the store opened fresh (with the key) reads everything the sync brought: the mark goes */
+  const wasOpen = useRef(view.state === 'open');
   useEffect(() => {
-    if (view.state !== 'open') setIncoming(false);
+    const isOpen = view.state === 'open';
+    if (isOpen && !wasOpen.current) { clearBucketPending('passwords'); setIncoming(false); }
+    wasOpen.current = isOpen;
     if (reopen && view.state === 'button') { setReopen(false); openWithKey(); }
   }, [view.state, reopen, openWithKey]);
   const decryptIncoming = () => { setReopen(true); lockNow(); };
