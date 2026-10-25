@@ -247,6 +247,9 @@ function describeBuild(): string {
  * because two callers computing it differently is a device that boots against
  * the wrong flash and looks perfectly healthy.
  */
+/** The firmware this app ships for its soft key - app.plugin.js's OKEDGE_FIRMWARE default; keep the two the same. */
+const APP_FIRMWARE = 'v3.1.0';
+
 export const storageSlot: string = (() => {
   /*
    * A DUO IS A DIFFERENT DEVICE, not a setting on this one. It has 24 slots
@@ -256,7 +259,14 @@ export const storageSlot: string = (() => {
    * build option (OKEMU_MODEL=duo), which makes it exactly the same hazard
    * this slot exists to prevent.
    */
-  const base = buildInfo.version ?? '';
+  /*
+   * THE FIRMWARE THE APP SHIPS KEEPS THE UNNAMED SLOT (Pixel, 2026-10-25: the build pinned to v3.1.0 - the RC plus its
+   * fixes, app.plugin.js okemuVersion - booted a new, empty "v3.1.0-..." folder and the testnet soft key read
+   * "uninitialized"; on the A13 the live one would have too). It is the same 3.1.0 device the working tree was
+   * (libraries aligned to 37aa531), so it reads the flash every phone already has. Only another pinned version - the
+   * compatibility matrix's v3.0.4 and older - is another device with a folder of its own.
+   */
+  const base = buildInfo.version && buildInfo.version !== APP_FIRMWARE ? buildInfo.version : '';
   const model = buildInfo.model !== 'duo' ? base : base ? base + '-duo' : 'duo';
   /*
    * A PLUGIN BUILD IS ANOTHER DEVICE TOO: a plugin may keep state of its own
