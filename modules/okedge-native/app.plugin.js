@@ -35,6 +35,15 @@ const withOkEmuProperties = (config) => withGradleProperties(config, (c) => {
     else c.modResults.push({ type: 'property', key, value });
   };
   set('okemuPlugins', PLUGINS);
+  /*
+   * THE SOFT KEY'S FIRMWARE IS THE RC PIN PLUS ITS FIXES (Brad, 2026-10-25: the patches "patched on top of the pin from
+   * the RC"): the emulator's v3.1.0 recipe - libraries 37aa531 with 0008-0011 (emulator scripts/versions/fixes-3.1.0.js,
+   * the patch files beside it) - never whatever the local libraries checkout holds. The Pixel's soft key was built from
+   * a working tree without 0011, and its backup could not be restored (the composite PQC record written 896 bytes long).
+   * OKEDGE_FIRMWARE=tree builds the working tree instead, for firmware work; another release name stages that release.
+   */
+  const firmware = process.env.OKEDGE_FIRMWARE || 'v3.1.0';
+  if (firmware !== 'tree') set('okemuVersion', firmware);
   /* a debug build loads its JS from ok-edge's Metro on 8082 (metro.pm2.config.js); ok-rn's keeps 8081 */
   set('reactNativeDevServerPort', '8082');
   /* the debug build's KSP pass (Expo's modules; ok-rn has none) ran out of metaspace at the
