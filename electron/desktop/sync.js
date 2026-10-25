@@ -69,11 +69,19 @@ function changed(next) {
   send('okedge:syncChanged', snapshot());
 }
 
+/*
+ * WHICH CLI: OKEDGE_CLI (a path to a node-onlykey-lib checkout's cli/index.js), else the lib this app is built with.
+ * The lib does not list its Bluetooth stack as a dependency (dbus-next on Linux, @stoprocent/noble on Windows - each
+ * installed by hand into the CLI's own checkout), so the copy inside this app cannot reach a phone; the person's CLI
+ * can. Until the lib lists them, a desktop that syncs is started with OKEDGE_CLI set.
+ */
+const cliEntry = () => process.env.OKEDGE_CLI || require.resolve('node-onlykey-lib/cli/index.js');
+
 /* the lib's CLI with plain Node - the ELECTRON_RUN_AS_NODE of this process is not passed on */
 function runCli(args, onLine) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  const proc = spawn(process.env.OKEDGE_NODE || 'node', [require.resolve('node-onlykey-lib/cli/index.js'), ...args], {
+  const proc = spawn(process.env.OKEDGE_NODE || 'node', [cliEntry(), ...args], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     /* Windows gives a console program started from a GUI app a console window of its own */
