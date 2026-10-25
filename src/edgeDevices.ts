@@ -38,8 +38,10 @@ const DEVICES = (): string => edgeKey('devices');
 const OWN = (deviceIdHex: string): string => edgeKey(`ownStatement.${deviceIdHex.toLowerCase()}`);
 const LEGACY_OWN = (): string => edgeKey('ownStatement');
 let currentDevice: string | null = null;
-export function setCurrentDevice(deviceIdHex: string): void {
+let currentIsHard = false;
+export function setCurrentDevice(deviceIdHex: string, backend?: string): void {
   currentDevice = deviceIdHex.toLowerCase();
+  currentIsHard = backend === 'usb';
 }
 const HELD = (): string => edgeKey('held');
 
@@ -110,8 +112,11 @@ export async function ownStatement(deviceIdHex: string | null = currentDevice): 
   if (!deviceIdHex) return null;
   const kept = await readJson<StoredStatement | null>(OWN(deviceIdHex), null);
   if (kept) return kept;
-  /* the one statement kept before per-device statements: it belongs to the device it names, and moves there */
-  const legacy = await readJson<StoredStatement | null>(LEGACY_OWN(), null);
+  /*
+   * the one statement kept before per-device statements: it belongs to the device it names, and moves there -
+   * to a soft key only: a hard key re-signing the phone's name used to write over it (it would carry "Pixel 6a")
+   */
+  const legacy = currentIsHard && deviceIdHex.toLowerCase() === currentDevice ? null : await readJson<StoredStatement | null>(LEGACY_OWN(), null);
   if (legacy && legacy.deviceId.toLowerCase() === deviceIdHex.toLowerCase()) {
     await AsyncStorage.setItem(OWN(deviceIdHex), JSON.stringify(legacy));
     return legacy;
