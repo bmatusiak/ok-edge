@@ -19,7 +19,7 @@
  */
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 import {currentNet} from './net';
-import {bucketStorage, keychainStore} from './bucketStore';
+import {bucketStorage} from './bucketStore';
 
 const keychain = require('node-onlykey-lib/keychain');
 const {sha256} = require('node-onlykey-lib/vendor/@noble/hashes/sha2.js');
@@ -52,7 +52,8 @@ export function keychainListKey(): string {
  * THE LIST'S STORAGE (plan S2): key 'list' in this identity's sealed bucket (src/bucketStore.ts), as the
  * CLI keeps it. Only a key with no Edge identity still keeps it under keychainListKey() in plain storage.
  */
-export const keychainList = bucketStorage(keychainStore, () => keychainListKey());
+const keychainStore = (): string => (currentNet() === 'test' ? 'keychain-test' : 'keychain');
+export const keychainList = bucketStorage(keychainStore, () => keychainListKey(), ['list']);
 
 const CODE_SCHEME: Record<number, string> = {132: 'agent-v1', 232: 'agent-v2', 128: 'web'};
 /* agent derivation keytypes (okcrypto OKGETPUBKEY) */

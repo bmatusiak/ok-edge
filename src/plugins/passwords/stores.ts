@@ -9,8 +9,8 @@
  * (`vault:ok-rn-manager`): asking for a public key never needs a press, and slot 128, which it
  * comes from, travels in the backup. So a soft key and a hard key restored from one backup get
  * the same store id, and share ONE open store - one list, one session; keys with other seeds get
- * other ids and never see each other's entries. Each store lives under its own AsyncStorage
- * prefix, `okrn.passwords.<id>/`.
+ * other ids and never see each other's entries. Each store lives under its own prefix,
+ * `okrn.passwords.<id>/` - in the identity's sealed bucket, as `<id>/` (usePasswordManager.ts).
  *
  * TOUCH-FREE OR PRESS, decided once per store (Brad, 2026-10-11: "touch free if possible, and
  * press to open if not"). The press flag is an INPUT to the derive - the same label with and

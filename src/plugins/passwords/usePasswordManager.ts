@@ -13,17 +13,37 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {AppState} from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {getOnlyKey} from '../../onlykey';
 import {supportsKnown} from '../../firmwareFeatures';
+import {bucketStorage} from '../../bucketStore';
 import {createStores, LABEL, type Backend, type Manager, type Okcrypto, type OpenWhy, type StorePolicy} from './stores';
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
-export const stores = createStores({storage: AsyncStorage, randomBytes});
+/*
+ * THE STORES' STORAGE (plan S2): store 'passwords' in this identity's sealed bucket (src/bucketStore.ts), each key
+ * `<store id>/...` as the bucket's merge rule names them (bucket/src/rules.js passwords). stores.ts asks for
+ * `okrn.passwords.<id>/...` - the plain names, which only a key with no Edge identity still uses.
+ *
+ * A store's old plain records move in when it is first read here: each store is one key's (its id is that key's
+ * public key), so only the key whose bucket is open takes its own - never another key's.
+ */
+const PLAIN = 'okrn.passwords.';
+const inBucket = bucketStorage(() => 'passwords', (k: string) => PLAIN + k);
+const passwordStorage = {
+  async getItem(k: string) {
+    const key = k.slice(PLAIN.length);
+    await inBucket.moveInPrefix(`${key.split('/')[0]}/`);
+    return inBucket.getItem(key);
+  },
+  setItem: (k: string, v: string) => inBucket.setItem(k.slice(PLAIN.length), v),
+  removeItem: (k: string) => inBucket.removeItem(k.slice(PLAIN.length)),
+};
+
+export const stores = createStores({storage: passwordStorage, randomBytes});
 
 const REAP_MS = 30_000;
 const BACKENDS: Backend[] = ['embedded', 'usb'];

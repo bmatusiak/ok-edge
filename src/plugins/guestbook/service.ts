@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {bucketStorage} from '../../bucketStore';
 
 import {refresh, store} from 'node-onlykey-lib/guestbook';
 import {currentNet} from '../../net';
@@ -19,7 +19,19 @@ declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 export const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 /* one list per net, as Key Chain's: the testnet's is cleared with the testnet (src/testnet.ts) */
 export const storageKey = () => (currentNet() === 'test' ? 'okrn.guestbook.test:v1' : store.KEY);
-export const openBook = () => store.createGuestBook({storage: AsyncStorage, randomBytes, key: storageKey()});
+/*
+ * THE BOOK'S STORAGE (plan S2): store 'guestbook' in this identity's sealed bucket (src/bucketStore.ts), keys as the
+ * lib names them ('guestbook:v1', the bucket's merge rule for it - bucket/src/rules.js), plus your name and the keys
+ * a swap offers. Only a key with no Edge identity still keeps each under its old plain name, below.
+ */
+const legacyKey = (k: string): string =>
+  k.startsWith(store.KEY) ? storageKey() + k.slice(store.KEY.length) : k === 'myname' ? myNameKey() : offeredKey();
+const bookStorage = bucketStorage(
+  () => (currentNet() === 'test' ? 'guestbook-test' : 'guestbook'),
+  legacyKey,
+  [store.KEY, 'myname', 'offered'],
+);
+export const openBook = () => store.createGuestBook({storage: bookStorage, randomBytes});
 /*
  * YOUR NAME ON A SWAP (Brad, 2026-10-12: "a name for the contact can be provided by the person
  * offering the key, in Me ... give yourself a name, and send the name with the pubkey, and the
@@ -27,8 +39,8 @@ export const openBook = () => store.createGuestBook({storage: AsyncStorage, rand
  * like the list.
  */
 const myNameKey = () => (currentNet() === 'test' ? 'okrn.guestbook.test:myname' : 'okrn.guestbook:myname');
-export const readMyName = async () => (await AsyncStorage.getItem(myNameKey()).catch(() => null)) || '';
-export const saveMyName = (name: string) => AsyncStorage.setItem(myNameKey(), name.trim().slice(0, 64));
+export const readMyName = async () => (await bookStorage.getItem('myname').catch(() => null)) || '';
+export const saveMyName = (name: string) => bookStorage.setItem('myname', name.trim().slice(0, 64));
 /*
  * WHICH OF YOUR KEYS A SWAP OFFERS (Brad, 2026-10-12: "lets put a toggle, all default off, the
  * toggled ones are the keys that get offered"). Guest Book collects the keys people encrypt
@@ -38,7 +50,7 @@ export const saveMyName = (name: string) => AsyncStorage.setItem(myNameKey(), na
 const offeredKey = () => (currentNet() === 'test' ? 'okrn.guestbook.test:offered' : 'okrn.guestbook:offered');
 export async function readOffered(): Promise<Set<string>> {
   try {
-    const raw = await AsyncStorage.getItem(offeredKey());
+    const raw = await bookStorage.getItem('offered');
     const ids = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(ids) ? ids.filter((x: unknown) => typeof x === 'string') : []);
   } catch {
@@ -49,7 +61,7 @@ export async function setOffered(id: string, on: boolean): Promise<Set<string>> 
   const ids = await readOffered();
   if (on) ids.add(id);
   else ids.delete(id);
-  await AsyncStorage.setItem(offeredKey(), JSON.stringify([...ids]));
+  await bookStorage.setItem('offered', JSON.stringify([...ids]));
   return ids;
 }
 /* the 1.2 MB OpenPGP fork, loaded the first time a PGP key is read (MessagesScreen does the same) */

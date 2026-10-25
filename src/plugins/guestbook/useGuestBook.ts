@@ -6,10 +6,11 @@ import {guestBookChanged, onGuestBookChanged, openBook, openpgp} from './service
 
 /*
  * GUEST BOOK'S STATE (onlykey-edge/features/GUEST-BOOK-SPEC.md): the contacts list, kept by the
- * lib's store (node-onlykey-lib/guestbook) in AsyncStorage. Local only, no OnlyKey needed.
+ * lib's store (node-onlykey-lib/guestbook) in this identity's sealed bucket (service.ts bookStorage).
+ * Reading and editing it needs no OnlyKey; opening the bucket did, at the identity check.
  *
- * One list per net, as Key Chain's: the testnet's list is `okrn.guestbook.test:v1` (cleared with
- * the testnet, src/testnet.ts), so trying things in testing mode never touches the real one.
+ * One list per net, as Key Chain's: the testnet's is the testnet bucket's 'guestbook-test' store
+ * (cleared with the testnet, src/testnet.ts), so trying things in testing mode never touches the real one.
  *
  * The network is touched only by a person's press (Look up, Refresh on one contact) - ok-rn is
  * air-gapped by default. PUBLIC ONLY: every way in goes through the lib's guard; a private key is

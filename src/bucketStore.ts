@@ -39,7 +39,7 @@ const KEY = (identity: string): string => `okrn.bucket.${currentNet() === 'test'
 type Door =
   | {kind: 'closed'}
   | {kind: 'legacy'}
-  | {kind: 'bucket'; identity: string; bucket: Bucket; recipient: Uint8Array; encrypt: (p: Uint8Array, r: Uint8Array | string) => Uint8Array};
+  | {kind: 'bucket'; identity: string; bucket: Bucket; recipient: Uint8Array; encrypt: (p: Uint8Array, r: Uint8Array | string) => Uint8Array; movedPrefixes: Set<string>};
 let door: Door = {kind: 'closed'};
 
 /* one sealed write at a time, so the last stored is the newest bucket (writes arrive back to back) */
@@ -75,38 +75,30 @@ function persist(): Promise<void> {
  * the bucket. Stored sealed first, then the plain one removed - a stop between the two leaves both, never
  * neither. A store the bucket already has is not overwritten: the old record is left for the next look.
  * The old records were the phone's, not an identity's: the first identity opened on this net takes them.
+ * Each feature names its own (bucketStorage's moves), so core never names a plugin's records.
  */
 type Move = {legacy: () => string; store: () => string; key: string};
-const MOVES: Move[] = [
-  /* the Key Chain list (keyChainRecorder keychainListKey); store names as the CLI's bucket (bucket/cli/home.js) */
-  {
-    legacy: () => (currentNet() === 'test' ? 'okrn.keychain.test.list' : 'okrn.keychain.list'),
-    store: () => keychainStore(),
-    key: 'list',
-  },
-];
+const MOVES: Move[] = [];
 
-/** The Key Chain's store in the bucket on the current net (the CLI's names: keychain / keychain-test). */
-export function keychainStore(): string {
-  return currentNet() === 'test' ? 'keychain-test' : 'keychain';
-}
-
-async function moveOldRecords(): Promise<void> {
+/* old plain records -> keys of one store in the open bucket: sealed first, then the plain ones removed */
+async function moveIn(store: string, pairs: {legacy: string; key: string}[]): Promise<void> {
   if (door.kind !== 'bucket') return;
+  const kv = bucketLib.kv(door.bucket, store);
   const moved: string[] = [];
-  for (const m of MOVES) {
-    const legacy = m.legacy();
+  for (const {legacy, key} of pairs) {
     const old = await AsyncStorage.getItem(legacy);
-    if (old === null) continue;
-    const kv = bucketLib.kv(door.bucket, m.store());
-    if (kv.getItem(m.key) !== null) continue;
-    kv.setItem(m.key, old);
+    if (old === null || kv.getItem(key) !== null) continue;
+    kv.setItem(key, old);
     moved.push(legacy);
   }
   if (!moved.length) return;
   await persist();
   for (const k of moved) await AsyncStorage.removeItem(k);
-  console.log(`[bucket] moved into this identity's bucket: ${moved.join(', ')}`);
+  console.log(`[bucket] moved into this identity's bucket (${store}): ${moved.length > 3 ? `${moved.length} records` : moved.join(', ')}`);
+}
+
+async function moveOldRecords(): Promise<void> {
+  for (const m of MOVES) await moveIn(m.store(), [{legacy: m.legacy(), key: m.key}]);
 }
 
 /** A feature's storage: its store in the opened bucket, or today's plain storage for a key with no identity. */
@@ -114,13 +106,21 @@ export type BucketKv = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem(key: string): Promise<void>;
+  /**
+   * Move in every old plain record under one prefix of this store's keys, once per open bucket - for records
+   * that belong to one key, not to the phone (Passwords' stores, each named by its key's id): the feature
+   * calls it when that key's store is first read, so another key's records are never taken.
+   */
+  moveInPrefix(prefix: string): Promise<void>;
 };
 
 /**
  * One store of the open door. store: the store's name in the bucket; legacy: the plain record each key was
- * kept under before (only a key with no identity still uses it).
+ * kept under before (only a key with no identity still uses it); moves: the keys whose old plain record moves
+ * into the bucket the first time it opens.
  */
-export function bucketStorage(store: () => string, legacy: (key: string) => string): BucketKv {
+export function bucketStorage(store: () => string, legacy: (key: string) => string, moves: string[] = []): BucketKv {
+  for (const key of moves) MOVES.push({legacy: () => legacy(key), store, key});
   const refused = (): Error =>
     Object.assign(new Error('no bucket is open: unlock the key and continue past the identity check'), {code: 'EBUCKET_CLOSED'});
   return {
@@ -141,6 +141,16 @@ export function bucketStorage(store: () => string, legacy: (key: string) => stri
       bucketLib.kv(door.bucket, store()).removeItem(key);
       await persist();
     },
+    async moveInPrefix(prefix) {
+      if (door.kind !== 'bucket') return;
+      const name = store();
+      const done = `${name} ${prefix}`;
+      if (door.movedPrefixes.has(done)) return;
+      door.movedPrefixes.add(done);
+      const from = legacy(prefix);
+      const old = (await AsyncStorage.getAllKeys()).filter(k => k.startsWith(from));
+      await moveIn(name, old.map(k => ({legacy: k, key: prefix + k.slice(from.length)})));
+    },
   };
 }
 
@@ -155,7 +165,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   const {recipient} = await okcrypto.deviceAge.identity(bucketLib.AGE_LABEL);
   const encrypt = (p: Uint8Array, r: Uint8Array | string) => okcrypto.deviceAge.encrypt(p, r);
   if (!text) {
-    door = {kind: 'bucket', identity, bucket: bucketLib.create({owner: identity}), recipient, encrypt};
+    door = {kind: 'bucket', identity, bucket: bucketLib.create({owner: identity}), recipient, encrypt, movedPrefixes: new Set()};
     await persist();
     await moveOldRecords();
     return {created: true};
@@ -169,7 +179,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
      */
     decrypt: (age: Uint8Array, label: string) => okcrypto.deviceAge.decrypt(age, label, {requirePress: true, confirm: () => onPress?.(), onKeepAlive: () => onPress?.()}),
   });
-  door = {kind: 'bucket', identity, bucket, recipient, encrypt};
+  door = {kind: 'bucket', identity, bucket, recipient, encrypt, movedPrefixes: new Set()};
   await moveOldRecords();
   return {created: false};
 }
