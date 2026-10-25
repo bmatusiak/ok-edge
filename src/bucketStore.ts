@@ -38,6 +38,7 @@ export function closeBucket(): void {
  */
 export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<{created: boolean}> {
   const text = await AsyncStorage.getItem(KEY(identity));
+  console.log(`[bucket] ${identity.slice(0, 12)}: ${text ? 'a sealed bucket is stored - the key opens it' : 'none stored - sealing a new one'}`);
   if (!text) {
     const b = bucketLib.create({owner: identity});
     const {recipient} = await okcrypto.deviceAge.identity(bucketLib.AGE_LABEL);
