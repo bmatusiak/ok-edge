@@ -17,13 +17,13 @@ import {theme} from '../ui/theme';
 import {netTag} from '../net';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {ensureNametag} from '../edgeDevices';
-import {openIdentityBucket, openLegacyStorage} from '../bucketStore';
+import {bucketState, openIdentityBucket, openLegacyStorage} from '../bucketStore';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 
 type Read =
   | {kind: 'checking'}
-  | {kind: 'read'; identity: string; nametag: string | null}
+  | {kind: 'read'; identity: string; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'}
   | {kind: 'none'; why: string};
 
 /*
@@ -43,7 +43,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
   const [open, setOpen] = useState<Open>({kind: 'idle'});
 
   /*
-   * CONTINUE OPENS THIS IDENTITY'S BUCKET (Brad, 2026-10-24: "a button press here is needed to decrypt the
+   * THE BUTTON OPENS THIS IDENTITY'S BUCKET (Brad, 2026-10-24: "a button press here is needed to decrypt the
    * container"): the key decapsulates it and asks for its press; then the app opens. A key with no identity
    * to read (no Edge) has no bucket here, and goes on.
    */
@@ -81,12 +81,31 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
       }
       const identity = await soft.identityId();
       const statement = await ensureNametag(soft).catch(() => null);
-      if (live) setRead({kind: 'read', identity, nametag: statement?.nametag ?? null});
+      /* asked here so the button says what it will do; unknown is treated as the press it may need */
+      const bucket = await bucketState(identity).catch(() => 'sealed' as const);
+      if (live) setRead({kind: 'read', identity, nametag: statement?.nametag ?? null, bucket});
     })().catch((e: unknown) => {
       if (live) setRead({kind: 'none', why: `Could not read the identity: ${String((e as Error)?.message ?? e)}`});
     });
     return () => { live = false; };
   }, [attempt]);
+
+  /*
+   * NOTHING TO ASK, NOTHING TO STOP FOR (Brad, 2026-10-25: "the continue button can now be skipped after identity
+   * check is successful AND we already decrypted our bucket before"): the identity was read and this computer
+   * already keeps its bucket opened (the desktop after its first open) - the app opens by itself. Once per read.
+   */
+  useEffect(() => {
+    if (read.kind === 'read' && read.bucket === 'kept') void continueAndOpen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [read]);
+
+  /*
+   * THE BUTTON SAYS WHAT IT DOES (Brad, 2026-10-25: Continue "should turn into Decrypt Bucket"): a sealed bucket is
+   * decrypted by the key (a press); an identity seen for the first time gets a new bucket (no key needed); a key
+   * with no identity has no bucket and just goes on.
+   */
+  const action = read.kind !== 'read' ? 'Continue' : read.bucket === 'none' ? 'Create Bucket' : 'Decrypt Bucket';
 
   return (
     <View style={styles.root}>
@@ -114,7 +133,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         {open.kind === 'failed' ? <Text style={[styles.hint, {color: theme.error}]}>{`The bucket did not open: ${open.why}`}</Text> : null}
         {read.kind === 'none' ? <Btn title="Try again" onPress={() => setAttempt(n => n + 1)} /> : null}
         <Btn
-          title={open.kind === 'failed' ? 'Try again' : 'Continue'}
+          title={open.kind === 'failed' ? 'Try again' : action}
           tone="primary"
           onPress={() => void continueAndOpen()}
           disabled={read.kind === 'checking' || open.kind === 'opening' || open.kind === 'press'}

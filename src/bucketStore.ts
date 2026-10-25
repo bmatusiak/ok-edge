@@ -193,6 +193,17 @@ export async function ensureBucketOpen(
   await openIdentityBucket(await app.edge.identityId(), app.okcrypto as Okcrypto, onPress);
 }
 
+/**
+ * What opening this identity's bucket will take, asked before it is opened (the identity check's button):
+ * 'kept' - this computer already keeps it opened (the desktop, after its first open): no key, no press;
+ * 'sealed' - stored sealed: the key decrypts it, with a press; 'none' - not made yet: a new one, no press.
+ */
+export async function bucketState(identity: string): Promise<'kept' | 'sealed' | 'none'> {
+  const id = identity.toLowerCase();
+  if (desktop && (await desktop.invoke('okedge:bucketHas', id, currentNet()))) return 'kept';
+  return (await AsyncStorage.getItem(KEY(id))) !== null ? 'sealed' : 'none';
+}
+
 /* the key opens a sealed bucket - always with its press */
 async function openSealed(text: string, identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<Bucket> {
   const {bucket} = await bucketLib.openWithKey(text, {
