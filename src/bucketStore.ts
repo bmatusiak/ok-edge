@@ -206,6 +206,9 @@ export async function bucketState(identity: string): Promise<'kept' | 'sealed' |
 
 /* the key opens a sealed bucket - always with its press */
 async function openSealed(text: string, identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<Bucket> {
+  /* the press sheet names this ask as the app's own, not "an identity nobody listed" (required here, not imported:
+     pressAsk reads the Key Chain, which sits on this store) */
+  require('./pressAsk').noteOwnAsk(bucketLib.AGE_LABEL, "this identity's bucket");
   const {bucket} = await bucketLib.openWithKey(text, {
     owner: identity,
     /*

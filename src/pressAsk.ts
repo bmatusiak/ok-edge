@@ -106,6 +106,23 @@ export function deriveNameOf(labelHash: string): string | null {
   return deriveNames.get(labelHash.toLowerCase()) ?? null;
 }
 
+/*
+ * THE APP'S OWN ASK, RIGHT NOW (box/Pixel, 2026-10-25: opening this identity's bucket showed "an identity not in your
+ * Key Chain - nobody listed it, if you did not ask for it, let it run out" - the app had asked). A feature that is
+ * about to ask the key for a label notes it here; for a short while the sheet names it as this app's ask and drops
+ * the warning. Only for that while: the same label asked by anything else later still gets the warning, so a
+ * computer cannot borrow the bucket's label to look like the app.
+ */
+const OWN_ASK_MS = 30_000;
+const ownAsks = new Map<string, {what: string; at: number}>();
+export function noteOwnAsk(label: string, what: string): void {
+  ownAsks.set(hashOf(label), {what, at: Date.now()});
+}
+export function ownAskOf(labelHash: string, now = Date.now()): string | null {
+  const a = ownAsks.get(labelHash.toLowerCase());
+  return a && now - a.at < OWN_ASK_MS ? a.what : null;
+}
+
 export function latestPressAt(): number {
   return lastPress ? lastPress.at : 0;
 }
