@@ -28,7 +28,7 @@ const CHANNELS = new Set([
   /* which key the page has open, so a CLI reaches the same one (electron/desktop/hosting.js) */
   'okedge:activeKey',
   /* the sync service this app hosts, and pairing a phone from the Sync tab (electron/desktop/sync.js) */
-  'okedge:syncState', 'okedge:syncNet', 'okedge:syncEnable','okedge:syncPair', 'okedge:syncPairCancel', 'okedge:syncForget',
+  'okedge:syncState', 'okedge:syncNet', 'okedge:syncEnable', 'okedge:syncSetOn', 'okedge:syncPair', 'okedge:syncPairCancel', 'okedge:syncForget',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',

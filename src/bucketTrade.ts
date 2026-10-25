@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {bytes as okbytes} from 'node-onlykey-lib';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
-import {bucketTraded} from './bucketEvents';
+import {phoneSyncAllowed, phoneSyncChecked, phoneSyncTraded} from './sync';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
@@ -78,6 +78,8 @@ export function isTradeMessage(msg: any): boolean {
 /** Answer one round of a trade from a paired computer. */
 export async function handleTrade(msg: any, from: string): Promise<unknown> {
   console.log(`[bucket] ${msg.type} arrived (${JSON.stringify(msg).length} bytes)`);
+  /* the Sync tab's switch off, or no bucket open: the same plain refusal as any other (no hint about the bucket) */
+  if (!phoneSyncAllowed()) { console.log(`[bucket] ${msg.type}: refused (sync is off on this phone)`); return {ok: false, refusal: 'no'}; }
   if (msg.type === bucketLib.trade.TYPES.HELLO) await ensureMe().catch((e: unknown) => { me = null; console.log(`[bucket] no proof material: ${String((e as Error)?.message ?? e)}`); });
   let out: any;
   try {
@@ -89,12 +91,26 @@ export async function handleTrade(msg: any, from: string): Promise<unknown> {
     console.log(`[bucket] a trade message failed (${msg.type}): ${String((e as Error)?.stack ?? e).slice(0, 400)}`);
     throw e;
   }
+  /* a check answered: the two states compared, and each feature as it is here - for the Sync tab (src/sync.ts) */
+  if (msg.type === bucketLib.trade.TYPES.PROVE && out?.ok && out.state && msg.state) {
+    const b = tradeBucket()?.bucket;
+    const differs: string[] = bucketLib.replicate.differs(out.state, msg.state);
+    const stores: Record<string, {items: number; same: boolean}> = {};
+    if (b) {
+      for (const [name, units] of Object.entries(bucketLib.replicate.summarize(b, {rules: RULES}) as Record<string, Record<string, unknown>>)) {
+        /* a split store's items are its parts by id; the part for its other fields (ending in \u0001) is not an item */
+        const items = Object.keys(units).filter(k => !k.endsWith('\u0001')).length;
+        if (items) stores[name] = {items, same: !differs.includes(name)};
+      }
+    }
+    phoneSyncChecked(out.state.hash === msg.state.hash, stores);
+  }
   if (msg.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
     await saveTradedBucket().catch((e: unknown) => { console.log(`[bucket] the traded bucket was not stored: ${String((e as Error)?.message ?? e)}`); throw e; });
     const n = Object.values(out.taken || {}).reduce((a: number, b: any) => a + Number(b), 0);
     console.log(`[bucket] traded with a paired computer: took ${n}`);
-    /* a screen holding a decrypted copy of a changed store asks to decrypt again (Passwords' banner) */
-    bucketTraded(Object.keys(out.taken || {}).filter(k => Number(out.taken[k]) > 0));
+    /* the Sync tab's state - and through it, a screen holding a decrypted copy of a changed store asks to decrypt again */
+    phoneSyncTraded(out.taken || {});
   }
   if (out && out.ok === false) console.log(`[bucket] a trade was refused (${msg.type})`);
   return out;

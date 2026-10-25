@@ -36,7 +36,9 @@ let pairing = null;
 let cancelled = false;
 /* the stores the running trade took changes into (its "sync: took" lines), said to the page when it ends */
 const tookStores = new Set();
-let state = { enabled: true, service: 'off', net: null, last: null, trading: false, took: null, lines: [], pair: null };
+/* the stores it gave to (its "sync: giving" lines): with the took ones, the stores a sync changed */
+const gaveStores = new Set();
+let state = { role: 'computer', enabled: true, service: 'off', net: null, last: null, trading: false, stores: {}, took: null, lines: [], pair: null };
 
 const store = () => require('node-onlykey-lib/cli/clipair-store');
 
@@ -58,6 +60,10 @@ function peers() {
     address: p.address || null,
     phoneId: String(p.phoneId || '').slice(0, 8) || null,
     renewedAt: p.renewedAt || null,
+    /* the phone side's row facts, so the one card shows the same (src/ui/PairedDevicesCard.tsx) */
+    code: p.code || null,
+    lastUsed: p.lastUsed || null,
+    on: !p.off,
   }));
 }
 
@@ -107,7 +113,11 @@ function startService() {
   if (!snapshot().enabled) { changed({ service: 'off', net: wantNet }); return; }
   if (!peers().length) { changed({ service: 'no-peers', net: wantNet }); return; }
   const net = wantNet;
-  const proc = runCli(['--ble', '--service', ...(net === 'test' ? ['--test-mode'] : [])], (line) => {
+  /*
+   * the lib's service with this app as its key (the plain CLI reaches a running desktop app): it opens its own Bluetooth
+   * link to each phone this computer is cli-paired with and has switched on (the Sync tab's toggles)
+   */
+  const proc = runCli(['--service', ...(net === 'test' ? ['--test-mode'] : [])], (line) => {
     if (child !== proc) return;
     /*
      * The sync service's own lines (node-onlykey-lib bucket/cli/service.js, bucket/cli/trade.js), after the agent's
@@ -121,6 +131,8 @@ function startService() {
      */
     const s = line.replace(/^edge: /, '');
     const took = /^sync: took (\{.*\})$/.exec(s);
+    const giving = /^sync: giving (\{.*\})/.exec(s);
+    const storesLine = /^sync: stores (\{.*\})$/.exec(s);
     const elsewhere = /^sync: runs in pid (\d+) \((.*)\)/.exec(s);
     if (elsewhere) {
       /*
@@ -132,6 +144,22 @@ function startService() {
       proc.kill();
       retry = setTimeout(startService, RETRY_MS);
     } else if (/^sync: trading\b/.test(s)) changed({ lines: keep(line), trading: true });
+    else if (giving) {
+      try { for (const st of Object.keys(JSON.parse(giving[1]))) gaveStores.add(st); } catch { /* not a count line */ }
+      changed({ lines: keep(line) });
+    } else if (storesLine) {
+      /* each feature after the trade: its items, whether it matches; a store this trade took into or gave from changed now */
+      let now = {};
+      try { now = JSON.parse(storesLine[1]); } catch { /* not a stores line */ }
+      const at = Date.now();
+      const stores = {};
+      for (const [name, x] of Object.entries(now)) {
+        const moved = tookStores.has(name) || gaveStores.has(name);
+        stores[name] = { items: x.items, same: x.same, checkedAt: at, changedAt: moved ? at : ((state.stores || {})[name] || {}).changedAt || null };
+      }
+      gaveStores.clear();
+      changed({ lines: keep(line), stores });
+    }
     else if (took) {
       /* held until the trade ends: the CLI writes the kept file after its last round, and a screen reading it now would read it old */
       try { for (const st of Object.keys(JSON.parse(took[1]))) tookStores.add(st); } catch { /* not a count line */ }
@@ -180,6 +208,13 @@ function setNet(net) {
   wantNet = next;
   if (!next) changed({ service: 'off', net: null });
   else startService();
+  return snapshot();
+}
+
+/* a paired phone switched on or off here (off: the service leaves it alone; the lib reads it each trade) */
+function setOn(address, on) {
+  store().setOn(address, on !== false);
+  changed({});
   return snapshot();
 }
 
@@ -249,6 +284,7 @@ module.exports = {
     'okedge:syncState': () => snapshot(),
     'okedge:syncNet': (net) => setNet(net),
     'okedge:syncEnable': (on) => setEnabled(on),
+    'okedge:syncSetOn': (address, on) => setOn(address, on),
     'okedge:syncPair': () => pairPhone(),
     'okedge:syncPairCancel': () => cancelPair(),
     'okedge:syncForget': (address) => forget(address),

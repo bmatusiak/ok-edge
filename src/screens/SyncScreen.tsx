@@ -1,65 +1,95 @@
 /*
- * THE SYNC TAB (Brad, 2026-10-25): the 🔁 in the top bar leads here, on the phone and the desktop alike. It says what
- * the sync service is doing and lists the paired devices it syncs with; a new one is paired here, no CLI needed.
+ * THE SYNC TAB, ONE CODE ON THE PHONE AND THE DESKTOP (Brad, 2026-10-25: "the whole idea of using this platform style
+ * is to use identical code, so the bugs are fixed in 1 spot"). The desktop's ⇄ in the top bar leads here; the phone's
+ * Bluetooth tab has a button to it.
  *
- *   - The desktop HOSTS the service while it runs (electron/desktop/sync.js): it reaches the phones it is cli-paired
- *     with and trades this computer's bucket with them whenever it changes, and on a slow timer.
- *   - The phone is reached: a paired computer's service trades with it while the app is open and its Bluetooth API is
- *     on (src/bucketTrade.ts answers).
+ *   - Sync service: the switch, what the service is doing, the last sync.
+ *   - Features: each store in the bucket - its items, whether it matches the other device, when it was last checked
+ *     and last changed by a sync ("a panel that shows the status of each feature, and last sync timestamps").
+ *   - Paired devices: the cli pair, the same card on both sides (src/ui/PairedDevicesCard.tsx).
+ * Where the state comes from is src/sync.ts's business; the words follow the side (the phone is reached, the computer
+ * reaches).
  */
 import React from 'react';
 import {ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {Section} from '../ui/components';
 import {PairedDevicesCard} from '../ui/PairedDevicesCard';
 import {theme} from '../ui/theme';
-import {pairGate, sync, useSync, type SyncState} from '../sync';
+import {pairGate, sync, useSync, type SyncState, type SyncStore} from '../sync';
 
-const SERVICE_TEXT: Record<SyncState['service'], string> = {
-  'off': 'Waiting - it starts once the key is unlocked and its bucket is open.',
-  'no-peers': 'Waiting - no phone is paired with this computer yet.',
-  'running': 'Running - this computer\'s bucket is synced with the phones below.',
-  'stopped': 'Not reaching a phone right now - trying again in a minute.',
-  'elsewhere': 'Another sync service on this computer has it - one per computer.',
-};
+function serviceText(s: SyncState): string {
+  const phone = s.role === 'phone';
+  switch (s.service) {
+    case 'off': return 'Waiting - it starts once the key is unlocked and its bucket is open.';
+    case 'no-peers': return phone ? 'Waiting - no computer is paired with this phone yet.' : 'Waiting - no phone is paired with this computer yet.';
+    case 'running': return phone
+      ? 'Running - the paired computers below sync this phone\'s bucket whenever they reach it (the app open, its Bluetooth API on).'
+      : 'Running - this computer\'s bucket is synced with the phones below.';
+    case 'stopped': return 'Not reaching a phone right now - trying again in a minute.';
+    case 'elsewhere': return `Another sync service on this computer has it - one per computer${s.elsewhere ? ` (${s.elsewhere})` : ''}.`;
+    default: return '';
+  }
+}
 
-function when(at: number): string {
+/* a store's name, in the app's words (a testnet store is the same feature) */
+const FEATURE: Record<string, string> = {passwords: 'Passwords', guestbook: 'Guest Book', keychain: 'Key Chain', cryptobox: 'Cryptobox'};
+const featureName = (store: string) => FEATURE[store.replace(/-test$/, '')] ?? store;
+
+function when(at: number | null | undefined): string {
+  if (!at) return 'never';
   const s = Math.max(0, Math.round((Date.now() - at) / 1000));
   if (s < 60) return 'just now';
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return new Date(at).toLocaleString();
+}
+
+function FeatureRow({name, s}: {name: string; s: SyncStore}) {
+  const mark = s.same === null ? '?' : s.same ? '✓' : '≠';
+  const color = s.same === null ? theme.textDim : s.same ? theme.ok : theme.warn;
+  return (
+    <View style={styles.feature}>
+      <Text style={[styles.mark, {color}]}>{mark}</Text>
+      <View style={styles.featureText}>
+        <Text style={styles.name}>{featureName(name)}</Text>
+        <Text style={styles.sub}>
+          {`${s.items} item${s.items === 1 ? '' : 's'} · ${s.same === null ? 'not compared yet' : s.same ? 'in sync' : 'differs'} · checked ${when(s.checkedAt)} · changed by a sync ${when(s.changedAt)}`}
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 export function SyncScreen({testing = false}: {testing?: boolean}) {
   const state = useSync();
+  if (!state) return null;
+  const device = state.role === 'phone' ? 'phone' : 'computer';
+  const stores = Object.entries(state.stores ?? {}).sort(([a], [b]) => featureName(a).localeCompare(featureName(b)));
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.page}>
       <Section title="Sync service">
-        {state ? (
-          <>
-            <View style={styles.row}>
-              <Text style={styles.name}>Sync this computer's bucket</Text>
-              <Switch value={state.enabled} onValueChange={on => void sync.setEnabled(on)} />
-            </View>
-            <Text style={state.service === 'running' ? styles.on : styles.note}>
-              {state.enabled
-                ? `${SERVICE_TEXT[state.service]}${state.service === 'elsewhere' && state.elsewhere ? ` (${state.elsewhere})` : ''}`
-                : 'Turned off - nothing is synced until it is turned on.'}
-            </Text>
-            {state.net ? <Text style={styles.note}>Net: {state.net === 'test' ? 'testnet' : 'live'}</Text> : null}
-            <Text style={styles.note}>
-              {state.last ? `Last sync ${when(state.last.at)}: ${state.last.line.replace(/^(edge: )?sync:\s*/, '')}` : 'No sync yet.'}
-            </Text>
-            {testing && state.lines.length ? (
-              <Text style={styles.mono}>{state.lines.slice(-8).join('\n')}</Text>
-            ) : null}
-          </>
+        <View style={styles.row}>
+          <Text style={styles.name}>{`Sync this ${device}'s bucket`}</Text>
+          <Switch value={state.enabled} onValueChange={on => void sync.setEnabled(on)} />
+        </View>
+        <Text style={state.enabled && state.service === 'running' ? styles.on : styles.note}>
+          {state.enabled ? serviceText(state) : 'Turned off - nothing is synced until it is turned on.'}
+        </Text>
+        {state.net ? <Text style={styles.note}>Net: {state.net === 'test' ? 'testnet' : 'live'}</Text> : null}
+        <Text style={styles.note}>
+          {state.last ? `Last sync ${when(state.last.at)}: ${state.last.line.replace(/^(edge: )?sync:\s*/, '')}` : 'No sync yet.'}
+        </Text>
+        {testing && state.lines.length ? <Text style={styles.mono}>{state.lines.slice(-8).join('\n')}</Text> : null}
+      </Section>
+
+      <Section title="Features">
+        {stores.length ? (
+          stores.map(([name, s]) => <FeatureRow key={name} name={name} s={s} />)
         ) : (
-          <Text style={styles.note}>
-            A paired computer syncs its bucket with this phone whenever it reaches it - while the app is open, with the
-            Bluetooth API on.
-          </Text>
+          <Text style={styles.note}>Each feature shows here after the first sync check.</Text>
         )}
       </Section>
+
       {pairGate ? <PairedDevicesCard gate={pairGate} testing={testing} /> : null}
     </ScrollView>
   );
@@ -72,6 +102,10 @@ const styles = StyleSheet.create({
   on: {color: theme.ok, fontSize: 13, marginBottom: 6},
   row: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6},
   name: {color: theme.text, fontSize: 14},
+  sub: {color: theme.textDim, fontSize: 11},
   note: {color: theme.textDim, fontSize: 12, lineHeight: 17, marginVertical: 2},
   mono: {fontFamily: theme.mono, color: theme.textSecondary, fontSize: 11, marginTop: 6},
+  feature: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8},
+  featureText: {flex: 1},
+  mark: {fontSize: 16, width: 18, textAlign: 'center'},
 });
