@@ -4,6 +4,7 @@ import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 
 import {chooseTarget, pressKeyButton, readKeyState, targetLabel, type Target} from '../../../credprovider/flow';
 import {supportsKnown} from '../../../firmwareFeatures';
+import {ensureBucketOpen} from '../../../bucketStore';
 import {useSecureScreen} from '../../../hooks/useSecureScreen';
 import {getOnlyKey} from '../../../onlykey';
 import {Btn, Section} from '../../../ui/components';
@@ -96,6 +97,8 @@ export default function AutofillSheet() {
     }
     const okcrypto = app.okcrypto as Okcrypto;
     setStep({kind: 'opening', target});
+    /* the stores are in the identity's sealed bucket (plan S2): opened here when the app's door is not open */
+    await ensureBucketOpen(app);
     const r = withKey
       ? await stores.openWithKey(target.backend, okcrypto)
       : await stores.tryOpen(target.backend, okcrypto);

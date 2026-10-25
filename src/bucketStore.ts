@@ -155,6 +155,23 @@ export function bucketStorage(store: () => string, legacy: (key: string) => stri
 }
 
 /**
+ * A FLOW THAT STARTS WITHOUT THE DOOR (the autofill sheet: Android opens it over another app, the identity check
+ * may never have run in this process): open the bucket of the key it talks to, as the identity check does - the
+ * key's press included. A door already open is used as it is; a key with no Edge identity keeps plain storage.
+ */
+export async function ensureBucketOpen(
+  app: {edge: {probe(o?: {timeoutMs?: number}): Promise<string>; identityId(): Promise<string>}; okcrypto: unknown},
+  onPress?: () => void,
+): Promise<void> {
+  if (door.kind !== 'closed') return;
+  if ((await app.edge.probe({timeoutMs: 4000})) !== 'edge') {
+    openLegacyStorage();
+    return;
+  }
+  await openIdentityBucket(await app.edge.identityId(), app.okcrypto as Okcrypto, onPress);
+}
+
+/**
  * Open this identity's bucket with the key - or seal a new, empty one the first time (no press).
  * onPress: the key is waiting for the press (the soft key's is the app's to give).
  */
