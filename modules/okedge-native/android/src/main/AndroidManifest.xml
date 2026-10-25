@@ -102,10 +102,13 @@
             android:taskAffinity=""
             android:exported="false" />
 
-        <!-- Merged into the app's own activity (expo prebuild writes it as <applicationId>.MainActivity):
-             brings the app forward when an OnlyKey is plugged in (res/xml/device_filter.xml), as
-             ok-rn's manifest does. -->
-        <activity android:name="${applicationId}.MainActivity" android:exported="true">
+        <!-- Merged into the app's own activity: brings the app forward when an OnlyKey is plugged in
+             (res/xml/device_filter.xml), as ok-rn's manifest does. Named by its CLASS, which lives in the
+             code's namespace (app.json "package": com.okedge) - not by the applicationId, which a build
+             may change (OKEDGE_APP_ID=com.okrn): "${applicationId}.MainActivity" became
+             com.okrn.MainActivity, a class that does not exist, and plugging a hard key in crashed the
+             app (Pixel, 2026-10-24). -->
+        <activity android:name="com.okedge.MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
