@@ -206,10 +206,14 @@ const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
  * EDGE SECOND, SETTINGS LAST (Brad, 2026-10-11: "Settings Tab,, should be at the Bottom, in the
  * list of tabs,, and Edge should be 2nd").
  */
+const LOCKED_TESTING_TABS: readonly Tab[] = ['This Key' as Tab, TESTING_TAB];
 function shownTabs(testingOn: boolean, testingLocked = false): readonly Tab[] {
   const testingTabs = __DEV__ && testingOn;
-  /* testing mode with the key still locked (Brad, 2026-10-25): the Testing tab and nothing else - no bucket is open */
-  if (testingTabs && testingLocked) return [TESTING_TAB];
+  /*
+   * testing mode with the key still locked (Brad, 2026-10-25): This Key - "Check config mode" is there - and Testing,
+   * nothing else: no bucket is open
+   */
+  if (testingTabs && testingLocked) return [LOCKED_TESTING_TABS[0], LOCKED_TESTING_TABS[1]];
   /* the desktop hosts the hard key's Edge (useEdge: the key is the hard key there), whatever its bundled soft key has */
   const edge = testingTabs || hasSoftKeyPlugin('edge') || shell === 'electron';
   const [first, ...rest] = TABS.filter(t => t !== 'Settings');
@@ -1012,6 +1016,19 @@ function Shell() {
   useEffect(() => {
     if (emu.device === 'unlocked') awaitingUnlock.current = false;
     /*
+     * CONFIG MODE HAS NO IDENTITY CHECK (Pixel, 2026-10-25: the PIN typed for config mode sent the app to the identity
+     * check, which spun - in config mode the key takes settings writes, not the bucket identity's derive). Config mode
+     * open: the app opens on every tab for the settings work, with no bucket opened (its stores read nothing and refuse
+     * writes); a restart leaves config mode. Waiting for its check (PRE) the key is not opened either - testing mode
+     * stays on This Key and Testing, where "Check config mode" is.
+     */
+    if (configMode === ON && emu.device === 'unlocked') {
+      closeBucket();
+      if (!passed) setPassed(true);
+      setPhase('main');
+      return;
+    }
+    /*
      * TESTING MODE (Brad, 2026-10-25: "after pressing Enter testing mode it should go to the TESTING tab"; "the softkey
      * should still be locked after entering testing mode"; "it should lock into testing mode and never go out until
      * app restart"). With the key locked - or a key switch still waiting for this key's unlock - the app is open on the
@@ -1019,7 +1036,7 @@ function Shell() {
      * the PIN but not which identity the key is; then every tab.
      */
     if (testing.enabled) {
-      if (emu.device === 'unlocked' && !awaitingUnlock.current) {
+      if (emu.device === 'unlocked' && !awaitingUnlock.current && configMode !== PRE) {
         setPhase(prev => (prev === 'identity' || (prev === 'main' && passed) ? prev : 'identity'));
       } else {
         if (passed) setPassed(false);
@@ -1085,10 +1102,10 @@ function Shell() {
      */
   }, [testing.enabled, emu.device, emu.state, configMode, splashDone, doorKey, passed]);
 
-  /* testing mode before the identity check: the Testing tab is the only one, so it is the one shown */
+  /* testing mode before the identity check: only This Key and Testing are shown - any other tab goes to Testing */
   useEffect(() => {
-    if (testing.enabled && !passed && phase === 'main') setTab(TESTING_TAB);
-  }, [testing.enabled, passed, phase]);
+    if (testing.enabled && !passed && phase === 'main' && !LOCKED_TESTING_TABS.includes(tab)) setTab(TESTING_TAB);
+  }, [testing.enabled, passed, phase, tab]);
 
   const ready = phase === 'main';
 
