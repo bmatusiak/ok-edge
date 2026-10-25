@@ -16,6 +16,7 @@ import {theme} from '../../ui/theme';
 import type {RecipientContact, RecipientsService} from '../recipients';
 import type {TabContext} from '../types';
 import {ME, openBox, type BoxMessage} from './service';
+import {onBucketTraded} from '../../bucketEvents';
 
 /*
  * CRYPTOBOX (onlykey-edge/features/CRYPTOBOX-SPEC.md; Brad, 2026-10-18: "i want to store messages
@@ -74,6 +75,16 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
   useEffect(() => {
     reload().catch(e => setError(String(e?.message ?? e)));
   }, [reload]);
+  /*
+   * messages and contacts that arrived from a sync (src/bucketEvents.ts): read in at once - what is kept is armored,
+   * so nothing has to be decrypted to list it (opening one is its own press, as always)
+   */
+  useEffect(
+    () => onBucketTraded(stores => {
+      if (stores.some(s => s.startsWith('cryptobox') || s.startsWith('guestbook'))) reload().catch(() => {});
+    }),
+    [reload],
+  );
 
   const byId = useMemo(() => new Map(people.map(p => [p.id, p])), [people]);
   const me = byId.get(ME) ?? null;
