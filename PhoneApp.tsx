@@ -1001,7 +1001,8 @@ function Shell() {
 
   useEffect(() => {
     if (testing.enabled) {
-      setPhase('main');
+      /* testing mode skips the PIN, not the identity check: which identity the key is matters on the testnet too */
+      setPhase(prev => (prev === 'main' || prev === 'identity' ? prev : 'identity'));
       return;
     }
     /*
