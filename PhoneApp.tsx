@@ -78,6 +78,7 @@ import {btTransit} from './src/btTransit';
 import {EdgeScreen} from './src/screens/EdgeScreen';
 import {EdgeRequestSheet} from './src/ui/EdgeRequestSheet';
 import {useDesktopHost} from './src/hooks/useDesktopHost';
+import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {shell} from './src/platform';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
@@ -219,7 +220,8 @@ function shownTabs(testingOn: boolean): readonly Tab[] {
 }
 
 /** Splash until the device can answer, then a door, then the app. */
-type Phase = 'splash' | 'login' | 'pin' | 'setup' | 'main';
+/* identity: after the unlock, before the app - which identity the key is (IdentityCheckScreen, Brad 2026-10-24) */
+type Phase = 'splash' | 'login' | 'pin' | 'setup' | 'identity' | 'main';
 
 /*
  * The provider has to sit ABOVE whatever reads insets, so the shell is its own
@@ -1002,7 +1004,8 @@ function Shell() {
      * stays. Pressing the check sets ON and the next run opens the door.
      */
     if (emu.device === 'unlocked' && configMode !== PRE) {
-      setPhase('main');
+      /* a fresh unlock goes through the identity check first; an open app stays open */
+      setPhase(prev => (prev === 'main' || prev === 'identity' ? prev : 'identity'));
       return;
     }
     setPhase(prev => {
@@ -1323,6 +1326,8 @@ function Shell() {
               onProvision={emu.provision}
               led={keys.backend === 'embedded' ? emu.led : undefined}
             />
+          ) : phase === 'identity' ? (
+            <IdentityCheckScreen keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => setPhase('main')} />
           ) : phase === 'pin' ? (
             <PinScreen
               onBypass={keys.backend === 'embedded' && keys.soft.state === 'running' ? () => void devLogin() : undefined}

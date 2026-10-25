@@ -430,6 +430,11 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     await this.edge.revoke(grantId, {urgent: true});
   }
 
+  /* this key's identity id - the owner key's (lib edge identityId: one read per connection), the same on every device restored from one backup */
+  async identityId(): Promise<string> {
+    return this.edge.identityId();
+  }
+
   async state(): Promise<EdgeKeyState> {
     const h = await this.keyHead();
     return {owed: h.owed, held: h.held, refusedTx: h.refusedTx ?? 0};
