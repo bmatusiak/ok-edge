@@ -32,6 +32,7 @@ const RULES = {
   keychain: kcRule, 'keychain-test': kcRule,
   guestbook: bucketLib.rules.guestbook(), 'guestbook-test': bucketLib.rules.guestbook(),
   passwords: bucketLib.rules.passwords(),
+  cryptobox: bucketLib.rules.cryptobox(), 'cryptobox-test': bucketLib.rules.cryptobox(),
 };
 
 type Me = {id: string; identityPublicKey: Uint8Array; bucketKey: {secretKey: Uint8Array; publicKey: Uint8Array}; certificate: Uint8Array};
