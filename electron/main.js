@@ -69,6 +69,12 @@ function createWindow() {
     },
   });
   const dev = process.env.OKEDGE_WEB_URL;
+  /*
+   * NO MENU BAR IN PRODUCTION (Brad, 2026-10-25: "can we remove that menu bar in production release, but keep it in
+   * other builds like debug or test"): Electron's File / Edit / View / Window - reload, devtools - stays for the
+   * debug page (OKEDGE_WEB_URL) and the test build; the production window has none.
+   */
+  if (!dev && !TEST) win.removeMenu();
   if (dev) win.loadURL(dev);
   else win.loadURL('https://apps.crp.to/index.html');
   /*
