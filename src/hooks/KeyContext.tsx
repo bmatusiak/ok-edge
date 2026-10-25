@@ -33,6 +33,17 @@ import {BACKEND_NAME, type Backend} from './keySession';
  */
 const KeyBackendContext = createContext<Backend>('embedded');
 
+/*
+ * THE ACTIVE KEY FOR CODE OUTSIDE REACT (box, 2026-10-24: with the hard key unplugged the desktop's identity
+ * check still asked the hard key, and found none). The Edge key code (SoftKeyEdge.open) is called from the
+ * host, the background sync and screens alike; it follows the key this provider says is active - the soft
+ * key or a hard key, on the phone and the desktop the same.
+ */
+let active: Backend = 'embedded';
+export function activeBackend(): Backend {
+  return active;
+}
+
 export function KeyBackendProvider({
   backend,
   children,
@@ -40,6 +51,7 @@ export function KeyBackendProvider({
   backend: Backend;
   children: React.ReactNode;
 }) {
+  active = backend;
   return (
     <KeyBackendContext.Provider value={backend}>
       {children}

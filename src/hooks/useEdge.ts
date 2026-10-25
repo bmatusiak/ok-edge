@@ -13,7 +13,6 @@ import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, typ
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {computerHoldsKey, onKeyFree} from '../vendorBridge';
 import {hasSoftKeyPlugin} from '../buildInfo';
-import {shell} from '../platform';
 import {useBackend} from './KeyContext';
 import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
 import NativeShare from 'okedge-native/specs/NativeShare';
@@ -27,8 +26,8 @@ let real: SoftKeyEdge | null = null;
 
 export function useEdge() {
   const backend = useBackend();
-  /* the phone's soft key with the Edge plugin, or the desktop's hard key (the same plugin; SoftKeyEdge.open picks it) */
-  const wantReal = (backend === 'embedded' && hasSoftKeyPlugin('edge')) || shell === 'electron';
+  /* a hard key (its firmware has Edge or it does not - SoftKeyEdge.open probes), or a soft key with the Edge plugin; phone and desktop alike */
+  const wantReal = backend === 'usb' || hasSoftKeyPlugin('edge');
   const [view, setView] = useState<EdgeView | null>(null);
   const [budgets, setBudgets] = useState<EdgeBudget[]>([]);
   const [past, setPast] = useState<EdgeBudget[]>([]);
@@ -56,7 +55,8 @@ export function useEdge() {
   /* the key to talk to; null = no Edge here (not the soft key with the Edge plugin), or it did not answer (locked?) */
   const source = useCallback(async (): Promise<Source | null> => {
     if (!wantReal) return null;
-    if (!real) real = await SoftKeyEdge.open();
+    /* the key the app is using now: another one (unplugged, picked) is opened afresh */
+    if (!real || real.backend !== backend) real = await SoftKeyEdge.open();
     return real;
   }, [wantReal]);
 

@@ -15,7 +15,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {approve as approveLib, chain, codes, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
-import {getOnlyKey} from './onlykey';
+import {getOnlyKey, type Backend} from './onlykey';
+import {activeBackend} from './hooks/KeyContext';
 import {shell} from './platform';
 import OkEmu from './transport/OkEmu';
 import {chainState, evaluate, loadMirror, takeOwnLinks, type EdgeView} from './edgeStore';
@@ -97,6 +98,9 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   private nextRequest = 1;
   private pressWanted: (() => void) | null = null;
 
+  /* which key this is: the soft key (embedded) or a hard key (usb) - a caller that keeps one reopens when the active key changes */
+  backend: Backend = 'embedded';
+
   private constructor(edge: any, deviceId: Uint8Array) {
     this.edge = edge;
     this.deviceId = deviceId;
@@ -111,16 +115,19 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   }
 
   /*
-   * THE KEY: the soft key on the phone; on the desktop, the hard key on USB (Brad, 2026-10-24: "i
-   * need this to be a 1 to 1 in how it works"). Both run the same Edge firmware plugin, so the
-   * phone's Edge code - the tab, the host, the background sync, the nametag - drives either one.
+   * THE KEY: the one the app is using - its soft key, or a hard key - on the phone and the desktop alike
+   * (Brad, 2026-10-24: "i need this to be a 1 to 1 in how it works"; KeyContext.activeBackend). Both run
+   * the same Edge firmware plugin, so the Edge code - the tab, the host, the background sync, the
+   * nametag - drives either one.
    */
   static async open(): Promise<SoftKeyEdge | null> {
-    const app = await getOnlyKey(shell === 'electron' ? 'usb' : 'embedded');
+    const backend = activeBackend();
+    const app = await getOnlyKey(backend);
     /* 4 s: right after start the background sync's chain reads go first (lib client.js deviceIdentity, 2026-10-04) */
     if ((await app.edge.probe({timeoutMs: 4000})) !== 'edge') return null;
     const {deviceId} = await app.edge.publicKey();
     const soft = new SoftKeyEdge(app.edge, deviceId);
+    soft.backend = backend;
     /*
      * THE DEFAULT NAMETAG, MADE EARLY (Brad, 2026-10-08: "i still had to click change name tag"):
      * the first time the app reaches the key after login (the background sync does, within
