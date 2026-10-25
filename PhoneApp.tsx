@@ -206,8 +206,10 @@ const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
  * EDGE SECOND, SETTINGS LAST (Brad, 2026-10-11: "Settings Tab,, should be at the Bottom, in the
  * list of tabs,, and Edge should be 2nd").
  */
-function shownTabs(testingOn: boolean): readonly Tab[] {
+function shownTabs(testingOn: boolean, testingLocked = false): readonly Tab[] {
   const testingTabs = __DEV__ && testingOn;
+  /* testing mode with the key still locked (Brad, 2026-10-25): the Testing tab and nothing else - no bucket is open */
+  if (testingTabs && testingLocked) return [TESTING_TAB];
   /* the desktop hosts the hard key's Edge (useEdge: the key is the hard key there), whatever its bundled soft key has */
   const edge = testingTabs || hasSoftKeyPlugin('edge') || shell === 'electron';
   const [first, ...rest] = TABS.filter(t => t !== 'Settings');
@@ -936,7 +938,7 @@ function Shell() {
      * must not come back through here - the render's last branch IS the
      * Testing screen, and this would walk round its gate.
      */
-    const valid: readonly string[] = shownTabs(testing.enabled);
+    const valid: readonly string[] = shownTabs(testing.enabled, testing.enabled && !passed);
     void takeResumeTab(valid).then(remembered => {
       if (remembered) setTab(remembered as Tab);
     });
@@ -996,19 +998,34 @@ function Shell() {
   const lastDoorKey = useRef(doorKey);
   /* after a switch, the door waits for THIS key's unlock - testing mode too (Brad, 2026-10-24: hard key out of the Pixel, soft key not logged in, and the app was still inside) */
   const awaitingUnlock = useRef(false);
+  /* past the identity check for this unlock (its Continue / Decrypt Bucket); a lock or a key switch takes it back */
+  const [passed, setPassed] = useState(false);
   useEffect(() => {
     if (lastDoorKey.current === doorKey) return;
     lastDoorKey.current = doorKey;
     awaitingUnlock.current = true;
+    setPassed(false);
     closeBucket();
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
   }, [doorKey]);
 
   useEffect(() => {
     if (emu.device === 'unlocked') awaitingUnlock.current = false;
-    if (testing.enabled && !awaitingUnlock.current) {
-      /* testing mode skips the PIN, not the identity check: which identity the key is matters on the testnet too */
-      setPhase(prev => (prev === 'main' || prev === 'identity' ? prev : 'identity'));
+    /*
+     * TESTING MODE (Brad, 2026-10-25: "after pressing Enter testing mode it should go to the TESTING tab"; "the softkey
+     * should still be locked after entering testing mode"; "it should lock into testing mode and never go out until
+     * app restart"). With the key locked - or a key switch still waiting for this key's unlock - the app is open on the
+     * Testing tab alone, with no bucket open. Its unlock (Login Bypass) goes through the identity check, which skips
+     * the PIN but not which identity the key is; then every tab.
+     */
+    if (testing.enabled) {
+      if (emu.device === 'unlocked' && !awaitingUnlock.current) {
+        setPhase(prev => (prev === 'identity' || (prev === 'main' && passed) ? prev : 'identity'));
+      } else {
+        if (passed) setPassed(false);
+        closeBucket();
+        setPhase('main');
+      }
       return;
     }
     /*
@@ -1043,6 +1060,7 @@ function Shell() {
       if (prev === 'main' || prev === 'identity') {
         /* the door closed: the opened bucket goes with it */
         closeBucket();
+        setPassed(false);
         /*
          * WHY THE DOOR CLOSED, to logcat.
          *
@@ -1065,7 +1083,12 @@ function Shell() {
      * 'unlocked' since the PIN landed - so without it the door would never
      * reopen and the check button would look dead.
      */
-  }, [testing.enabled, emu.device, emu.state, configMode, splashDone, doorKey]);
+  }, [testing.enabled, emu.device, emu.state, configMode, splashDone, doorKey, passed]);
+
+  /* testing mode before the identity check: the Testing tab is the only one, so it is the one shown */
+  useEffect(() => {
+    if (testing.enabled && !passed && phase === 'main') setTab(TESTING_TAB);
+  }, [testing.enabled, passed, phase]);
 
   const ready = phase === 'main';
 
@@ -1328,7 +1351,8 @@ function Shell() {
               onTesting={() => {
                 /* the testnet's own soft key (src/net.ts): started here, before anything reads it */
                 if (keys.backend === 'embedded') void keys.soft.ensureStarted('test').then(warnNet('test'));
-                testing.toggle();
+                /* on, never toggled: testing mode lasts until the app restarts (Brad, 2026-10-25) */
+                testing.setEnabled(true);
                 setTab(TESTING_TAB);
               }}
               onContinue={() => {
@@ -1350,7 +1374,7 @@ function Shell() {
               led={keys.backend === 'embedded' ? emu.led : undefined}
             />
           ) : phase === 'identity' ? (
-            <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => setPhase('main')} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
+            <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => { setPassed(true); setPhase('main'); }} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
           ) : phase === 'pin' ? (
             <PinScreen
               onBypass={keys.backend === 'embedded' && keys.soft.state === 'running' ? () => void devLogin() : undefined}
@@ -1511,7 +1535,7 @@ function Shell() {
 
         <Drawer
           open={drawer && ready}
-          tabs={shownTabs(testing.enabled)}
+          tabs={shownTabs(testing.enabled, testing.enabled && !passed)}
           value={tab}
           onChange={setTab}
           onClose={() => setDrawer(false)}
