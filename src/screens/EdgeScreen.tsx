@@ -811,7 +811,14 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
   const notLive = [...edge.past, ...edge.budgets.filter(b => expiredIds.has(b.grantId))];
   const owing = notLive.filter(b => budgetStatus(b, false, edge.view).kind === 'active');
   const done = notLive.filter(b => budgetStatus(b, false, edge.view).kind !== 'active');
-  if (broken || (ks && ks.owed > 0)) {
+  /*
+   * A RECEIPT OWED FROM BEFORE THIS CHAIN (box developer key, 2026-10-24): a restore's CONTINUE carried a use
+   * still owing its receipt. The key opens no budget until it is paid, and no use of THIS chain waits for it -
+   * so the budget view's Settle (under the waiting use) never shows. Settled from here instead.
+   */
+  const chainOwes = (edge.view?.rows ?? []).some(r => (r.receipt as {status?: string} | undefined)?.status === 'waiting');
+  const carriedOwed = !broken && !!ks && ks.owed > 0 && !chainOwes;
+  if (broken || carriedOwed) {
     items.push({key: 'status', kind: 'node', render: () => (
       <View style={styles.statusStack}>
           {broken ? (
@@ -849,6 +856,12 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
                   {gap ? <Btn title={`Accept loss of ${range}…`} onPress={() => setConfirmLoss(true)} disabled={edge.busy} /> : null}
                 </View>
               )}
+            </View>
+          ) : carriedOwed ? (
+            <View style={styles.mismatch}>
+              <Text style={[styles.receiptTitle, {color: theme.warn}]}>A receipt is still owed from before this chain</Text>
+              <Text style={styles.dim}>This key was restored, and one use from its old chain still owes its receipt. Until that is settled the key opens no budget. Settling records, with a press, that you accept that use without its receipt.</Text>
+              <SettleControls edge={edge} />
             </View>
           ) : null}
       </View>
