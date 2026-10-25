@@ -17,9 +17,9 @@
  * confirm (list.createEntry drops it anyway). A derive is not a use - nothing
  * here touches Edge receipts or budgets.
  */
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 import {currentNet} from './net';
+import {bucketStorage, keychainStore} from './bucketStore';
 
 const keychain = require('node-onlykey-lib/keychain');
 const {sha256} = require('node-onlykey-lib/vendor/@noble/hashes/sha2.js');
@@ -47,6 +47,12 @@ export const KEYCHAIN_LIST_KEY = 'okrn.keychain.list';
 export function keychainListKey(): string {
   return currentNet() === 'test' ? 'okrn.keychain.test.list' : KEYCHAIN_LIST_KEY;
 }
+
+/*
+ * THE LIST'S STORAGE (plan S2): key 'list' in this identity's sealed bucket (src/bucketStore.ts), as the
+ * CLI keeps it. Only a key with no Edge identity still keeps it under keychainListKey() in plain storage.
+ */
+export const keychainList = bucketStorage(keychainStore, () => keychainListKey());
 
 const CODE_SCHEME: Record<number, string> = {132: 'agent-v1', 232: 'agent-v2', 128: 'web'};
 /* agent derivation keytypes (okcrypto OKGETPUBKEY) */
@@ -125,7 +131,7 @@ export function recordDerive(r: DeriveRecord): Promise<void> {
     const now = new Date().toISOString();
     const e = deriveEntry(r, now);
     if (!e) return;
-    const raw = await AsyncStorage.getItem(keychainListKey());
+    const raw = await keychainList.getItem('list');
     const entries: any[] = raw ? keychain.list.parse(raw) : [];
     /* the same key already here by its name (imported from a computer): that entry, not a second one */
     const old = entries.find(x => x.id === e.id) || (keychain.list.findTwin ? keychain.list.findTwin(entries, e) : null);
@@ -138,7 +144,7 @@ export function recordDerive(r: DeriveRecord): Promise<void> {
     } else {
       entries.push(e);
     }
-    await AsyncStorage.setItem(keychainListKey(), keychain.list.serialize(entries));
+    await keychainList.setItem('list', keychain.list.serialize(entries));
     for (const l of listeners) l();
   });
   queue = run.catch(() => {});
@@ -158,11 +164,11 @@ export function recordNamed(fields: {scheme: string; label: string; type: string
       kind: 'derived', scheme: fields.scheme, label: fields.label, type: fields.type,
       publicKey: fields.publicKey, firstSeen: now, lastSeen: now, tools: [fields.tool],
     });
-    const raw = await AsyncStorage.getItem(keychainListKey());
+    const raw = await keychainList.getItem('list');
     const entries: any[] = raw ? keychain.list.parse(raw) : [];
     const {entries: next, added, paired, joined} = keychain.list.merge(entries, [e]);
     if (!added && !paired && !joined) return;
-    await AsyncStorage.setItem(keychainListKey(), keychain.list.serialize(next));
+    await keychainList.setItem('list', keychain.list.serialize(next));
     for (const l of listeners) l();
   });
   queue = run.catch(() => {});
@@ -171,7 +177,7 @@ export function recordNamed(fields: {scheme: string; label: string; type: string
 
 /** This phone's Key Chain list as it is now (public entries). */
 export async function readKeyChainList(): Promise<any[]> {
-  const raw = await AsyncStorage.getItem(keychainListKey());
+  const raw = await keychainList.getItem('list');
   return raw ? keychain.list.parse(raw) : [];
 }
 

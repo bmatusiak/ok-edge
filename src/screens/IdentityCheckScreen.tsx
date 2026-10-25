@@ -17,7 +17,7 @@ import {theme} from '../ui/theme';
 import {netTag} from '../net';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {ensureNametag} from '../edgeDevices';
-import {openIdentityBucket} from '../bucketStore';
+import {openIdentityBucket, openLegacyStorage} from '../bucketStore';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 
@@ -48,7 +48,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
    * to read (no Edge) has no bucket here, and goes on.
    */
   const continueAndOpen = async () => {
-    if (read.kind !== 'read') { onContinue(); return; }
+    if (read.kind !== 'read') { openLegacyStorage(); onContinue(); return; }
     setOpen({kind: 'opening'});
     try {
       const {okcrypto} = await getOnlyKey(activeBackend());

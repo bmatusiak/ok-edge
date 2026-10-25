@@ -6,9 +6,14 @@
  * own X-Wing recipient (node-onlykey-lib bucket sealToKey). Opening it is the key's X-Wing step - the key asks
  * for a press - and the opened bucket lives in memory only, until the door closes (a lock, another key).
  * The first time an identity is seen, an empty bucket is sealed for it: sealing needs no key and no press.
+ *
+ * THE APP'S STORES SIT ON IT (plan S2): bucketStorage(store) is the feature's storage while the door is open.
+ * Every write changes the bucket in memory and stores it sealed again - to the recipient read when it opened,
+ * so a write needs no key and no press. Nothing a store keeps is written anywhere in the clear.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
+import {currentNet} from './net';
 
 type Bucket = ReturnType<typeof bucketLib.create>;
 type Okcrypto = {
@@ -19,17 +24,124 @@ type Okcrypto = {
   };
 };
 
-const KEY = (identity: string): string => `okedge.bucket.${identity.toLowerCase()}`;
-let opened: {identity: string; bucket: Bucket} | null = null;
+/*
+ * ONE BUCKET PER IDENTITY PER NET: the testnet's records stay apart from the live ones, as every other record
+ * does - and okrn.bucket.test.<identity> is a feature's test record by its name (testnet.ts TEST_KEYS), so
+ * Clear testnet removes the testnet's bucket with the rest, without having to open it.
+ */
+const KEY = (identity: string): string => `okrn.bucket.${currentNet() === 'test' ? 'test.' : ''}${identity.toLowerCase()}`;
+
+/*
+ * The door's state. 'bucket': this identity's bucket is open, the stores read and write it. 'legacy': the key
+ * has no Edge identity (stock v3.0.4 firmware: nothing to seal a bucket to), so the stores keep today's plain
+ * storage. 'closed': no door is open - nothing is read, and a write is refused rather than put in the clear.
+ */
+type Door =
+  | {kind: 'closed'}
+  | {kind: 'legacy'}
+  | {kind: 'bucket'; identity: string; bucket: Bucket; recipient: Uint8Array; encrypt: (p: Uint8Array, r: Uint8Array | string) => Uint8Array};
+let door: Door = {kind: 'closed'};
+
+/* one sealed write at a time, so the last stored is the newest bucket (writes arrive back to back) */
+let writes: Promise<unknown> = Promise.resolve();
 
 /** The bucket opened for this session, or null - nothing of it is kept unsealed anywhere else. */
 export function openedBucket(): {identity: string; bucket: Bucket} | null {
-  return opened;
+  return door.kind === 'bucket' ? {identity: door.identity, bucket: door.bucket} : null;
 }
 
 /** The door closed (a lock, another key): the opened bucket goes with it. */
 export function closeBucket(): void {
-  opened = null;
+  door = {kind: 'closed'};
+}
+
+/** The key has no identity to seal a bucket to: its stores keep today's plain storage. */
+export function openLegacyStorage(): void {
+  door = {kind: 'legacy'};
+}
+
+/* store the opened bucket sealed again; the in-memory bucket is already changed */
+function persist(): Promise<void> {
+  const d = door;
+  if (d.kind !== 'bucket') return Promise.resolve();
+  const text = bucketLib.sealToKey(d.bucket, d.recipient, d.encrypt);
+  const run = writes.then(() => AsyncStorage.setItem(KEY(d.identity), text));
+  writes = run.catch(() => {});
+  return run;
+}
+
+/*
+ * WHAT MOVES IN (copy first, as B3.0 did): a feature's old plain record, on the current net, into its store in
+ * the bucket. Stored sealed first, then the plain one removed - a stop between the two leaves both, never
+ * neither. A store the bucket already has is not overwritten: the old record is left for the next look.
+ * The old records were the phone's, not an identity's: the first identity opened on this net takes them.
+ */
+type Move = {legacy: () => string; store: () => string; key: string};
+const MOVES: Move[] = [
+  /* the Key Chain list (keyChainRecorder keychainListKey); store names as the CLI's bucket (bucket/cli/home.js) */
+  {
+    legacy: () => (currentNet() === 'test' ? 'okrn.keychain.test.list' : 'okrn.keychain.list'),
+    store: () => keychainStore(),
+    key: 'list',
+  },
+];
+
+/** The Key Chain's store in the bucket on the current net (the CLI's names: keychain / keychain-test). */
+export function keychainStore(): string {
+  return currentNet() === 'test' ? 'keychain-test' : 'keychain';
+}
+
+async function moveOldRecords(): Promise<void> {
+  if (door.kind !== 'bucket') return;
+  const moved: string[] = [];
+  for (const m of MOVES) {
+    const legacy = m.legacy();
+    const old = await AsyncStorage.getItem(legacy);
+    if (old === null) continue;
+    const kv = bucketLib.kv(door.bucket, m.store());
+    if (kv.getItem(m.key) !== null) continue;
+    kv.setItem(m.key, old);
+    moved.push(legacy);
+  }
+  if (!moved.length) return;
+  await persist();
+  for (const k of moved) await AsyncStorage.removeItem(k);
+  console.log(`[bucket] moved into this identity's bucket: ${moved.join(', ')}`);
+}
+
+/** A feature's storage: its store in the opened bucket, or today's plain storage for a key with no identity. */
+export type BucketKv = {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
+};
+
+/**
+ * One store of the open door. store: the store's name in the bucket; legacy: the plain record each key was
+ * kept under before (only a key with no identity still uses it).
+ */
+export function bucketStorage(store: () => string, legacy: (key: string) => string): BucketKv {
+  const refused = (): Error =>
+    Object.assign(new Error('no bucket is open: unlock the key and continue past the identity check'), {code: 'EBUCKET_CLOSED'});
+  return {
+    async getItem(key) {
+      if (door.kind === 'bucket') return bucketLib.kv(door.bucket, store()).getItem(key);
+      if (door.kind === 'legacy') return AsyncStorage.getItem(legacy(key));
+      return null;
+    },
+    async setItem(key, value) {
+      if (door.kind === 'legacy') return AsyncStorage.setItem(legacy(key), value);
+      if (door.kind !== 'bucket') throw refused();
+      bucketLib.kv(door.bucket, store()).setItem(key, value);
+      await persist();
+    },
+    async removeItem(key) {
+      if (door.kind === 'legacy') return AsyncStorage.removeItem(legacy(key));
+      if (door.kind !== 'bucket') throw refused();
+      bucketLib.kv(door.bucket, store()).removeItem(key);
+      await persist();
+    },
+  };
 }
 
 /**
@@ -39,11 +151,13 @@ export function closeBucket(): void {
 export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<{created: boolean}> {
   const text = await AsyncStorage.getItem(KEY(identity));
   console.log(`[bucket] ${identity.slice(0, 12)}: ${text ? 'a sealed bucket is stored - the key opens it' : 'none stored - sealing a new one'}`);
+  /* the recipient is public: read once here, every later write seals to it with no key and no press */
+  const {recipient} = await okcrypto.deviceAge.identity(bucketLib.AGE_LABEL);
+  const encrypt = (p: Uint8Array, r: Uint8Array | string) => okcrypto.deviceAge.encrypt(p, r);
   if (!text) {
-    const b = bucketLib.create({owner: identity});
-    const {recipient} = await okcrypto.deviceAge.identity(bucketLib.AGE_LABEL);
-    await AsyncStorage.setItem(KEY(identity), bucketLib.sealToKey(b, recipient, (p, r) => okcrypto.deviceAge.encrypt(p, r)));
-    opened = {identity, bucket: b};
+    door = {kind: 'bucket', identity, bucket: bucketLib.create({owner: identity}), recipient, encrypt};
+    await persist();
+    await moveOldRecords();
     return {created: true};
   }
   const {bucket} = await bucketLib.openWithKey(text, {
@@ -55,6 +169,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
      */
     decrypt: (age: Uint8Array, label: string) => okcrypto.deviceAge.decrypt(age, label, {requirePress: true, confirm: () => onPress?.(), onKeepAlive: () => onPress?.()}),
   });
-  opened = {identity, bucket};
+  door = {kind: 'bucket', identity, bucket, recipient, encrypt};
+  await moveOldRecords();
   return {created: false};
 }
