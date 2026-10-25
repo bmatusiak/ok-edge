@@ -75,7 +75,7 @@ function changed(next) {
  * installed by hand into the CLI's own checkout), so the copy inside this app cannot reach a phone; the person's CLI
  * can. Until the lib lists them, a desktop that syncs is started with OKEDGE_CLI set.
  */
-const cliEntry = () => process.env.OKEDGE_CLI || require.resolve('node-onlykey-lib/cli/index.js');
+const cliEntry = () => process.env.OKEDGE_CLI || require.resolve('node-onlykey-lib/cli/index');
 
 /* the lib's CLI with plain Node - the ELECTRON_RUN_AS_NODE of this process is not passed on */
 function runCli(args, onLine) {
