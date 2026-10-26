@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   /* inside a tab's section: the section's width, no gap above */
-  wide: {marginTop: 0, maxWidth: undefined},
+  wide: {marginTop: 0, maxWidth: '100%'},
   row: {flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 6},
   rowLabel: {color: theme.textDim, fontSize: 12},
   rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1, textAlign: 'right'},
