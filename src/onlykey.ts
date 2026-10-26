@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import hostPlugin from 'node-onlykey-lib/plugins/host';
 import embeddedTransport from 'node-onlykey-lib/plugins/transport/embedded';
 import usbTransport from 'node-onlykey-lib/plugins/transport/usb';
+import tunnelTransport from 'node-onlykey-lib/plugins/transport/tunnel';
 import sessionPlugin from 'node-onlykey-lib/plugins/session';
 import devicePlugin from 'node-onlykey-lib/plugins/device';
 import okcryptoPlugin from 'node-onlykey-lib/plugins/okcrypto';
@@ -127,7 +128,8 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
      */
     const plugins: any[] & {config?: Record<string, unknown>} = [
       hostPlugin,
-      backend === 'usb' ? usbTransport : embeddedTransport,
+      /* the webapp has no USB: its key is the WebAuthn tunnel (a transport with no vendor interface, lib plugins/transport/tunnel) */
+      backend === 'usb' ? (shell === 'webapp' ? tunnelTransport : usbTransport) : embeddedTransport,
       sessionPlugin,
       devicePlugin,
       okcryptoPlugin,
@@ -159,6 +161,8 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
        * as https://apps.crp.to (electron/main.js), the origin the tunnel asserts. Linux opens the FIDO
        * interface itself and keeps the CTAPHID path.
        */
+      /* the webapp: every key operation goes through the browser's WebAuthn, for the page's own site (lib RP_ID apps.crp.to by default) */
+      ...(backend === 'usb' && shell === 'webapp' ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname})}} : {}),
       ...(backend === 'usb' && shell === 'desktop' && /Windows/.test(navigator.userAgent)
         ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials})}}
         : {}),

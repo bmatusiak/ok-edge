@@ -9,5 +9,6 @@ import App from '../App';
 import { shell } from './platform';
 import { phoneRoot } from './phoneRoot';
 
-export const root = shell === 'desktop' ? phoneRoot() : App;
+/* the web app uses the desktop's elements and views (Brad, 2026-10-26); its key comes through WebAuthn (useWebKey) */
+export const root = shell === 'desktop' || shell === 'webapp' ? phoneRoot() : App;
 export function registerMore(): void {}

@@ -3,6 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {useOkEmu} from './useOkEmu';
 import {useHardKey} from './useHardKey';
+import {useWebKey} from './useWebKey';
+import {shell} from '../platform';
+
+/* the webapp's hard key is reached through WebAuthn (useWebKey, same shape); every other shell's through USB */
+const useUsbKey = shell === 'webapp' ? useWebKey : useHardKey;
 import UsbPipe, {VENDOR_ID, PRODUCT_ID} from '../transport/UsbPipe';
 import {resetOnlyKey} from '../onlykey';
 import type {LogLevel} from './useLog';
@@ -68,7 +73,7 @@ export function useKey({
 }) {
   /* a build with testing mode boots nothing at launch: the login screen starts it (useOkEmu ensureStarted, Brad 2026-10-07) */
   const soft = useOkEmu({log: softLog, autoStart: !__DEV__});
-  const hard = useHardKey({log: hardLog});
+  const hard = useUsbKey({log: hardLog});
 
   /*
    * SETTLING AFTER A CEREMONY, for BOTH keys now.
@@ -184,6 +189,8 @@ export function useKey({
      * gets a fresh session without anything having to predict when that is.
      */
     const look = async () => {
+      /* a page cannot list USB devices: the key is taken as there, and asking it says whether it is (useWebKey) */
+      if (shell === 'webapp') { if (alive) setAttached(true); return; }
       try {
         const devices = await UsbPipe.listDevices();
         const found = devices.some(
