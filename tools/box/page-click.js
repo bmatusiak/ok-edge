@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Click the web app in Chromium on the box by what a control SAYS, over the DevTools protocol (port 9333, webapp.sh) -
-// no screen coordinates. Each label is found as the innermost visible element whose text is exactly that label; a real
+// no screen coordinates. Each label is found as a visible element whose aria-label is that label (--labels shows these
+// as [label]), or else the innermost visible element whose text is exactly that label; a real
 // mouse press and release go to its centre (React Native Web's Pressable answers pointer events, not element.click()).
 //   node tools/box/page-click.js "Create Bucket" [wait:2] ["Passwords" ...]   click in turn
 //   node tools/box/page-click.js --labels                                     what is on screen, clicking nothing
