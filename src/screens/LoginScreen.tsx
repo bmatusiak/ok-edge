@@ -42,9 +42,10 @@ export function LoginScreen({
   picked?: Net | null;
 }) {
   const setup = device === 'uninitialized';
+  /* the web app asks its key nothing before Log in (useWebKey armWebKey), so it is waiting for no key here */
   const hint = setup
     ? 'This key has no PIN yet. Choose one to finish setting it up.'
-    : device === 'locked'
+    : device === 'locked' || shell === 'webapp'
       ? null
       : 'Waiting for the key…';
 
