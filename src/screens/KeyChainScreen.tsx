@@ -14,7 +14,7 @@ import NativeShare from 'okedge-native/specs/NativeShare';
 import {supports} from '../firmwareFeatures';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const keychain = require('node-onlykey-lib/keychain');
-import {keychainList, onKeyChainRecorded, updateKeyChainList} from '../keyChainRecorder';
+import {applyHeldKeyChain, holdForBucket, keychainList, onKeyChainRecorded, updateKeyChainList} from '../keyChainRecorder';
 import {
   type Probe, type Entry, type Job, type DeviceType, type HostType, type RemoveTarget, SLOTS, slotName, DEVICE_TYPES, KIND_TITLE,
   TYPE_INFO, KIND_INFO, SCHEME_INFO, labelText, slotOutcome, Choice, type Progress, ProgressList,
@@ -191,14 +191,26 @@ export function KeyChainScreen({
       .catch(() => {});
   }), []);
 
-  const saveEntries = useCallback(async (next: Entry[]) => {
+  /*
+   * 'saved', or 'held': the bucket is closed (config mode locks the key), so the list waits on this phone and is merged
+   * in when the bucket is open again (keyChainRecorder holdForBucket) - never dropped, never reported as saved.
+   */
+  const saveEntries = useCallback(async (next: Entry[]): Promise<'saved' | 'held'> => {
     setEntries(next);
     try {
       await keychainList.setItem('list', keychain.list.serialize(next));
-    } catch {
-      /* the list stays in memory for this visit */
+      return 'saved';
+    } catch (e) {
+      await holdForBucket(next);
+      if ((e as {code?: string})?.code !== 'EBUCKET_CLOSED') setError(`Key Chain could not save the list (${String((e as Error)?.message ?? e)}); it is kept on this phone and added when it can be.`);
+      return 'held';
     }
   }, []);
+  /* anything held while the bucket was closed goes in as soon as this tab can write (a restart, an unlock) */
+  useEffect(() => {
+    if (locked || inConfig) return;
+    void applyHeldKeyChain();
+  }, [locked, inConfig]);
 
   /* Read-modify-write from storage, so two copies saved in one step both stay. */
   const addCopy = useCallback(async (c: Omit<Copy, 'id' | 'made'>) => {
@@ -642,9 +654,9 @@ export function KeyChainScreen({
         pgp: publicArmored,
         slots: loaded.map(l => l.slot),
       });
-      await saveEntries(keychain.list.merge(entries, [made]).entries);
+      const pgpSaved = await saveEntries(keychain.list.merge(entries, [made]).entries);
       setWritten(true);
-      setStatus(`PGP key made and loaded: ${loaded.map(l => `${l.role} in ${slotName(l.slot)}`).join(', ')}. Its public key is in "On this App". Restart to finish.`);
+      setStatus(`PGP key made and loaded: ${loaded.map(l => `${l.role} in ${slotName(l.slot)}`).join(', ')}. ${pgpSaved === 'saved' ? 'Its public key is in "On this App"' : 'Its public key is kept on this phone and goes into Key Chain when the bucket is open again (after the restart)'}. Restart to finish.`);
       return true;
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
@@ -682,9 +694,9 @@ export function KeyChainScreen({
        */
       const now = new Date().toISOString();
       const kept = entries.map(x => (x.type === 'composite' && (x.slots || []).includes(g.slot) && keychain.list.present(x) ? {...x, gone: now} : x));
-      await saveEntries(keychain.list.merge(kept, [entry]).entries);
+      const pqcSaved = await saveEntries(keychain.list.merge(kept, [entry]).entries);
       setWritten(true);
-      setStatus(`+PQC PGP key made and loaded in ${slotName(g.slot)}. Its public key is in Key Chain. Restart to finish.`);
+      setStatus(`+PQC PGP key made and loaded in ${slotName(g.slot)}. ${pqcSaved === 'saved' ? 'Its public key is in Key Chain' : 'Its public key is kept on this phone and goes into Key Chain when the bucket is open again (after the restart)'}. Restart to finish.`);
       return true;
     } catch (e) {
       setError(String((e as Error)?.message ?? e));

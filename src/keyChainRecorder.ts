@@ -18,6 +18,7 @@
  * here touches Edge receipts or budgets.
  */
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {currentNet} from './net';
 import {bucketStorage} from './bucketStore';
 
@@ -193,8 +194,43 @@ export function updateKeyChainList(fn: (entries: any[]) => any[] | null): Promis
   return run;
 }
 
-/** This phone's Key Chain list as it is now (public entries). */
+/*
+ * A KEY MADE WHILE THE BUCKET IS CLOSED IS KEPT, NOT LOST (A13, 2026-10-26). Making a key is done in config mode, and
+ * config mode locks the key: the bucket the list lives in is closed then, its writes are refused (EBUCKET_CLOSED) - and
+ * the Wizard's save swallowed the refusal and said "its public key is in Key Chain". A composite key's certificate is
+ * the one thing the OnlyKey cannot give back, and it was gone at the restart. So a refused write is HELD here - public
+ * entries only, the same data the list holds - and merged into the list the next time it can be written (merge keeps
+ * everything either side knew, so holding a whole list is safe). One held list per net.
+ */
+const HELD_KEY = (): string => `okrn.keychain.held.${currentNet()}`;
+export async function holdForBucket(entries: any[]): Promise<void> {
+  const before = await AsyncStorage.getItem(HELD_KEY()).catch(() => null);
+  const merged = before ? keychain.list.merge(keychain.list.parse(before), entries).entries : entries;
+  await AsyncStorage.setItem(HELD_KEY(), keychain.list.serialize(merged));
+}
+/** Merge what was held into the list, when the bucket takes writes again. True when something was merged. */
+export function applyHeldKeyChain(): Promise<boolean> {
+  const run = queue.then(async () => {
+    const held = await AsyncStorage.getItem(HELD_KEY()).catch(() => null);
+    if (!held) return false;
+    const raw = await keychainList.getItem('list').catch(() => null);
+    const next = keychain.list.merge(raw ? keychain.list.parse(raw) : [], keychain.list.parse(held)).entries;
+    await keychainList.setItem('list', keychain.list.serialize(next)); /* refused while closed: still held */
+    await AsyncStorage.removeItem(HELD_KEY());
+    for (const l of listeners) l();
+    return true;
+  });
+  queue = run.catch(() => {});
+  return run.catch(() => false);
+}
+export async function heldCount(): Promise<number> {
+  const held = await AsyncStorage.getItem(HELD_KEY()).catch(() => null);
+  return held ? keychain.list.parse(held).length : 0;
+}
+
+/** This phone's Key Chain list as it is now (public entries), with anything held merged in first. */
 export async function readKeyChainList(): Promise<any[]> {
+  await applyHeldKeyChain();
   const raw = await keychainList.getItem('list');
   return raw ? keychain.list.parse(raw) : [];
 }

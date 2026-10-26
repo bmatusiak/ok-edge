@@ -17,6 +17,17 @@ import type {RecipientContact, RecipientsService} from '../recipients';
 import type {TabContext} from '../types';
 import {ME, openBox, type BoxMessage} from './service';
 import {onBucketTraded} from '../../bucketEvents';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {currentNet} from '../../net';
+
+/*
+ * WHICH KEY SIGNS IS THE USER'S CHOICE (Brad, 2026-10-26: "Cryptobox shows which key it will sign with, beside Sign:
+ * on/off ... and a key to select if there is keys that can sign"). It signed with the first +PQC key in Key Chain,
+ * unasked: on the A13 the list held two of them (one adopted on another device), it picked the one this OnlyKey does
+ * not hold, and the slot check refused. Now the key is named beside Sign; with one key it is that one, with more the
+ * user picks and the pick is kept on this device (per net). Nothing is picked for them.
+ */
+const SIGN_PICK = () => `cryptobox:signKey:${currentNet()}`;
 
 /*
  * CRYPTOBOX (onlykey-edge/features/CRYPTOBOX-SPEC.md; Brad, 2026-10-18: "i want to store messages
@@ -59,6 +70,18 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
   const [people, setPeople] = useState<Person[]>([]);
   const [messages, setMessages] = useState<BoxMessage[]>([]);
   const [deviceKeys, setDeviceKeys] = useState<DeviceKey[]>([]);
+  const [signPick, setSignPick] = useState<string | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(SIGN_PICK()).then(v => setSignPick(v), () => {});
+  }, []);
+  const pickSignKey = useCallback((fp: string) => {
+    setSignPick(fp);
+    AsyncStorage.setItem(SIGN_PICK(), fp).catch(() => {});
+  }, []);
+  /* one key: that one; more: only the user's pick, while it is still in Key Chain */
+  const signKey: DeviceKey | null = deviceKeys.length === 1
+    ? deviceKeys[0]
+    : deviceKeys.find(k => k.pgpFingerprint.toUpperCase() === (signPick || '').toUpperCase()) ?? null;
   const [opened, setOpened] = useState<Record<string, Opened>>({});
   const [challenge, setChallenge] = useState<number[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -150,7 +173,9 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
         opened={opened}
         busy={busy}
         banner={banner}
-        signKey={deviceKeys[0] ?? null}
+        signKey={signKey}
+        signKeys={deviceKeys}
+        onPickSignKey={pickSignKey}
         onBack={() => go({kind: 'list'})}
         onOpen={m =>
           run('open', async () => {
@@ -170,8 +195,12 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
             let disarm: (() => void) | null = null;
             let proven: (() => Promise<void>) | null = null;
             if (sign) {
-              const key = deviceKeys[0];
-              if (!key) throw new Error('Signing needs your +PQC key on the device - in Key Chain, adopt the composite key already on this OnlyKey, or make a new one.');
+              const key = signKey;
+              if (!key) {
+                throw new Error(deviceKeys.length
+                  ? 'Pick the key to sign with, beside Sign.'
+                  : 'Signing needs your +PQC key on the device - in Key Chain, adopt the composite key already on this OnlyKey, or make a new one.');
+              }
               const armed = await armDeviceKey(getKey, key, setChallenge);
               signWith = armed.privateKey;
               disarm = armed.disarm;
@@ -268,6 +297,8 @@ function Thread({
   busy,
   banner,
   signKey,
+  signKeys,
+  onPickSignKey,
   onBack,
   onOpen,
   onSend,
@@ -282,6 +313,8 @@ function Thread({
   busy: string | null;
   banner: React.ReactNode;
   signKey: DeviceKey | null;
+  signKeys: DeviceKey[];
+  onPickSignKey: (fingerprint: string) => void;
   onBack: () => void;
   onOpen: (m: BoxMessage) => void;
   onSend: (text: string, sign: boolean) => void;
@@ -290,7 +323,9 @@ function Thread({
   const [text, setText] = useState('');
   /* signed by default (Brad, 2026-10-18); off only when there is no +PQC key on the device to sign with */
   const [signWanted, setSign] = useState(true);
-  const sign = signWanted && !!signKey;
+  const sign = signWanted && signKeys.length > 0;
+  /* signing asked, more than one key, none picked yet: Send waits for the pick */
+  const needsPick = sign && !signKey;
   const [actionFor, setActionFor] = useState<BoxMessage | null>(null);
   const scroller = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const canSend = !!person && person.keys.length > 0 && !!me;
@@ -350,14 +385,27 @@ function Thread({
           <Btn
             title={sign ? 'Sign: on' : 'Sign: off'}
             tone={sign ? 'primary' : undefined}
-            disabled={!signKey}
+            disabled={!signKeys.length}
             onPress={() => setSign(s => !s)}
           />
-          <View style={styles.flex} />
+          {sign ? (
+            <View style={styles.flex}>
+              <ListPicker
+                label="with"
+                placeholder="Pick the key to sign with…"
+                sheetTitle="Sign with"
+                items={signKeys.map((k): PickItem => ({key: k.pgpFingerprint, title: k.name, detail: k.pgpFingerprint.toUpperCase().slice(0, 16)}))}
+                selected={signKey ? [signKey.pgpFingerprint] : []}
+                onChange={keys => { if (keys[0]) onPickSignKey(keys[0]); }}
+              />
+            </View>
+          ) : (
+            <View style={styles.flex} />
+          )}
           <Btn
             title={busy === 'send' ? 'Sending…' : 'Send'}
             tone="primary"
-            disabled={!canSend || !text.trim() || !!busy}
+            disabled={!canSend || !text.trim() || !!busy || needsPick}
             onPress={() => {
               onSend(text, sign);
               setText('');

@@ -24,7 +24,8 @@ export type DeviceKey = {id: string; name: string; slot: number; pgp: string; pg
 export async function readDeviceKeys(): Promise<DeviceKey[]> {
   const list = await readKeyChainList();
   return list
-    .filter(e => e.type === 'composite' && e.pgp && e.pgpFingerprint && (e.slots || []).length)
+    /* only a key that can sign here: one Key Chain has not seen replaced (keychain list.present) */
+    .filter(e => e.type === 'composite' && e.pgp && e.pgpFingerprint && (e.slots || []).length && keychain.list.present(e))
     /* the entry the key was seen in last first, so the one kept per fingerprint is the newest */
     .sort((a, b) => Number(keychain.list.present(b)) - Number(keychain.list.present(a)) || String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')))
     .filter((e, i, all) => all.findIndex(x => String(x.pgpFingerprint).toUpperCase() === String(e.pgpFingerprint).toUpperCase()) === i)
