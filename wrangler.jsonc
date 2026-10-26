@@ -1,0 +1,21 @@
+/*
+ * The Cloudflare Worker that hosts the web app (Workers Builds runs `npx wrangler deploy` here on a push).
+ * Without this file wrangler guessed a static site built to dist/; this names it: the web app is built into docs/
+ * (the plan's folder, the one mcp-server/ will serve) and served as one page, so a reload on any route loads the app.
+ *
+ * The RELEASE export: a public URL never carries the testing screen (metro.config.js swaps it for its stub when the
+ * bundle is not a dev one). The box's local copy is the --dev build (npm run build:webapp, tools/box/webapp.sh).
+ *
+ * Static only for now; mcp-server/ adds the Worker itself (the websocket and MCP faces) as `main` in M1.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ok-edge",
+  "compatibility_date": "2026-10-23",
+  "observability": { "enabled": true },
+  "build": { "command": "npm run build:webapp:release" },
+  "assets": {
+    "directory": "./docs",
+    "not_found_handling": "single-page-application"
+  }
+}

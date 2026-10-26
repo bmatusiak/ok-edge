@@ -12,8 +12,11 @@ const workspace = path.resolve(__dirname, '..');
  * Metro resolves a symlink to its real path and serves nothing outside a watched root, and a file
  * inside a linked sibling resolves node_modules from the sibling - so the sibling is watched and
  * this project's node_modules is an explicit search path (Babel's injected helpers live here).
+ * Only when the sibling is there: a clone on its own (Cloudflare's build) has no ../test-moniker, Metro refuses a
+ * watch folder that does not exist, and the bundle never imports it (the harness is vendored in __e2e_tests__).
  */
-config.watchFolders = [...(config.watchFolders || []), path.join(workspace, 'test-moniker')];
+const moniker = path.join(workspace, 'test-moniker');
+if (require('fs').existsSync(moniker)) config.watchFolders = [...(config.watchFolders || []), moniker];
 config.resolver.nodeModulesPaths = [path.join(__dirname, 'node_modules')];
 
 /*
