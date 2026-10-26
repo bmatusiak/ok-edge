@@ -13,6 +13,10 @@ const FIND = (label) => `(() => {
   for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') continue;
+    /* an icon button says what it is only in its aria-label (React Native's accessibilityLabel) */
+    const aria = el.getAttribute('aria-label');
+    if (aria && want !== null && aria === want) return {x: r.left + r.width / 2, y: r.top + r.height / 2};
+    if (aria) seen.push('[' + aria + ']');
     const t = (el.innerText || '').trim();
     if (!t || [...el.children].some((c) => (c.innerText || '').trim() === t)) continue;
     if (want !== null && t === want) return {x: r.left + r.width / 2, y: r.top + r.height / 2};
