@@ -194,6 +194,7 @@ const computerGate: PairGate = {
     code: p.code ?? null,
     lastUsed: p.lastUsed ?? null,
     on: p.on !== false,
+    renewedAt: p.renewedAt ?? null,
   })),
   pairing(): PairingView {
     const p = latest?.pair;
@@ -221,7 +222,7 @@ const computerGate: PairGate = {
  */
 const phoneGate: PairGate = {
   role: 'phone',
-  list: async () => (await btTransit.list()).map(c => ({id: c.id, name: c.name, code: c.code, lastUsed: c.lastUsed, on: c.on})),
+  list: async () => (await btTransit.list()).map(c => ({id: c.id, name: c.name, code: c.code, lastUsed: c.lastUsed, on: c.on, renewedAt: c.renewedAt})),
   pairing: () => btTransit.pairing(),
   subscribe: (fn) => btTransit.subscribe(fn),
   openPairWindow: () => { btTransit.openPairWindow(); },

@@ -24,6 +24,7 @@ import {StyleSheet, Switch, Text, View} from 'react-native';
 import {Btn, Section} from './components';
 import {theme} from './theme';
 import {NOTICE_TEXT, type Notice, type PairingView} from '../btTransit';
+import * as clipair from 'node-onlykey-lib/clipair';
 
 /** One paired device, as the card draws it. */
 export type PairRow = {
@@ -73,6 +74,29 @@ function subLine(r: PairRow, now: number): string {
   else if (r.renewedAt) parts.push(`paired ${new Date(r.renewedAt).toISOString().slice(0, 10)}`);
   if (r.on !== undefined) parts.push(r.on ? 'on' : 'off - no answer');
   return parts.join(' · ');
+}
+
+/* a span of time, in the largest whole unit */
+function span(ms: number): string {
+  const m = Math.max(1, Math.round(ms / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h`;
+  return `${Math.round(h / 24)} d`;
+}
+
+/*
+ * WHEN THE PAIRING RENEWS, AND WHEN IT WOULD EXPIRE (Brad, 2026-10-25: "we need to see how long until it renews /
+ * expires"): the cli pair's own rule (node-onlykey-lib src/clipair RENEW_AFTER, EXPIRES_AFTER) - from day 6 the next
+ * use renews it; by day 7 without one it is gone, and the device must be paired again.
+ */
+function renewLine(r: PairRow, now: number): {text: string; warn: boolean} | null {
+  if (!r.renewedAt) return null;
+  const renewAt = r.renewedAt + clipair.RENEW_AFTER;
+  const expireAt = r.renewedAt + clipair.EXPIRES_AFTER;
+  if (now < renewAt) return {text: `renews in ${span(renewAt - now)} (on its next use after that) · expires in ${span(expireAt - now)} without one`, warn: false};
+  if (now < expireAt) return {text: `renewal due - its next use renews it · expires in ${span(expireAt - now)}`, warn: true};
+  return {text: 'expired - pair it again', warn: true};
 }
 
 export function PairedDevicesCard({gate, testing = false}: {gate: PairGate; testing?: boolean}) {
@@ -148,6 +172,10 @@ export function PairedDevicesCard({gate, testing = false}: {gate: PairGate; test
             <View style={styles.rowText}>
               <Text style={styles.name}>{c.name}</Text>
               <Text style={styles.sub}>{subLine(c, now)}</Text>
+              {(() => {
+                const rl = renewLine(c, now);
+                return rl ? <Text style={[styles.sub, rl.warn && {color: theme.warn}]}>{rl.text}</Text> : null;
+              })()}
             </View>
             {revoking === c.id ? (
               <>
