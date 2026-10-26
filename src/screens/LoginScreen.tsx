@@ -8,6 +8,7 @@ import {buildInfo} from '../buildInfo';
 import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import type {DeviceState} from '../hooks/useOkEmu';
 import {FirmwareDownload} from './FirmwareDownload';
+import {shell} from '../platform';
 
 /**
  * The first thing you see, and a provenance screen as much as a door.
@@ -83,7 +84,8 @@ export function LoginScreen({
         * `attached` is tri-state: null means USB has not answered yet, which is
         * not the same as nothing being there, so only `true` says anything.
         */}
-      {attached === true ? (
+      {/* the web app cannot see USB (only what answers WebAuthn), so it never says a key is attached */}
+      {attached === true && shell !== 'webapp' ? (
         <Text style={styles.attached}>Hard key attached</Text>
       ) : null}
 
