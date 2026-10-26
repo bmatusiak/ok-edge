@@ -19,8 +19,12 @@ const re = filter ? new RegExp(filter) : null;
     send('Log.enable');
     if (reload) send('Page.reload', { ignoreCache: true });
   };
+  /* Runtime.enable replays what the page logged before this attached: those are old lines, never this run's */
+  const since = Date.now();
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
+    const at = m.params?.timestamp ?? m.params?.entry?.timestamp;
+    if (at !== undefined && at < since) return;
     let line = null;
     if (m.method === 'Runtime.consoleAPICalled') line = `[${m.params.type}] ${m.params.args.map((a) => (a.value !== undefined ? a.value : a.description || a.type)).join(' ')}`;
     else if (m.method === 'Runtime.exceptionThrown') line = `[exception] ${m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text}`;
