@@ -1,4 +1,6 @@
-import {readKeyChainList} from './keyChainRecorder';
+import {readKeyChainList, updateKeyChainList} from './keyChainRecorder';
+
+const keychain = require('node-onlykey-lib/keychain');
 
 /*
  * THE PGP STEPS ENCRYPT / DECRYPT AND CRYPTOBOX SHARE (Brad's rule: reuse the logic that works).
@@ -12,14 +14,21 @@ import {readKeyChainList} from './keyChainRecorder';
 
 export const openpgpFork = () => require('node-onlykey-lib/crypto/pgp');
 
-/* a composite (+PQC) key Key Chain made and keeps the public certificate of; its private half is on the device */
-export type DeviceKey = {id: string; name: string; slot: number; pgp: string};
+/*
+ * a composite (+PQC) key Key Chain made and keeps the public certificate of; its private half is on the device. ONE
+ * per key (its fingerprint), however many slots the list has seen it in: which slot holds it NOW is asked of the key
+ * each time it is armed (keychain composite.locate) - the user may have put another key in the old one.
+ */
+export type DeviceKey = {id: string; name: string; slot: number; pgp: string; pgpFingerprint: string};
 
 export async function readDeviceKeys(): Promise<DeviceKey[]> {
   const list = await readKeyChainList();
   return list
-    .filter(e => e.type === 'composite' && e.pgp && (e.slots || []).length)
-    .map(e => ({id: e.id, name: e.name || 'composite key', slot: e.slots[0], pgp: e.pgp}));
+    .filter(e => e.type === 'composite' && e.pgp && e.pgpFingerprint && (e.slots || []).length)
+    /* the entry the key was seen in last first, so the one kept per fingerprint is the newest */
+    .sort((a, b) => Number(keychain.list.present(b)) - Number(keychain.list.present(a)) || String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')))
+    .filter((e, i, all) => all.findIndex(x => String(x.pgpFingerprint).toUpperCase() === String(e.pgpFingerprint).toUpperCase()) === i)
+    .map(e => ({id: e.id, name: e.name || 'composite key', slot: e.slots[0], pgp: e.pgp, pgpFingerprint: e.pgpFingerprint}));
 }
 
 /*
@@ -33,15 +42,28 @@ export async function armDeviceKey(
   getKey: () => Promise<{okcrypto: any}>,
   key: DeviceKey,
   onChallenge: (digits: number[] | null) => void,
-): Promise<{privateKey: unknown; disarm: () => void}> {
+): Promise<{privateKey: unknown; slot: number; proven: () => Promise<void>; disarm: () => void}> {
   const openpgp = openpgpFork();
-  const {okcrypto} = await getKey();
+  const {okcrypto, device} = (await getKey()) as any;
+  /*
+   * WHERE THE KEY IS NOW (Brad, 2026-10-25: "key management to be dymanic, its possible the user may already be using
+   * the slot"): the slots read from the key - no press, no config mode - and the list corrected by what they hold, then
+   * the slot chosen by Key Chain (keychain composite.locate). The signature hook proves the choice by its answer.
+   */
+  const slots = await keychain.composite.readRsaSlots(device);
+  const now = new Date().toISOString();
+  await updateKeyChainList(entries => keychain.composite.reconcile(entries, slots, now));
+  const where = keychain.composite.locate(await readKeyChainList(), key, slots);
+  if (where.slot === null) throw new Error(`${key.name}: ${where.why}. Load it in Key Chain, or pick another key.`);
   const pub = await openpgp.readKey({armoredKey: key.pgp});
   const privateKey = openpgp.createHardwarePrivateKey(pub);
-  okcrypto.registerPgpHooks(openpgp, key.slot);
+  okcrypto.registerPgpHooks(openpgp, where.slot);
   const off = okcrypto.on('challenge', ({digits}: {digits: number[]}) => onChallenge(digits));
   return {
     privateKey,
+    slot: where.slot,
+    /* the key answered for this slot (a signature that checked, a message it opened): Key Chain records it there */
+    proven: () => updateKeyChainList(entries => keychain.composite.seen(entries, key, where.slot)),
     disarm: () => {
       onChallenge(null);
       if (typeof off === 'function') off();

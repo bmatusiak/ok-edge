@@ -176,6 +176,23 @@ export function recordNamed(fields: {scheme: string; label: string; type: string
   return run;
 }
 
+/*
+ * A CHANGE TO THE LIST FROM WHAT THE KEY SAID (keychain composite.reconcile / seen): in the same queue as the derives,
+ * so a slot read and a derive arriving together do not write over each other. fn returns the new list, or null for
+ * no change.
+ */
+export function updateKeyChainList(fn: (entries: any[]) => any[] | null): Promise<void> {
+  const run = queue.then(async () => {
+    const raw = await keychainList.getItem('list');
+    const next = fn(raw ? keychain.list.parse(raw) : []);
+    if (!next) return;
+    await keychainList.setItem('list', keychain.list.serialize(next));
+    for (const l of listeners) l();
+  });
+  queue = run.catch(() => {});
+  return run;
+}
+
 /** This phone's Key Chain list as it is now (public entries). */
 export async function readKeyChainList(): Promise<any[]> {
   const raw = await keychainList.getItem('list');

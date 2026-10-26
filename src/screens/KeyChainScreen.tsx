@@ -14,7 +14,7 @@ import NativeShare from 'okedge-native/specs/NativeShare';
 import {supports} from '../firmwareFeatures';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const keychain = require('node-onlykey-lib/keychain');
-import {keychainList, onKeyChainRecorded} from '../keyChainRecorder';
+import {keychainList, onKeyChainRecorded, updateKeyChainList} from '../keyChainRecorder';
 import {
   type Probe, type Entry, type Job, type DeviceType, type HostType, type RemoveTarget, SLOTS, slotName, DEVICE_TYPES, KIND_TITLE,
   TYPE_INFO, KIND_INFO, SCHEME_INFO, labelText, slotOutcome, Choice, type Progress, ProgressList,
@@ -262,6 +262,12 @@ export function KeyChainScreen({
         out.push({...p, label});
       }
       setSlots(out);
+      /*
+       * THE LIST FIXES ITSELF FROM WHAT THE KEY SAYS (Brad, 2026-10-25): an entry whose slot now holds another kind of
+       * key, or none, is marked gone (keychain composite.reconcile) - in the recorder's queue; its listener reloads here
+       */
+      const now = new Date().toISOString();
+      await updateKeyChainList(list => keychain.composite.reconcile(list, out, now)).catch(() => {});
       await AsyncStorage.setItem(
         CACHE_KEY,
         JSON.stringify(out.map(({slot: s, kind, bits, label}) => ({slot: s, kind, bits, label}))),
@@ -669,8 +675,12 @@ export function KeyChainScreen({
       const tag = g.tagName.trim() ? keychain.tag.formatTag('pqc', g.tagName.trim()) : null;
       const entry = await keychain.composite.load(device, g.slot, made, {label: tag});
       await addPending([{slot: g.slot, type: 'rsa', tag}]);
-      /* a key this one replaced is destroyed: its certificate encrypts to nothing any more */
-      const kept = entries.filter(x => !(x.type === 'composite' && (x.slots || []).includes(g.slot)));
+      /*
+       * a key this one replaced is destroyed: its certificate encrypts to nothing any more. Marked gone, not dropped -
+       * merge keeps what any device knew, so a dropped entry came back from the next sync (keychain list.present)
+       */
+      const now = new Date().toISOString();
+      const kept = entries.map(x => (x.type === 'composite' && (x.slots || []).includes(g.slot) && keychain.list.present(x) ? {...x, gone: now} : x));
       await saveEntries(keychain.list.merge(kept, [entry]).entries);
       setWritten(true);
       setStatus(`+PQC PGP key made and loaded in ${slotName(g.slot)}. Its public key is in Key Chain. Restart to finish.`);
@@ -1355,7 +1365,7 @@ export function KeyChainScreen({
             const tag = keychain.tag.parseTag(p.label);
             const a = p.publicKey ? keychain.artifacts.forKey({type: p.kind, publicKey: p.publicKey}) : null;
             /* a composite key gives nothing back: its certificate is the one Key Chain kept */
-            const kept = p.kind === 'composite' ? entries.find(x => x.pgp && (x.slots || []).includes(p.slot)) : undefined;
+            const kept = p.kind === 'composite' ? entries.find(x => x.pgp && (x.slots || []).includes(p.slot) && keychain.list.present(x)) : undefined;
             return (
               <View key={id}>
                 <Pressable onPress={() => setOpen(o => (o === id ? null : id))} style={styles.row}>

@@ -111,6 +111,7 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
       const armed = await armDeviceKey(getKey, key, setChallenge);
       try {
         const r = await okpure.messages.decryptMessage(openpgp, {armored, decryptWith: armed.privateKey as any, verifyWith: everyone.length ? everyone : null});
+        await armed.proven();
         return {text: typeof r.data === 'string' ? r.data : '(a file - open it in Encrypt / Decrypt)', line: signedBy(r.signatures, signers) || 'Not signed.', signer: signerOf(r.signatures, signers)};
       } finally {
         armed.disarm();
@@ -167,15 +168,18 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
             const openpgp = openpgpFork();
             let signWith: unknown = null;
             let disarm: (() => void) | null = null;
+            let proven: (() => Promise<void>) | null = null;
             if (sign) {
               const key = deviceKeys[0];
               if (!key) throw new Error('Signing needs your +PQC key on the device - make one in Key Chain.');
               const armed = await armDeviceKey(getKey, key, setChallenge);
               signWith = armed.privateKey;
               disarm = armed.disarm;
+              proven = armed.proven;
             }
             try {
               const armored = String(await okpure.messages.encryptText(openpgp, {text, recipients: keys.map(k => k.text), signWith: signWith as any}));
+              await proven?.();
               const saved = await box.add({contact: page.contact, dir: 'out', armored, signed: sign});
               setMessages(list => [...list, saved as BoxMessage]);
               /* you just typed it: shown open until you leave, never stored */

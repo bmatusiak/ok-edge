@@ -241,6 +241,8 @@ export function MessagesScreen({
     reset();
     setBusy(true);
     let disarm: (() => void) | null = null;
+    /* the key answered from the slot Key Chain chose: recorded there (pgpOps armDeviceKey) */
+    let proven: (() => Promise<void>) | null = null;
     try {
       // Lazy, and only reachable once the WebCrypto shim is installed.
       const openpgp = require('node-onlykey-lib/crypto/pgp');
@@ -291,6 +293,7 @@ export function MessagesScreen({
         const armed = await armDeviceKey(getKey, deviceKey, setChallenge);
         hardware = armed.privateKey;
         disarm = armed.disarm;
+        proven = armed.proven;
       } else if (!privateKey.trim()) {
         throw new Error('Your private key is empty.');
       }
@@ -307,6 +310,7 @@ export function MessagesScreen({
           passphrase: passphrase || null,
           verifyWith: everyone.length ? everyone.map(k => k.text) : null,
         });
+        if (hardware) await proven?.();
 
         /*
          * A decrypted FILE is bytes and may not be text at all, so it is
@@ -339,6 +343,7 @@ export function MessagesScreen({
       // sign
       if (!input) throw new Error('nothing to sign');
       const signed = await messages.signText(openpgp, {text: input, signWith: hardware ?? privateKey, passphrase: passphrase || null});
+      if (hardware) await proven?.();
       setOutput(String(signed));
       setStatus('Signed. The text stays readable inside the signature.');
       setResultOpen(true);
