@@ -10,13 +10,13 @@
  * Where the state comes from is src/sync.ts's business; the words follow the side (the phone is reached, the computer
  * reaches).
  */
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {Btn, Section} from '../ui/components';
 import {IdentityCard, type IdentityRow} from '../ui/IdentityCard';
 import {PairedDevicesCard} from '../ui/PairedDevicesCard';
 import {theme} from '../ui/theme';
-import {openBucketIdentity} from '../bucketStore';
+import {bucketSummary, openBucketIdentity} from '../bucketStore';
 import {activeBackend} from '../hooks/KeyContext';
 import {readKeyIdentity, useKeyIdentity} from '../keyIdentity';
 import {netTag} from '../net';
@@ -58,7 +58,9 @@ function FeatureRow({name, s}: {name: string; s: SyncStore}) {
       <View style={styles.featureText}>
         <Text style={styles.name}>{featureName(name)}</Text>
         <Text style={styles.sub}>
-          {`${s.items} item${s.items === 1 ? '' : 's'} · ${s.same === null ? 'not compared yet' : s.same ? 'in sync' : 'differs'} · checked ${when(s.checkedAt)} · changed by a sync ${when(s.changedAt)}`}
+          {s.same === null
+            ? `${s.items} item${s.items === 1 ? '' : 's'} here · not compared with another device yet`
+            : `${s.items} item${s.items === 1 ? '' : 's'} · ${s.same ? 'in sync' : 'differs'} · checked ${when(s.checkedAt)} · changed by a sync ${when(s.changedAt)}`}
         </Text>
       </View>
     </View>
@@ -96,9 +98,22 @@ function IdentityPanel() {
 
 export function SyncScreen({testing = false}: {testing?: boolean}) {
   const state = useSync();
+  /*
+   * EACH FEATURE AS THIS DEVICE HOLDS IT, always (Brad: "it should show the status of itself") - its items from the
+   * bucket open here; a sync check adds whether it matches the other device, and when. Read again after each change.
+   */
+  const [own, setOwn] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    let live = true;
+    void bucketSummary().then(s => { if (live) setOwn(s); }).catch(() => {});
+    return () => { live = false; };
+  }, [state?.stores, state?.took?.at]);
   if (!state) return null;
   const device = state.role === 'phone' ? 'phone' : 'computer';
-  const stores = Object.entries(state.stores ?? {}).sort(([a], [b]) => featureName(a).localeCompare(featureName(b)));
+  const merged: Record<string, SyncStore> = {};
+  for (const [name, items] of Object.entries(own ?? {})) merged[name] = {items, same: null, checkedAt: 0, changedAt: null};
+  for (const [name, s] of Object.entries(state.stores ?? {})) merged[name] = {...s, items: own?.[name] ?? s.items};
+  const stores = Object.entries(merged).sort(([a], [b]) => featureName(a).localeCompare(featureName(b)));
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.page}>
       <IdentityPanel />
@@ -121,7 +136,7 @@ export function SyncScreen({testing = false}: {testing?: boolean}) {
         {stores.length ? (
           stores.map(([name, s]) => <FeatureRow key={name} name={name} s={s} />)
         ) : (
-          <Text style={styles.note}>Each feature shows here after the first sync check.</Text>
+          <Text style={styles.note}>No bucket is open on this device.</Text>
         )}
       </Section>
 

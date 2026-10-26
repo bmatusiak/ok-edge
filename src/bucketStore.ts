@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {currentNet} from './net';
 import {desktop} from './platform';
+import {storeItems} from './bucketRules';
 
 type Bucket = ReturnType<typeof bucketLib.create>;
 type Okcrypto = {
@@ -72,6 +73,17 @@ export function tradeBucket(): {identity: string; bucket: Bucket} | null {
  */
 export function openBucketIdentity(): {identity: string; kind: 'sealed' | 'kept'} | null {
   return door.kind === 'sealed' || door.kind === 'kept' ? {identity: door.identity, kind: door.kind} : null;
+}
+
+/*
+ * EACH FEATURE AS THIS DEVICE HOLDS IT (Brad, 2026-10-25: the Sync tab's Features list was empty until a first sync -
+ * "it should show the status of itself"): per store, its items, from the bucket open here - the phone's in memory, the
+ * desktop's kept file (asked of the main process, which reads it with the same lib rules).
+ */
+export async function bucketSummary(): Promise<Record<string, number> | null> {
+  if (door.kind === 'sealed') return storeItems(door.bucket);
+  if (door.kind === 'kept') return (await desktop!.invoke('okedge:bucketSummary', door.identity, door.net)) as Record<string, number>;
+  return null;
 }
 
 /** A trade changed the opened bucket: stored sealed again. */

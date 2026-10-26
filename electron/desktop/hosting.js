@@ -160,6 +160,18 @@ module.exports = {
     'okedge:bucketMove': (fromId, toId, net) => bucketHome().moveIdentityBucket(fromId, toId, net),
     'okedge:bucketKeep': (identity, net, text) =>
       bucketHome().keepIdentityBucket(identity, net, require('node-onlykey-lib/bucket').open(text, { allowUnsealed: true }).bucket),
+    /* each feature's items in the kept bucket, by the lib's own store rules (the Sync tab's Features list) */
+    'okedge:bucketSummary': (identity, net) => {
+      const home = bucketHome();
+      const bucket = home.read(home.identityFile(identity, net));
+      const rules = require('node-onlykey-lib/bucket/cli/trade').storeRules();
+      const out = {};
+      for (const [name, units] of Object.entries(require('node-onlykey-lib/bucket').replicate.summarize(bucket, { rules }))) {
+        const items = Object.keys(units).filter((k) => !k.endsWith('\u0001')).length;
+        if (items) out[name] = items;
+      }
+      return out;
+    },
     'okedge:bucketGet': (identity, net, store, key) => bucketHome().kv(bucketHome().identityAt(identity, net, store)).getItem(key),
     'okedge:bucketSet': (identity, net, store, key, value) => {
       const kv = bucketHome().kv(bucketHome().identityAt(identity, net, store));

@@ -16,24 +16,17 @@ import * as bucketLib from 'node-onlykey-lib/bucket';
 import {bytes as okbytes} from 'node-onlykey-lib';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {phoneSyncAllowed, phoneSyncChecked, phoneSyncTraded} from './sync';
+import {RULES, storeItems} from './bucketRules';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {currentNet} from './net';
 
-const keychain = require('node-onlykey-lib/keychain');
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 /* the store rules the computer uses too (lib bucket/cli/trade.js storeRules) */
-const kcRule = bucketLib.rules.keychain(keychain.list);
-const RULES = {
-  keychain: kcRule, 'keychain-test': kcRule,
-  guestbook: bucketLib.rules.guestbook(), 'guestbook-test': bucketLib.rules.guestbook(),
-  passwords: bucketLib.rules.passwords(),
-  cryptobox: bucketLib.rules.cryptobox(), 'cryptobox-test': bucketLib.rules.cryptobox(),
-};
 
 type Me = {id: string; identityPublicKey: Uint8Array; bucketKey: {secretKey: Uint8Array; publicKey: Uint8Array}; certificate: Uint8Array};
 const ALIAS = 'bucketkey';
@@ -96,13 +89,7 @@ export async function handleTrade(msg: any, from: string): Promise<unknown> {
     const b = tradeBucket()?.bucket;
     const differs: string[] = bucketLib.replicate.differs(out.state, msg.state);
     const stores: Record<string, {items: number; same: boolean}> = {};
-    if (b) {
-      for (const [name, units] of Object.entries(bucketLib.replicate.summarize(b, {rules: RULES}) as Record<string, Record<string, unknown>>)) {
-        /* a split store's items are its parts by id; the part for its other fields (ending in \u0001) is not an item */
-        const items = Object.keys(units).filter(k => !k.endsWith('\u0001')).length;
-        if (items) stores[name] = {items, same: !differs.includes(name)};
-      }
-    }
+    if (b) for (const [name, items] of Object.entries(storeItems(b))) stores[name] = {items, same: !differs.includes(name)};
     phoneSyncChecked(out.state.hash === msg.state.hash, stores);
   }
   if (msg.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
