@@ -49,8 +49,20 @@ export function useWebKey({log}: {log: (level: LogLevel, text: string) => void})
   const restart = useCallback(async () => { throw new Error(refused('restart itself')); }, []);
 
   /* one tunnel connect: answered = unlocked (with the version); refused = locked (or a site the key does not trust) */
+  /*
+   * ONE ASK AT A TIME: Log in arms the key and the session's own connect (useKey) follows a moment later - two asks
+   * are two security-key prompts on a real key. A connect while one is out answers with that one.
+   */
+  const inFlight = useRef<Promise<any> | null>(null);
   const connect = useCallback(async () => {
     if (!armed) return null;
+    if (inFlight.current) return inFlight.current;
+    const once = connectOnce().finally(() => { inFlight.current = null; });
+    inFlight.current = once;
+    return once;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- connectOnce is this render's, and reads only log
+  }, [log]);
+  async function connectOnce() {
     setBusy(true);
     try {
       const {okcrypto} = await getOnlyKey('usb');
@@ -72,7 +84,7 @@ export function useWebKey({log}: {log: (level: LogLevel, text: string) => void})
     } finally {
       setBusy(false);
     }
-  }, [log]);
+  }
 
   /* every press, hold, raw message and setup: refused by name (the shapes are useHardKey's) */
   const no = (what: string) => async (..._args: any[]): Promise<never> => { throw new Error(refused(what)); };
