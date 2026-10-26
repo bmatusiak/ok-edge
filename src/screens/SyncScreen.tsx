@@ -10,11 +10,16 @@
  * Where the state comes from is src/sync.ts's business; the words follow the side (the phone is reached, the computer
  * reaches).
  */
-import React from 'react';
+import React, {useState} from 'react';
 import {ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
-import {Section} from '../ui/components';
+import {Btn, Section} from '../ui/components';
+import {IdentityCard, type IdentityRow} from '../ui/IdentityCard';
 import {PairedDevicesCard} from '../ui/PairedDevicesCard';
 import {theme} from '../ui/theme';
+import {openBucketIdentity} from '../bucketStore';
+import {activeBackend} from '../hooks/KeyContext';
+import {readKeyIdentity, useKeyIdentity} from '../keyIdentity';
+import {netTag} from '../net';
 import {pairGate, sync, useSync, type SyncState, type SyncStore} from '../sync';
 
 function serviceText(s: SyncState): string {
@@ -60,6 +65,35 @@ function FeatureRow({name, s}: {name: string; s: SyncStore}) {
   );
 }
 
+/*
+ * IDENTITY (Brad, 2026-10-25: "a new panel called identity, so we can see it if it goes past identity check
+ * automatically" - on the Sync tab): what the identity check read from the key, beside whose bucket is open - a sync
+ * trades only between devices of one identity, and the two must be the same. "Read again" asks the key now.
+ */
+function IdentityPanel() {
+  const read = useKeyIdentity();
+  const [reading, setReading] = useState(false);
+  const open = openBucketIdentity();
+  const keyName = activeBackend() === 'usb' ? 'Hard Key' : 'Soft Key';
+  const differs = read?.kind === 'read' && open && open.identity !== read.identity;
+  const rows: IdentityRow[] = [
+    {label: 'key', value: keyName},
+    {label: 'chain', value: netTag() ? 'testnet' : 'live'},
+    {label: 'bucket identity', value: read?.kind === 'read' ? read.identity : read ? 'could not read' : 'not read yet'},
+    {label: 'open bucket', value: open ? `${open.identity} (${open.kind === 'kept' ? 'kept on this computer' : 'sealed'})` : 'none open', warn: !!differs},
+    ...(read?.kind === 'read' && read.edgeIdentity ? [{label: 'this device', value: read.nametag ? `"${read.nametag}"` : 'no nametag yet'}] : []),
+    ...(read ? [{label: 'read', value: when(read.at)}] : []),
+  ];
+  return (
+    <Section title="Identity">
+      <IdentityCard wide rows={rows} checking={reading} />
+      {differs ? <Text style={styles.warn}>The open bucket is not this key's identity - unlock again to open this key's own.</Text> : null}
+      {read?.kind === 'none' ? <Text style={styles.note}>{read.why}</Text> : null}
+      <Btn title={reading ? 'Reading…' : 'Read again'} disabled={reading} onPress={() => { setReading(true); void readKeyIdentity().finally(() => setReading(false)); }} />
+    </Section>
+  );
+}
+
 export function SyncScreen({testing = false}: {testing?: boolean}) {
   const state = useSync();
   if (!state) return null;
@@ -67,6 +101,7 @@ export function SyncScreen({testing = false}: {testing?: boolean}) {
   const stores = Object.entries(state.stores ?? {}).sort(([a], [b]) => featureName(a).localeCompare(featureName(b)));
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.page}>
+      <IdentityPanel />
       <Section title="Sync service">
         <View style={styles.row}>
           <Text style={styles.name}>{`Sync this ${device}'s bucket`}</Text>
@@ -105,6 +140,7 @@ const styles = StyleSheet.create({
   sub: {color: theme.textDim, fontSize: 11},
   note: {color: theme.textDim, fontSize: 12, lineHeight: 17, marginVertical: 2},
   mono: {fontFamily: theme.mono, color: theme.textSecondary, fontSize: 11, marginTop: 6},
+  warn: {color: theme.warn, fontSize: 12, lineHeight: 17, marginVertical: 6},
   feature: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8},
   featureText: {flex: 1},
   mark: {fontSize: 16, width: 18, textAlign: 'center'},

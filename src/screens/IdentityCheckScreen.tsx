@@ -11,16 +11,15 @@
  * bucket the web app was handed (plan S5/S6). Nothing asked yet: it shows what it read, then Continue.
  */
 import React, {useEffect, useState} from 'react';
-import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import {Logo} from '../ui/Logo';
 import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
 import {netTag} from '../net';
-import {SoftKeyEdge} from '../edgeSoftKey';
-import {ensureNametag} from '../edgeDevices';
-import {bucketState, openIdentityBucket, openLegacyStorage} from '../bucketStore';
-import * as bucketLib from 'node-onlykey-lib/bucket';
+import {openIdentityBucket, openLegacyStorage} from '../bucketStore';
+import {readKeyIdentity} from '../keyIdentity';
+import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 
@@ -58,38 +57,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
   useEffect(() => {
     let live = true;
     setRead({kind: 'checking'});
-    void (async () => {
-      /*
-       * A KEY JUST UNLOCKED IS STILL SETTLING (box, 2026-10-24): the hard key re-connects right after its unlock
-       * (useHardKey), and a question asked in that moment timed out - asked again a moment later, it answered.
-       * So the bucket identity is asked twice more, 1.5 s apart, before "could not read" is said.
-       */
-      const {okcrypto} = await getOnlyKey(activeBackend());
-      let identity: string | null = null;
-      let why = '';
-      for (let n = 0; n < 3 && live && !identity; n++) {
-        try {
-          identity = (await bucketLib.bucketIdentity.readIdentity(okcrypto as any)).id;
-        } catch (e: unknown) {
-          why = String((e as Error)?.message ?? e);
-          if (n < 2) await new Promise(r => setTimeout(r, 1500));
-        }
-      }
-      if (!live) return;
-      if (!identity) {
-        setRead({kind: 'none', why: `Could not read this key's bucket identity: ${why}`});
-        return;
-      }
-      /* Edge, when the key has it: this device's nametag, and its Edge identity - only to move a bucket kept under it */
-      const soft = await SoftKeyEdge.open().catch(() => null);
-      const edgeIdentity = soft ? (await soft.identityId().catch(() => null))?.toLowerCase() ?? null : null;
-      const statement = soft ? await ensureNametag(soft).catch(() => null) : null;
-      /* asked here so the button says what it will do; unknown is treated as the press it may need */
-      const bucket = await bucketState(identity, edgeIdentity).catch(() => 'sealed' as const);
-      if (live) setRead({kind: 'read', identity, edgeIdentity, nametag: statement?.nametag ?? null, bucket});
-    })().catch((e: unknown) => {
-      if (live) setRead({kind: 'none', why: `Could not read this key's bucket identity: ${String((e as Error)?.message ?? e)}`});
-    });
+    /* the read is src/keyIdentity.ts's, and kept there - This Key's Identity panel shows the same result */
+    void readKeyIdentity(() => live).then(r => { if (live && r) setRead(r); });
     return () => { live = false; };
   }, [attempt]);
 
@@ -114,17 +83,15 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
     <View style={styles.root}>
       <Logo height={44} />
       <Text style={styles.title}>{read.kind === 'checking' ? 'Checking this key\'s identity…' : 'This key'}</Text>
-      <View style={styles.card}>
-        <Row label="key" value={keyName} />
-        <Row label="chain" value={netTag() ? 'testnet' : 'live'} />
-        {read.kind === 'read' ? (
-          <>
-            <Row label="bucket identity" value={`${read.identity.slice(0, 12)}…`} />
-            {read.edgeIdentity ? <Row label="this device" value={read.nametag ? `"${read.nametag}"` : 'no nametag yet'} /> : null}
-          </>
-        ) : null}
-        {read.kind === 'checking' ? <ActivityIndicator style={styles.spinner} color={theme.textDim} /> : null}
-      </View>
+      <IdentityCard
+        checking={read.kind === 'checking'}
+        rows={[
+          {label: 'key', value: keyName},
+          {label: 'chain', value: netTag() ? 'testnet' : 'live'},
+          ...(read.kind === 'read' ? [{label: 'bucket identity', value: `${read.identity.slice(0, 12)}…`}] : []),
+          ...(read.kind === 'read' && read.edgeIdentity ? [{label: 'this device', value: read.nametag ? `"${read.nametag}"` : 'no nametag yet'}] : []),
+        ]}
+      />
       {read.kind === 'none' ? <Text style={styles.hint}>{read.why}</Text> : null}
       {read.kind === 'read' ? (
         <Text style={styles.hint}>Everything this app keeps for this key belongs to this bucket identity - every device restored from the same backup shares it.</Text>
@@ -148,33 +115,9 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
   );
 }
 
-function Row({label, value}: {label: string; value: string}) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   root: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
   title: {marginTop: 28, color: theme.text, fontSize: 16, fontWeight: '600'},
-  card: {
-    marginTop: 16,
-    width: '100%',
-    maxWidth: 320,
-    borderRadius: theme.radius,
-    borderWidth: 1,
-    borderColor: theme.border,
-    backgroundColor: theme.surface,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  row: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6},
-  rowLabel: {color: theme.textDim, fontSize: 12},
-  rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1},
-  spinner: {paddingVertical: 8},
   press: {color: theme.warn, fontSize: 14, fontWeight: '600'},
   hint: {marginTop: 14, maxWidth: 320, color: theme.textDim, fontSize: 12, textAlign: 'center', lineHeight: 17},
   action: {marginTop: 28, width: '100%', maxWidth: 320, gap: 12},

@@ -66,6 +66,14 @@ export function tradeBucket(): {identity: string; bucket: Bucket} | null {
   return door.kind === 'sealed' ? {identity: door.identity, bucket: door.bucket} : null;
 }
 
+/**
+ * Whose bucket is open now, and how (the Sync tab's Identity panel shows it beside the key's own identity - the two must
+ * be one): sealed (the phone, opened in memory), kept (the desktop, the opened file), or null (closed, or no identity).
+ */
+export function openBucketIdentity(): {identity: string; kind: 'sealed' | 'kept'} | null {
+  return door.kind === 'sealed' || door.kind === 'kept' ? {identity: door.identity, kind: door.kind} : null;
+}
+
 /** A trade changed the opened bucket: stored sealed again. */
 export function saveTradedBucket(): Promise<void> {
   return persist();
