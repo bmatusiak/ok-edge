@@ -73,7 +73,7 @@ export function LoginScreen({
          * must allow (this host - the WebAuthn rpId), how the page reaches it, and which library and app build this is.
          */
         <View style={styles.versions}>
-          <Row label="key" value={keyVersion || 'not answered yet'} />
+          <Row label="key" value={keyVersion || 'asked when you log in'} />
           <Row label="site" value={location.host} />
           <Row label="connection" value="WebAuthn (this browser)" />
           <Row label="library" value={[buildInfo.library, buildInfo.libraryCommit].filter(Boolean).join(' · ')} />

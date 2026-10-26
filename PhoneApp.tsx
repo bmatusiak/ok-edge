@@ -83,6 +83,7 @@ import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
+import {armWebKey} from './src/hooks/useWebKey';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
@@ -1422,6 +1423,8 @@ function Shell() {
                   void keys.soft.ensureStarted('live').then(warnNet('live'));
                   return;
                 }
+                /* the web app asks its key nothing until now (useWebKey armWebKey); an unlocked key then goes on to the identity check */
+                if (shell === 'webapp') armWebKey();
                 // A blank key has no PIN to enter; it needs one chosen.
                 setPhase(emu.device === 'uninitialized' ? 'setup' : 'pin');
               }}

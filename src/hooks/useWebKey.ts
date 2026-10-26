@@ -20,6 +20,19 @@ import type {HardKeySession} from './useHardKey';
  *   - presses, PIN digits, restart, the debug console: nothing a page can drive - refused by name, as on a
  *     production hard key (canPress false, so no keypad is drawn for it).
  */
+/*
+ * NOTHING IS ASKED BEFORE LOG IN (Brad, 2026-10-26: "can we not have the key auto connect until i press log in"). Each
+ * ask is the browser's security-key prompt, so a page that asked on load put that prompt over the login page before
+ * anyone had chosen to use a key. The login page's Log in arms the key (armWebKey); until then connect() asks nothing
+ * and the window-focus retry stays off. Armed once, it stays armed for the page's life.
+ */
+let armed = false;
+const armListeners = new Set<() => void>();
+export function armWebKey(): void {
+  armed = true;
+  for (const l of [...armListeners]) l();
+}
+
 export function useWebKey({log}: {log: (level: LogLevel, text: string) => void}): HardKeySession {
   const [state, setState] = useState<KeyState>('running');
   const [device, setDevice] = useState<DeviceState>('unknown');
@@ -37,6 +50,7 @@ export function useWebKey({log}: {log: (level: LogLevel, text: string) => void})
 
   /* one tunnel connect: answered = unlocked (with the version); refused = locked (or a site the key does not trust) */
   const connect = useCallback(async () => {
+    if (!armed) return null;
     setBusy(true);
     try {
       const {okcrypto} = await getOnlyKey('usb');
@@ -63,25 +77,29 @@ export function useWebKey({log}: {log: (level: LogLevel, text: string) => void})
   /* every press, hold, raw message and setup: refused by name (the shapes are useHardKey's) */
   const no = (what: string) => async (..._args: any[]): Promise<never> => { throw new Error(refused(what)); };
   /*
-   * WHEN TO ASK: once at start, and again each time the window comes back to the front while the key is not yet
-   * unlocked (the PIN went in on the key, the person returns to the page). A desktop's hard key is asked when its
-   * status broadcast arrives over USB; a page gets no broadcast, and each ask is the browser's security-key prompt,
-   * so it is never asked on a timer.
+   * WHEN TO ASK: once at Log in (armWebKey), and again each time the window comes back to the front while the key is
+   * not yet unlocked (the PIN went in on the key, the person returns to the page). A desktop's hard key is asked when
+   * its status broadcast arrives over USB; a page gets no broadcast, and each ask is the browser's security-key prompt,
+   * so it is never asked on a timer - nor before Log in.
    */
   const deviceRef = useRef(device);
   deviceRef.current = device;
   const asking = useRef(false);
   useEffect(() => {
     const ask = () => {
-      if (asking.current || deviceRef.current === 'unlocked') return;
+      if (!armed || asking.current || deviceRef.current === 'unlocked') return;
       asking.current = true;
       void connect().finally(() => { asking.current = false; });
     };
     ask();
+    armListeners.add(ask);
     const onFocus = () => ask();
     const w = globalThis as unknown as {addEventListener?: (e: string, l: () => void) => void; removeEventListener?: (e: string, l: () => void) => void};
     w.addEventListener?.('focus', onFocus);
-    return () => w.removeEventListener?.('focus', onFocus);
+    return () => {
+      armListeners.delete(ask);
+      w.removeEventListener?.('focus', onFocus);
+    };
   }, [connect]);
 
   const send = no('take a raw vendor message');
