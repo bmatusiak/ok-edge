@@ -11,6 +11,7 @@ import {DESKTOP_FROM, handleEdgeMessage} from '../edgeAgents';
 import {desktop, shell} from '../platform';
 import {createComputerHold} from '../vendorBridge';
 import {getOnlyKey} from '../onlykey';
+import {activeBackend} from './KeyContext';
 
 type Shell = {on(channel: string, listener: (payload: any) => void): () => void};
 
@@ -46,9 +47,14 @@ export function useDesktopHost(): void {
       const until = Date.now() + QUIET_MAX_MS;
       while (Date.now() - lastReport < QUIET_MS && Date.now() < until) await new Promise(r => setTimeout(r, 50));
     };
-    /* the handover in progress: a CLI write waits for it, quiet included */
+    /*
+     * the handover in progress: a CLI write waits for it, quiet included. THE KEY THE CLI REACHES - the open one,
+     * hard or soft (electron/desktop/hosting.js follows the same activeKey): held as 'usb' always, the soft key went
+     * on answering this page's own reads while a CLI talked to it, and the CLI read them as its answers (the Windows
+     * desktop, 2026-10-25: a bucket key's ECDH "answered" with no press, its certificate did not verify).
+     */
     let ready: Promise<void> = Promise.resolve();
-    const take = () => (ready = getOnlyKey('usb')
+    const take = () => (ready = getOnlyKey(activeBackend())
       .then(async app => { await hold.holdForComputer(app.transport, connected); await quiet(app.transport); })
       .catch(() => undefined));
     const offConnected = bridge.on('okedge:computerConnected', ({connected: c}: {connected: boolean}) => {
