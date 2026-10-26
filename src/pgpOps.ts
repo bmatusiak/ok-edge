@@ -54,7 +54,8 @@ export async function armDeviceKey(
   const now = new Date().toISOString();
   await updateKeyChainList(entries => keychain.composite.reconcile(entries, slots, now));
   const where = keychain.composite.locate(await readKeyChainList(), key, slots);
-  if (where.slot === null) throw new Error(`${key.name}: ${where.why}. In Key Chain: adopt the composite key on this OnlyKey, or make a new one.`);
+  /* only the choices that exist: with no composite key on this OnlyKey there is nothing to adopt (texts true and accurate) */
+  if (where.slot === null) throw new Error(`${key.name}: ${where.why}. In Key Chain: ${where.reason === 'none' ? 'make a new one with the Wizard' : 'adopt a composite key on this OnlyKey, or make a new one'}.`);
   const pub = await openpgp.readKey({armoredKey: key.pgp});
   const privateKey = openpgp.createHardwarePrivateKey(pub);
   okcrypto.registerPgpHooks(openpgp, where.slot);
