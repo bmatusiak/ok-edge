@@ -5,6 +5,7 @@
 // mouse press and release go to its centre (React Native Web's Pressable answers pointer events, not element.click()).
 //   node tools/box/page-click.js "Create Bucket" [wait:2] ["Passwords" ...]   click in turn
 //   node tools/box/page-click.js --labels                                     what is on screen, clicking nothing
+//   node tools/box/page-click.js --text [chars=3000]                          the page's visible text
 // A label not on screen fails, naming what is.
 const args = process.argv.slice(2);
 
@@ -41,7 +42,10 @@ const FIND = (label) => `(() => {
   const call = (method, params = {}) => new Promise((resolve) => { waiting.set(++id, resolve); ws.send(JSON.stringify({ id, method, params })); });
   const evaluate = async (expr) => (await call('Runtime.evaluate', { expression: expr, returnByValue: true })).result.result.value;
 
-  if (args[0] === '--labels') {
+  if (args[0] === '--text') {
+    /* the page's visible text, bounded: an error message is longer than a label */
+    console.log(String(await evaluate('document.body.innerText')).slice(0, Number(args[1]) || 3000));
+  } else if (args[0] === '--labels') {
     console.log((await evaluate(FIND(null))).seen.join(' | '));
   } else {
     for (const a of args) {
