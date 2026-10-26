@@ -22,6 +22,7 @@ import NativeShare from 'okedge-native/specs/NativeShare';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {useActiveKey, useKeyName} from '../hooks/KeyContext';
 import type {EmuSession} from '../hooks/useOkEmu';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /**
  * Encrypt, decrypt, sign and verify PGP messages and files.
@@ -414,7 +415,7 @@ export function MessagesScreen({
 
   if (resultOpen) {
     return (
-      <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
         <View style={styles.topbar}>
           <Btn
             title="‹ Back"
@@ -455,7 +456,7 @@ export function MessagesScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       <Section title={part ? PART_TITLE[part] : 'Messages'}>
         {modes.length > 1 ? (
           <Segmented

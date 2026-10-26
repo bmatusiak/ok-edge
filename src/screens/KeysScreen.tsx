@@ -9,6 +9,7 @@ import {useActiveKey, useBackend, useKeyName} from '../hooks/KeyContext';
 import {missingNote, supports} from '../firmwareFeatures';
 import type {EmuSession} from '../hooks/useOkEmu';
 import {CryptoScreen} from './CryptoScreen';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * Loading keys onto the device.
@@ -554,7 +555,7 @@ export function KeysScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       <Section title={`Keys — ${keyName}`}>
         <Text style={styles.body}>
           Private keys for signing and decryption, used by OnlyKey Agent and the

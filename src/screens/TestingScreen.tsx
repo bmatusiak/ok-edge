@@ -14,6 +14,7 @@ import type {UsbSession} from '../hooks/useUsbHid';
 import type {LogEntry} from '../hooks/useLog';
 import {currentNet} from '../net';
 import {clearTestnet, scheduleClearAndRestart} from '../testnet';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /** Digits are button numbers, so each must be 1-6, and the firmware wants 7-10. */
 const TEST_PIN = '1234561';
@@ -183,7 +184,7 @@ export function TestingScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       {/*
         THE ONLY WRITER IN THE APP, and it is behind testing mode.
 

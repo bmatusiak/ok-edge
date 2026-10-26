@@ -7,6 +7,7 @@ import {ConfigModePanel} from '../ui/ConfigModePanel';
 import type {ConfigState} from '../ui/configModeNotes';
 import {useActiveKeyWithBackend} from '../hooks/KeyContext';
 import type {EmuSession} from '../hooks/useOkEmu';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * THE FIRMWARE TAB - updating a production key's firmware.
@@ -34,7 +35,7 @@ export function FirmwareTabScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       {hardRunning ? (
         <FirmwareScreen emu={emu} backend={backend} configMode={configMode} />
       ) : (

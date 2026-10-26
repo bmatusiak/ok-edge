@@ -25,6 +25,7 @@ import {TotpCode, TotpRowCode} from './TotpViews';
 import {policyWords, timeLeftWords} from './session';
 import {usePasswordManager, type OldVault} from './usePasswordManager';
 import type {Manager, StorePolicy} from './stores';
+import {SHOW_SCROLLBARS} from '../../platform';
 
 /*
  * THE PASSWORDS TAB. Unlocks when the tab opens if that needs no press; otherwise "Open with
@@ -577,7 +578,7 @@ function OpenStore({
       <View style={styles.filters}>
         <Segmented options={KIND_FILTERS} value={kindFilter} onChange={setKindFilter} />
         {folders.length ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={SHOW_SCROLLBARS} contentContainerStyle={styles.chips}>
             <Btn title="All folders" tone={folderFilter === null ? 'primary' : 'default'} onPress={() => setFolderFilter(null)} />
             {folders.map(f => (
               <Btn key={f} title={f} tone={folderFilter === f ? 'primary' : 'default'} onPress={() => setFolderFilter(folderFilter === f ? null : f)} />

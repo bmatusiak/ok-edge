@@ -14,6 +14,7 @@ import type {EmuSession} from '../hooks/useOkEmu';
 import {FidoGatt} from '../transport/FidoGatt';
 import type {PermissionStatus} from '../transport/FidoGatt';
 import {usePasskeyProvider} from '../hooks/usePasskeyProvider';
+import {SHOW_SCROLLBARS} from '../platform';
 
 const {keystrokes} = okdevice;
 
@@ -504,7 +505,7 @@ export function PreferencesScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       {has('prefs') ? (<>
       <Section title="Permissions">
         <Text style={styles.body}>

@@ -3,6 +3,7 @@ import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Logo} from './Logo';
 import {theme} from './theme';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * A left menu, opened by the logo in the top bar.
@@ -78,7 +79,7 @@ export function Drawer<T extends string>({
         <ScrollView
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
           {tabs.map(tab => {
             const active = tab === value;
             return (

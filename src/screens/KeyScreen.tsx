@@ -14,6 +14,7 @@ import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {buildInfo} from '../buildInfo';
 import {usePasskeyProvider} from '../hooks/usePasskeyProvider';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /**
  * The key itself: what state it is in, what it holds, and its buttons.
@@ -182,7 +183,7 @@ export function KeyScreen({emu, keys, configMode = false, onCheckConfig, checkin
       <ScrollView
         style={styles.root}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
         <View style={styles.locked}>
           <PinScreen onPress={emu.press} onPressRun={emu.pressRun} canPress={emu.canPress} model={emu.model} settling={emu.settling} led={keys.backend === 'embedded' ? emu.led : undefined} configMode={configMode} onCheckConfig={onCheckConfig} checking={checking} />
         </View>
@@ -257,7 +258,7 @@ function Unlocked({emu, keys, slots}: {emu: EmuSession; keys: KeyControl; slots?
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
 
       {emu.canPress !== true ? (
         <Section title="Buttons">

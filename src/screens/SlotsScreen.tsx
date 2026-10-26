@@ -6,6 +6,7 @@ import {DuoSlotGrid} from '../ui/DuoSlotGrid';
 import {theme} from '../ui/theme';
 import {useActiveKey, useKeyName} from '../hooks/KeyContext';
 import {device as okdevice} from 'node-onlykey-lib';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * Slots, as the device's own shape rather than as a list.
@@ -126,7 +127,7 @@ export function SlotsScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       <View style={styles.header}>
         <Text style={styles.title}>{`Slots — ${keyName}`}</Text>
         {refreshBtn}

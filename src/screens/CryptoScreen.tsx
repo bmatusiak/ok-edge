@@ -12,6 +12,7 @@ import {useActiveKey, useKeyName} from '../hooks/KeyContext';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {useSecureScreen} from '../hooks/useSecureScreen';
 import type {EmuSession} from '../hooks/useOkEmu';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * Secrets the key DERIVES rather than stores.
@@ -108,7 +109,7 @@ function Root({embedded, children}: {embedded: boolean; children: React.ReactNod
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       {children}
     </ScrollView>
   );

@@ -5,6 +5,7 @@ import {theme} from '../ui/theme';
 import type {LogEntry} from '../hooks/useLog';
 import {useBackend, useKeyName} from '../hooks/KeyContext';
 import {useSecureScreen} from '../hooks/useSecureScreen';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * NAMED FOR THE DEVICE, not for the layer.
@@ -101,7 +102,7 @@ export function LogScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       <Section
         title={view === 'Console' ? `Console — ${keyName}` : view}
         right={<Btn title="Clear" onPress={active.clear} />}>

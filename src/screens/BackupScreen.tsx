@@ -13,6 +13,7 @@ import {NEEDS_CONFIG_MODE, NOT_IN_CONFIG_MODE, ON, type ConfigState} from '../ui
 import {summarizeBackup} from '../backupFile';
 import type {BackupSummary} from '../backupFile';
 import type {EmuSession} from '../hooks/useOkEmu';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * Backup and restore.
@@ -413,7 +414,7 @@ export function BackupScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       {/*
         * A BACKUP CANNOT BE TAKEN IN CONFIG MODE.
         *

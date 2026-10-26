@@ -4,6 +4,7 @@ import {Btn, KeyValue, LogList, Section, Segmented, StatusPill} from '../ui/comp
 import {theme} from '../ui/theme';
 import {IFACE_NAMES, type UsbSession} from '../hooks/useUsbHid';
 import type {LogEntry} from '../hooks/useLog';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /**
  * The byte-level view of the hard key: what is on the wire, and a way to put
@@ -41,7 +42,7 @@ export function UsbScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}
     >
       <Section
         title="Hard Key transport"

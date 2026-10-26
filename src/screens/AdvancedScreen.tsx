@@ -29,6 +29,7 @@ import {useActiveKeyWithBackend, useKeyName} from '../hooks/KeyContext';
 import type {EmuSession} from '../hooks/useOkEmu';
 import type {HardKeySession} from '../hooks/useHardKey';
 import type {KeyControl} from '../hooks/useKey';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /**
  * The settings a provisioned key CANNOT TAKE BACK.
@@ -254,7 +255,7 @@ export function AdvancedScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       {/* First, because it decides which key everything below acts on. */}
       <KeySource keys={keys} />
 

@@ -18,6 +18,7 @@ import type {EmuSession} from '../hooks/useOkEmu';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {useSecureScreen} from '../hooks/useSecureScreen';
 import {generatePassword} from '../passwordGenerator';
+import {SHOW_SCROLLBARS} from '../platform';
 
 /*
  * One slot, in full.
@@ -438,7 +439,7 @@ export function SlotEditorScreen({
     <ScrollView
       style={styles.root}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       <View style={styles.header}>
         <Pressable
           onPress={onBack}
