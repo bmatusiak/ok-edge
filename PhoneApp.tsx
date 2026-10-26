@@ -84,7 +84,7 @@ import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
 import {armWebKey} from './src/hooks/useWebKey';
-import {joinServerRoom} from './src/serverRoom';
+import {joinServerRoom, leaveServerRoom} from './src/serverRoom';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
@@ -205,8 +205,11 @@ const DEV_ONLY_TABS: readonly Tab[] = ['Log'];
  * app reaches keys through WebAuthn - only the Android app is a Bluetooth keyboard and authenticator.
  */
 const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
-/* the cli pair and the sync service (src/sync.ts): the phone and the desktop; the web app has neither yet */
-const NOT_WEB_TABS: readonly Tab[] = ['Sync'];
+/*
+ * Every tab is on the web app now: Sync shows the web app its server (the cli pair and the sync service stay the phone's
+ * and the desktop's - SyncScreen shows the web app only Identity, Server and Features).
+ */
+const NOT_WEB_TABS: readonly Tab[] = [];
 
 /*
  * The drawer's tabs: testing mode adds its own; Edge also comes with a soft key that has it.
@@ -1040,9 +1043,14 @@ function Shell() {
   const awaitingUnlock = useRef(false);
   /* past the identity check for this unlock (its Continue / Decrypt Bucket); a lock or a key switch takes it back */
   const [passed, setPassed] = useState(false);
-  /* the web app joins its identity's room on the server that served it once the bucket is open (src/serverRoom.ts) */
+  /*
+   * THE IDENTITY'S ROOM ON THE USER'S SERVER (src/serverRoom.ts): joined once the bucket is open, left when it closes.
+   * The web app's server is the one that served it; the phone's, the one set in the Sync tab. (The desktop's bucket is
+   * its sync service's file: the room is that service's to join, and this finds no bucket open in the page.)
+   */
   useEffect(() => {
-    if (shell === 'webapp' && passed) void joinServerRoom();
+    if (passed) void joinServerRoom();
+    else leaveServerRoom();
   }, [passed]);
   useEffect(() => {
     if (lastDoorKey.current === doorKey) return;

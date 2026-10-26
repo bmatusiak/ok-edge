@@ -3,6 +3,8 @@
  * is to use identical code, so the bugs are fixed in 1 spot"). The desktop's ⇄ in the top bar leads here; the phone's
  * Bluetooth tab has a button to it.
  *
+ *   - Server: the user's server this device meets its other devices on (src/ui/ServerPanel.tsx) - the web app has
+ *     only this (no Bluetooth, no cli pair), with Identity and Features.
  *   - Sync service: the switch, what the service is doing, the last sync.
  *   - Features: each store in the bucket - its items, whether it matches the other device, when it was last checked
  *     and last changed by a sync ("a panel that shows the status of each feature, and last sync timestamps").
@@ -15,6 +17,7 @@ import {ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {Btn, Section} from '../ui/components';
 import {IdentityCard, type IdentityRow} from '../ui/IdentityCard';
 import {PairedDevicesCard} from '../ui/PairedDevicesCard';
+import {ServerPanel} from '../ui/ServerPanel';
 import {theme} from '../ui/theme';
 import {bucketSummary, openBucketIdentity} from '../bucketStore';
 import {activeBackend} from '../hooks/KeyContext';
@@ -108,15 +111,34 @@ export function SyncScreen({testing = false}: {testing?: boolean}) {
     void bucketSummary().then(s => { if (live) setOwn(s); }).catch(() => {});
     return () => { live = false; };
   }, [state?.stores, state?.took?.at]);
-  if (!state) return null;
-  const device = state.role === 'phone' ? 'phone' : 'computer';
   const merged: Record<string, SyncStore> = {};
   for (const [name, items] of Object.entries(own ?? {})) merged[name] = {items, same: null, checkedAt: 0, changedAt: null};
-  for (const [name, s] of Object.entries(state.stores ?? {})) merged[name] = {...s, items: own?.[name] ?? s.items};
+  for (const [name, s] of Object.entries(state?.stores ?? {})) merged[name] = {...s, items: own?.[name] ?? s.items};
   const stores = Object.entries(merged).sort(([a], [b]) => featureName(a).localeCompare(featureName(b)));
+  const features = (
+    <Section title="Features">
+      {stores.length ? (
+        stores.map(([name, s]) => <FeatureRow key={name} name={name} s={s} />)
+      ) : (
+        <Text style={styles.note}>No bucket is open on this device.</Text>
+      )}
+    </Section>
+  );
+  /* THE WEB APP HAS NO SYNC SERVICE (no Bluetooth, no cli pair): it syncs through its server alone */
+  if (!state) {
+    return (
+      <ScrollView style={styles.root} contentContainerStyle={styles.page}>
+        <IdentityPanel />
+        <ServerPanel />
+        {features}
+      </ScrollView>
+    );
+  }
+  const device = state.role === 'phone' ? 'phone' : 'computer';
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.page}>
       <IdentityPanel />
+      <ServerPanel />
       <Section title="Sync service">
         <View style={styles.row}>
           <Text style={styles.name}>{`Sync this ${device}'s bucket`}</Text>
@@ -132,13 +154,7 @@ export function SyncScreen({testing = false}: {testing?: boolean}) {
         {testing && state.lines.length ? <Text style={styles.mono}>{state.lines.slice(-8).join('\n')}</Text> : null}
       </Section>
 
-      <Section title="Features">
-        {stores.length ? (
-          stores.map(([name, s]) => <FeatureRow key={name} name={name} s={s} />)
-        ) : (
-          <Text style={styles.note}>No bucket is open on this device.</Text>
-        )}
-      </Section>
+      {features}
 
       {pairGate ? <PairedDevicesCard gate={pairGate} testing={testing} /> : null}
     </ScrollView>
