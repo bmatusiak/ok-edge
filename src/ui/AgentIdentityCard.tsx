@@ -15,7 +15,7 @@ import {shell} from '../platform';
 import {theme} from './theme';
 
 /* the device this app runs on: the phone, or on the desktop this computer (its key is the hard key) */
-const HERE = shell === 'electron' ? 'this computer' : 'this phone';
+const HERE = shell === 'desktop' ? 'this computer' : 'this phone';
 
 export function AgentIdentityCard() {
   const [kept, setKept] = useState<KeptIdentity | null | undefined>(undefined);

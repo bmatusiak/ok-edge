@@ -34,8 +34,8 @@ const common: Setup[] = [
 const byShell: Record<typeof shell, Setup[]> = {
   /* the native modules copied from ok-rn (okedge-native), each checked once at start */
   android: [plugin('native', () => require('./native/selfTest').selfTest())],
-  web: [],
-  electron: [plugin('desktop', async () => ({ about: await desktop!.invoke('okedge:about') }))],
+  webapp: [],
+  desktop: [plugin('desktop', async () => ({ about: await desktop!.invoke('okedge:about') }))],
 };
 
 /**
@@ -44,12 +44,12 @@ const byShell: Record<typeof shell, Setup[]> = {
  * have it". A shell missing from a row never gets that capability.
  */
 export const CAPABILITIES: Record<string, Partial<Record<typeof shell, number>>> = {
-  'hard key (USB)': { android: 2, electron: 4, web: 5 },
+  'hard key (USB)': { android: 2, desktop: 4, webapp: 5 },
   /* node-onlykey-emulator (stage 1b): its Android build on the phone, its Node addon in Electron's
      main process; a browser reaches it only through the emulator's HID bridge, as a USB key */
-  'soft key': { android: 2, electron: 4 },
+  'soft key': { android: 2, desktop: 4 },
   'computer link (Bluetooth service)': { android: 2 },
-  'phone over Bluetooth': { electron: 4, web: 5 },
+  'phone over Bluetooth': { desktop: 4, webapp: 5 },
 };
 
 export type App = { services: Record<string, unknown> };

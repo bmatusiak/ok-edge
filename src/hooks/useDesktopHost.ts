@@ -18,7 +18,7 @@ type Shell = {on(channel: string, listener: (payload: any) => void): () => void}
 export function useDesktopHost(): void {
   useEffect(() => {
     const bridge = (globalThis as {okedge?: Shell}).okedge;
-    if (shell !== 'electron' || !desktop || !bridge) return undefined;
+    if (shell !== 'desktop' || !desktop || !bridge) return undefined;
     /*
      * THE CLI'S WHOLE CONVERSATION HOLDS THE KEY (box, 2026-10-24: with the Edge tab open, edge setup's
      * certificate came back with a self-signature that did not verify). The phone's bridge holds the key

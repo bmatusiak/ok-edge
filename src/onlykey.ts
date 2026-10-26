@@ -159,7 +159,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
        * as https://apps.crp.to (electron/main.js), the origin the tunnel asserts. Linux opens the FIDO
        * interface itself and keeps the CTAPHID path.
        */
-      ...(backend === 'usb' && shell === 'electron' && /Windows/.test(navigator.userAgent)
+      ...(backend === 'usb' && shell === 'desktop' && /Windows/.test(navigator.userAgent)
         ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials})}}
         : {}),
     };

@@ -65,7 +65,7 @@ type Bridge = {
 };
 
 /* the desktop's preload (electron/preload.js) */
-const bridge = shell === 'electron' ? (globalThis as {okedge?: Bridge}).okedge ?? null : null;
+const bridge = shell === 'desktop' ? (globalThis as {okedge?: Bridge}).okedge ?? null : null;
 
 /** Whether this shell hosts a sync service (the desktop's ⇄ in the top bar shows only there). */
 export const syncHosted = bridge !== null;

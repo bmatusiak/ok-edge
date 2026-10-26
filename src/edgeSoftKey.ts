@@ -152,7 +152,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * Once per key per app run: later links the tab reads from the key itself.
    */
   private async takeShared(): Promise<void> {
-    if (shell !== 'electron' || takenShared.has(toHex(this.deviceId))) return;
+    if (shell !== 'desktop' || takenShared.has(toHex(this.deviceId))) return;
     takenShared.add(toHex(this.deviceId));
     const {desktop} = require('./platform');
     const shared = (await desktop.invoke('okedge:sharedLinks', toHex(this.deviceId))) as {links: [string, string, string | null][]; openings: unknown[]; notes: any} | null;

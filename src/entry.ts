@@ -9,5 +9,5 @@ import App from '../App';
 import { shell } from './platform';
 import { phoneRoot } from './phoneRoot';
 
-export const root = shell === 'electron' ? phoneRoot() : App;
+export const root = shell === 'desktop' ? phoneRoot() : App;
 export function registerMore(): void {}

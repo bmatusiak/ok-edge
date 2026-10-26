@@ -220,7 +220,7 @@ function shownTabs(testingOn: boolean, testingLocked = false): readonly Tab[] {
    */
   if (testingTabs && testingLocked) return [LOCKED_TESTING_TABS[0], LOCKED_TESTING_TABS[1]];
   /* the desktop hosts the hard key's Edge (useEdge: the key is the hard key there), whatever its bundled soft key has */
-  const edge = testingTabs || hasSoftKeyPlugin('edge') || shell === 'electron';
+  const edge = testingTabs || hasSoftKeyPlugin('edge') || shell === 'desktop';
   const [first, ...rest] = TABS.filter(t => t !== 'Settings');
   const all: Tab[] = [first, ...(edge ? [EDGE_TAB] : []), ...rest, ...(testingTabs ? [IN_DEV_TAB, TESTING_TAB] : []), 'Settings'];
   /* each plugin tab after the tab it names, else just before Settings */
@@ -228,7 +228,7 @@ function shownTabs(testingOn: boolean, testingLocked = false): readonly Tab[] {
     const at = p.after ? all.indexOf(p.after as Tab) : -1;
     all.splice(at >= 0 ? at + 1 : all.length - 1, 0, p.name as PluginTab);
   }
-  return all.filter(t => !HIDDEN_TABS.includes(t) && (__DEV__ || !DEV_ONLY_TABS.includes(t)) && (shell === 'android' || !ANDROID_ONLY_TABS.includes(t)) && (shell !== 'web' || !NOT_WEB_TABS.includes(t)));
+  return all.filter(t => !HIDDEN_TABS.includes(t) && (__DEV__ || !DEV_ONLY_TABS.includes(t)) && (shell === 'android' || !ANDROID_ONLY_TABS.includes(t)) && (shell !== 'webapp' || !NOT_WEB_TABS.includes(t)));
 }
 
 /** Splash until the device can answer, then a door, then the app. */
@@ -1205,7 +1205,7 @@ function Shell() {
       <IoPolicySync setTarget={fido.setTarget} />
       <StatusBar barStyle="light-content" />
       {/* an agent's budget request (Edge step 2): over whatever tab is open */}
-      {hasSoftKeyPlugin('edge') || shell === 'electron' ? <EdgeRequestSheet /> : null}
+      {hasSoftKeyPlugin('edge') || shell === 'desktop' ? <EdgeRequestSheet /> : null}
 
       {/* app plugins' watches run whatever tab is open (the Password Manager closes a key's store when it locks) */}
       {pluginWatches().map((Watch, i) => (
@@ -1274,7 +1274,7 @@ function Shell() {
               />
             ) : null}
             {/* the desktop's status icon in the same place (Brad, 2026-10-25): the sync service it hosts */}
-            {shell === 'electron' ? <SyncStatus onPress={() => setTab('Sync')} /> : null}
+            {shell === 'desktop' ? <SyncStatus onPress={() => setTab('Sync')} /> : null}
 
             <Pressable
               onPress={() => setTab('This Key')}
