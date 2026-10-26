@@ -84,6 +84,7 @@ import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
 import {armWebKey} from './src/hooks/useWebKey';
+import {joinServerRoom} from './src/serverRoom';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
@@ -1039,6 +1040,10 @@ function Shell() {
   const awaitingUnlock = useRef(false);
   /* past the identity check for this unlock (its Continue / Decrypt Bucket); a lock or a key switch takes it back */
   const [passed, setPassed] = useState(false);
+  /* the web app joins its identity's room on the server that served it once the bucket is open (src/serverRoom.ts) */
+  useEffect(() => {
+    if (shell === 'webapp' && passed) void joinServerRoom();
+  }, [passed]);
   useEffect(() => {
     if (lastDoorKey.current === doorKey) return;
     lastDoorKey.current = doorKey;

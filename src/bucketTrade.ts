@@ -63,16 +63,30 @@ const answer = bucketLib.trade.peerSide({
   rules: RULES,
 });
 
+/**
+ * This device's proof material for the open bucket's identity (made once through the key: two presses), or null when
+ * no bucket is open or the key is another identity's. Joining the identity's room on the user's server needs it first
+ * (serverRoom.ts).
+ */
+export async function proofMaterial(): Promise<Me | null> {
+  await ensureMe();
+  return me;
+}
+
 /** Is this a bucket trade message (bucket/src/trade.js)? */
 export function isTradeMessage(msg: any): boolean {
   return (Object.values(bucketLib.trade.TYPES) as string[]).includes(msg?.type);
 }
 
-/** Answer one round of a trade from a paired computer. */
-export async function handleTrade(msg: any, from: string): Promise<unknown> {
+/**
+ * Answer one round of a trade from a paired computer.
+ * allowed: whether this carrier may trade now - the phone's Bluetooth sync service by default; a room on the user's
+ * server passes its own (it was joined with the key's proof, and is left when the bucket closes).
+ */
+export async function handleTrade(msg: any, from: string, {allowed = phoneSyncAllowed}: {allowed?: () => boolean} = {}): Promise<unknown> {
   console.log(`[bucket] ${msg.type} arrived (${JSON.stringify(msg).length} bytes)`);
   /* the Sync tab's switch off, or no bucket open: the same plain refusal as any other (no hint about the bucket) */
-  if (!phoneSyncAllowed()) { console.log(`[bucket] ${msg.type}: refused (sync is off on this phone)`); return {ok: false, refusal: 'no'}; }
+  if (!allowed()) { console.log(`[bucket] ${msg.type}: refused (sync is off here)`); return {ok: false, refusal: 'no'}; }
   if (msg.type === bucketLib.trade.TYPES.HELLO) await ensureMe().catch((e: unknown) => { me = null; console.log(`[bucket] no proof material: ${String((e as Error)?.message ?? e)}`); });
   let out: any;
   try {
