@@ -23,9 +23,13 @@ export function currentNet(): Net {
   return current;
 }
 
-/** The net of a firmware storage folder: the testnet's slot, or live. */
+/*
+ * The net of a firmware storage folder: the testnet's slot, or live. Either separator: a Windows folder is
+ * C:\...\okemu\plugins-config.edge-test (the Windows desktop, 2026-10-25: split on / alone, its testnet soft key read as
+ * live - no TESTNET banner, its records filed under the live chain).
+ */
 export function netOfStorageDir(dir: string | null | undefined): Net {
-  const leaf = String(dir ?? '').replace(/[\/]+$/, '').split(/[\/]/).pop();
+  const leaf = String(dir ?? '').replace(/[\\/]+$/, '').split(/[\\/]/).pop();
   return leaf === testStorageSlot ? 'test' : 'live';
 }
 

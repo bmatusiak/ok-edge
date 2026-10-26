@@ -465,7 +465,8 @@ function tail(path: string): string {
   if (!path) {
     return '-';
   }
-  return path.split('/').slice(-2).join('/');
+  /* either separator (a Windows folder has \) */
+  return path.split(/[\\/]/).slice(-2).join('/');
 }
 
 function describeLed(pixels: number[]): string {
