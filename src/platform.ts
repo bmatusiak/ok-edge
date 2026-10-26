@@ -24,8 +24,11 @@ const bridge: DesktopBridge | null = (globalThis as { okedge?: DesktopBridge }).
 
 export const shell: Shell = Platform.OS === 'android' ? 'android' : bridge ? 'desktop' : 'webapp';
 
-/** What this device is called in the app's sentences ("this phone is also the key"): the desktop is a computer. */
-export const DEVICE_WORD = shell === 'android' ? 'phone' : 'computer';
+/**
+ * What this device is called in the app's sentences ("this phone is also the key"): the desktop is a computer; the
+ * web app is a browser - what it keeps lives in this browser's profile, not on the computer.
+ */
+export const DEVICE_WORD = shell === 'android' ? 'phone' : shell === 'desktop' ? 'computer' : 'browser';
 
 /*
  * SCROLLBARS ON THE DESKTOP AND THE WEB (Brad, 2026-10-25: "this scroll view on desktop has no scroll bars, it's not

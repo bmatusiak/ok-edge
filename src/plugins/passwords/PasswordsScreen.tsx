@@ -25,7 +25,7 @@ import {TotpCode, TotpRowCode} from './TotpViews';
 import {policyWords, timeLeftWords} from './session';
 import {usePasswordManager, type OldVault} from './usePasswordManager';
 import type {Manager, StorePolicy} from './stores';
-import {SHOW_SCROLLBARS} from '../../platform';
+import {DEVICE_WORD, SHOW_SCROLLBARS} from '../../platform';
 
 /*
  * THE PASSWORDS TAB. Unlocks when the tab opens if that needs no press; otherwise "Open with
@@ -146,7 +146,7 @@ export function PasswordsScreen({ctx}: {ctx: TabContext}) {
           <>
             <Text style={styles.body}>
               {view.isNew
-                ? `No password store for this key on this phone yet. Opening makes one, sealed to the ${keyName}: only this key, or a key restored from its backup, opens it.`
+                ? `No password store for this key on this ${DEVICE_WORD} yet. Opening makes one, sealed to the ${keyName}: only this key, or a key restored from its backup, opens it.`
                 : `Your passwords are sealed to the ${keyName}. Opening asks the key once; the store then stays open for ${policyWords(policy())}, or until the key locks.`}
             </Text>
             <Text style={styles.store}>Store {view.storeId.slice(0, 8)}</Text>
