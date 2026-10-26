@@ -10,6 +10,7 @@ https.createServer({ key: fs.readFileSync(path.join(certs, 'apps.crp.to.key')), 
   let f = path.join(docs, p);
   if (!f.startsWith(path.resolve(docs))) { res.writeHead(403); return res.end(); }
   if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(docs, 'index.html'); /* single-page app */
-  res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' });
+  /* no-store: the --dev export names its bundle index-<md5 of nothing>.js every time, so a cached copy is never the new build */
+  res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
   fs.createReadStream(f).pipe(res);
 }).listen(Number(port), () => console.log(`serving ${docs} at https://apps.crp.to:${port}`));
