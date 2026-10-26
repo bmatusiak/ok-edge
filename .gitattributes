@@ -1,0 +1,2 @@
+# firmware images are byte-exact: their sha256 is published (firmware/manifest.json); never convert line endings
+*.hex -text
