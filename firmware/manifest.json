@@ -1,0 +1,14 @@
+{
+  "file": "v3.1.0-test-config-edge-key_chain-fix_usertimeout-ctap_bridge-fw9fceea1-libb273489.hex",
+  "version": "v3.1.0",
+  "firmware": "9fceea1",
+  "libraries": "b273489",
+  "plugins": ["config", "edge", "key_chain", "fix_usertimeout", "ctap_bridge"],
+  "pluginsFrom": "node-onlykey-emulator 085393c",
+  "debug": true,
+  "site": "ok-edge.bmatusiak.workers.dev",
+  "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (edge/tools/build-hardkey.sh)",
+  "built": "2026-10-26",
+  "tested": false,
+  "sha256": "0189285028c7e7ba94cee14d98108f5efc36412655b8058f4e391117e5c83b3f"
+}

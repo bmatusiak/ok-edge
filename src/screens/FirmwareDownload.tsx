@@ -25,6 +25,8 @@ type Manifest = {
   debug: boolean;
   sha256: string;
   site?: string;
+  /* false until this exact file has run on a hard key: said on the page, never left out */
+  tested?: boolean;
 };
 
 const BASE = '/firmware/';
@@ -65,6 +67,7 @@ export function FirmwareDownload() {
       </Text>
       <Text style={styles.line}>plugins: {m.plugins.join(', ')}</Text>
       {m.site ? <Text style={styles.line}>allowed site: {m.site}</Text> : null}
+      {m.tested === false ? <Text style={styles.warn}>not yet tested on a hard key</Text> : null}
       <Text style={styles.line} selectable>
         sha256 {m.sha256}
       </Text>
@@ -75,4 +78,5 @@ export function FirmwareDownload() {
 const styles = StyleSheet.create({
   box: {width: '100%', maxWidth: 420, gap: 4, alignItems: 'stretch'},
   line: {color: theme.textDim, fontSize: 11, textAlign: 'center', lineHeight: 15},
+  warn: {color: theme.warn, fontSize: 11, textAlign: 'center', lineHeight: 15},
 });
