@@ -1,21 +1,28 @@
 /*
- * The Cloudflare Worker that hosts the web app (Workers Builds runs `npx wrangler deploy` here on a push).
- * Without this file wrangler guessed a static site built to dist/; this names it: the web app is built into docs/
- * (the plan's folder, the one mcp-server/ will serve) and served as one page, so a reload on any route loads the app.
+ * The user's server (Cloudflare Workers Builds runs `npx wrangler deploy` here on a push; `npm run server:dev` runs it
+ * locally). mcp-server/src/index.js: the Worker - the identity rooms on /ws/<identity id> (a Durable Object each) and
+ * the web app, built into docs/ and served as one page, so a reload on any route loads the app.
  *
- * The RELEASE export: a public URL never carries the testing screen (metro.config.js swaps it for its stub when the
- * bundle is not a dev one). The box's local copy is the --dev build (npm run build:webapp, tools/box/webapp.sh).
+ * Cloudflare builds the RELEASE export (mcp-server/build-webapp.js): a public URL never carries the testing screen
+ * (metro.config.js swaps it for its stub when the bundle is not a dev one). A local run keeps the docs/ already built
+ * (the box's --dev build: npm run build:webapp, tools/box/webapp.sh).
  *
- * Static only for now; mcp-server/ adds the Worker itself (the websocket and MCP faces) as `main` in M1.
+ * run_worker_first: /ws/* reaches the Worker even though the single-page fallback would answer every path with the app.
+ * new_sqlite_classes: the free plan's Durable Objects are the SQLite-backed kind.
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ok-edge",
+  "main": "mcp-server/src/index.js",
   "compatibility_date": "2026-10-23",
   "observability": { "enabled": true },
-  "build": { "command": "npm run build:webapp:release" },
+  "build": { "command": "node mcp-server/build-webapp.js" },
   "assets": {
     "directory": "./docs",
-    "not_found_handling": "single-page-application"
-  }
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/ws/*"]
+  },
+  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "IdentityRoom" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["IdentityRoom"] }]
 }

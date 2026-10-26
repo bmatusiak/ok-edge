@@ -11,6 +11,8 @@
     "build:web:test": "expo export --platform web --dev --output-dir dist/web-test",
     "build:webapp": "expo export --platform web --dev --output-dir docs",
     "build:webapp:release": "expo export --platform web --output-dir docs",
+    "server:dev": "npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787",
+    "server:test": "node --test mcp-server/test/rooms.test.js",
     "electron": "node electron/start.js",
     "electron:dev": "cross-env OKEDGE_WEB_URL=http://localhost:8090 node electron/start.js",
     "electron:test": "cross-env OKEDGE_FLAVOR=test node electron/start.js",
