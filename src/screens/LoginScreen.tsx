@@ -7,6 +7,7 @@ import {theme} from '../ui/theme';
 import {buildInfo} from '../buildInfo';
 import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import type {DeviceState} from '../hooks/useOkEmu';
+import {FirmwareDownload} from './FirmwareDownload';
 
 /**
  * The first thing you see, and a provenance screen as much as a door.
@@ -118,13 +119,15 @@ export function LoginScreen({
         * opens from a top bar this screen does not draw - so tools/e2e.js taps
         * it too.
         */}
-      {__DEV__ && onTesting ? (
-        <View style={styles.devFooter}>
+      <View style={styles.devFooter}>
+        {/* the web app: the firmware it works with, for a developer key (FirmwareDownload.tsx; nothing elsewhere) */}
+        <FirmwareDownload />
+        {__DEV__ && onTesting ? (
           <View style={styles.devFooterInner}>
             <Btn title="Enter testing mode" onPress={onTesting} disabled={picked === 'live'} />
           </View>
-        </View>
-      ) : null}
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -174,6 +177,7 @@ const styles = StyleSheet.create({
     right: 24,
     bottom: 24,
     alignItems: 'center',
+    gap: 12,
   },
   devFooterInner: {width: '100%', maxWidth: 320},
   action: {marginTop: 32, width: '100%', maxWidth: 320, gap: 12},
