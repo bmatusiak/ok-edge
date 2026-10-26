@@ -21,6 +21,7 @@ import {
 } from './keychain/shared';
 import {KeyChainWizard, WIZARD_SAVE_KEY} from './keychain/KeyChainWizard';
 import {KeyChainRemove} from './keychain/KeyChainRemove';
+import {AdoptComposite} from './keychain/AdoptComposite';
 
 /*
  * KEY CHAIN - generate, keep track of, derive and export keys (owner,
@@ -1379,6 +1380,10 @@ export function KeyChainScreen({
                   <>
                     {a ? artifactRows(a, {name: tag ? `${tag.kind}-${tag.name}` : slotName(p.slot)}) : null}
                     {!a && kept ? artifactRows(kept.artifacts, {name: kept.name || slotName(p.slot), pgp: kept.pgp, id: kept.id, fp: kept.pgpFingerprint}) : null}
+                    {p.kind === 'composite' && !kept ? (
+                      <AdoptComposite slot={p.slot} entries={entries} getKey={getKey} busy={busy !== null}
+                        onBusy={b => setBusy(b ? 'adopt' : null)} onStatus={setStatus} onError={setError} />
+                    ) : null}
                     <Btn title="Remove…" tone="danger" disabled={busy !== null} onPress={() => setRemoving(targetForSlot(p))} />
                   </>
                 ) : null}

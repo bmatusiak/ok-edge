@@ -523,7 +523,7 @@ export function MessagesScreen({
             items={kept.map(k => ({key: k.id, title: k.name, detail: `RSA slot ${k.slot}`}))}
             selected={myDeviceKey ? [myDeviceKey] : []}
             onChange={keys => setMyDeviceKey(keys[0] ?? null)}
-            empty="No +PQC key on this OnlyKey yet - make one in Key Chain."
+            empty="No +PQC key yet - in Key Chain, adopt the one on this OnlyKey or make a new one."
             disabled={!pqc}
           />
           <Btn

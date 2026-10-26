@@ -161,7 +161,7 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
         onSend={(text, sign) =>
           run('send', async () => {
             const to = byId.get(page.contact);
-            if (!me) throw new Error('You have no PGP key yet, so you could not read what you send. Make a +PQC key in Key Chain first.');
+            if (!me) throw new Error('You have no PGP key yet, so you could not read what you send. Get one in Key Chain, adopt the composite key already on this OnlyKey, or make a new one.');
             if (!to || !to.keys.length) throw new Error('This person has no PGP key in Guest Book any more.');
             /* them AND you, so your side of the thread opens again later */
             const keys = page.contact === ME ? me.keys : [...to.keys, ...me.keys];
@@ -171,7 +171,7 @@ export function CryptoboxScreen({recipients}: {ctx: TabContext; recipients: Reci
             let proven: (() => Promise<void>) | null = null;
             if (sign) {
               const key = deviceKeys[0];
-              if (!key) throw new Error('Signing needs your +PQC key on the device - make one in Key Chain.');
+              if (!key) throw new Error('Signing needs your +PQC key on the device - in Key Chain, adopt the composite key already on this OnlyKey, or make a new one.');
               const armed = await armDeviceKey(getKey, key, setChallenge);
               signWith = armed.privateKey;
               disarm = armed.disarm;
@@ -335,7 +335,7 @@ function Thread({
       {banner}
       <View style={styles.compose}>
         {canSend ? null : (
-          <Text style={styles.dim}>{!me ? 'Make a +PQC key in Key Chain to write - you need one to read what you send.' : 'This person has no PGP key in Guest Book.'}</Text>
+          <Text style={styles.dim}>{!me ? 'To write you need a +PQC key: in Key Chain, adopt the composite key already on this OnlyKey, or make a new one.' : 'This person has no PGP key in Guest Book.'}</Text>
         )}
         <TextInput
           value={text}
