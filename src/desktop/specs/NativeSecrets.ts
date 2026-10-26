@@ -1,6 +1,8 @@
-/* clipboard in the page, the sealed box in Electron's main process (safeStorage); no biometrics on the desktop (module.ts: how a desktop module is made) */
+/* clipboard in the page, the sealed box in Electron's main process (safeStorage) or, in the web app, the page (webBox.ts); no biometrics on the desktop (module.ts: how a desktop module is made) */
 import type {Spec} from 'okedge-native/specs/NativeSecrets';
 import {desktopModule, invoke} from './module';
+import {shell} from '../../platform';
+import * as webBox from './webBox';
 let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
 export default desktopModule<Spec>('NativeSecrets', {
@@ -24,8 +26,11 @@ export default desktopModule<Spec>('NativeSecrets', {
   async biometricForget() { return true; },
   async biometricLoad(alias: string) { throw new Error(`nothing is stored under "${alias}": this desktop has no biometric store`); },
   async biometricStore() { throw new Error('this desktop has no biometric store - nothing was stored'); },
-  /* the Keystore box: Electron's safeStorage (the OS keychain/DPAPI), in the main process */
-  boxSeal: (alias: string, hex: string) => invoke<string>('NativeSecrets:boxSeal', alias, hex),
-  boxOpen: (alias: string, hex: string) => invoke<string>('NativeSecrets:boxOpen', alias, hex),
-  boxForget: (alias: string) => invoke<boolean>('NativeSecrets:boxForget', alias),
+  /*
+   * The Keystore box: on the desktop Electron's safeStorage (the OS keychain/DPAPI), in the main process; in the
+   * web app a non-extractable WebCrypto key in IndexedDB (webBox.ts says what that does and does not protect).
+   */
+  boxSeal: (alias: string, hex: string) => (shell === 'webapp' ? webBox.boxSeal(alias, hex) : invoke<string>('NativeSecrets:boxSeal', alias, hex)),
+  boxOpen: (alias: string, hex: string) => (shell === 'webapp' ? webBox.boxOpen(alias, hex) : invoke<string>('NativeSecrets:boxOpen', alias, hex)),
+  boxForget: (alias: string) => (shell === 'webapp' ? webBox.boxForget(alias) : invoke<boolean>('NativeSecrets:boxForget', alias)),
 });
