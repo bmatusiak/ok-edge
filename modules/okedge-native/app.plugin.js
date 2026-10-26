@@ -7,14 +7,14 @@
  *   - includes `:okemu` in settings.gradle, from OKEDGE_EMULATOR or the sibling checkout
  *     ../node-onlykey-emulator (the workspace layout; the firmware checkouts sit beside it);
  *   - names the soft key in gradle.properties, so a plain `gradlew assemble…` always stages the same
- *     firmware: the plugins every phone build needs (config, edge, key_chain, fix_usertimeout -
+ *     firmware: the plugins every phone build needs (config, edge, key_chain -
  *     without them the soft key boots the empty base slot) and src/generated/ as the folder for
  *     firmware.json, which src/buildInfo.ts reads.
  */
 const path = require('path');
 const { withSettingsGradle, withGradleProperties } = require('expo/config-plugins');
 
-const PLUGINS = 'config,edge,key_chain,fix_usertimeout';
+const PLUGINS = 'config,edge,key_chain';
 
 const withOkEmuProject = (config) => withSettingsGradle(config, (c) => {
   if (!c.modResults.contents.includes("include ':okemu'")) {
