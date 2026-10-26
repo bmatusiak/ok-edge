@@ -6,6 +6,7 @@
 //   node tools/box/page-click.js "Create Bucket" [wait:2] ["Passwords" ...]   click in turn
 //   node tools/box/page-click.js --labels                                     what is on screen, clicking nothing
 //   node tools/box/page-click.js --text [chars=3000]                          the page's visible text
+//   node tools/box/page-click.js --eval 'EXPR'                                EXPR's value in the page, as JSON
 // A label not on screen fails, naming what is.
 const args = process.argv.slice(2);
 
@@ -42,7 +43,11 @@ const FIND = (label) => `(() => {
   const call = (method, params = {}) => new Promise((resolve) => { waiting.set(++id, resolve); ws.send(JSON.stringify({ id, method, params })); });
   const evaluate = async (expr) => (await call('Runtime.evaluate', { expression: expr, returnByValue: true })).result.result.value;
 
-  if (args[0] === '--text') {
+  if (args[0] === '--eval') {
+    /* an expression in the page (awaited), its value as JSON - storage, state, what a screen holds */
+    const r = await call('Runtime.evaluate', { expression: args[1], returnByValue: true, awaitPromise: true });
+    console.log(r.result.exceptionDetails ? `threw: ${r.result.exceptionDetails.exception?.description}` : JSON.stringify(r.result.result.value));
+  } else if (args[0] === '--text') {
     /* the page's visible text, bounded: an error message is longer than a label */
     console.log(String(await evaluate('document.body.innerText')).slice(0, Number(args[1]) || 3000));
   } else if (args[0] === '--labels') {
