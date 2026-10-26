@@ -21,12 +21,15 @@ import {shell} from '../platform';
 export function LoginScreen({
   device,
   attached,
+  keyVersion,
   onContinue,
   onTesting,
   picked = null,
 }: {
   device: DeviceState;
   attached?: boolean | null;
+  /** The firmware version the USB key reported (the web app's panel shows it); '' before it answers. */
+  keyVersion?: string;
   onContinue: () => void;
   /** Turns testing mode on from outside the door. Debug builds only. */
   onTesting?: () => void;
@@ -62,6 +65,21 @@ export function LoginScreen({
     <View style={styles.root}>
       <Logo height={44} />
 
+      {shell === 'webapp' ? (
+        /*
+         * THE WEB APP HAS NO SOFT KEY (Brad, 2026-10-26: "firmware in webapp is unknown because webapp has no softkey
+         * support ... change that panel for something more logical"): the card above describes a staged emulator the
+         * page does not carry. What is true here: the firmware the key itself reports when it answers, the site it
+         * must allow (this host - the WebAuthn rpId), how the page reaches it, and which library and app build this is.
+         */
+        <View style={styles.versions}>
+          <Row label="key" value={keyVersion || 'not answered yet'} />
+          <Row label="site" value={location.host} />
+          <Row label="connection" value="WebAuthn (this browser)" />
+          <Row label="library" value={[buildInfo.library, buildInfo.libraryCommit].filter(Boolean).join(' · ')} />
+          <Row label="app" value={[buildInfo.app, buildInfo.appCommit].filter(Boolean).join(' · ')} />
+        </View>
+      ) : (
       <View style={styles.versions}>
         <Row label="firmware" value={buildInfo.firmware} />
         {buildInfo.sources ? <Row label="sources" value={buildInfo.sources} /> : null}
@@ -72,6 +90,7 @@ export function LoginScreen({
         {buildInfo.plugins.length ? <Row label="plugins" value={buildInfo.plugins.join(', ')} /> : null}
         <Row label="app" value={buildInfo.app} />
       </View>
+      )}
 
       {/*
         * A HARD KEY BEING PRESENT IS NOT VISIBLE ANYWHERE ELSE ON THIS SCREEN.

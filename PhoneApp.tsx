@@ -1401,6 +1401,7 @@ function Shell() {
             <LoginScreen
               device={emu.device}
               attached={keys.attached}
+              keyVersion={keys.hard.version}
               picked={keys.backend === 'embedded' && keys.soft.state === 'running' ? net : null}
               /*
                 Straight to the Testing tab, not This Key. Someone who turns

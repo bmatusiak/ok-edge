@@ -14,7 +14,10 @@ const ci = process.env.WORKERS_CI || process.env.CI;
 if (!ci && fs.existsSync(path.join(docs, 'index.html'))) {
   console.log('[build] docs/ is built - kept (a local run; Cloudflare builds the release web app itself)');
 } else {
-  execSync('npm run build:webapp:release', { cwd: root, stdio: 'inherit' });
+  /* the commit being built, for the login page's "app" row (src/buildInfo.ts appCommit) */
+  let commit = process.env.WORKERS_CI_COMMIT_SHA || '';
+  try { commit = commit || execSync('git rev-parse HEAD', { cwd: root }).toString().trim(); } catch { /* not a git checkout */ }
+  execSync('npm run build:webapp:release', { cwd: root, stdio: 'inherit', env: { ...process.env, EXPO_PUBLIC_APP_COMMIT: commit } });
 }
 const out = path.join(docs, 'firmware');
 fs.rmSync(out, { recursive: true, force: true });

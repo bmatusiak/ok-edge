@@ -54,7 +54,14 @@ try {
 
 export type BuildInfo = {
   app: string;
+  /**
+   * The ok-edge commit this bundle was built from, or '' when the build did not say: mcp-server/build-webapp.js
+   * passes it to the web app's export as EXPO_PUBLIC_APP_COMMIT (Expo inlines it).
+   */
+  appCommit: string;
   library: string;
+  /** The node-onlykey-lib commit package.json pins (github:...#<sha>), short; '' when not pinned by commit. */
+  libraryCommit: string;
   /** Digest of the staged firmware sources, or 'unknown'. */
   firmware: string;
   /** Upstream checkouts the staging read, when they were git repos. */
@@ -131,7 +138,9 @@ export type BuildInfo = {
 
 export const buildInfo: BuildInfo = {
   app: String(pkg.version ?? '0.0.0'),
+  appCommit: String(process.env.EXPO_PUBLIC_APP_COMMIT ?? '').slice(0, 7),
   library: String(lib.version ?? 'unknown'),
+  libraryCommit: (/#([0-9a-f]{7,40})$/.exec(String(pkg.dependencies?.['node-onlykey-lib'] ?? '')) || [])[1]?.slice(0, 7) ?? '',
   firmware: staged.digest ?? 'unknown',
   sources:
     staged.firmware || staged.libraries
