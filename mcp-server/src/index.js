@@ -58,9 +58,20 @@ export class IdentityRoom extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  /* the devices that have joined: [socket, attachment] */
+  /*
+   * The devices that have joined: [socket, attachment], ONE per device - its newest socket. A replaced socket is still
+   * listed by getWebSockets until its close completes, and changing its attachment once it closes does not hold, so the
+   * room decides by device: the latest join of a device id is that device.
+   */
   joined() {
-    return this.ctx.getWebSockets().map((ws) => [ws, ws.deserializeAttachment()]).filter(([, a]) => a && a.device);
+    const newest = new Map();
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (!a || !a.device) continue;
+      const have = newest.get(a.device.id);
+      if (!have || a.joinedAt > have[1].joinedAt) newest.set(a.device.id, [ws, a]);
+    }
+    return [...newest.values()];
   }
 
   async webSocketMessage(ws, data) {
@@ -76,18 +87,14 @@ export class IdentityRoom extends DurableObject {
         send(ws, { t: 'refused' });
         return ws.close(4401, 'refused');
       }
-      /*
-       * One socket per device: a device that reconnects replaces its old socket. The old one stops counting as joined
-       * at once (a closing socket stays in getWebSockets until its close completes), so it is no peer of anyone and
-       * its close says nothing - the device never left.
-       */
-      for (const [old, a] of this.joined()) {
-        if (a.device.id !== check.device.id) continue;
-        old.serializeAttachment({ ...a, device: null });
-        old.close(4409, 'replaced');
+      /* one socket per device: a device that reconnects replaces its old socket (joined() counts the newest only) */
+      const old = this.joined().find(([, a]) => a.device.id === check.device.id);
+      const peers = this.joined().filter(([, a]) => a.device.id !== check.device.id).map(([, a]) => a.device);
+      ws.serializeAttachment({ ...me, device: check.device, nonce: null, joinedAt: Date.now() });
+      if (old) {
+        old[0].close(4409, 'replaced');
+        return send(ws, { t: 'joined', you: check.device.id, peers });
       }
-      const peers = this.joined().filter(([old]) => old !== ws).map(([, a]) => a.device);
-      ws.serializeAttachment({ ...me, device: check.device, nonce: null });
       send(ws, { t: 'joined', you: check.device.id, peers });
       for (const [other] of this.joined()) if (other !== ws) send(other, { t: 'peer', up: check.device });
       return;
@@ -115,11 +122,13 @@ export class IdentityRoom extends DurableObject {
     this.left(ws);
   }
 
-  /* a joined device left: the others hear it (a replaced socket holds no device any more - nothing to say) */
+  /* a joined device left: the others hear it - unless this was a replaced socket and a newer one holds the device */
   left(ws) {
     const a = ws.deserializeAttachment();
     if (!a || !a.device) return;
-    for (const [other] of this.joined()) if (other !== ws) send(other, { t: 'peer', down: a.device.id });
+    const others = this.joined().filter(([s]) => s !== ws);
+    if (others.some(([, b]) => b.device.id === a.device.id)) return;
+    for (const [other] of others) send(other, { t: 'peer', down: a.device.id });
   }
 
   /* close the sockets that never joined in time; come back while any are still waiting */
