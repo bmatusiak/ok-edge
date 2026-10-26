@@ -1,5 +1,5 @@
 import type {Net} from '../net';
-import {useCallback, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {device as device_} from 'node-onlykey-lib';
 import {errText} from '../logSafe';
 import {getOnlyKey} from '../onlykey';
@@ -62,6 +62,28 @@ export function useWebKey({log}: {log: (level: LogLevel, text: string) => void})
 
   /* every press, hold, raw message and setup: refused by name (the shapes are useHardKey's) */
   const no = (what: string) => async (..._args: any[]): Promise<never> => { throw new Error(refused(what)); };
+  /*
+   * WHEN TO ASK: once at start, and again each time the window comes back to the front while the key is not yet
+   * unlocked (the PIN went in on the key, the person returns to the page). A desktop's hard key is asked when its
+   * status broadcast arrives over USB; a page gets no broadcast, and each ask is the browser's security-key prompt,
+   * so it is never asked on a timer.
+   */
+  const deviceRef = useRef(device);
+  deviceRef.current = device;
+  const asking = useRef(false);
+  useEffect(() => {
+    const ask = () => {
+      if (asking.current || deviceRef.current === 'unlocked') return;
+      asking.current = true;
+      void connect().finally(() => { asking.current = false; });
+    };
+    ask();
+    const onFocus = () => ask();
+    const w = globalThis as unknown as {addEventListener?: (e: string, l: () => void) => void; removeEventListener?: (e: string, l: () => void) => void};
+    w.addEventListener?.('focus', onFocus);
+    return () => w.removeEventListener?.('focus', onFocus);
+  }, [connect]);
+
   const send = no('take a raw vendor message');
   const press = no('be pressed from software');
   const pressRun = no('be pressed from software');

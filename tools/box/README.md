@@ -14,6 +14,7 @@ The xrdp desktop is display `:10`; the Pixel is on the box's adb (`ANDROID_SERIA
 | `softkey-gadget.sh start\|stop\|status` | box | a copy of the testnet soft key as a real USB OnlyKey (emulator gadget) for browsers |
 | `devcert.sh` | box | once: a local CA + an `apps.crp.to` certificate, and its SPKI hash for Chromium |
 | `webapp.sh build\|serve\|browser\|shot\|stop` | box | build `docs/`, serve it as `https://apps.crp.to:8443`, open Chromium on `:10`, screenshot |
+| `page-console.js [seconds] [--reload] [--filter=RE]` | box | stream the web app's console from Chromium (DevTools port 9333) |
 | `serve-docs.js <docs> <certs> [port]` | box | the HTTPS static server `webapp.sh serve` uses (a stand-in until `mcp-server/`) |
 
 Why `apps.crp.to`: the testnet soft key is a production build, which accepts WebAuthn only from apps.onlykey.io /

@@ -15,7 +15,7 @@ case "${1:-}" in
     sleep 1; cat $ROOT/logs/serve-docs.log ;;
   browser)
     for p in $(pgrep -f "user-data-dir=$PROFILE"); do kill $p 2>/dev/null; done; sleep 1
-    DISPLAY=:10 setsid nohup chromium-browser --test-type --host-resolver-rules="MAP apps.crp.to 127.0.0.1" \
+    DISPLAY=:10 setsid nohup chromium-browser --test-type --remote-debugging-port=9333 --host-resolver-rules="MAP apps.crp.to 127.0.0.1" \
       --ignore-certificate-errors-spki-list="$(cat $ROOT/devcert/apps.crp.to.spki)" \
       --user-data-dir=$PROFILE --no-first-run --new-window https://apps.crp.to:8443/ > $ROOT/logs/webapp-chromium.log 2>&1 < /dev/null &
     echo "opened https://apps.crp.to:8443 on :10" ;;
