@@ -281,7 +281,8 @@ function vendorWhat(w: KeyWaiting, fw: FirmwarePress | null, named: Who | undefi
 
 /* A DERIVE: what it is for, as the feature that asked it named it; else the label's hash. */
 function DeriveBody({d}: {d: DeriveWait}) {
-  const what = deriveNameOf(d.label);
+  /* a feature's named label, or this app's own derive_secret ask of a moment ago (pressAsk noteOwnSecret) */
+  const what = deriveNameOf(d.label) ?? ownAskOf(d.label);
   return (
     <>
       <Text style={[styles.title, {color: theme.warn}]}>{what ?? 'A derived key'}</Text>

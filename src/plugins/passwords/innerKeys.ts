@@ -1,6 +1,7 @@
 import {inner} from 'node-onlykey-lib/passwords';
 
 import {challengeOpts} from '../../hostChallenge';
+import {noteOwnSecret} from '../../ownAsks';
 
 /*
  * AN ENTRY'S SECRETS COST A PRESS, EVERY TIME (Brad, 2026-10-27: "the secret in password do now need
@@ -24,11 +25,21 @@ const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 /** The key of one entry: its touch derive, the press asked on the app's sheet (the hard key's waits there). */
 export async function entryKey(okcrypto: DeriveOkcrypto, identity: string, ref: string, what: string): Promise<Uint8Array> {
   const ask = challengeOpts(what);
-  try {
-    return await inner.entryKey(okcrypto, identity, ref, {
-      confirm: (a: {digits?: number[] | null}) => ask.opts.confirm({digits: a.digits ?? undefined}),
+  /* the soft key's sheet names this press (its record carries only the label's hash) */
+  noteOwnSecret(inner.entryLabel(identity, ref), true, what);
+  const t0 = Date.now();
+  if (__DEV__) console.log(`[passwords] entry derive start ${ref.slice(0, 8)}`);  try {
+    const k = await inner.entryKey(okcrypto, identity, ref, {
+      confirm: (a: {digits?: number[] | null}) => {
+        if (__DEV__) console.log(`[passwords] entry derive confirm +${Date.now() - t0}ms digits ${a.digits ? a.digits.join(' ') : 'none'}`);        ask.opts.confirm({digits: a.digits ?? undefined});
+      },
       timeoutMs: 40000,
     });
+    if (__DEV__) console.log(`[passwords] entry derive done +${Date.now() - t0}ms`);
+    return k;
+  } catch (e) {
+    if (__DEV__) console.log(`[passwords] entry derive failed +${Date.now() - t0}ms: ${String((e as Error)?.message ?? e).slice(0, 160)}`);
+    throw e;
   } finally {
     ask.done();
   }

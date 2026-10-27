@@ -27,6 +27,7 @@ import {currentNet} from './net';
 import {desktop} from './platform';
 import {storeItems} from './bucketRules';
 import {challengeOpts} from './hostChallenge';
+import {noteOwnSecret} from './ownAsks';
 
 type Bucket = ReturnType<typeof bucketLib.create>;
 type Okcrypto = {
@@ -44,6 +45,8 @@ const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8A
  */
 async function bucketKey(identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<Uint8Array> {
   const ask = challengeOpts("Opening this identity's bucket");
+  /* the soft key's sheet names this derive (its record carries only the label's hash) */
+  noteOwnSecret(bucketKeyLabel(identity), false, "Opening this identity's bucket");
   try {
     return await okcrypto.deriveSecret(bucketKeyLabel(identity), {
       confirm: (a) => { onPress?.(); ask.opts.confirm({digits: a.digits ?? undefined}); },

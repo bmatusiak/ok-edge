@@ -17,6 +17,8 @@ import {getOnlyKey} from '../../onlykey';
 import {bucketStorage, openBucketIdentity} from '../../bucketStore';
 import {onBucketTraded} from '../../bucketEvents';
 import {challengeOpts} from '../../hostChallenge';
+import {noteOwnSecret} from '../../ownAsks';
+import {manager as passwordsLib} from 'node-onlykey-lib/passwords';
 import {createStores, type Backend, type Manager, type Okcrypto, type OpenWhy} from './stores';
 import type {DeriveOkcrypto} from './innerKeys';
 
@@ -37,6 +39,9 @@ const BACKENDS: Backend[] = ['embedded', 'usb'];
 export type PhraseOkcrypto = {deriveSharedSecretFor(label: string, opts: object): Promise<Uint8Array>};
 
 const okcryptoOf = async (backend: Backend) => (await getOnlyKey(backend)).okcrypto as unknown as Okcrypto & DeriveOkcrypto & PhraseOkcrypto;
+
+/* the soft key's sheet names the store key's derive (its record carries only the label's hash) */
+const noteStoreAsk = (identity: string) => noteOwnSecret(passwordsLib.storeLabel(identity.toLowerCase()), false, 'Passwords: open your list');
 
 /**
  * Mounted once, with the app. `unlocked`: each key's "is it unlocked and running" right now.
@@ -115,6 +120,7 @@ export function usePasswordManager({backend, unlocked}: {backend: Backend; unloc
     busy.current = true;
     setView({state: 'checking'});
     const ask = challengeOpts('Opening your passwords');
+    noteStoreAsk(identity ?? (view as {identity?: string}).identity ?? '');
     (async () => {
       const r = await stores.tryOpen(backend, await okcryptoOf(backend), identity, a => ask.opts.confirm({digits: a.digits ?? undefined}));
       if (!live) return;
@@ -136,6 +142,7 @@ export function usePasswordManager({backend, unlocked}: {backend: Backend; unloc
     held.current = false;
     setView({state: 'pressing', identity: view.identity});
     const ask = challengeOpts('Opening your passwords');
+    noteStoreAsk(identity ?? (view as {identity?: string}).identity ?? '');
     try {
       const r = await stores.openWithKey(backend, await okcryptoOf(backend), view.identity, a => ask.opts.confirm({digits: a.digits ?? undefined}));
       setView({state: 'open', identity: view.identity, manager: r.manager, why: r.why});
