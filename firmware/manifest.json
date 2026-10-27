@@ -1,31 +1,32 @@
 {
-  "file": "v3.1.0-test-edge-ctap_bridge-fw80e3ba0-libfe9e293-fix0012-0013-b20af74ce.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-fw80e3ba0-libfe9e293-fix0012-0013-0015-b5a69bc03.hex",
   "version": "v3.1.0",
   "firmware": "80e3ba0",
   "libraries": "fe9e293",
   "fixes": [
     "0012",
-    "0013"
+    "0013",
+    "0015"
   ],
   "plugins": [
     "edge",
     "ctap_bridge"
   ],
-  "buildHash": "20af74ce004163d4",
+  "buildHash": "5a69bc038760eb7d",
   "sources": {
     "emulator/scripts/versions/v3.1.0.js": "b3e957ee6b0c",
-    "emulator/scripts/versions/fixes-3.1.0.js": "c996735112d2",
-    "emulator/scripts/versions/patches-3.1.0": "687375431e8a",
+    "emulator/scripts/versions/fixes-3.1.0.js": "dd8ddabae834",
+    "emulator/scripts/versions/patches-3.1.0": "e9189d7abaef",
     "emulator/package.json": "efdab12e5786",
-    "emulator/plugins/edge": "0ebc2ef5a364",
+    "emulator/plugins/edge": "c952e7969755",
     "emulator/plugins/ctap_bridge": "b165502b86b9"
   },
-  "sourcesFrom": "node-onlykey-emulator 7960dbf",
+  "sourcesFrom": "node-onlykey-emulator ae0ae07",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
   "built": "2026-10-27",
   "tested": true,
-  "sha256": "c7eafa1d2062e17e1d023bb16e3b9a1e767709c1a937354ea416e165aabf1e5c",
-  "testedOn": "2026-10-27 key 2 (hard key): kit 01-protocol + 05-security, 197 passed, 0 firmware failures - run on the b6f58c126 build, which differs from this one only in its 4-byte build stamp"
+  "sha256": "678ef16bce2e861c85bb8ef2f5765fe80b0c5ce02d91e2265614f5d945190d2e",
+  "testedOn": "2026-10-27 key 2 (hard key): kit FIDO/WebAuthn set 79/0 incl. 43-silent-check; the web app's login on Windows 11 Chrome"
 }
