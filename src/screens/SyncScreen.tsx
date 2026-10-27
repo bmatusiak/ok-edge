@@ -18,6 +18,7 @@ import {Btn, Section} from '../ui/components';
 import {IdentityCard, type IdentityRow} from '../ui/IdentityCard';
 import {PairedDevicesCard} from '../ui/PairedDevicesCard';
 import {ServerPanel} from '../ui/ServerPanel';
+import {shell} from '../platform';
 import {theme} from '../ui/theme';
 import {bucketSummary, openBucketIdentity} from '../bucketStore';
 import {activeBackend} from '../hooks/KeyContext';
@@ -125,7 +126,7 @@ export function SyncScreen({testing = false}: {testing?: boolean}) {
     </Section>
   );
   /* THE WEB APP HAS NO SYNC SERVICE (no Bluetooth, no cli pair): it syncs through its server alone */
-  if (!state) {
+  if (!state || shell === 'webapp') {
     return (
       <ScrollView style={styles.root} contentContainerStyle={styles.page}>
         <IdentityPanel />

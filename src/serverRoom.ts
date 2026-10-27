@@ -185,8 +185,14 @@ export function retryServerRoom(): void {
   void joinServerRoom();
 }
 
-/* one trade at a time, in the order asked */
+/*
+ * ONE STARTER PER PAIR: two devices that both start a trade with each other run two trades at once, each mid-way when
+ * the other changes the bucket. A CLI starts its own (its sync is one-shot: it starts, never answers); between two apps
+ * the one with the lower id starts, the other answers. One trade at a time, in the order asked.
+ */
 function tradeSoon(peer: RoomPeer): void {
+  const mine = state.you?.id ?? '';
+  if (peer.kind === 'cli' || (mine && peer.id < mine)) return;
   tradeChain = tradeChain.then(() => tradeWith(peer)).catch((e: unknown) => {
     const line = `not traded: ${String((e as Error)?.message ?? e)}`;
     console.log(`[room] ${peer.name}: ${line}`);
