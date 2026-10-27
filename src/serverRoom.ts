@@ -40,8 +40,10 @@ const ANSWER_MS = 120000;
 
 export type RoomPeer = {id: string; name: string; kind: string};
 export type RoomState = {
-  /* the server this device joins, or null (the phone/desktop with none set) */
+  /* the server this device joins, or null (no site on the key, or a web page off the key's site) */
   url: string | null;
+  /* the key's site - the server it belongs to (ctap_bridge), read at the identity check; null when it has none */
+  site: string | null;
   status: 'off' | 'joining' | 'joined' | 'error';
   why: string | null;
   you: RoomPeer | null;
@@ -52,7 +54,7 @@ export type RoomState = {
   needsKey: boolean;
 };
 
-let state: RoomState = {url: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false};
+let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false};
 const listeners = new Set<(s: RoomState) => void>();
 const set = (patch: Partial<RoomState>) => {
   state = {...state, ...patch};
@@ -64,10 +66,33 @@ export function onRoomState(l: (s: RoomState) => void): () => void {
   return () => { listeners.delete(l); };
 }
 
-/* the web app's server is the page's own; the others keep the one they were given */
+/*
+ * THE KEY SAYS WHERE ITS SYNC LIVES (Brad, 2026-10-27: "during identity check we can use the rpid to connect to the
+ * mcp for bucket sync in desktop and mobile app - so the firmware tells where the bucket sync can live on the
+ * internet"; "for the webapp it should be using the same domain set for the rpid - that is what I think should help
+ * protect in production"). The identity check reads the key's site (ctap_bridge's, okcrypto.keySite) and sets it here.
+ *   - the phone and the desktop join https://<site>; a typed address (the Server panel) is a TESTING override only -
+ *     a local server on another port;
+ *   - the web app joins its own page's server ONLY when the page is on the key's site: a page anywhere else - even a
+ *     site the key also trusts - does not sync. The key will not answer a site it does not trust; this keeps a site
+ *     it does trust from being taken for the person's server.
+ */
+let keySite: string | null = null;
+export function setKeySite(site: string | null): void {
+  const changed = site !== keySite;
+  keySite = site;
+  set({site});
+  if (changed) { leaveServerRoom(); void joinServerRoom(); }
+}
+
 export async function serverUrl(): Promise<string | null> {
-  if (shell === 'webapp' && typeof location !== 'undefined') return location.origin;
-  return AsyncStorage.getItem(SERVER_KEY);
+  if (shell === 'webapp' && typeof location !== 'undefined') {
+    /* the page's host without its port: an rpId is a name, never a port (a local server is apps.crp.to:8787) */
+    return keySite && location.host.split(':')[0] === keySite ? location.origin : null;
+  }
+  const override = await AsyncStorage.getItem(SERVER_KEY);
+  if (override) return override;
+  return keySite ? `https://${keySite}` : null;
 }
 
 /** Set (or clear, with null) the server the phone/desktop joins; joins it at once when a bucket is open. */

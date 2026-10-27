@@ -15,6 +15,7 @@ import {ensureNametag} from './edgeDevices';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {activeBackend} from './hooks/KeyContext';
 import {getOnlyKey} from './onlykey';
+import {setKeySite} from './serverRoom';
 
 export type KeyIdentity =
   | {kind: 'read'; identity: string; edgeIdentity: string | null; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'; at: number}
@@ -68,6 +69,12 @@ export async function readKeyIdentity(alive: () => boolean = () => true): Promis
     const statement = soft ? await ensureNametag(soft).catch(() => null) : null;
     /* asked here so the check's button says what it will do; unknown is treated as the press it may need */
     const bucket = await bucketState(identity, edgeIdentity).catch(() => 'sealed' as const);
+    /*
+     * THE KEY'S SITE - where its bucket sync lives (src/serverRoom.ts setKeySite): ctap_bridge's site, read from the
+     * key itself. A key without ctap_bridge, or with it off, has none: no server, Bluetooth only.
+     */
+    const site = await (okcrypto as any).keySite?.().then((r: {on: boolean; site: string | null}) => (r.on ? r.site : null)).catch(() => null) ?? null;
+    setKeySite(site);
     if (!alive()) return null;
     return keep({kind: 'read', identity, edgeIdentity, nametag: statement?.nametag ?? null, bucket, at: Date.now()});
   } catch (e: unknown) {

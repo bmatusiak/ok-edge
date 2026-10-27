@@ -15,7 +15,11 @@ import {joinServerRoom, onRoomState, retryServerRoom, roomState, serverUrl, setS
 const KIND: Record<string, string> = {webapp: 'web app', android: 'phone', desktop: 'desktop', cli: 'computer (CLI)', agent: 'agent'};
 
 function statusText(s: RoomState): string {
-  if (!s.url) return 'No server set - this device syncs only with the devices paired to it.';
+  if (!s.url) {
+    if (shell === 'webapp' && s.site) return `This page is ${location.host.split(":")[0]}, not your key's site ${s.site} - nothing syncs here. Open https://${s.site}.`;
+    if (!s.site) return "Your key names no server (ctap_bridge off, or no site set) - this device syncs only with the devices paired to it.";
+    return 'No server - this device syncs only with the devices paired to it.';
+  }
   if (s.status === 'joined') return `In this key's room on ${new URL(s.url).host}.`;
   if (s.status === 'joining') return `Joining ${new URL(s.url).host}…`;
   if (s.status === 'error') return `Not joined: ${s.why ?? 'unknown'}`;
@@ -38,13 +42,15 @@ export function ServerPanel() {
 
   return (
     <Section title="Server">
+      {/* the key names its server (ctap_bridge's site, read at the identity check) */}
+      <Text style={styles.note}>{s.site ? `Your key's server: ${s.site}` : "Your key names no server."}</Text>
       {editable ? (
         <View style={styles.row}>
           <TextInput
             style={styles.input}
             value={draft}
             onChangeText={setDraft}
-            placeholder="https://your-server.workers.dev"
+            placeholder="testing only: another server (e.g. a local one)"
             placeholderTextColor={theme.textDim}
             autoCapitalize="none"
             autoCorrect={false}
