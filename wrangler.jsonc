@@ -1,10 +1,11 @@
 /*
- * The user's server (Cloudflare Workers Builds runs `npx wrangler deploy` here on a push; `npm run server:dev` runs it
- * locally). mcp-server/src/index.js: the Worker - the identity rooms on /ws/<identity id> (a Durable Object each) and
+ * The user's server (`npm run server:dev` runs it locally; the release workflow, .github/workflows/release.yml, builds
+ * and deploys it - Cloudflare's own builds are disabled). mcp-server/src/index.js: the Worker - the identity rooms on /ws/<identity id> (a Durable Object each) and
  * the web app, built into docs/ and served as one page, so a reload on any route loads the app.
  *
- * Cloudflare builds the RELEASE export (mcp-server/build-webapp.js): a public URL never carries the testing screen
- * (metro.config.js swaps it for its stub when the bundle is not a dev one). A local run keeps the docs/ already built
+ * The workflow builds the RELEASE export (mcp-server/build-webapp.js, CI set): a public URL never carries the testing
+ * screen (metro.config.js swaps it for its stub when the bundle is not a dev one). It deploys from the cloudflare branch,
+ * where tools/release/cloudflare-site.js writes this config without the build and with the Worker already bundled. A local run keeps the docs/ already built
  * (the box's --dev build: npm run build:webapp, tools/box/webapp.sh).
  *
  * run_worker_first: /ws/* reaches the Worker even though the single-page fallback would answer every path with the app.

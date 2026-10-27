@@ -53,3 +53,8 @@ tools/.last-e2e*.json
 
 # wrangler (Cloudflare) local state
 .wrangler/
+
+# builds never go on main (.github/workflows/release.yml): the web app, the Worker bundle, a bench hex
+/docs/
+worker-out/
+firmware/*.hex

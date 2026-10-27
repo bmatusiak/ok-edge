@@ -1,11 +1,12 @@
 #!/bin/sh
-# A push to main or cloudflare deploys the site (Cloudflare Workers Builds), and the site offers firmware/ as it is:
-# Cloudflare does not build firmware. So the commit being pushed must hold the build of the current firmware sources
-# (tools/firmware.js check). Installed by `node tools/firmware.js install-hook`.
+# main's firmware/manifest.json is THE RECORD the release workflow builds the developer-key hex from (its emulator
+# commit, its build hash, whether that build ran on a hard key). So a commit pushed to main must carry the record of
+# the current firmware sources (tools/firmware.js check), or the next release would build a hex nobody recorded.
+# Installed by `node tools/firmware.js install-hook`. The cloudflare branch is the workflow's alone (no source on it).
 root=$(git rev-parse --show-toplevel)
 while read -r local_ref local_sha remote_ref remote_sha; do
   case "$remote_ref" in
-    refs/heads/main|refs/heads/cloudflare)
+    refs/heads/main)
       [ "$local_sha" = 0000000000000000000000000000000000000000 ] && continue
       node "$root/tools/firmware.js" check "$local_sha" || exit 1 ;;
   esac

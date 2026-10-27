@@ -1,17 +1,23 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * THE DEVELOPER-KEY FIRMWARE THE WEB APP OFFERS (firmware/), BUILT BEFORE IT IS PUSHED (Brad, 2026-10-27: "we build
- * it,, we just need to make sure we build it before pushing to cloudflare").
+ * THE DEVELOPER-KEY FIRMWARE THE WEB APP OFFERS (Brad, 2026-10-27: "we build it, we just need to make sure we build it
+ * before pushing to cloudflare"; then "the first thing the workflow needs to build is the firmware, then the apk").
  *
- * Cloudflare does not build firmware: mcp-server/build-webapp.js only copies firmware/ into the site. So the hex is
- * built here (on the box, the OnlyKey Docker toolchain), committed, and a push to main or cloudflare (both deploy)
- * is refused while the committed hex is not the build of the sources it claims - the pre-push hook runs `check`.
+ * NO BUILDS ON MAIN (Brad, 2026-10-27: "this will keep our main from having builds"): main keeps firmware/manifest.json
+ * only - THE RECORD of the build the sources make (its build hash, the emulator commit it is built from) and whether that
+ * build has run on a hard key. The hex itself is built by the release workflow (.github/workflows/release.yml, `ci-build`)
+ * and published on the cloudflare branch and in the GitHub release; a hex built here for a developer key stays in
+ * firmware/ untracked (.gitignore).
  *
- *   node tools/firmware.js build [--force]       build on the box, post the hex + manifest into firmware/ (tested: false);
- *                                                skipped when firmware/ already holds this build hash
- *   node tools/firmware.js tested "<what ran>"   this exact hex passed on a hard key (the page then drops its warning)
- *   node tools/firmware.js check [<rev>]         firmware/ (or as committed at <rev>) matches the sources; exit 1 if not
+ *   node tools/firmware.js build [--force]       build on the box (for a key on the bench): the hex into firmware/
+ *                                                (untracked) + the record (tested: false); skipped when up to date
+ *   node tools/firmware.js tested "<what ran>"   the recorded build passed on a hard key: the record says so, and every
+ *                                                build of the same hash carries it (the page then drops its warning)
+ *   node tools/firmware.js check [<rev>]         the record (as committed at <rev>) is the build of the current sources
+ *   node tools/firmware.js ci-build --out <dir> --src <dir> --kit <dir>
+ *                                                the workflow's build, here, with no box: <src> holds OnlyKey-Firmware,
+ *                                                libraries and arduino-1.6.5-r5-teensy_127; writes <dir>/firmware/
  *   node tools/firmware.js install-hook          the pre-push hook (tools/hooks/pre-push) into this clone
  *
  * WHAT "THE SOURCES" ARE: the emulator checkout beside this repo (../node-onlykey-emulator), at its committed HEAD -
@@ -113,7 +119,9 @@ function differences(rev) {
     if (had !== h) out.push(`${p}: built from ${had || '(not recorded)'}, now ${h}`);
   }
   if (m.buildHash !== want.buildHash) out.push(`build hash: posted ${m.buildHash || '(none)'}, the sources make ${want.buildHash}`);
-  if (hexes.length !== 1 || hexes[0] !== m.file) out.push(`firmware/ must hold exactly the manifest's hex (${m.file}); it holds ${hexes.join(', ') || 'none'}`);
+  /* the record alone (main keeps no hex); a hex here (a bench build, untracked) must be the record's */
+  if (!hexes.length) return out;
+  if (hexes.length !== 1 || hexes[0] !== m.file) out.push(`firmware/ must hold only the manifest's hex (${m.file}); it holds ${hexes.join(', ')}`);
   else {
     const hex = read(m.file);
     if (sha256(hex) !== m.sha256) out.push(`${m.file}: its sha256 is not the manifest's`);
@@ -145,12 +153,12 @@ function check(rev) {
     return;
   }
   fail(`firmware/${rev ? ` at ${rev.slice(0, 7)}` : ''} is not the build of the current sources:\n  ${out.join('\n  ')}\n` +
-    'build and post it first: node tools/firmware.js build (then commit firmware/)');
+    'build it first: node tools/firmware.js build (then commit firmware/manifest.json)');
 }
 
 function build(force) {
   const want = expected();
-  if (!force && fs.existsSync(path.join(DIR, 'manifest.json')) && !differences().length) {
+  if (!force && fs.existsSync(path.join(DIR, 'manifest.json')) && posted().hexes.length && !differences().length) {
     console.log(`firmware: up to date - firmware/ already holds build ${want.buildHash}; nothing to build (--force builds anyway)`);
     return;
   }
@@ -186,6 +194,8 @@ function build(force) {
     buildHash: want.buildHash,
     sources: want.sources,
     sourcesFrom: `node-onlykey-emulator ${git(EMU_REPO, 'rev-parse', '--short', 'HEAD')}`,
+    /* the commit the workflow checks out to build the same hex (its tree hashes must still be `sources`) */
+    emulatorCommit: git(EMU_REPO, 'rev-parse', 'HEAD'),
     debug: true,
     site: want.site,
     toolchain: TOOLCHAIN,
@@ -194,7 +204,7 @@ function build(force) {
     sha256: sha256(fs.readFileSync(path.join(DIR, file))),
   };
   fs.writeFileSync(path.join(DIR, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`firmware: posted firmware/${file} (sha256 ${manifest.sha256.slice(0, 12)}), not yet tested - commit firmware/`);
+  console.log(`firmware: built firmware/${file} (sha256 ${manifest.sha256.slice(0, 12)}), not yet tested - commit firmware/manifest.json`);
 }
 
 function tested(what) {
@@ -206,6 +216,53 @@ function tested(what) {
   m.testedOn = `${new Date().toISOString().slice(0, 10)} ${what}`;
   fs.writeFileSync(path.join(DIR, 'manifest.json'), `${JSON.stringify(m, null, 2)}\n`);
   console.log(`firmware: ${m.file} marked tested (${m.testedOn})`);
+}
+
+/*
+ * THE WORKFLOW'S BUILD (.github/workflows/release.yml, its first job): the same build-hardkey.sh as `build`, run here
+ * on the CI machine from the checkouts beside this repo - no box. The hex and its manifest go to <out>/firmware/; the
+ * manifest is the record's, with this file's sha256, and keeps "tested" only when this build's hash is the record's.
+ */
+function ciBuild(args) {
+  const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? path.resolve(args[i + 1]) : null; };
+  const out = opt('--out');
+  const src = opt('--src');
+  const kit = opt('--kit');
+  if (!out || !src || !kit) fail('usage: node tools/firmware.js ci-build --out <dir> --src <dir> --kit <dir>');
+  const want = expected();
+  const record = JSON.parse(fs.readFileSync(path.join(DIR, 'manifest.json'), 'utf8'));
+  const work = path.join(out, 'fw-work');
+  fs.mkdirSync(work, { recursive: true });
+  console.log(`firmware: ci-build ${want.version} @ ${want.firmware}/${want.libraries}, fixes ${want.fixes.join(' ')}, plugins ${PLUGINS.join(',')}, build ${want.buildHash}`);
+  const r = spawnSync('bash', ['plugins/edge/tools/build-hardkey.sh'], {
+    cwd: EMU,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    env: { ...process.env, FW_PIN: want.firmware, LIB_PIN: want.libraries, PLUGINS: PLUGINS.join(','), BUILD_STAMP: stampOf(want.buildHash), FW_SRC: src, FW_OUT: work, KIT: kit },
+  });
+  process.stdout.write(r.stdout || '');
+  const image = ((r.stdout || '').match(/== \S+ 6\. (\S+\.hex)/) || [])[1];
+  if (r.status !== 0 || !image) fail('the build did not finish (see above)');
+  const file = path.basename(image);
+  const dest = path.join(out, 'firmware');
+  fs.mkdirSync(dest, { recursive: true });
+  fs.copyFileSync(image, path.join(dest, file));
+  const hex = fs.readFileSync(path.join(dest, file));
+  if (!carriesStamp(hex.toString('latin1'), stampOf(want.buildHash))) fail(`${file} does not carry build stamp ${stampOf(want.buildHash)}`);
+  const same = record.buildHash === want.buildHash;
+  const manifest = {
+    ...record,
+    file,
+    buildHash: want.buildHash,
+    sources: want.sources,
+    built: new Date().toISOString().slice(0, 10),
+    builtBy: process.env.GITHUB_RUN_ID ? `release workflow run ${process.env.GITHUB_RUN_ID}` : 'ci-build',
+    tested: same && record.tested === true,
+    sha256: sha256(hex),
+  };
+  if (!manifest.tested) delete manifest.testedOn;
+  fs.writeFileSync(path.join(dest, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  console.log(`firmware: ${dest}/${file} (sha256 ${manifest.sha256.slice(0, 12)})${manifest.tested ? ` - tested: ${manifest.testedOn}` : same ? ' - the recorded build, not yet tested' : ' - NOT the recorded build: untested'}`);
 }
 
 function installHook() {
@@ -221,4 +278,5 @@ if (cmd === 'build') build(arg === '--force');
 else if (cmd === 'tested') tested(arg);
 else if (cmd === 'check') check(arg);
 else if (cmd === 'install-hook') installHook();
-else fail('usage: node tools/firmware.js build | tested "<what ran>" | check [<rev>] | install-hook');
+else if (cmd === 'ci-build') ciBuild(process.argv.slice(3));
+else fail('usage: node tools/firmware.js build | tested "<what ran>" | check [<rev>] | ci-build --out <dir> --src <dir> --kit <dir> | install-hook');

@@ -1,0 +1,331 @@
+# THE RELEASE: firmware hex -> Android app (the hex inside) -> web app -> GitHub release + the cloudflare branch.
+#
+# BY HAND ONLY (Brad, 2026-10-27: "i want to trigger the builds from gh command or from github's website, no auto
+# building"): no push, schedule or other trigger. Run it from the Actions tab ("Run workflow") or with
+#     gh workflow run release.yml                     # build everything, publish nothing (artifacts only)
+#     gh workflow run release.yml -f publish=true     # and publish: the prerelease + the cloudflare branch
+#
+# THE ORDER IS BRAD'S ("the first thing the workflow needs to build is the firmware, then the apk ... one day i want to
+# have the firmware flashed from the phone app, so i want the apk to have the latest firmware hex before it is built"):
+#   1. firmware - the developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js)
+#   2. android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
+#                 debug keystore until the OnlyKey signs releases through Edge
+#   3. webapp   - the release web app with the hex (docs/firmware) and the APK's manifest (docs/android), and the
+#                 Worker bundled - the Downloads page then offers both
+#   4. publish  - only with publish=true: a GitHub prerelease (APK + hex) and the built site committed to the
+#                 cloudflare branch; deployed by `wrangler deploy` when the repo has a CLOUDFLARE_API_TOKEN secret
+#
+# NO BUILDS ON MAIN (Brad: "this will keep our main from having builds"): every build goes to the release and the
+# cloudflare branch. Cloudflare's own builds are disabled - nothing builds the site but this workflow.
+#
+# The first run should be publish=false: it uploads the four builds as artifacts and changes nothing.
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: publish - the GitHub prerelease (APK + hex) and the built site on the cloudflare branch
+        type: boolean
+        default: false
+
+# one at a time: two runs would race for the tag and the cloudflare branch
+concurrency: release
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: 24
+  APP_ID: com.okrn
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      emulator: ${{ steps.plan.outputs.emulator }}
+      version: ${{ steps.plan.outputs.version }}
+      version_code: ${{ steps.plan.outputs.version_code }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      # fetch-depth 0: the APK's versionCode is 1000 + main's commit count (modules/okedge-native/app.plugin.js)
+      - name: Checkout ok-edge
+        uses: actions/checkout@v4
+        with:
+          path: ok-edge
+          fetch-depth: 0
+
+      - name: Plan - the recorded emulator commit, the version, the tag
+        id: plan
+        working-directory: ok-edge
+        run: |
+          emulator=$(node -p "require('./firmware/manifest.json').emulatorCommit || ''")
+          [ -n "$emulator" ] || { echo "::error::firmware/manifest.json has no emulatorCommit - run tools/firmware.js build"; exit 1; }
+          version=$(node -p "require('./app.json').expo.version")
+          code=$((1000 + $(git rev-list --count HEAD)))
+          echo "emulator=$emulator" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version_code=$code" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version-$code" >> "$GITHUB_OUTPUT"
+          echo "release v$version-$code from main $(git rev-parse --short HEAD), firmware from emulator ${emulator:0:7}" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Firmware sources
+        uses: ./ok-edge/.github/actions/firmware-sources
+        with:
+          emulator_ref: ${{ steps.plan.outputs.emulator }}
+
+      # build-hardkey.sh reads Intel HEX with the kit's lib/flash.js (no packages needed for that)
+      - name: Checkout the test kit
+        uses: actions/checkout@v4
+        with:
+          repository: bm-ok/onlykey-testing
+          path: onlykey-testing
+
+      # the record must be the build of these sources, or the hex would claim a test it never had
+      - name: The record is the build of the recorded sources
+        run: node ok-edge/tools/firmware.js check
+
+      - name: Build the toolchain image
+        run: docker build --quiet -t onlykey/onlykey-firmware-toolchain arduino-1.6.5-r5-teensy_127
+
+      - name: Build the hex
+        run: node ok-edge/tools/firmware.js ci-build --out out --src "$GITHUB_WORKSPACE" --kit onlykey-testing
+
+      - name: Upload the firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/firmware/
+          if-no-files-found: error
+
+  android:
+    needs: firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout ok-edge
+        uses: actions/checkout@v4
+        with:
+          path: ok-edge
+          fetch-depth: 0
+
+      # package.json: "test-moniker": "file:../test-moniker"
+      - name: Checkout test-moniker
+        uses: actions/checkout@v4
+        with:
+          repository: bmatusiak/test-moniker
+          path: test-moniker
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # the soft key inside the app is built from the same recorded sources as the hex
+      - name: Firmware sources
+        uses: ./ok-edge/.github/actions/firmware-sources
+        with:
+          emulator_ref: ${{ needs.firmware.outputs.emulator }}
+
+      # the hex just built, into firmware/ - the Gradle task stageDeveloperFirmware puts it in the APK's assets
+      - name: The hex into firmware/
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: ok-edge/firmware
+
+      - name: Install ok-edge's packages
+        working-directory: ok-edge
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate android/
+        working-directory: ok-edge
+        env:
+          OKEDGE_APP_ID: ${{ env.APP_ID }}
+        run: npx expo prebuild --platform android --no-install
+
+      # OKEMU_PRODUCTION=1: the soft key's DEBUG console off (it is off by default; said here so no setting can turn it
+      # on). No OKRN_DEBUG_LOCK: the debugging lock stays on, as in every production build.
+      - name: Build the release APK
+        working-directory: ok-edge/android
+        env:
+          OKEDGE_APP_ID: ${{ env.APP_ID }}
+          OKEMU_PRODUCTION: 1
+        run: ./gradlew assembleRelease --no-daemon
+
+      # WHAT A RELEASE MUST NOT CARRY (ok-rn's tools/release-guards.js, the same three): the soft key's DEBUG console
+      # (it prints key bytes), the debugging lock off (a computer could approve and press), the testing screen in the
+      # bundle (metro.config.js swaps it for its stub). And the hex the APK carries must be the one just built.
+      - name: Release checks
+        run: |
+          set -euo pipefail
+          apk=ok-edge/android/app/build/outputs/apk/release/app-release.apk
+          bad=0
+          for h in $(find node-onlykey-emulator/emulator/.stage* -path '*libraries/onlykey/onlykey.h'); do
+            if grep -qE '^#define DEBUG\s' "$h"; then echo "::error::DEBUG on in $h"; bad=1; fi
+          done
+          node -e "const f=require('./ok-edge/src/generated/firmware.json'); if (f.debugLock === false) { console.error('the debugging lock is off'); process.exit(1) }" || bad=1
+          if unzip -p "$apk" assets/index.android.bundle | grep -qa 'Soft Key firmware'; then echo "::error::the testing screen is in the bundle"; bad=1; fi
+          want=$(node -p "require('./ok-edge/firmware/manifest.json').file")
+          [ "$(unzip -p "$apk" "assets/developer_firmware/$want" | sha256sum | cut -d' ' -f1)" = "$(node -p "require('./ok-edge/firmware/manifest.json').sha256")" ] \
+            || { echo "::error::the APK does not carry $want as built"; bad=1; }
+          [ $bad = 0 ]
+          echo "release checks: DEBUG off, debugging lock on, no testing screen, $want inside" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Name the APK and write its manifest
+        env:
+          TAG: ${{ needs.firmware.outputs.tag }}
+          VERSION: ${{ needs.firmware.outputs.version }}
+          CODE: ${{ needs.firmware.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          file="onlykey-edge-$VERSION-$CODE.apk"
+          cp ok-edge/android/app/build/outputs/apk/release/app-release.apk "out/$file"
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          node ok-edge/tools/release/android-manifest.js --apk "out/$file" --apksigner "$apksigner" --repo "$GITHUB_REPOSITORY" \
+            --tag "$TAG" --version "$VERSION" --version-code "$CODE" --commit "$GITHUB_SHA" --out out/manifest.json
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/
+          if-no-files-found: error
+
+  webapp:
+    needs: [firmware, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout ok-edge
+        uses: actions/checkout@v4
+        with:
+          path: ok-edge
+
+      - name: Checkout test-moniker
+        uses: actions/checkout@v4
+        with:
+          repository: bmatusiak/test-moniker
+          path: test-moniker
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: The hex into firmware/
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: ok-edge/firmware
+
+      - name: The APK's manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: android-out
+
+      - name: Install ok-edge's packages
+        working-directory: ok-edge
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+        run: npm ci --no-audit --no-fund
+
+      # wrangler's build command (mcp-server/build-webapp.js) builds the RELEASE web app into docs/ (CI is set) and
+      # copies firmware/ to docs/firmware; --dry-run then bundles the Worker into worker-out/ and deploys nothing
+      - name: Build the web app and bundle the Worker
+        working-directory: ok-edge
+        run: |
+          npx --yes "wrangler@$(node -p "require('./package.json').scripts['server:dev'].match(/wrangler@([\d.]+)/)[1]")" deploy --dry-run --outdir worker-out
+          mkdir -p docs/android
+          cp ../android-out/manifest.json docs/android/manifest.json
+
+      - name: Assemble the site
+        working-directory: ok-edge
+        run: node tools/release/cloudflare-site.js --docs docs --worker worker-out --out ../site --commit "$GITHUB_SHA" --tag "${{ needs.firmware.outputs.tag }}"
+
+      - name: Upload the site
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site/
+          if-no-files-found: error
+
+  publish:
+    if: inputs.publish
+    needs: [firmware, android, webapp]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG: ${{ needs.firmware.outputs.tag }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # a prerelease: Brad promotes it once it has run on his devices
+      - name: The GitHub prerelease (APK + hex)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=$(ls artifacts/android/*.apk)
+          hex=$(ls artifacts/firmware/*.hex)
+          tested=$(node -p "const m=require('./artifacts/firmware/manifest.json'); m.tested ? 'tested: ' + m.testedOn : 'not yet tested on a hard key'")
+          {
+            echo "Built by the release workflow (run $GITHUB_RUN_ID) from main ${GITHUB_SHA:0:7}."
+            echo
+            echo "- Android app: $(basename "$apk") - com.okrn, signed with the repo debug keystore"
+            echo "  sha256 $(node -p "require('./artifacts/android/manifest.json').sha256")"
+            echo "  signing certificate SHA-256 $(node -p "require('./artifacts/android/manifest.json').certSha256")"
+            echo "- Firmware for a developer key (unsigned): $(basename "$hex") - $tested"
+            echo "  sha256 $(node -p "require('./artifacts/firmware/manifest.json').sha256")"
+          } > notes.md
+          gh release create "$TAG" "$apk" "$hex" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file notes.md
+
+      # the built site, one commit per release on the cloudflare branch (created on the first run)
+      - name: The site onto the cloudflare branch
+        run: |
+          set -euo pipefail
+          git init --quiet branch
+          cd branch
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/$GITHUB_REPOSITORY.git"
+          if git fetch --quiet --depth 1 origin cloudflare; then git checkout --quiet -B cloudflare FETCH_HEAD; else git checkout --quiet --orphan cloudflare; fi
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../artifacts/site/. .
+          git add -A
+          git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+            commit --quiet -m "$TAG: the built site from main ${GITHUB_SHA:0:7} (release workflow run $GITHUB_RUN_ID)"
+          git push --quiet origin cloudflare
+          echo "cloudflare branch: $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+      # Cloudflare's own builds are disabled: with a token the workflow deploys the site itself; without one the
+      # branch waits to be deployed by hand (npx wrangler deploy in a checkout of it)
+      - name: Deploy (with a CLOUDFLARE_API_TOKEN secret)
+        working-directory: branch
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "no CLOUDFLARE_API_TOKEN secret - not deployed; the cloudflare branch holds the site" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npx --yes "wrangler@$(node -p "require('./package.json').devDependencies.wrangler")" deploy
+          echo "deployed to Cloudflare" >> "$GITHUB_STEP_SUMMARY"

@@ -109,17 +109,27 @@ const withActivityCalls = (config) => withMainActivity(config, (c) => {
  *     never share objects.
  *   - the signed firmware releases (ok-edge/signed_firmware) bundled as assets under
  *     signed_firmware/, the name the app asks for - an update works in airplane mode.
+ *   - the developer-key firmware (ok-edge/firmware: its hex and manifest.json) under
+ *     developer_firmware/ (Brad, 2026-10-27: "one day i want to have the firmware flashed from the
+ *     phone app, so i want the apk to have the latest firmware hex"). The release workflow puts the
+ *     hex it just built there before the APK is built; a local build carries what firmware/ holds
+ *     (the record alone, or a bench build).
  */
 const { withAppBuildGradle } = require('expo/config-plugins');
 
 const APP_GRADLE = `
-// okedge-native: the C++ staging path and the signed firmware assets (modules/okedge-native/app.plugin.js)
+// okedge-native: the C++ staging path and the firmware assets (modules/okedge-native/app.plugin.js)
 def signedFirmwareAssets = file("$buildDir/signedFirmwareAssets")
 tasks.register('stageSignedFirmware', Copy) {
     from "$rootDir/../signed_firmware"
     into new File(signedFirmwareAssets, 'signed_firmware')
 }
 preBuild.dependsOn stageSignedFirmware
+tasks.register('stageDeveloperFirmware', Copy) {
+    from("$rootDir/../firmware") { include '*.hex', 'manifest.json' }
+    into new File(signedFirmwareAssets, 'developer_firmware')
+}
+preBuild.dependsOn stageDeveloperFirmware
 android {
     sourceSets {
         main {

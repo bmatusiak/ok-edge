@@ -1,0 +1,53 @@
+# THE FIRMWARE'S SOURCES, BESIDE ok-edge (the release workflow's firmware and android jobs both build from them).
+#
+# The workspace layout every tool here expects: the emulator, the firmware checkouts and the Arduino tree as siblings
+# of ok-edge - tools/firmware.js reads ../node-onlykey-emulator; the emulator's stage.js reads ../libraries,
+# ../OnlyKey-Firmware and ../arduino-1.6.5-r5-teensy_127; build-hardkey.sh is given the same folder as FW_SRC.
+#
+# The emulator is checked out at the commit firmware/manifest.json records (emulatorCommit), not at its master: the
+# record is what was tested on a hard key, and `firmware.js check` then proves the checkout still is those sources.
+name: firmware sources
+description: node-onlykey-emulator at the recorded commit, trustcrypto's libraries and OnlyKey-Firmware with every branch, the Arduino tree
+inputs:
+  emulator_ref:
+    description: the node-onlykey-emulator commit (firmware/manifest.json emulatorCommit)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Checkout the emulator at the recorded commit
+      uses: actions/checkout@v4
+      with:
+        repository: bm-ok/node-onlykey-emulator
+        ref: ${{ inputs.emulator_ref }}
+        path: node-onlykey-emulator
+
+    - name: Checkout the Arduino tree (the compiler and the toolchain Dockerfile)
+      uses: actions/checkout@v4
+      with:
+        repository: bm-ok/arduino-1.6.5-r5-teensy_127
+        path: arduino-1.6.5-r5-teensy_127
+
+    # Full clones, every branch a LOCAL branch: build-hardkey.sh clones these folders again, and a clone of a clone
+    # carries only its local branches - a release pin on any other branch would be missing from the build's copy.
+    - name: Clone trustcrypto's libraries and OnlyKey-Firmware (the release pins are their commits)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for r in libraries OnlyKey-Firmware; do
+          git clone --quiet "https://github.com/trustcrypto/$r" "$r"
+          for b in $(git -C "$r" for-each-ref --format='%(refname:strip=3)' refs/remotes/origin/ | grep -v '^HEAD$'); do
+            git -C "$r" show-ref --verify --quiet "refs/heads/$b" || git -C "$r" branch --quiet "$b" "origin/$b"
+          done
+        done
+        pins=$(node -p "const v=require('./node-onlykey-emulator/emulator/scripts/versions/v3.1.0.js').pins; v.libraries+' '+v['OnlyKey-Firmware']")
+        git -C libraries cat-file -e "${pins% *}^{commit}" || { echo "::error::libraries pin ${pins% *} is not in trustcrypto/libraries"; exit 1; }
+        git -C OnlyKey-Firmware cat-file -e "${pins#* }^{commit}" || { echo "::error::OnlyKey-Firmware pin ${pins#* } is not in trustcrypto/OnlyKey-Firmware"; exit 1; }
+        echo "pins: libraries ${pins% *}, OnlyKey-Firmware ${pins#* }"
+
+    # --ignore-scripts: the emulator is a gypfile package, and neither job needs its Node addon - only node-onlykey-lib
+    # (the plugins' applier) resolved from emulator/. The Android build compiles the firmware with the NDK itself.
+    - name: Install the emulator's packages (node-onlykey-lib at its pin)
+      shell: bash
+      working-directory: node-onlykey-emulator/emulator
+      run: npm ci --ignore-scripts --no-audit --no-fund
