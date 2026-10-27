@@ -11,6 +11,8 @@ export default desktopModule<Spec>('NativeOkEmu', {
   /* the phone's attention sound and splash bookkeeping: nothing to do on the desktop */
   setAttention() {},
   hushPress() {},
+  /* the silent-use notice's sound: the page plays it itself (src/ui/pressSound.ts chimeOnce) */
+  chime() {},
   markSplashDone() {},
   splashDoneThisProcess: () => false,
   ...Object.fromEntries(['start', 'stop', 'writeHid', 'setButton', 'setButtonTicks', 'pressQueue', 'pressPending',

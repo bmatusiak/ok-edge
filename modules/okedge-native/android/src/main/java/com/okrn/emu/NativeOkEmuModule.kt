@@ -488,6 +488,11 @@ class NativeOkEmuModule(
     PressAlert.hushPress()
   }
 
+  /* a silent use happened: its notice sounds once (src/ui/SilentUseSheet.tsx) */
+  override fun chime() {
+    PressAlert.chime()
+  }
+
   /* the splash plays once per process: a JS reload keeps this (see specs/NativeOkEmu.ts) */
   override fun markSplashDone() { splashDone = true }
 

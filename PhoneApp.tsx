@@ -87,6 +87,7 @@ import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom} from './src/serverRoom';
 import {HostChallengeSheet} from './src/ui/HostChallengeSheet';
 import {PressSheet} from './src/ui/PressSheet';
+import {SilentUseSheet} from './src/ui/SilentUseSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
 import {pluginTabs, pluginWatches, usePluginsStarted} from './src/plugins';
@@ -1398,6 +1399,8 @@ function Shell() {
           the site it names; a key the app cannot press (no debug console) says to press the key.
         */}
         <PressSheet waiting={keyWaiting} fido={{needed: fido.presenceNeeded, canPress: emu.canPress === true, confirm: fido.confirm}} />
+        {/* a derive the soft key answered unasked (field 30 = none): said, sound once, closes itself (SilentUseSheet) */}
+        <SilentUseSheet />
 
         {/*
           THE KEYBOARD MUST NOT COVER THE FIELD BEING TYPED IN.

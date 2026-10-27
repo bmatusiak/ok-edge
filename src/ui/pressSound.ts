@@ -37,6 +37,19 @@ function play(which: 'soft' | 'loud') {
 }
 
 /**
+ * The soft sound ONCE - the silent-use notice (SilentUseSheet): nothing waits, so nothing repeats. On the phone the
+ * native side plays it (the same file and audio stream as a press's); elsewhere the page does.
+ */
+export function chimeOnce(): void {
+  if (shell !== 'android') return play('soft');
+  try {
+    require('okedge-native/specs/NativeOkEmu').default.chime();
+  } catch {
+    /* an older native build without chime(): the sheet still shows */
+  }
+}
+
+/**
  * Ring while `wait` is set (anything naming this one wait - its start, its deadline) and it is not answered.
  * Another `wait` is a new wait: it starts soft again, timed from when it was first seen here.
  */

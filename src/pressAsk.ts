@@ -47,6 +47,18 @@ let listening = false;
 const listeners = new Set<() => void>();
 const changed = () => { for (const l of listeners) l(); };
 
+/*
+ * SILENT USES (Brad, 2026-10-27: "if a silent press happens i want the sheet to play the sound once, and auto close
+ * 15 seconds, and a dismiss button"): a derive the soft key answered with no confirmation - field 30 set to none -
+ * reported by its firmware (key_chain's "silent" record), whoever asked: this app, a computer, the web app.
+ */
+export type SilentUse = {label: string; at: number};
+const silentListeners = new Set<(u: SilentUse) => void>();
+export function onSilentUse(l: (u: SilentUse) => void): () => void {
+  silentListeners.add(l);
+  return () => { silentListeners.delete(l); };
+}
+
 /** Listen for the firmware's press records for the life of the app (idempotent). */
 export function startPressRecords(): void {
   if (listening) return;
@@ -55,6 +67,16 @@ export function startPressRecords(): void {
     NativeOkEmu.onPluginEvent(ev => {
       if (ev.name === 'press_end') {
         if (deriveWait) { deriveWait = null; changed(); }
+        return;
+      }
+      /* a derive the key answered unasked (field 30 = none): told to the person, not waited on */
+      if (ev.name === 'silent') {
+        const p = decodePress(ev.hex);
+        if (p?.label) {
+          const use = {label: p.label, at: Date.now()};
+          for (const l of [...silentListeners]) l(use);
+          if (__DEV__) console.log(`[press] firmware record: a silent derive, label ${p.label.slice(0, 8)}`);
+        }
         return;
       }
       if (ev.name !== 'press') return;

@@ -135,6 +135,12 @@ object PressAlert {
     if (started) handler.post { try { check() } catch (_: Throwable) {} }
   }
 
+  /** The soft sound, once - nothing waits, nothing repeats (a silent use's notice). */
+  fun chime() {
+    if (!started) return
+    handler.post { pool?.play(softId, 1f, 1f, 1, 0, 1f) }
+  }
+
   private fun asking(now: Long): Int? = if (askUntil > now) ASK else null
 
   private fun check() {
