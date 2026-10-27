@@ -6,7 +6,8 @@
  * The server publishes it beside the web app: /firmware/manifest.json names the .hex and says what it is built from
  * (firmware and libraries commits, the plugins - ctap_bridge is what lets a browser reach the key - DEBUG or not) and
  * its sha256, shown here so the file can be checked after the download. No manifest (the phone, the desktop, a server
- * that publishes none): nothing is shown.
+ * that publishes none): nothing is shown. Since 2026-10-27 it is a panel of the Downloads page (DownloadsPage.tsx), which
+ * the login page opens (Brad: "convert the download button to its own page ... with a back button").
  *
  * A DEVELOPER key only: a production OnlyKey loads signed firmware alone, and this is not signed.
  */
@@ -16,7 +17,7 @@ import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
 import {shell} from '../platform';
 
-type Manifest = {
+export type Manifest = {
   file: string;
   version: string;
   firmware: string;
@@ -36,7 +37,8 @@ type Manifest = {
 
 const BASE = '/firmware/';
 
-export function FirmwareDownload() {
+/** the manifest beside the web app; null when there is none (the phone, the desktop, a server that publishes none) */
+export function useFirmwareManifest(): Manifest | null {
   const [m, setM] = useState<Manifest | null>(null);
   useEffect(() => {
     if (shell !== 'webapp') return;
@@ -51,8 +53,11 @@ export function FirmwareDownload() {
       alive = false;
     };
   }, []);
-  if (!m) return null;
+  return m;
+}
 
+/* the Downloads page's firmware panel (DownloadsPage.tsx) */
+export function FirmwareDownload({m}: {m: Manifest}) {
   /* an anchor with `download`: the browser saves the file instead of showing a page of hex text */
   const download = () => {
     const a = document.createElement('a');
@@ -84,7 +89,7 @@ export function FirmwareDownload() {
 }
 
 const styles = StyleSheet.create({
-  box: {width: '100%', maxWidth: 420, gap: 4, alignItems: 'stretch'},
-  line: {color: theme.textDim, fontSize: 11, textAlign: 'center', lineHeight: 15},
-  warn: {color: theme.warn, fontSize: 11, textAlign: 'center', lineHeight: 15},
+  box: {gap: 4, alignItems: 'stretch'},
+  line: {color: theme.textDim, fontSize: 11, lineHeight: 15},
+  warn: {color: theme.warn, fontSize: 11, lineHeight: 15},
 });

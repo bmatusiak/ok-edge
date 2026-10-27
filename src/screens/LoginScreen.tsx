@@ -7,7 +7,7 @@ import {theme} from '../ui/theme';
 import {buildInfo} from '../buildInfo';
 import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import type {DeviceState} from '../hooks/useOkEmu';
-import {FirmwareDownload} from './FirmwareDownload';
+import {DownloadsPage} from './DownloadsPage';
 import {shell} from '../platform';
 
 /**
@@ -61,6 +61,10 @@ export function LoginScreen({
       .then(v => setOpenssl((/OpenSSL\s+(\S+)/.exec(v) || [])[1] || v))
       .catch(() => setOpenssl(null));
   }, []);
+
+  /* the web app's Downloads page (DownloadsPage.tsx): the app and the firmware, opened from here and back */
+  const [downloads, setDownloads] = useState(false);
+  if (downloads) return <DownloadsPage onBack={() => setDownloads(false)} />;
 
   return (
     <View style={styles.root}>
@@ -142,8 +146,8 @@ export function LoginScreen({
         * it too.
         */}
       <View style={styles.devFooter}>
-        {/* the web app: the firmware it works with, for a developer key (FirmwareDownload.tsx; nothing elsewhere) */}
-        <FirmwareDownload />
+        {/* the web app: what it publishes - the Android app, the firmware for a developer key (DownloadsPage.tsx) */}
+        {shell === 'webapp' ? <Btn title="Downloads" onPress={() => setDownloads(true)} /> : null}
         {__DEV__ && onTesting ? (
           <View style={styles.devFooterInner}>
             <Btn title="Enter testing mode" onPress={onTesting} disabled={picked === 'live'} />
