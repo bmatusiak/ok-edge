@@ -1,5 +1,5 @@
 {
-  "file": "v3.1.0-test-edge-ctap_bridge-derive_secret-fw80e3ba0-libfe9e293-fix0012-0013-0015-b6c614f69.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-derive_secret-fw80e3ba0-libfe9e293-fix0012-0013-0015-b8c6b8660.hex",
   "version": "v3.1.0",
   "firmware": "80e3ba0",
   "libraries": "fe9e293",
@@ -13,22 +13,22 @@
     "ctap_bridge",
     "derive_secret"
   ],
-  "buildHash": "6c614f692695d0b9",
+  "buildHash": "8c6b866045409b38",
   "sources": {
     "emulator/scripts/versions/v3.1.0.js": "b3e957ee6b0c",
     "emulator/scripts/versions/fixes-3.1.0.js": "dd8ddabae834",
     "emulator/scripts/versions/patches-3.1.0": "e9189d7abaef",
     "emulator/package.json": "efdab12e5786",
     "emulator/plugins/edge": "c952e7969755",
-    "emulator/plugins/ctap_bridge": "6ffe2430cc6b",
+    "emulator/plugins/ctap_bridge": "c98df95d7c43",
     "emulator/plugins/derive_secret": "f027a796da5a"
   },
-  "sourcesFrom": "node-onlykey-emulator 695581b",
+  "sourcesFrom": "node-onlykey-emulator 8543d1a",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
   "built": "2026-10-27",
   "tested": true,
-  "sha256": "1b6ed76918deabca5b9f14fdb715040387f6d977974f862353dfce4b01940f9c",
-  "testedOn": "2026-10-27 key 2 (hard key): kit hard-key plugin tests 21/0 incl. derive_secret; the web app on Windows 11 Chrome opened its bucket under the derived key and filled from the box CLI"
+  "sha256": "5d8fdd14368fccf43b3b8e0a2c6a49b62ee724c1f2a95e8f4c98eba9bf4b7f41",
+  "testedOn": "2026-10-27 key 2 (hard key): hard-key plugin tests 22/0 - ctap_bridge's site over the tunnel = USB, derive_secret touch/touchless/labels/sites"
 }
