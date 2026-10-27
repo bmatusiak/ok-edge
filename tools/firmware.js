@@ -29,8 +29,8 @@ const ROOT = path.resolve(__dirname, '..');
 const DIR = path.join(ROOT, 'firmware');
 const EMU_REPO = path.resolve(ROOT, '..', 'node-onlykey-emulator');
 const EMU = path.join(EMU_REPO, 'emulator');
-/* the web app's firmware: Edge and the browser's way in. Never a softKeyOnly plugin (build-hardkey.sh refuses them) */
-const PLUGINS = ['edge', 'ctap_bridge'];
+/* the web app's firmware: Edge, the browser's way in, and the derived secrets its stores are encrypted under. Never a softKeyOnly plugin (build-hardkey.sh refuses them) */
+const PLUGINS = ['edge', 'ctap_bridge', 'derive_secret'];
 /* what the hex is built from, as paths in the emulator repo: a change in any of them is a new build */
 const SOURCE_PATHS = [
   'emulator/scripts/versions/v3.1.0.js',
