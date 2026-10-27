@@ -25,8 +25,13 @@ export function noteOwnAsk(label: string, what: string): void {
  * payload, cut to 32 bytes - not the derivation hash above, so it is noted in that shape. Mode: 1 touchless, 2 touch.
  */
 export function noteOwnSecret(label: string, touch: boolean, what: string): void {
+  ownAsks.set(secretRecordLabel(label, touch), {what, at: Date.now()});
+}
+
+/** The label a derive_secret request's gate record carries (a press, a code or a silent answer): hex. */
+export function secretRecordLabel(label: string, touch: boolean): string {
   const h: Uint8Array = sha256(Uint8Array.from(unescape(encodeURIComponent(label)), c => c.charCodeAt(0)));
-  ownAsks.set(hex([touch ? 2 : 1, ...Array.from(h.subarray(0, 31))]), {what, at: Date.now()});
+  return hex([touch ? 2 : 1, ...Array.from(h.subarray(0, 31))]);
 }
 
 export function ownAskOf(labelHash: string, now = Date.now()): string | null {

@@ -23,6 +23,9 @@ function fakeKey(seed: string, asks = false) {
   return {okcrypto, calls};
 }
 
+/* the key's word on each derive: answered unasked (a soft key at field 30 = none), or not */
+const silent = (yes: boolean) => () => ({answeredSilently: async () => yes, stop() {}});
+
 function memory() {
   const map = new Map<string, string>();
   return {
@@ -35,7 +38,7 @@ function memory() {
 
 test('a store not opened yet waits for the button; the button opens it with the store key, under the identity', async () => {
   const storage = memory();
-  const stores = createStores({storage, randomBytes});
+  const stores = createStores({storage, randomBytes, watchSilent: silent(true)});
   const k = fakeKey('A');
   expect(await stores.tryOpen('embedded', k.okcrypto, ID)).toBeNull();
   expect(k.calls).toEqual([]);
@@ -50,13 +53,13 @@ test('a store not opened yet waits for the button; the button opens it with the 
 
 test('a store whose last open asked nothing opens by itself; one that asked waits for the button', async () => {
   const storage = memory();
-  const quiet = createStores({storage, randomBytes});
+  const quiet = createStores({storage, randomBytes, watchSilent: silent(true)});
   await quiet.openWithKey('embedded', fakeKey('A').okcrypto, ID);
-  const again = createStores({storage, randomBytes});
+  const again = createStores({storage, randomBytes, watchSilent: silent(true)});
   expect((await again.tryOpen('embedded', fakeKey('A').okcrypto, ID))?.why).toBe('by-itself');
 
   const storage2 = memory();
-  const asking = createStores({storage: storage2, randomBytes});
+  const asking = createStores({storage: storage2, randomBytes, watchSilent: silent(false)});
   const shown: unknown[] = [];
   const r = await asking.openWithKey('embedded', fakeKey('A', true).okcrypto, ID, a => shown.push(a));
   expect(r.why).toBe('asked');
@@ -96,4 +99,13 @@ test('two keys of one backup share one open store; it closes when the last one g
   stores.lockNow('usb');
   expect(stores.openCount()).toBe(0);
   expect(again.manager.locked).toBe(true);
+});
+
+test('without the key saying it answered unasked (a hard key) an open counts as asked: the button stays', async () => {
+  const storage = memory();
+  const hard = createStores({storage, randomBytes});
+  expect((await hard.openWithKey('usb', fakeKey('A').okcrypto, ID)).why).toBe('asked');
+  const k = fakeKey('A');
+  expect(await createStores({storage, randomBytes}).tryOpen('usb', k.okcrypto, ID)).toBeNull();
+  expect(k.calls).toEqual([]);
 });

@@ -47,14 +47,19 @@ export type OpenWhy = 'session' | 'by-itself' | 'asked';
 
 const META = 'meta';
 
+/* watching one derive for the key's word that it answered unasked (the soft key's "silent" record) */
+export type SilentWatch = {answeredSilently(): Promise<boolean>; stop(): void};
+
 export function createStores({
   storage,
   randomBytes,
   now = () => new Date(),
+  watchSilent,
 }: {
   storage: KV;
   randomBytes: (n: number) => Uint8Array;
   now?: () => Date;
+  watchSilent?: (label: string) => SilentWatch;
 }) {
   /* identity -> the open store and the backends looking at it */
   const open = new Map<string, {manager: Manager; backends: Set<Backend>}>();
@@ -75,16 +80,21 @@ export function createStores({
   }
 
   /* the store key, from the key; `asked` turns true when the key waits for the person (the code or a press) */
+  /*
+   * The store key, from the key, and whether the key ASKED the person. confirm() starts before every derive (the lib
+   * cannot know the key's setting), so it says nothing; only the key's own word that it answered unasked does -
+   * watchSilent (the soft key's "silent" record for this label). Without that word - a hard key, an older build -
+   * it counts as asked: the button stays, never a request that waits for the person on its own.
+   */
   async function storeKey(okcrypto: Okcrypto, identity: string, confirm?: (a: {digits?: number[] | null}) => void) {
-    let asked = false;
-    const key = await okcrypto.deriveSecret(m.storeLabel(identity.toLowerCase()), {
-      confirm: a => {
-        asked = true;
-        confirm?.(a);
-      },
-      timeoutMs: 40000,
-    });
-    return {key, asked};
+    const label = m.storeLabel(identity.toLowerCase());
+    const watch = watchSilent?.(label);
+    try {
+      const key = await okcrypto.deriveSecret(label, {confirm: a => confirm?.(a), timeoutMs: 40000});
+      return {key, asked: !(await watch?.answeredSilently())};
+    } finally {
+      watch?.stop();
+    }
   }
 
   async function attach(identity: string, backend: Backend, key: Uint8Array): Promise<Manager> {

@@ -17,9 +17,10 @@ import {getOnlyKey} from '../../onlykey';
 import {bucketStorage, openBucketIdentity} from '../../bucketStore';
 import {onBucketTraded} from '../../bucketEvents';
 import {challengeOpts} from '../../hostChallenge';
-import {noteOwnSecret} from '../../ownAsks';
+import {noteOwnSecret, secretRecordLabel} from '../../ownAsks';
+import {onSilentUse, startPressRecords} from '../../pressAsk';
 import {manager as passwordsLib} from 'node-onlykey-lib/passwords';
-import {createStores, type Backend, type Manager, type Okcrypto, type OpenWhy} from './stores';
+import {createStores, type Backend, type Manager, type Okcrypto, type OpenWhy, type SilentWatch} from './stores';
 import type {DeriveOkcrypto} from './innerKeys';
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
@@ -31,7 +32,26 @@ const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
  * `<identity>/...` as the bucket's merge rule names them (bucket/src/rules.js passwords). No plain records move
  * in (pre-v1, no migration): a key with no bucket identity has no password store.
  */
-export const stores = createStores({storage: bucketStorage(() => 'passwords', (k: string) => `okrn.passwords.${k}`), randomBytes});
+/*
+ * DID THE KEY ASK? The soft key says when it answered a derive unasked (its "silent" record, src/pressAsk.ts): the
+ * store's label, in the record's shape. The event can land a moment after the derive's answer, so a short grace.
+ */
+const SILENT_GRACE_MS = 400;
+function watchSilent(label: string): SilentWatch {
+  startPressRecords();
+  const want = secretRecordLabel(label, false);
+  let seen = false;
+  const stop = onSilentUse(u => { if (u.label === want) seen = true; });
+  return {
+    async answeredSilently() {
+      if (!seen) await new Promise(r => setTimeout(r, SILENT_GRACE_MS));
+      return seen;
+    },
+    stop,
+  };
+}
+
+export const stores = createStores({storage: bucketStorage(() => 'passwords', (k: string) => `okrn.passwords.${k}`), randomBytes, watchSilent});
 
 const BACKENDS: Backend[] = ['embedded', 'usb'];
 
