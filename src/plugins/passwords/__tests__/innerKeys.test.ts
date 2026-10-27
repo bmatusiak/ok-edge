@@ -1,64 +1,60 @@
 /*
- * An entry sealed a second time (src/plugins/passwords/innerKeys.ts): with the key - its own
- * derive, not left in the session - or with a passphrase through OkSSL's PBKDF2 (NativeKdf, here
- * Node's PBKDF2 standing in for it).
+ * An entry's secrets under its own press (src/plugins/passwords/innerKeys.ts): sealed with the touch
+ * derive of its id, opened with one press, sealed again on the same visit with no second press.
  */
-declare const require: (m: string) => any;
-const nodeCrypto = require('crypto');
+import {sha256} from 'node-onlykey-lib/vendor/@noble/hashes/sha2.js';
+import {openEntry, sealEntry} from '../innerKeys';
 
-jest.mock('okedge-native/specs/NativeKdf', () => ({
-  __esModule: true,
-  default: {
-    pbkdf2Sha256: async (pwHex: string, saltHex: string, rounds: number, len: number) =>
-      jest
-        .requireActual('crypto')
-        .pbkdf2Sync((globalThis as any).Buffer.from(pwHex, 'hex'), (globalThis as any).Buffer.from(saltHex, 'hex'), rounds, len, 'sha256')
-        .toString('hex'),
-  },
-}));
+jest.mock('../../../hostChallenge', () => ({challengeOpts: () => ({opts: {confirm: () => undefined}, done: () => undefined})}));
 
-import {openEntry, sealEntry, sealOf} from '../innerKeys';
+const ID = 'ab12cd34';
 
-function fakeKey() {
-  const cache = new Map<string, Uint8Array>();
-  const locked: string[] = [];
+function fakeKey(seed: string) {
+  const presses: string[] = [];
   const okcrypto = {
-    deviceVault: {
-      async key(label: string) {
-        const k = cache.get(label) ?? new Uint8Array(nodeCrypto.createHash('sha256').update('seed|' + label).digest());
-        cache.set(label, k);
-        return k;
-      },
-      lock(label: string) {
-        locked.push(label);
-        cache.delete(label);
-      },
+    async deriveSecret(label: string, opts: any = {}) {
+      if (opts.touch) presses.push(label);
+      return sha256(Uint8Array.from(`${seed}|${opts.touch ? 'touch' : 'touchless'}|${label}`, c => c.charCodeAt(0)));
     },
   };
-  return {okcrypto, locked};
+  return {okcrypto, presses};
 }
 
-const ENTRY = {id: 'a1', kind: 'login', title: 'Bank', username: 'brad', password: 'secret', notes: 'pin 1234'};
-
-test('sealed with the key: secrets inside, opened by the key again, never left in the session', async () => {
-  const {okcrypto, locked} = fakeKey();
-  const sealed = await sealEntry(ENTRY, {seal: 'key'}, okcrypto, false);
-  expect(sealed.password).toBeUndefined();
-  expect(sealed.notes).toBeUndefined();
-  expect(sealed.username).toBe('brad');
-  expect(sealOf(sealed)).toBe('key');
-  expect(locked).toEqual([`entry:${sealed.inner.ref}`]);
-  const open = await openEntry(sealed, okcrypto, false);
-  expect(open.password).toBe('secret');
-  expect(open.notes).toBe('pin 1234');
-  expect(locked).toHaveLength(2);
+test('a new entry is sealed with one press; its secrets leave the labels; opening takes one press', async () => {
+  const k = fakeKey('A');
+  const {entry, key} = await sealEntry({kind: 'login', title: 'Bank', username: 'u', password: 'secret-x', notes: 'n'}, k.okcrypto, ID);
+  expect(entry.password).toBeUndefined();
+  expect(entry.notes).toBeUndefined();
+  expect(entry.username).toBe('u');
+  expect(entry.inner.seal).toBe('entry-touch');
+  expect(k.presses).toEqual([`okedge/passwords/v1/${ID}/${entry.inner.ref}`]);
+  key.fill(0);
+  const stored = {...entry, id: entry.inner.ref};
+  const open = await openEntry(stored, k.okcrypto, ID);
+  expect(open.entry.password).toBe('secret-x');
+  expect(open.entry.notes).toBe('n');
+  expect(k.presses.length).toBe(2);
 });
 
-test('sealed with a passphrase: opens with it, not without it or with another', async () => {
-  const {okcrypto} = fakeKey();
-  const sealed = await sealEntry(ENTRY, {seal: 'passphrase', passphrase: 'horse battery'}, okcrypto, false);
-  expect(sealOf(sealed)).toBe('passphrase');
-  expect((await openEntry(sealed, okcrypto, false, 'horse battery')).password).toBe('secret');
-  await expect(openEntry(sealed, okcrypto, false)).rejects.toThrow(/passphrase/);
-  await expect(openEntry(sealed, okcrypto, false, 'other words')).rejects.toThrow(/does not open/);
+test('an edit on the same visit seals again with the key of its open: no second press', async () => {
+  const k = fakeKey('A');
+  const first = await sealEntry({kind: 'login', title: 'Bank', password: 'one'}, k.okcrypto, ID);
+  const stored = {...first.entry, id: first.entry.inner.ref};
+  const open = await openEntry(stored, k.okcrypto, ID);
+  const before = k.presses.length;
+  const again = await sealEntry({...open.entry, password: 'two'}, k.okcrypto, ID, open.key);
+  expect(k.presses.length).toBe(before);
+  expect(again.entry.inner.ref).toBe(stored.id);
+  expect((await openEntry({...again.entry, id: stored.id}, k.okcrypto, ID)).entry.password).toBe('two');
+});
+
+test('another key, or the seal of another entry, does not open it', async () => {
+  const a = fakeKey('A');
+  const x = await sealEntry({kind: 'login', title: 'Bank', password: 'b'}, a.okcrypto, ID);
+  const y = await sealEntry({kind: 'login', title: 'Mail', password: 'm'}, a.okcrypto, ID);
+  await expect(openEntry({...x.entry, id: x.entry.inner.ref}, fakeKey('B').okcrypto, ID)).rejects.toThrow(/does not open/);
+  /* Mail's seal under Bank's id: its own key opens it, and it says it is not Bank's */
+  const moved = {...x.entry, id: x.entry.inner.ref, inner: {...y.entry.inner}};
+  moved.inner.ref = x.entry.inner.ref;
+  await expect(openEntry(moved, a.okcrypto, ID)).rejects.toThrow();
 });

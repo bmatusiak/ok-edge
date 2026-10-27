@@ -3,8 +3,8 @@ import {Alert, NativeModules, ScrollView, StyleSheet, Text, TextInput, View} fro
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 
 import {chooseTarget, pressKeyButton, readKeyState, targetLabel, type Target} from '../../../credprovider/flow';
-import {supportsKnown} from '../../../firmwareFeatures';
-import {ensureBucketOpen} from '../../../bucketStore';
+import {ensureBucketOpen, openBucketIdentity} from '../../../bucketStore';
+import {challengeOpts} from '../../../hostChallenge';
 import {useSecureScreen} from '../../../hooks/useSecureScreen';
 import {getOnlyKey} from '../../../onlykey';
 import {Btn, Section} from '../../../ui/components';
@@ -16,7 +16,7 @@ import {theme} from '../../../ui/theme';
 import type {Manager, Okcrypto} from '../stores';
 import {derived, mnemonic, totp as totpLib} from 'node-onlykey-lib/passwords';
 import {nameDerivedDerive} from '../DerivedViews';
-import {openEntry} from '../innerKeys';
+import {openEntry, sealEntry, type DeriveOkcrypto} from '../innerKeys';
 import {NewPhrase, namePhraseDerive} from '../PhraseViews';
 import {stores, storesChanged, type PhraseOkcrypto} from '../usePasswordManager';
 import {ClockWarning, TotpProgress} from '../TotpViews';
@@ -30,10 +30,12 @@ import {formName, hostOf, matching, matchingCodes, type FormTarget} from './matc
  *  1. the key: the hard key if one is on the bus, else the soft key (started if it was not -
  *     Chrome can wake the app cold); a locked key is unlocked here, as the passkey sheet does;
  *  2. the store: the same `stores` the Passwords tab uses (one JS runtime, the app's), so a store
- *     the tab opened is open here; else touch-free, else "Open with OnlyKey";
+ *     the tab opened is open here; else by itself when its last open asked nothing, else "Open with
+ *     OnlyKey";
  *  3. the entries saved for this site (or app) - match.ts; every other entry only behind a warning
  *     naming the site, for a site saved under another address;
- *  4. a pick fills the form and closes the sheet; Cancel leaves the form as it was.
+ *  4. a pick fills the form and closes the sheet - a password or a code after its press (every
+ *     secret is sealed under its own, innerKeys.ts); Cancel leaves the form as it was.
  */
 
 type Native = {
@@ -54,7 +56,7 @@ type Step =
   | {kind: 'unlock'; target: Target; state: string}
   | {kind: 'button'; target: Target}
   | {kind: 'opening'; target: Target}
-  | {kind: 'open'; target: Target; manager: Manager}
+  | {kind: 'open'; target: Target; manager: Manager; identity: string}
   | {kind: 'error'; message: string};
 
 export default function AutofillSheet() {
@@ -67,9 +69,6 @@ export default function AutofillSheet() {
   const [phrase, setPhrase] = useState(false);
   /* a one-time-code box: the code of the entry picked here, as it is now */
   const [codeBox, setCodeBox] = useState(false);
-  /* an entry sealed with a passphrase, waiting for it here before it fills */
-  const [askPass, setAskPass] = useState<{entry: Entry; use: (open: Entry) => Promise<void>} | null>(null);
-  const [passphrase, setPassphrase] = useState('');
   const [step, setStep] = useState<Step>({kind: 'starting'});
   const [showAll, setShowAll] = useState(false);
   /* the phrase box's "+ Derive": Passwords' own new-phrase steps, here, then the new phrase fills */
@@ -91,18 +90,22 @@ export default function AutofillSheet() {
   /* the store, once the key is unlocked */
   const openStore = useCallback(async (target: Target, withKey: boolean) => {
     const app = await getOnlyKey(target.backend);
-    /* unknown means no (the tab's rule too): the key connected above, so it has said what it is */
-    if (!supportsKnown(app.device.capabilities, 'deviceVault')) {
-      throw new Error(`the ${targetLabel(target)} has not said it has the password vault (firmware 3.1.0 or newer)`);
-    }
-    const okcrypto = app.okcrypto as Okcrypto;
+    const okcrypto = app.okcrypto as unknown as Okcrypto;
     setStep({kind: 'opening', target});
     /* the stores are in the identity's sealed bucket (plan S2): opened here when the app's door is not open */
     await ensureBucketOpen(app);
-    const r = withKey
-      ? await stores.openWithKey(target.backend, okcrypto)
-      : await stores.tryOpen(target.backend, okcrypto);
-    setStep(r ? {kind: 'open', target, manager: r.manager} : {kind: 'button', target});
+    const identity = openBucketIdentity()?.identity;
+    if (!identity) throw new Error('no identity\'s bucket is open on this key');
+    const ask = challengeOpts('Opening your passwords');
+    const confirm = (a: {digits?: number[] | null}) => ask.opts.confirm({digits: a.digits ?? undefined});
+    try {
+      const r = withKey
+        ? await stores.openWithKey(target.backend, okcrypto, identity, confirm)
+        : await stores.tryOpen(target.backend, okcrypto, identity, confirm);
+      setStep(r ? {kind: 'open', target, manager: r.manager, identity} : {kind: 'button', target});
+    } finally {
+      ask.done();
+    }
   }, []);
 
   useEffect(() => {
@@ -142,20 +145,19 @@ export default function AutofillSheet() {
     [openStore],
   );
 
-  /* the store's press flag (a sealed entry's own derive uses it too) */
-  const pressOf = async (backend: Target['backend'], okcrypto: Okcrypto) =>
-    (await stores.readMeta(await stores.identify(backend, okcrypto)))?.press ?? true;
+  /* this key's okcrypto, for an entry's press derive */
+  const deriveOkcrypto = async () => (await getOnlyKey((step as {target: Target}).target.backend)).okcrypto as unknown as DeriveOkcrypto;
 
-  /*
-   * An entry with its secrets: sealed with the key - one more press now; with a passphrase - asked
-   * here first (askPass); plain - as it is.
-   */
+  /* an entry with its secrets: its press now (an entry with none is used as it is); its key wiped after */
   const withSecrets = (e: Entry, use: (open: Entry) => Promise<void>) =>
     (async () => {
       if (!e.inner || step.kind !== 'open') return use(e);
-      if ((e.inner as any).seal === 'entry-passphrase') return setAskPass({entry: e, use});
-      const okcrypto = (await getOnlyKey(step.target.backend)).okcrypto as Okcrypto;
-      return use(await openEntry(e, okcrypto as any, await pressOf(step.target.backend, okcrypto)));
+      const r = await openEntry(e, await deriveOkcrypto(), step.identity);
+      try {
+        await use(r.entry);
+      } finally {
+        r.key.fill(0);
+      }
     })().catch(err => setStep({kind: 'error', message: String(err?.message ?? err)}));
 
   const pick = (sealed: Entry) =>
@@ -207,81 +209,59 @@ export default function AutofillSheet() {
 
   const name = form ? formName(form) : '';
   let body: React.ReactNode;
-  if (askPass && step.kind === 'open') {
-    body = (
-      <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
-        <Section title={askPass.entry.title}>
-          <Text style={styles.body}>Sealed with a passphrase: enter it to fill.</Text>
-          <TextInput
-            value={passphrase}
-            onChangeText={setPassphrase}
-            placeholder="Passphrase"
-            placeholderTextColor={theme.textDim}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            importantForAutofill="no"
-            style={styles.input}
-          />
-          <View style={styles.bar}>
-            <Btn
-              title="Open and fill"
-              tone="primary"
-              disabled={!passphrase}
-              onPress={() =>
-                (async () => {
-                  const okcrypto = (await getOnlyKey(step.target.backend)).okcrypto as Okcrypto;
-                  const open = await openEntry(askPass.entry, okcrypto as any, await pressOf(step.target.backend, okcrypto), passphrase);
-                  setPassphrase('');
-                  await askPass.use(open);
-                })().catch(err => setStep({kind: 'error', message: String(err?.message ?? err)}))
-              }
-            />
-            <Btn title="Back" onPress={() => { setPassphrase(''); setAskPass(null); }} />
-          </View>
-        </Section>
-      </ScrollView>
-    );
-  } else if (step.kind === 'open' && saving && form) {
+  if (step.kind === 'open' && saving && form) {
     /*
      * SAVE: the login typed into the form, into this store - an update when the site already has
-     * an entry with that username, else a new login under the site's address. Nothing is kept on
-     * Not now.
+     * an entry with that username, else a new login under the site's address. Either is sealed
+     * under the entry's press (an update opens it with that one press, and seals again with the
+     * same key). Nothing is kept on Not now.
      */
-    const all = (step.manager.list() as Entry[]).filter(e => e.kind === 'login' && !e.inner);
+    const all = (step.manager.list() as Entry[]).filter(e => e.kind === 'login');
     const same = matching(all, form).find(e => (e.username ?? '') === saving.username);
-    const unchanged = !!same && same.password === saving.password;
     const finish = () => {
       storesChanged();
       setSaving(null);
       OkAutofill?.done().catch(() => {});
     };
     const keep = () =>
-      (same
-        ? step.manager.put({...same, password: saving.password})
-        : step.manager.put({
+      (async () => {
+        const okcrypto = await deriveOkcrypto();
+        if (!same) {
+          const sealed = await sealEntry({
             kind: 'login',
             title: name,
             username: saving.username || undefined,
             password: saving.password,
             urls: [form.domain ? 'https://' + hostOf(form.domain) : 'android://' + form.packageName],
-          })
-      )
-        .then(finish)
-        .catch((e: any) => setStep({kind: 'error', message: String(e?.message ?? e)}));
+          }, okcrypto, step.identity);
+          sealed.key.fill(0);
+          await step.manager.put(sealed.entry);
+          return finish();
+        }
+        const open = same.inner ? await openEntry(same, okcrypto, step.identity) : {entry: same, key: null};
+        try {
+          if (open.entry.password === saving.password) return finish();
+          const history = open.entry.password
+            ? [{password: open.entry.password, changedAt: new Date().toISOString()}, ...((open.entry as any).history ?? [])].slice(0, 5)
+            : (open.entry as any).history;
+          const sealed = await sealEntry({...open.entry, password: saving.password, ...(history?.length ? {history} : {})}, okcrypto, step.identity, open.key);
+          await step.manager.put(sealed.entry);
+          finish();
+        } finally {
+          open.key?.fill(0);
+        }
+      })().catch((e: any) => setStep({kind: 'error', message: String(e?.message ?? e)}));
     body = (
       <ScrollView contentContainerStyle={styles.pad}>
-        <Section title={unchanged ? 'Already saved' : same ? `Update ${same.title}` : `Save to OnlyKey`}>
+        <Section title={same ? `Update ${same.title}` : `Save to OnlyKey`}>
           <Text style={styles.body}>
-            {unchanged
-              ? `OnlyKey already has this password for ${saving.username || name}.`
-              : same
-                ? `Replace the saved password for ${saving.username || 'this login'} on ${name}? The old one goes to its history.`
-                : `Keep ${saving.username || 'this login'} for ${name}, sealed to the ${targetLabel(step.target)}?`}
+            {same
+              ? `Replace the saved password for ${saving.username || 'this login'} on ${name}? The key asks for a press to open it; the old one goes to its history.`
+              : `Keep ${saving.username || 'this login'} for ${name}, sealed to the ${targetLabel(step.target)}? The key asks for a press.`}
           </Text>
           <View style={styles.bar}>
-            {unchanged ? null : <Btn title={same ? 'Update password' : 'Save'} tone="primary" onPress={() => void keep()} />}
-            <Btn title={unchanged ? 'Close' : 'Not now'} onPress={finish} />
+            <Btn title={same ? 'Update password' : 'Save'} tone="primary" onPress={() => void keep()} />
+            <Btn title="Not now" onPress={finish} />
           </View>
         </Section>
       </ScrollView>
@@ -378,8 +358,8 @@ export default function AutofillSheet() {
           <NewPhrase
             manager={manager}
             phraseKey={async () => {
-              const okcrypto = (await getOnlyKey(target.backend)).okcrypto as unknown as Okcrypto;
-              return {okcrypto: okcrypto as unknown as PhraseOkcrypto, press: await pressOf(target.backend, okcrypto)};
+              /* made with a press, as every secret in Passwords is */
+              return {okcrypto: (await getOnlyKey(target.backend)).okcrypto as unknown as PhraseOkcrypto, press: true};
             }}
             act={fn => {
               Promise.resolve()

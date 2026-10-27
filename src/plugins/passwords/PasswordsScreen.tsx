@@ -1,11 +1,9 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, BackHandler, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 
-import {legacy, totp as totpLib} from 'node-onlykey-lib/passwords';
+import {inner as innerLib} from 'node-onlykey-lib/passwords';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import NativeShare from 'okedge-native/specs/NativeShare';
-import {bucketTradedAt, onBucketTraded} from '../../bucketEvents';
-import {missingNote} from '../../firmwareFeatures';
 import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import {BACKEND_NAME} from '../../hooks/keySession';
 import {useSecureScreen} from '../../hooks/useSecureScreen';
@@ -21,15 +19,18 @@ import {DerivedEntry, NewDerived} from './DerivedViews';
 import {openEntry, sealEntry, stripInner} from './innerKeys';
 import {NewPhrase, PhraseEntry} from './PhraseViews';
 import {RowActions, type RowAction} from '../../ui/RowActions';
-import {TotpCode, TotpRowCode} from './TotpViews';
-import {policyWords, timeLeftWords} from './session';
-import {usePasswordManager, type OldVault} from './usePasswordManager';
-import type {Manager, StorePolicy} from './stores';
-import {DEVICE_WORD, SHOW_SCROLLBARS} from '../../platform';
+import {TotpCode} from './TotpViews';
+import {usePasswordManager} from './usePasswordManager';
+import type {Manager} from './stores';
+import type {DeriveOkcrypto} from './innerKeys';
+import type {PhraseOkcrypto} from './usePasswordManager';
+import {SHOW_SCROLLBARS} from '../../platform';
 
 /*
- * THE PASSWORDS TAB. Unlocks when the tab opens if that needs no press; otherwise "Open with
- * OnlyKey", so opening the tab never sends a press request by itself (Brad, 2026-10-11). The
+ * THE PASSWORDS TAB. The list opens with the store key (stores.ts: the key's touchless derive) - by
+ * itself when its last open asked nothing, otherwise "Open passwords", so opening the tab never sends
+ * a request that waits for the person (Brad, 2026-10-11). An entry's secrets open with a press, each
+ * visit (innerKeys.ts; Brad, 2026-10-27: "press decrypt only"). The
  * list is Edge's scrollable list (src/ui/EdgeList.tsx; Brad: "we need to reuse the scrollable list
  * view we use in edge"). An entry and the editor open as a page with ‹ Back and its name, and the
  * phone's own Back goes back too, as Settings and Edge's budget view do.
@@ -59,9 +60,12 @@ type Entry = {
   androidApps?: {package: string; cert: string}[];
   notes?: string;
   history?: {password: string; changedAt: string}[];
-  inner?: {seal: string; ref?: string; salt?: string; blob: string};
+  inner?: {seal: string; ref: string; blob: string};
   updatedAt?: string;
 };
+
+/* an entry opened on this visit: its secrets, and its key - so an edit seals again with no second press */
+type Opened = {entry: Entry; key: Uint8Array};
 
 type NewKind = 'login' | 'note' | 'card' | 'totp';
 type Page =
@@ -73,11 +77,6 @@ type Page =
   | {kind: 'derive-new'; id: null}
   | {kind: 'to-slot'; id: string};
 
-/* the store's "stays open" choices, in words (stores.ts STORE_POLICIES) */
-const POLICY_OF_LABEL = {'5 min': 'session:5m', '30 min': 'session:30m', '8 hours': 'session:8h', 'Until restart': 'startup'} as const;
-const POLICY_LABELS = Object.keys(POLICY_OF_LABEL) as (keyof typeof POLICY_OF_LABEL)[];
-const POLICY_LABEL_OF = Object.fromEntries(Object.entries(POLICY_OF_LABEL).map(([k, v]) => [v, k])) as Record<StorePolicy, keyof typeof POLICY_OF_LABEL>;
-
 const hostOf = (url: string) => url.replace(/^[a-z]+:\/\//i, '').split(/[/?#]/)[0];
 
 async function copy(text: string | undefined, what: string) {
@@ -86,23 +85,10 @@ async function copy(text: string | undefined, what: string) {
   Alert.alert('Copied', `${what} copied. The clipboard is cleared in ${CLIPBOARD_TTL_MS / 1000} seconds.`);
 }
 
-/*
- * WHEN EACH OPEN STORE WAS DECRYPTED: first seen by this screen, which is where it opens (Open with OnlyKey, the
- * banner's Decrypt). A store reopened is a new object, so a new time.
- */
-const openedTimes = new WeakMap<object, number>();
-function openedAt(manager: object): number {
-  let t = openedTimes.get(manager);
-  if (t === undefined) { t = Date.now(); openedTimes.set(manager, t); }
-  return t;
-}
-
 export function PasswordsScreen({ctx}: {ctx: TabContext}) {
-  const {view, pressAsked, openWithKey, touch, lockNow, retry, oldVault, phraseKey, policy, timeLeft, choosePolicy} = usePasswordManager({
-    backend: ctx.backend,
-    unlocked: ctx.unlocked,
-    caps: ctx.caps,
-  });
+  const {view, openWithKey, lockNow, retry, keyFor} = usePasswordManager({backend: ctx.backend, unlocked: ctx.unlocked});
+  /* a phrase or a derived password is made with a press, as every secret here is */
+  const phraseKey = async () => ({okcrypto: (await keyFor()) as PhraseOkcrypto, press: true});
   const keyName = BACKEND_NAME[ctx.backend];
   useSecureScreen(ctx.blockScreenshots && view.state === 'open');
 
@@ -111,46 +97,26 @@ export function PasswordsScreen({ctx}: {ctx: TabContext}) {
     const {device} = await getOnlyKey(ctx.backend);
     await device.setSlot(slotId, device.totpFields(secret));
   };
-  /*
-   * PASSWORDS ARRIVED FROM ANOTHER DEVICE while this store is open (src/bucketEvents.ts): the list on screen was
-   * decrypted before they came, so a banner asks to decrypt again - Decrypt locks the store and opens it with the key,
-   * and the arrived entries are in the list.
-   */
-  /* a sync newer than this open store's decrypt (the store object outlives the screen: openedAt keys on it) */
-  const [, setSyncTick] = useState(0);
-  const [reopen, setReopen] = useState(false);
-  useEffect(() => onBucketTraded(stores => { if (stores.includes('passwords')) setSyncTick(t => t + 1); }), []);
-  const incoming = view.state === 'open' && bucketTradedAt('passwords') > openedAt(view.manager);
-  useEffect(() => {
-    if (reopen && view.state === 'button') { setReopen(false); openWithKey(); }
-  }, [view.state, reopen, openWithKey]);
-  const decryptIncoming = () => { setReopen(true); lockNow(); };
-  if (view.state === 'open') return <OpenStore manager={view.manager} keyName={keyName} touch={touch} lockNow={lockNow} oldVault={oldVault} phraseKey={phraseKey} timeLeft={timeLeft} policy={policy} choosePolicy={choosePolicy} writeSlot={writeSlot} incoming={incoming} onDecrypt={decryptIncoming} />;
+  /* passwords a sync brings are read in by the store itself (usePasswordWatch: reload with the key it holds) */
+  if (view.state === 'open') return <OpenStore manager={view.manager} identity={view.identity} keyName={keyName} lockNow={lockNow} keyFor={keyFor} phraseKey={phraseKey} writeSlot={writeSlot} />;
 
   return (
     <ScrollView contentContainerStyle={styles.pad}>
       <Section title="Passwords">
-        {view.state === 'unsupported' ? (
-          <Text style={styles.body}>{missingNote('deviceVault')}</Text>
-        ) : view.state === 'reading' ? (
-          <Text style={styles.body}>Reading the {keyName}'s firmware…</Text>
-        ) : view.state === 'locked-key' ? (
+        {view.state === 'locked-key' ? (
           <Text style={styles.body}>Unlock the {keyName} to see its passwords.</Text>
+        ) : view.state === 'no-bucket' ? (
+          <Text style={styles.body}>No identity's bucket is open: passwords live in it. Continue past the identity check first.</Text>
         ) : view.state === 'checking' ? (
-          <Text style={styles.body}>{pressAsked ? 'Press a button on your OnlyKey…' : 'Opening…'}</Text>
+          <Text style={styles.body}>Opening…</Text>
         ) : view.state === 'pressing' ? (
-          <Text style={styles.body}>
-            {ctx.backend === 'usb' ? 'Press a button on your OnlyKey to open your passwords.' : 'Confirm on the key to open your passwords.'}
-          </Text>
+          <Text style={styles.body}>Opening your passwords - if the key asks, enter its code or press it.</Text>
         ) : view.state === 'button' ? (
           <>
             <Text style={styles.body}>
-              {view.isNew
-                ? `No password store for this key on this ${DEVICE_WORD} yet. Opening makes one, sealed to the ${keyName}: only this key, or a key restored from its backup, opens it.`
-                : `Your passwords are sealed to the ${keyName}. Opening asks the key once; the store then stays open for ${policyWords(policy())}, or until the key locks.`}
+              {`Your passwords are sealed to the ${keyName}. Opening asks the key once (its code, unless you have set it to ask nothing); the list then stays open until the key locks. Each password opens with a press.`}
             </Text>
-            <Text style={styles.store}>Store {view.storeId.slice(0, 8)}</Text>
-            <Btn title="Open with OnlyKey" tone="primary" onPress={openWithKey} />
+            <Btn title="Open passwords" tone="primary" onPress={openWithKey} />
           </>
         ) : (
           <>
@@ -165,48 +131,36 @@ export function PasswordsScreen({ctx}: {ctx: TabContext}) {
 
 function OpenStore({
   manager,
+  identity,
   keyName,
-  touch,
   lockNow,
-  oldVault,
+  keyFor,
   phraseKey,
-  timeLeft,
-  policy,
-  choosePolicy,
   writeSlot,
-  incoming = false,
-  onDecrypt,
 }: {
-  /* passwords arrived from a sync since this list was decrypted (src/bucketEvents.ts) */
-  incoming?: boolean;
-  onDecrypt?: () => void;
   manager: Manager;
+  /* the bucket identity: an entry's press derive is scoped to it (innerKeys.ts) */
+  identity: string;
   keyName: string;
-  touch: () => boolean;
   lockNow: () => void;
-  oldVault: () => Promise<OldVault>;
+  keyFor: () => Promise<DeriveOkcrypto>;
   phraseKey: Parameters<typeof PhraseEntry>[0]['phraseKey'];
-  timeLeft: () => number | null;
-  policy: () => string | null;
-  choosePolicy: (p: StorePolicy) => Promise<void>;
   writeSlot: (slotId: string, secret: string) => Promise<void>;
 }) {
-  /* the session's time left, redrawn every 15 s (read-only: it does not keep the session open) */
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick(n => n + 1), 15000);
-    return () => clearInterval(t);
-  }, []);
-  const left = timeLeft();
   const [page, setPage] = useState<Page>({kind: 'list'});
   /*
-   * Entries sealed a second time, opened while their page is up: {entry with its secrets, the
-   * passphrase if it took one}. In memory only; gone when the list is shown again.
+   * Entries opened with their press while their page is up: the entry with its secrets, and its key.
+   * In memory only; the keys are wiped and the secrets dropped when the list is shown again, and when
+   * the store goes (the key locks: this screen unmounts).
    */
-  const [opened, setOpened] = useState<Record<string, {entry: any; passphrase?: string}>>({});
+  const [opened, setOpened] = useState<Record<string, Opened>>({});
+  const wipe = (o: Record<string, Opened>) => { for (const x of Object.values(o)) x.key.fill(0); };
   useEffect(() => {
-    if (page.kind === 'list') setOpened({});
+    if (page.kind === 'list') setOpened(o => { wipe(o); return {}; });
   }, [page.kind]);
+  const openedRef = React.useRef(opened);
+  openedRef.current = opened;
+  useEffect(() => () => wipe(openedRef.current), []);
   const [search, setSearch] = useState('');
   /* the list's filters: one kind, one folder (spec UI: "search, folders, kind filter") */
   const [kindFilter, setKindFilter] = useState<KindFilter>('All');
@@ -233,27 +187,42 @@ function OpenStore({
     return () => sub.remove();
   }, [page, back]);
 
-  /* every action first slides the session; a run-out session closes the store (the hook redraws) */
+  /* an action's failure, said - a press refused or timed out included */
   const act = useCallback((fn: () => void | Promise<void>) => {
-    if (!touch()) return;
     Promise.resolve(fn()).catch(err => Alert.alert('Passwords', String(err?.message ?? err)));
-  }, [touch]);
+  }, []);
+
+  /* this entry opened with its press (one per visit); its page then shows and edits its secrets */
+  const openOne = async (e: Entry) => {
+    const r = await openEntry(e, await keyFor(), identity);
+    setOpened(o => ({...o, [e.id]: {entry: r.entry, key: r.key}}));
+  };
 
   /*
-   * The shortcuts a row offers. Only what the list already holds open: an entry sealed again
-   * keeps its secrets shut until it is opened (it asks its key or passphrase), a derived password
-   * or phrase is made only when shown, and a counter code moves its counter only from the entry.
+   * Seal and save: the entry's secrets under its press (innerKeys.ts) - with the key of this visit's
+   * open when there is one, else one press. An entry with no secret at all (a login with only its
+   * username) needs no seal and no press.
+   */
+  const saveEntry = async (input: any, was?: Opened) => {
+    if (!innerLib.hasPlainSecret(input)) return manager.put(input);
+    const {entry, key} = await sealEntry(input, await keyFor(), identity, was?.key ?? null);
+    const saved = await manager.put(entry);
+    setOpened(o => {
+      if (o[saved.id] && o[saved.id].key !== key) o[saved.id].key.fill(0);
+      return {...o, [saved.id]: {entry: {...stripInner(input), id: saved.id}, key}};
+    });
+    return saved;
+  };
+
+  /*
+   * The shortcuts a row offers: only labels. Every secret is sealed, so a password, a code or a
+   * note is copied or typed from its entry, after its press.
    */
   const rowActions = (e: Entry | null): RowAction[] => {
-    if (!e || e.inner) return [];
+    if (!e) return [];
     const out: RowAction[] = [];
-    if (e.password) out.push({title: 'Copy password', primary: true, onPress: () => act(() => copy(e.password, 'Password'))});
-    if (e.username) out.push({title: 'Copy username', onPress: () => act(() => copy(e.username, 'Username'))});
+    if (e.username) out.push({title: 'Copy username', primary: true, onPress: () => act(() => copy(e.username, 'Username'))});
     if (canType && e.username) out.push({title: 'Type username + Tab', onPress: () => act(() => bt.typeSecret(e.username!, {then: 'tab'}))});
-    if (canType && e.password) out.push({title: 'Type password', onPress: () => act(() => bt.typeSecret(e.password!, {then: null}))});
-    const timed = e.totp && e.totp.type !== 'hotp';
-    if (timed) out.push({title: 'Copy code', primary: !e.password, onPress: () => act(() => copy(totpLib.codeOf(e.totp).code, 'Code'))});
-    if (timed && canType) out.push({title: 'Type code', onPress: () => act(() => bt.typeSecret(totpLib.codeOf(e.totp).code, {then: null}))});
     return out;
   };
 
@@ -265,7 +234,10 @@ function OpenStore({
   if (page.kind !== 'list') {
     const stored = page.id ? (manager.get(page.id) as Entry | null) : null;
     /* a sealed entry, once opened, is shown and edited with its secrets */
-    const entry = page.id && opened[page.id] ? (opened[page.id].entry as Entry) : stored;
+    const was = page.id ? opened[page.id] : undefined;
+    const entry = was ? was.entry : stored;
+    /* still sealed: its page (and its editor - saving it unopened would drop its secrets) asks for its press first */
+    const shut = !!stored?.inner && !was && (page.kind === 'entry' || page.kind === 'edit' || page.kind === 'to-slot');
     const title =
       page.kind === 'add' ? 'Add' : page.kind === 'to-slot' ? 'Put on a key slot' : page.kind === 'derive-new' ? 'New derived password' : page.kind === 'phrase' ? 'New wallet phrase' : page.kind === 'edit' ? (entry ? `Edit ${entry.title}` : 'New entry') : entry?.title ?? '';
     return (
@@ -276,7 +248,9 @@ function OpenStore({
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
           </View>
         </View>
-        {page.kind === 'phrase' ? (
+        {shut && entry ? (
+          <SealedEntry entry={entry} act={act} onOpen={() => openOne(entry)} />
+        ) : page.kind === 'phrase' ? (
           <NewPhrase
             manager={manager}
             phraseKey={phraseKey}
@@ -334,27 +308,15 @@ function OpenStore({
             newKind={page.newKind}
             /* never a phrase: a phrase entry has no Edit (its recipe is the entry) */
             entry={entry as (Entry & {kind: 'login' | 'note' | 'card' | 'totp'}) | null}
-            onSave={(input, how) =>
+            onSave={input =>
               act(async () => {
-                let toSave: any = input;
-                const was = page.id ? opened[page.id] : undefined;
-                if (how.seal !== 'none') {
-                  /* sealed: the history stays inside the seal (the store keeps none outside it) */
-                  const base: any = was?.entry ?? stored;
-                  let history = base?.history ?? [];
-                  if (base?.password && input.password !== base.password) {
-                    history = [{password: base.password, changedAt: new Date().toISOString()}, ...history].slice(0, 5);
-                  }
-                  const {okcrypto, press} = await phraseKey();
-                  toSave = await sealEntry(
-                    {...input, ...(history.length ? {history} : {}), ...(stored?.inner ? {inner: stored.inner} : {})},
-                    {seal: how.seal, passphrase: how.passphrase ?? was?.passphrase},
-                    okcrypto as any,
-                    press,
-                  );
+                /* a changed password goes to the history, inside the seal (the last five) */
+                const base: any = was?.entry;
+                let history = base?.history ?? [];
+                if (base?.password && input.password !== base.password) {
+                  history = [{password: base.password, changedAt: new Date().toISOString()}, ...history].slice(0, 5);
                 }
-                const saved = await manager.put(toSave);
-                if (was) setOpened(o => ({...o, [saved.id]: {entry: {...stripInner(input), id: saved.id, sealedWith: how.seal}, passphrase: how.passphrase ?? was.passphrase}}));
+                const saved = await saveEntry({...input, ...(history.length ? {history} : {})}, was);
                 setRev(n => n + 1);
                 setPage({kind: 'entry', id: saved.id});
               })
@@ -382,30 +344,16 @@ function OpenStore({
           <DerivedEntry entry={entry} deriveKey={phraseKey} act={act} copy={copy} />
         ) : entry?.kind === 'mnemonic' ? (
           <PhraseEntry entry={entry} phraseKey={phraseKey} act={act} />
-        ) : entry?.inner ? (
-          <SealedEntry
-            entry={entry}
-            act={act}
-            onOpen={async passphrase => {
-              const {okcrypto, press} = await phraseKey();
-              const open = await openEntry(entry, okcrypto as any, press, passphrase);
-              setOpened(o => ({...o, [entry.id]: {entry: open, passphrase}}));
-            }}
-          />
         ) : entry ? (
           <EntryView
             entry={entry}
             act={act}
             onEdit={() => setPage({kind: 'edit', id: entry.id})}
-            /* HOTP's counter is saved through the store; an entry sealed again keeps it inside its seal (Edit) */
-            onCounter={
-              stored?.inner
-                ? undefined
-                : async next => {
-                    await manager.put({...stored, totp: {...stored!.totp, counter: next}});
-                    setRev(n => n + 1);
-                  }
-            }
+            /* HOTP's counter is a secret's part: sealed again with this visit's key, no second press */
+            onCounter={async next => {
+              await saveEntry({...entry, totp: {...entry.totp, counter: next}}, was);
+              setRev(n => n + 1);
+            }}
             onToSlot={() => setPage({kind: 'to-slot', id: entry.id})}
           />
         ) : (
@@ -439,18 +387,7 @@ function OpenStore({
     if (!of.length) continue;
     items.push({key: `s-${kind}`, kind: 'section', title: KIND_TITLE[kind], right: String(of.length)});
     for (const e of of) {
-      /* an authenticator row shows its code and time bar, live (spec UI: "Show TOTP" in the list) */
-      if (e.kind === 'totp' && !e.inner && e.totp) {
-        items.push({
-          key: e.id,
-          kind: 'node',
-          accessibilityLabel: e.title,
-          render: () => <TotpRowCode totp={e.totp} title={e.title} subtitle={e.totp?.issuer || 'authenticator'} />,
-          onPress: () => act(() => setPage({kind: 'entry', id: e.id})),
-          onLongPress: () => setRowFor(e),
-        });
-        continue;
-      }
+      /* an authenticator's code shows on its entry, after its press: its setup key is sealed */
       items.push({
         key: e.id,
         kind: 'row',
@@ -459,11 +396,10 @@ function OpenStore({
           e.kind === 'mnemonic'
             ? `${e.recipe?.out === 'bip39-12' ? 12 : 24} words, from the key`
             : e.kind === 'totp'
-              ? e.totp?.issuer || 'authenticator'
+              ? e.urls?.[0] ? hostOf(e.urls[0]) : 'authenticator'
               : e.kind === 'derived'
                 ? e.username || 'made from the key'
                 : e.username || (e.urls?.[0] ? hostOf(e.urls[0]) : undefined),
-        right: e.inner ? 'sealed' : undefined,
         onPress: () => act(() => setPage({kind: 'entry', id: e.id})),
         onLongPress: () => setRowFor(e),
       });
@@ -471,67 +407,34 @@ function OpenStore({
   }
 
   /*
-   * MOVING PASSWORDS. The export is the store as it is kept - every entry still sealed to this key,
-   * record ids random - so the file opens only with this key or one from its backup; an import
-   * skips (and counts) anything that does not open. The old vault's entries (Encrypt/Decrypt's
-   * single-password vault) are each opened with their own derive, one press per site as before,
-   * and kept here as logins; the old vault is left as it is.
+   * MOVING PASSWORDS. The export is the list sealed under the store key, each entry's secrets still
+   * in their own seal - so the file opens only with this key or one from its backup; an import adds
+   * what is not here and counts what it skips.
    */
-  const move = (kind: 'export' | 'save' | 'import' | 'old') =>
+  const move = (kind: 'export' | 'save' | 'import') =>
     act(async () => {
       /* the sealed copy into a folder the person picks (spec: "Save to a folder through Android's file picker") */
       if (kind === 'save') {
         const stamp = new Date().toISOString().slice(0, 10);
-        const r = await NativeShare.saveFile(`onlykey-passwords-${stamp}.json`, await manager.exportJSON(), 'application/json');
+        const r = await NativeShare.saveFile(`onlykey-passwords-${stamp}.json`, manager.exportJSON(), 'application/json');
         if (r.saved) Alert.alert('Saved', `Sealed copy saved as ${r.name || 'the chosen file'}. It opens only with this key or one restored from its backup.`);
         return;
       }
       if (kind === 'export') {
         const stamp = new Date().toISOString().slice(0, 10);
-        await NativeShare.shareFile(`onlykey-passwords-${stamp}.json`, await manager.exportJSON(), 'application/json', 'Passwords (sealed)');
+        await NativeShare.shareFile(`onlykey-passwords-${stamp}.json`, manager.exportJSON(), 'application/json', 'Passwords (sealed)');
         return;
       }
-      if (kind === 'import') {
-        const picked = await NativeShare.pickTextFile('application/json');
-        if (!picked.picked) return;
-        const r = await manager.importJSON(picked.content);
-        setRev(n => n + 1);
-        Alert.alert('Import', `${r.imported} added, ${r.skipped} already here, ${r.unreadable} did not open with this key.`);
-        return;
-      }
-      const vault = await oldVault();
-      const r = await legacy.importLegacy({
-        legacy: vault,
-        openOne: (id: string) => vault.load(id, {requirePress: true}),
-        manager,
-      });
+      const picked = await NativeShare.pickTextFile('application/json');
+      if (!picked.picked) return;
+      const r = await manager.importJSON(picked.content);
       setRev(n => n + 1);
-      Alert.alert(
-        'Old vault',
-        r.imported + r.failed.length === 0
-          ? 'The old vault on this key is empty.'
-          : `${r.imported} brought in.${r.failed.length ? ` ${r.failed.length} did not open: ${r.failed.map(f => f.serviceId).join(', ')}.` : ''}`,
-      );
+      Alert.alert('Import', `${r.imported} added, ${r.skipped} already here, ${r.unreadable} could not be read.`);
     });
   if (filtered && !shown.length) items.push({key: 'nomatch', kind: 'row', tone: 'dim', title: 'Nothing matches'});
   if (!q && !entries.length) items.push({key: 'none', kind: 'row', tone: 'dim', title: 'No passwords yet', subtitle: '+ Add makes the first one.'});
   /* the panels below belong to the whole store, not to a filtered view */
   if (!filtered) {
-    /* how long the store stays open once the key opened it (spec: "up to session:8h") */
-    const chosen = POLICY_LABEL_OF[policy() as StorePolicy] ?? '30 min';
-    items.push({key: 's-stay', kind: 'section', title: 'Stays open'});
-    items.push({
-      key: 'stay',
-      kind: 'node',
-      render: () => (
-        <View>
-          <Segmented options={POLICY_LABELS} value={chosen} onChange={v => act(() => choosePolicy(POLICY_OF_LABEL[v]))} />
-          <Text style={styles.dim}>
-            {policyWords(POLICY_OF_LABEL[chosen])}, or until the key locks. A shorter choice counts from the next open.
-          </Text>
-        </View>
-      ),
-    });
     items.push({key: 's-autofill', kind: 'section', title: 'Autofill'});
     items.push({key: 'autofill', kind: 'node', render: () => <AutofillCard />});
     items.push({key: 's-move', kind: 'section', title: 'Move passwords'});
@@ -547,7 +450,7 @@ function OpenStore({
             <Btn title="Save to a folder (sealed)" onPress={() => move('save')} />
             <Btn title="Share (sealed)" onPress={() => move('export')} />
             <Btn title="Import (sealed)" onPress={() => move('import')} />
-            {/* Import old vault: hidden - no legacy support yet (Brad, 2026-10-11); move('old') and lib legacy.js stay */}
+            {/* Import old vault: hidden - no legacy support yet (Brad, 2026-10-11); lib legacy.js stays */}
           </View>
         </View>
       ),
@@ -556,12 +459,6 @@ function OpenStore({
 
   return (
     <View style={styles.root}>
-      {incoming ? (
-        <View style={styles.incoming}>
-          <Text style={styles.incomingText}>New passwords arrived from sync. Decrypt to merge them into this list.</Text>
-          <Btn title="Decrypt" tone="primary" onPress={() => onDecrypt?.()} />
-        </View>
-      ) : null}
       <View style={styles.bar}>
         <TextInput
           value={search}
@@ -586,7 +483,6 @@ function OpenStore({
           </ScrollView>
         ) : null}
       </View>
-      {left !== null ? <Text style={[styles.dim, styles.session]}>{timeLeftWords(left)}</Text> : null}
       <EdgeList items={items} empty="Nothing matches." />
       <RowActions title={rowFor ? rowFor.title : null} actions={rowActions(rowFor)} onClose={() => setRowFor(null)} />
     </View>
@@ -631,42 +527,18 @@ function AddPage({first, keyName, onPick}: {first: boolean; keyName: string; onP
 }
 
 /*
- * AN ENTRY SEALED A SECOND TIME, not opened yet: its title and username show (they are the
- * store's), its secrets wait for one more press of the key, or for its passphrase (innerKeys.ts).
+ * AN ENTRY NOT OPENED YET: its labels show (they are the store's), its secrets wait for a press of
+ * the key (innerKeys.ts) - one per visit.
  */
-function SealedEntry({entry, act, onOpen}: {entry: Entry; act: (fn: () => void | Promise<void>) => void; onOpen: (passphrase?: string) => Promise<void>}) {
-  const [passphrase, setPassphrase] = useState('');
-  const byKey = (entry.inner as any)?.seal === 'entry-derive';
+function SealedEntry({entry, act, onOpen}: {entry: Entry; act: (fn: () => void | Promise<void>) => void; onOpen: () => Promise<void>}) {
   return (
-    <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
-      <Section title={byKey ? 'Sealed with one more press' : 'Sealed with a passphrase'}>
+    <ScrollView contentContainerStyle={styles.pad}>
+      <Section title="Sealed to the key">
         {entry.username ? <KeyValue label="Username" value={entry.username} /> : null}
         {entry.urls?.length ? <KeyValue label={entry.urls.length > 1 ? 'Sites' : 'Site'} value={entry.urls.join('\n')} /> : null}
-        <Text style={styles.body}>
-          {byKey
-            ? 'Its password, notes and code open with one more press of the key, each time.'
-            : 'Its password, notes and code open with the passphrase it was sealed with.'}
-        </Text>
-        {byKey ? null : (
-          <TextInput
-            value={passphrase}
-            onChangeText={setPassphrase}
-            placeholder="Passphrase"
-            placeholderTextColor={theme.textDim}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            importantForAutofill="no"
-            style={styles.input}
-          />
-        )}
+        <Text style={styles.body}>Its password, notes and code open with a press of the key, each time.</Text>
         <View style={styles.buttons}>
-          <Btn
-            title={byKey ? 'Open with OnlyKey' : 'Open'}
-            tone="primary"
-            disabled={!byKey && !passphrase}
-            onPress={() => act(() => onOpen(byKey ? undefined : passphrase))}
-          />
+          <Btn title="Open with OnlyKey" tone="primary" onPress={() => act(onOpen)} />
         </View>
       </Section>
     </ScrollView>
@@ -713,9 +585,7 @@ function EntryView({
         {entry.password ? <KeyValue label="Password" value={show ? entry.password : '••••••••••'} /> : null}
         {entry.urls?.length ? <KeyValue label={entry.urls.length > 1 ? 'Sites' : 'Site'} value={entry.urls.join('\n')} /> : null}
         {entry.notes ? <KeyValue label="Notes" value={entry.notes} /> : null}
-        {(entry as any).sealedWith && (entry as any).sealedWith !== 'none' ? (
-          <Text style={styles.dim}>{(entry as any).sealedWith === 'key' ? 'Sealed again with the key: opened for this visit.' : 'Sealed again with a passphrase: opened for this visit.'}</Text>
-        ) : null}
+        {entry.password || entry.notes || entry.totp ? <Text style={styles.dim}>Opened with a press for this visit.</Text> : null}
         {entry.androidApps?.length ? <KeyValue label="Apps" value={entry.androidApps.map(a => a.package).join('\n')} /> : null}
         {entry.folder ? <KeyValue label="Folder" value={entry.folder} /> : null}
         {entry.tags?.length ? <KeyValue label="Tags" value={entry.tags.join(', ')} /> : null}

@@ -4,71 +4,39 @@
  * when they run.
  *
  * One stores object for the whole app (module scope), so a store opened on the tab stays open
- * when the person switches tabs and comes back - the session is the key's, not the screen's.
- * Because it outlives the screen, closing it cannot be the screen's job either: usePasswordWatch
- * is mounted with the app and closes a key's store the moment that key stops being unlocked
- * (each key on its own - a hard key unplugged does not close the soft key's store), and runs the
- * reaper every 30 s and when the app comes back to the front, as CryptoScreen does for its vault.
+ * when the person switches tabs and comes back - the store key is held until the key locks, not
+ * the screen. Because it outlives the screen, closing it cannot be the screen's job either:
+ * usePasswordWatch is mounted with the app and closes a key's store the moment that key stops
+ * being unlocked (each key on its own - a hard key unplugged does not close the soft key's view).
+ * A sync that brings entries reads the store again with the key it holds (lib reload): no derive.
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AppState} from 'react-native';
 
 import {getOnlyKey} from '../../onlykey';
-import {supportsKnown} from '../../firmwareFeatures';
-import {bucketStorage} from '../../bucketStore';
-import {createStores, LABEL, type Backend, type Manager, type Okcrypto, type OpenWhy, type StorePolicy} from './stores';
+import {bucketStorage, openBucketIdentity} from '../../bucketStore';
+import {onBucketTraded} from '../../bucketEvents';
+import {challengeOpts} from '../../hostChallenge';
+import {createStores, type Backend, type Manager, type Okcrypto, type OpenWhy} from './stores';
+import type {DeriveOkcrypto} from './innerKeys';
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 /*
- * THE STORES' STORAGE (plan S2): store 'passwords' in this identity's sealed bucket (src/bucketStore.ts), each key
- * `<store id>/...` as the bucket's merge rule names them (bucket/src/rules.js passwords). stores.ts asks for
- * `okrn.passwords.<id>/...` - the plain names, which only a key with no Edge identity still uses.
- *
- * A store's old plain records move in when it is first read here: each store is one key's (its id is that key's
- * public key), so only the key whose bucket is open takes its own - never another key's.
+ * THE STORES' STORAGE: store 'passwords' in this identity's sealed bucket (src/bucketStore.ts), each key
+ * `<identity>/...` as the bucket's merge rule names them (bucket/src/rules.js passwords). No plain records move
+ * in (pre-v1, no migration): a key with no bucket identity has no password store.
  */
-const PLAIN = 'okrn.passwords.';
-const inBucket = bucketStorage(() => 'passwords', (k: string) => PLAIN + k);
-const passwordStorage = {
-  async getItem(k: string) {
-    const key = k.slice(PLAIN.length);
-    await inBucket.moveInPrefix(`${key.split('/')[0]}/`);
-    return inBucket.getItem(key);
-  },
-  setItem: (k: string, v: string) => inBucket.setItem(k.slice(PLAIN.length), v),
-  removeItem: (k: string) => inBucket.removeItem(k.slice(PLAIN.length)),
-};
+export const stores = createStores({storage: bucketStorage(() => 'passwords', (k: string) => `okrn.passwords.${k}`), randomBytes});
 
-export const stores = createStores({storage: passwordStorage, randomBytes});
-
-const REAP_MS = 30_000;
 const BACKENDS: Backend[] = ['embedded', 'usb'];
 
-/** The old vault's two calls the import uses (okcrypto.deviceVault). */
-export type OldVault = {
-  list(): Promise<{serviceId: string}[]>;
-  load(serviceId: string, opts?: object): Promise<string | null>;
-};
-
-/** The derive a phrase needs (okcrypto.deriveSharedSecretFor). */
+/** The derive a phrase or a derived password needs (okcrypto.deriveSharedSecretFor). */
 export type PhraseOkcrypto = {deriveSharedSecretFor(label: string, opts: object): Promise<Uint8Array>};
 
-/** The parts of the capabilities reading this needs; null before one. */
-export type PasswordCaps = {deviceVault?: boolean; touchFreeDerive?: string} | null | undefined;
-
-const okcryptoOf = async (backend: Backend): Promise<Okcrypto> => (await getOnlyKey(backend)).okcrypto as Okcrypto;
-
-/** Each key's cached okcrypto, for the synchronous lock and reap calls. */
-const known = new Map<Backend, Okcrypto>();
-async function remember(backend: Backend): Promise<Okcrypto> {
-  const o = await okcryptoOf(backend);
-  known.set(backend, o);
-  return o;
-}
+const okcryptoOf = async (backend: Backend) => (await getOnlyKey(backend)).okcrypto as unknown as Okcrypto & DeriveOkcrypto & PhraseOkcrypto;
 
 /**
  * Mounted once, with the app. `unlocked`: each key's "is it unlocked and running" right now.
@@ -77,41 +45,22 @@ export function usePasswordWatch(unlocked: Record<Backend, boolean>): void {
   const {embedded, usb} = unlocked;
   useEffect(() => {
     const before = stores.openCount();
-    for (const b of BACKENDS) {
-      if (!(b === 'embedded' ? embedded : usb)) {
-        try {
-          known.get(b)?.deviceVault.lock(LABEL);
-        } catch {}
-        stores.close(b);
-      }
-    }
+    for (const b of BACKENDS) if (!(b === 'embedded' ? embedded : usb)) stores.close(b);
     if (stores.openCount() !== before) notify();
   }, [embedded, usb]);
 
-  useEffect(() => {
-    /* only a store that actually closed is news: a screen showing the button must not re-run its
-       * touch-free try every 30 s */
-    const reap = () => {
-      const before = stores.openCount();
-      for (const [b, o] of known) {
-        try {
-          stores.reap(b, o);
-        } catch {}
-      }
-      if (stores.openCount() !== before) notify();
-    };
-    const timer = setInterval(reap, REAP_MS);
-    const sub = AppState.addEventListener('change', s => {
-      if (s === 'active') reap();
-    });
-    return () => {
-      clearInterval(timer);
-      sub.remove();
-    };
-  }, []);
+  /* passwords a sync brought: every open store reads itself again, with the key it holds */
+  useEffect(
+    () =>
+      onBucketTraded(changed => {
+        if (!changed.includes('passwords')) return;
+        void Promise.all(BACKENDS.map(b => stores.current(b)?.reload().catch(() => undefined))).then(notify);
+      }),
+    [],
+  );
 }
 
-/* screens listening for a store opening or closing elsewhere (a lock, the reaper, the other key) */
+/* screens listening for a store opening or closing elsewhere (a lock, a sync, the other key) */
 const listeners = new Set<() => void>();
 /** A store's entries changed elsewhere (the Autofill sheet saved one): redraw the tab. */
 export function storesChanged() {
@@ -122,150 +71,93 @@ function notify() {
 }
 
 export type ManagerView =
-  | {state: 'unsupported'}
   | {state: 'locked-key'}
-  /* unlocked, but the key has not said its firmware yet: nothing is opened or written until it has */
-  | {state: 'reading'}
+  /* the key is unlocked but no identity's bucket is open (the identity check has not run, or the key has none) */
+  | {state: 'no-bucket'}
   | {state: 'checking'}
-  | {state: 'button'; storeId: string; isNew: boolean}
-  | {state: 'pressing'; storeId: string}
-  | {state: 'open'; storeId: string; manager: Manager; why: OpenWhy}
+  | {state: 'button'; identity: string}
+  | {state: 'pressing'; identity: string}
+  | {state: 'open'; identity: string; manager: Manager; why: OpenWhy}
   | {state: 'error'; message: string};
 
 /**
- * The store of the ACTIVE key. On mount (the tab opens) it opens by itself when that needs no
- * press; otherwise it shows the button. `openWithKey` is the button. `pressAsked` is true while a
- * hard key waits for its press (the soft key's press shows on the app's own sheet).
+ * The store of the ACTIVE key's identity. On mount (the tab opens) it opens by itself when its last
+ * open asked nothing; otherwise it shows the button. `openWithKey` is the button.
  */
-export function usePasswordManager({
-  backend,
-  unlocked,
-  caps,
-}: {
-  backend: Backend;
-  unlocked: boolean;
-  caps: PasswordCaps;
-}) {
+export function usePasswordManager({backend, unlocked}: {backend: Backend; unlocked: boolean}) {
   const [view, setView] = useState<ManagerView>({state: 'checking'});
-  const [pressAsked, setPressAsked] = useState(false);
   const [rev, setRev] = useState(0);
   const busy = useRef(false);
-  /* Lock now holds the store shut until the tab is opened again - a touch-free store would
+  /* Lock now holds the store shut until the tab is opened again - one that opens by itself would
    * otherwise open again on the spot, and Lock would do nothing */
-  const held = useRef<string | null>(null);
+  const held = useRef(false);
 
-  const supported = !caps || caps.deviceVault !== false;
-  /* writes (a store made, an entry sealed) only once the key has said it has the vault: unknown is no */
-  const vaultKnown = supportsKnown(caps as any, 'deviceVault');
-  const touchFree = (caps?.touchFreeDerive ?? 'preference') as 'always' | 'preference' | 'broken';
-
-  /* follow stores opened or closed elsewhere */
+  /* follow stores opened, closed or reloaded elsewhere */
   useEffect(() => {
     const l = () => setRev(n => n + 1);
     listeners.add(l);
     return () => void listeners.delete(l);
   }, []);
 
+  const identity = openBucketIdentity()?.identity ?? null;
+
   useEffect(() => {
-    if (!supported) return setView({state: 'unsupported'});
     if (!unlocked) return setView({state: 'locked-key'});
-    if (!vaultKnown) return setView({state: 'reading'});
+    if (!identity) return setView({state: 'no-bucket'});
     if (busy.current) return;
     const open = stores.current(backend);
-    if (held.current && !open) return setView({state: 'button', storeId: held.current, isNew: false});
     if (open) {
-      /*
-       * Opened elsewhere (the Autofill sheet, the other key's tab): this screen still needs the
-       * key's okcrypto for touch() - without it every tap on the list was refused, silently (the
-       * Pixel, 2026-10-11, after a save from Chrome).
-       */
-      if (!known.has(backend)) void remember(backend).then(() => setRev(n => n + 1));
-      setView(v => (v.state === 'open' && v.manager === open ? v : {state: 'open', storeId: stores.idFor(backend) ?? '', manager: open, why: 'session'}));
+      setView(v => (v.state === 'open' && v.manager === open ? {...v} : {state: 'open', identity, manager: open, why: 'session'}));
       return;
     }
+    if (held.current) return setView({state: 'button', identity});
     let live = true;
     busy.current = true;
     setView({state: 'checking'});
+    const ask = challengeOpts('Opening your passwords');
     (async () => {
-      const o = await remember(backend);
-      const storeId = await stores.identify(backend, o);
-      const r = await stores.tryOpen(backend, o, {onKeepAlive: () => live && setPressAsked(true)});
+      const r = await stores.tryOpen(backend, await okcryptoOf(backend), identity, a => ask.opts.confirm({digits: a.digits ?? undefined}));
       if (!live) return;
-      if (r) setView({state: 'open', storeId, manager: r.manager, why: r.why});
-      else setView({state: 'button', storeId, isNew: !(await stores.readMeta(storeId))});
+      setView(r ? {state: 'open', identity, manager: r.manager, why: r.why} : {state: 'button', identity});
     })()
       .catch(err => live && setView({state: 'error', message: String(err?.message ?? err)}))
       .finally(() => {
+        ask.done();
         busy.current = false;
-        if (live) setPressAsked(false);
       });
     return () => {
       live = false;
     };
-  }, [backend, unlocked, supported, vaultKnown, touchFree, rev]);
+  }, [backend, unlocked, identity, rev]);
 
   const openWithKey = useCallback(async () => {
     if (view.state !== 'button' || busy.current) return;
     busy.current = true;
-    held.current = null;
-    setView({state: 'pressing', storeId: view.storeId});
+    held.current = false;
+    setView({state: 'pressing', identity: view.identity});
+    const ask = challengeOpts('Opening your passwords');
     try {
-      const o = await remember(backend);
-      const r = await stores.openWithKey(backend, o, {touchFree, onKeepAlive: () => setPressAsked(true)});
-      setView({state: 'open', storeId: view.storeId, manager: r.manager, why: r.why});
+      const r = await stores.openWithKey(backend, await okcryptoOf(backend), view.identity, a => ask.opts.confirm({digits: a.digits ?? undefined}));
+      setView({state: 'open', identity: view.identity, manager: r.manager, why: r.why});
       notify();
     } catch (err: any) {
       setView({state: 'error', message: String(err?.message ?? err)});
     } finally {
+      ask.done();
       busy.current = false;
-      setPressAsked(false);
     }
-  }, [backend, view, touchFree]);
-
-  /** Call before each action on the open store: slides the session, false when it ran out. */
-  const touch = useCallback((): boolean => {
-    const o = known.get(backend);
-    const ok = !!o && stores.touch(backend, o);
-    if (!ok) notify();
-    return ok;
-  }, [backend]);
+  }, [backend, view]);
 
   const lockNow = useCallback(() => {
-    held.current = stores.idFor(backend) ?? '';
-    stores.lockNow(backend, b => known.get(b) ?? null);
+    held.current = true;
+    stores.lockNow(backend);
     notify();
   }, [backend]);
 
   const retry = useCallback(() => setRev(n => n + 1), []);
 
-  /** The old single-password vault of this key (CryptoScreen's), for the import. */
-  const oldVault = useCallback(async () => (await remember(backend)).deviceVault as unknown as OldVault, [backend]);
+  /** This key's okcrypto: an entry's press derive (innerKeys.ts), and a phrase's or a derived password's derive. */
+  const keyFor = useCallback(() => okcryptoOf(backend), [backend]);
 
-  /*
-   * For a derived phrase: this key's okcrypto, and the press flag its store was made with - a
-   * phrase is derived with the same flag, so it opens wherever the store does (mnemonic.js).
-   */
-  const phraseKey = useCallback(async () => {
-    const okcrypto = await remember(backend);
-    const meta = await stores.readMeta(await stores.identify(backend, okcrypto));
-    return {okcrypto: okcrypto as unknown as PhraseOkcrypto, press: meta ? meta.press : true};
-  }, [backend]);
-
-  /* the session, read-only (never isUnlocked: that counts as a use and slides the window) */
-  const policy = useCallback((): string | null => known.get(backend)?.deviceVault.getPolicy?.(LABEL) ?? null, [backend]);
-  const timeLeft = useCallback((): number | null => {
-    const s = known.get(backend)?.deviceVault.status?.().find(e => e.serviceId === LABEL);
-    return s ? s.remainingMs : null;
-  }, [backend]);
-
-  /* the person's choice of how long the store stays open (kept in the store, stores.setPolicy) */
-  const choosePolicy = useCallback(
-    async (p: StorePolicy) => {
-      await stores.setPolicy(backend, await remember(backend), p);
-      notify();
-    },
-    [backend],
-  );
-
-  return {view, pressAsked, openWithKey, touch, lockNow, retry, oldVault, phraseKey, policy, timeLeft, choosePolicy};
+  return {view, openWithKey, lockNow, retry, keyFor};
 }

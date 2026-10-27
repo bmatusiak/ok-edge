@@ -2,7 +2,6 @@ import React, {useState} from 'react';
 import {ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 
 import {totp as totpLib} from 'node-onlykey-lib/passwords';
-import {sealOf, type Seal} from './innerKeys';
 import {TotpPreview} from './TotpViews';
 import {generatePassword, MAX_LENGTH, MIN_LENGTH, type PasswordOptions} from '../../passwordGenerator';
 import {Btn, Section, Segmented} from '../../ui/components';
@@ -13,14 +12,15 @@ import {theme} from '../../ui/theme';
  * manager.js KINDS); the lib checks every field again before sealing, so this form only has to
  * be convenient. A new password comes from the app's generator (src/passwordGenerator.ts: the
  * phone's CSPRNG, every chosen class present).
+ *
+ * NO SEAL TO CHOOSE (Brad, 2026-10-27: "no passphrase as an option to secure a password, press
+ * decrypt only"): every entry's password, notes and code are sealed under its own press
+ * (innerKeys.ts) - the form says so, it does not ask.
  */
 
 const KINDS = ['login', 'note', 'card', 'totp'] as const;
 type Kind = (typeof KINDS)[number];
 const KIND_LABEL: Record<Kind, string> = {login: 'Login', note: 'Note', card: 'Card', totp: 'Authenticator'};
-const SEAL_LABELS = ['No', 'With the key', 'With a passphrase'] as const;
-const SEAL_LABEL_OF: Record<Seal, (typeof SEAL_LABELS)[number]> = {none: 'No', key: 'With the key', passphrase: 'With a passphrase'};
-const SEAL_OF_LABEL: Record<(typeof SEAL_LABELS)[number], Seal> = {No: 'none', 'With the key': 'key', 'With a passphrase': 'passphrase'};
 
 /* the generator's start: 20 characters of every class; Options changes it for this entry */
 const GENERATED: PasswordOptions = {length: 20, upper: true, lower: true, digits: true, symbols: true};
@@ -59,8 +59,8 @@ export function EntryEditor({
   entry: (Input & {id: string}) | null;
   /* a new entry's kind, chosen on the + Add page */
   newKind?: Kind;
-  /* seal: the entry sealed a second time with its own key (innerKeys.ts), or not */
-  onSave: (input: Input, seal: {seal: Seal; passphrase?: string}) => void;
+  /* the caller seals the entry's secrets under its press (innerKeys.ts) */
+  onSave: (input: Input) => void;
   onDelete?: () => void;
 }) {
   const kind: Kind = entry?.kind ?? newKind;
@@ -117,12 +117,6 @@ export function EntryEditor({
     previewError = String(e?.message ?? e).replace(/^passwords: /, '');
   }
   const [error, setError] = useState<string | null>(null);
-  /* sealed a second time: with the key (a press each open) or a passphrase (spec: per-entry keys) */
-  const [seal, setSeal] = useState<Seal>(sealOf(entry));
-  const [pass1, setPass1] = useState('');
-  const [pass2, setPass2] = useState('');
-  /* an entry already sealed with a passphrase keeps it unless a new one is typed */
-  const keepsPassphrase = sealOf(entry) === 'passphrase' && seal === 'passphrase' && !pass1;
   /* the generator's options (spec UI: "Generator"): length and character classes */
   const [gen, setGen] = useState<PasswordOptions>(GENERATED);
   const [genOpen, setGenOpen] = useState(false);
@@ -159,10 +153,6 @@ export function EntryEditor({
     }
     if (kind === 'totp' && !code) return setError('the setup key (or the otpauth:// link) is needed');
     if (!named) return setError('a title is needed');
-    if (seal === 'passphrase' && !keepsPassphrase) {
-      if (pass1.length < 8) return setError('the passphrase needs 8 characters or more');
-      if (pass1 !== pass2) return setError('the two passphrases differ');
-    }
     setError(null);
     onSave({
       ...(entry ? {id: entry.id} : {}),
@@ -176,7 +166,7 @@ export function EntryEditor({
       notes: opt(notes),
       folder: opt(folder.trim()),
       tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-    }, {seal, passphrase: seal === 'passphrase' && !keepsPassphrase ? pass1 : undefined});
+    });
   };
 
   return (
@@ -269,21 +259,10 @@ export function EntryEditor({
         <Field label="Notes" value={notes} onChange={setNotes} multiline />
         <Field label="Folder" value={folder} onChange={setFolder} placeholder="Work" />
         <Field label="Tags (comma-separated)" value={tags} onChange={setTags} placeholder="email, important" />
-        <Text style={styles.label}>Seal this entry again</Text>
-        <Segmented options={SEAL_LABELS} value={SEAL_LABEL_OF[seal]} onChange={v => setSeal(SEAL_OF_LABEL[v])} />
         <Text style={styles.label}>
-          {seal === 'key'
-            ? 'Its password, notes and code open only with one more press of the key, each time.'
-            : seal === 'passphrase'
-              ? 'Its password, notes and code open only with this passphrase too - nothing stores it; forget it and they are gone.'
-              : 'Opens with the store, like the rest.'}
+          Its password, notes and code are sealed to the key: they open with a press, each time. Saving asks for one unless this entry is
+          already open.
         </Text>
-        {seal === 'passphrase' ? (
-          <>
-            <Field label={keepsPassphrase ? 'New passphrase (empty: keep the one it has)' : 'Passphrase'} value={pass1} onChange={setPass1} secure />
-            {pass1 ? <Field label="The passphrase again" value={pass2} onChange={setPass2} secure /> : null}
-          </>
-        ) : null}
         {error ? <Text style={[styles.label, {color: theme.error}]}>{error}</Text> : null}
         <View style={styles.buttons}>
           <Btn title="Save" tone="primary" disabled={!title.trim() && !/^otpauth:/i.test(otp.trim())} onPress={save} />
