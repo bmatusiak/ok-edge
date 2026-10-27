@@ -114,7 +114,7 @@ export function PasswordsScreen({ctx}: {ctx: TabContext}) {
         ) : view.state === 'button' ? (
           <>
             <Text style={styles.body}>
-              {`Your passwords are sealed to the ${keyName}. Opening asks the key once (its code, unless you have set it to ask nothing); the list then stays open until the key locks. Each password opens with a press.`}
+              {`Your passwords are sealed to the ${keyName}. Opening asks the key once - its code or a press, as its derive setting says, or nothing once that is set to none; the list then stays open until the key locks. Each password opens with a press.`}
             </Text>
             <Btn title="Open passwords" tone="primary" onPress={openWithKey} />
           </>

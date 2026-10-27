@@ -8,11 +8,13 @@ import {StyleSheet, Text, View} from 'react-native';
 import {Sheet} from './Sheet';
 import {theme} from './theme';
 import {hostChallenge, onHostChallenge, type HostChallenge} from '../hostChallenge';
+import {activeBackend} from '../hooks/KeyContext';
 
 export function HostChallengeSheet() {
   const [c, setC] = useState<HostChallenge | null>(hostChallenge());
   useEffect(() => onHostChallenge(setC), []);
-  if (!c) return null;
+  /* a hard key's only: the soft key's wait has its own sheet with its button (PressSheet, from the firmware's record) */
+  if (!c || activeBackend() !== 'usb') return null;
   return (
     <Sheet title="Press the key">
       <Text style={styles.what}>{c.what}</Text>
