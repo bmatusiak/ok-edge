@@ -10,7 +10,7 @@ import {StyleSheet, Text, TextInput, View} from 'react-native';
 import {Btn, Section} from './components';
 import {theme} from './theme';
 import {shell} from '../platform';
-import {joinServerRoom, onRoomState, roomState, serverUrl, setServerUrl, type RoomState} from '../serverRoom';
+import {joinServerRoom, onRoomState, retryServerRoom, roomState, serverUrl, setServerUrl, type RoomState} from '../serverRoom';
 
 const KIND: Record<string, string> = {webapp: 'web app', android: 'phone', desktop: 'desktop', cli: 'computer (CLI)', agent: 'agent'};
 
@@ -58,6 +58,8 @@ export function ServerPanel() {
       )}
       {error ? <Text style={styles.warn}>{error}</Text> : null}
       <Text style={s.status === 'joined' ? styles.on : styles.note}>{statusText(s)}</Text>
+      {/* a failure that needs the key is tried again only from here, never on a timer (serverRoom.ts) */}
+      {s.status === 'error' && s.needsKey ? <Btn title="Try again" onPress={retryServerRoom} /> : null}
       {s.status === 'joined' ? (
         <View style={styles.list}>
           {s.you ? <Text style={styles.peer}>{s.you.name} <Text style={styles.note}>- this device</Text></Text> : null}

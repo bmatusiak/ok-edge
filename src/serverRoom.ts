@@ -48,9 +48,11 @@ export type RoomState = {
   peers: RoomPeer[];
   /* the last trade this device started: with whom, when, and what came of it */
   last: {with: string; at: number; line: string} | null;
+  /* the last failure needs the key (its bucket key was not made): only the person tries again */
+  needsKey: boolean;
 };
 
-let state: RoomState = {url: null, status: 'off', why: null, you: null, peers: [], last: null};
+let state: RoomState = {url: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false};
 const listeners = new Set<(s: RoomState) => void>();
 const set = (patch: Partial<RoomState>) => {
   state = {...state, ...patch};
@@ -117,14 +119,30 @@ export async function joinServerRoom(): Promise<void> {
   set({url});
   if (!open || !url || joining || (room && joinedFor === open.identity)) return;
   joining = true;
-  set({status: 'joining', why: null});
+  set({status: 'joining', why: null, needsKey: false});
+  /*
+   * THE KEY IS NEVER ASKED ON A TIMER (Brad, 2026-10-26: "for some reason it keeps making key requests"): the first join
+   * makes this device's bucket key - two key requests - and a join retried every few seconds asked them again and again.
+   * A failure there waits for the person (the Server panel's Try again); only a connection that drops is retried, and
+   * that needs no key: the proof material is kept once made.
+   */
+  let me: Awaited<ReturnType<typeof proofMaterial>> = null;
   try {
-    const me = await proofMaterial();
-    if (!me) { set({status: 'error', why: 'no proof material for the open bucket (its key is another identity)'}); return; }
+    me = await proofMaterial();
+  } catch (e) {
+    const why = String((e as Error)?.message ?? e);
+    console.log(`[room] the key did not make this device's bucket key: ${why}`);
+    set({status: 'error', why: `the key did not answer (${why}) - Try again asks it once more`, needsKey: true});
+    joining = false;
+    return;
+  }
+  if (!me) { set({status: 'error', why: 'no proof material for the open bucket (its key is another identity)', needsKey: true}); joining = false; return; }
+  try {
     const device = await thisDevice();
     const r = await bucketLib.roomClient.connectRoom({url, me, device, WebSocket: (globalThis as any).WebSocket, randomBytes});
     room = r;
     joinedFor = me.id;
+    retries = 0;
     set({status: 'joined', why: null, you: device, peers: r.peers()});
     console.log(`[room] joined ${new URL(url).host} as ${device.name}: ${r.peers().length} other device(s) online`);
     /* the room was joined with the key's proof, so it may trade while the bucket it joined for is open */
@@ -140,17 +158,31 @@ export async function joinServerRoom(): Promise<void> {
       room = null;
       joinedFor = null;
       set({status: 'error', why: 'the connection closed - joining again shortly', peers: []});
-      setTimeout(() => { void joinServerRoom(); }, REJOIN_MS);
+      rejoinLater();
     });
     for (const p of r.peers()) tradeSoon(p);
   } catch (e) {
     const why = String((e as Error)?.message ?? e);
     console.log(`[room] not joined: ${why}`);
     set({status: 'error', why});
-    setTimeout(() => { void joinServerRoom(); }, REJOIN_MS);
+    rejoinLater();
   } finally {
     joining = false;
   }
+}
+
+/* a dropped or refused connection: again after 15 s, 30 s, 1 min ... up to 5 min (no key is asked - see above) */
+let retries = 0;
+function rejoinLater(): void {
+  const wait = Math.min(300000, REJOIN_MS * 2 ** retries);
+  retries += 1;
+  setTimeout(() => { void joinServerRoom(); }, wait);
+}
+
+/** The Server panel's Try again: one more join, which asks the key again when it has to. */
+export function retryServerRoom(): void {
+  retries = 0;
+  void joinServerRoom();
 }
 
 /* one trade at a time, in the order asked */

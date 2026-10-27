@@ -21,6 +21,7 @@ import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {currentNet} from './net';
+import {DEVICE_WORD} from './platform';
 
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
@@ -48,7 +49,7 @@ async function ensureMe(): Promise<void> {
   const ok = okcrypto as any;
   const identity = await bucketLib.bucketIdentity.readIdentity(ok);
   if (identity.id !== open.identity) { me = null; return; }
-  console.log(`[bucket] ${open.identity.slice(0, 12)}: making this phone's bucket key, once - the key asks for two presses`);
+  console.log(`[bucket] ${open.identity.slice(0, 12)}: making this ${DEVICE_WORD}'s bucket key, once - the key asks for two presses`);
   const bucketKey = await bucketLib.bucketIdentity.deriveBucketKey(ok, identity.publicKey);
   const certificate = await bucketLib.bucketIdentity.certify(ok, identity.publicKey, bucketKey.publicKey);
   const text = JSON.stringify({i: okbytes.toHex(identity.publicKey), s: okbytes.toHex(bucketKey.secretKey), p: okbytes.toHex(bucketKey.publicKey), c: okbytes.toHex(certificate)});
