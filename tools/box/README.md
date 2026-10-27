@@ -20,3 +20,22 @@ The xrdp desktop is display `:10`; the Pixel is on the box's adb (`ANDROID_SERIA
 Why `apps.crp.to`: the testnet soft key is a production build, which accepts WebAuthn only from apps.onlykey.io /
 apps.crp.to; Chromium maps the name to the box (`--host-resolver-rules`) and accepts the dev certificate by its key
 (`--ignore-certificate-errors-spki-list`), so nothing on the box's own name resolution changes.
+
+## The local server vs the deployed one (M2, 2026-10-26)
+
+`HTTPS=1 tools/box/server.sh start` runs the same Worker (`mcp-server/`, the rooms and the web app) as Cloudflare does
+at ok-edge.bmatusiak.workers.dev. Proven locally: a blank web app (hard key 2 in Chromium) filled from the CLI (the
+testnet soft key) through the room - 56 items, every store the same after. Where the two differ, and what bridges it:
+
+| | local (the box) | deployed |
+|---|---|---|
+| name | `apps.crp.to` mapped to the box by Chromium's flag; Node/CLI do not see that - they use `localhost` | real DNS |
+| TLS | the dev CA: Chromium trusts its key by flag; Node needs `NODE_EXTRA_CA_CERTS=~/project/onlykey/devcert/ca.crt` (the cert names `apps.crp.to` and `localhost`) | a public certificate |
+| the join's host | each device signs the host it reached (`apps.crp.to:8787` or `localhost:8787`); the server checks that same host, so both are valid in one room | one host |
+| the key's site | `apps.crp.to` is a site every 3.1.0 key trusts | `ok-edge.bmatusiak.workers.dev`: only a key with the ctap_bridge plugin (its default site) |
+| the web app files | `wrangler dev` reads the asset list at start: restart it after a rebuild | uploaded with each deploy |
+| the build | `CI=1 node mcp-server/build-webapp.js` for the release build Cloudflare makes | the same, in Workers Builds |
+| Durable Objects | miniflare's local SQLite; idle sockets are not really hibernated | hibernation on Cloudflare |
+
+The CLI on the box: `printf "<PIN>\n" | NODE_EXTRA_CA_CERTS=… onlykey-js --soft-key --test-mode bucket sync --server https://localhost:8787 --test-mode`
+(the desktop app not running: `--soft-key` boots its soft key).
