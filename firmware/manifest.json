@@ -1,5 +1,5 @@
 {
-  "file": "v3.1.0-test-edge-ctap_bridge-derive_secret-fw80e3ba0-libfe9e293-fix0012-0013-0015-b8c6b8660.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-derive_secret-fw80e3ba0-libfe9e293-fix0012-0013-0015-ba3597510.hex",
   "version": "v3.1.0",
   "firmware": "80e3ba0",
   "libraries": "fe9e293",
@@ -13,7 +13,7 @@
     "ctap_bridge",
     "derive_secret"
   ],
-  "buildHash": "8c6b866045409b38",
+  "buildHash": "a359751031f47b4f",
   "sources": {
     "emulator/scripts/versions/v3.1.0.js": "b3e957ee6b0c",
     "emulator/scripts/versions/fixes-3.1.0.js": "dd8ddabae834",
@@ -21,14 +21,14 @@
     "emulator/package.json": "efdab12e5786",
     "emulator/plugins/edge": "c952e7969755",
     "emulator/plugins/ctap_bridge": "c98df95d7c43",
-    "emulator/plugins/derive_secret": "f027a796da5a"
+    "emulator/plugins/derive_secret": "fa685adaa9e5"
   },
-  "sourcesFrom": "node-onlykey-emulator 8543d1a",
+  "sourcesFrom": "node-onlykey-emulator 4c1596e",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
   "built": "2026-10-27",
   "tested": true,
-  "sha256": "5d8fdd14368fccf43b3b8e0a2c6a49b62ee724c1f2a95e8f4c98eba9bf4b7f41",
-  "testedOn": "2026-10-27 key 2 (hard key): hard-key plugin tests 22/0 - ctap_bridge's site over the tunnel = USB, derive_secret touch/touchless/labels/sites"
+  "sha256": "1b8a65c2df4784d6095cad273dae12bbfde4f14ee444badaac47fa9f55f224eb",
+  "testedOn": "2026-10-27 key 2: kit 37-hardkey-plugins 22/0"
 }
