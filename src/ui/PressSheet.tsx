@@ -37,6 +37,7 @@ import {Sheet} from './Sheet';
 import {theme} from './theme';
 import {useQuietMotion} from './CountdownBar';
 import {DEVICE_WORD} from '../platform';
+import {usePressSound} from './pressSound';
 
 /* the core firmware closes every wait at 20 s (okcore.cpp Usertimeout) */
 const WAIT_MS = 20_000;
@@ -144,6 +145,8 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
   const showFido = fido.needed;
   const showVendor = !showFido && !!wait && !(wait.w.what === 'edge' && edgeAsking);
   const showDerive = !showFido && !showVendor && !!derive;
+  /* the desktop's and the browser's press sound (the phone's is native): while the sheet waits for its press */
+  usePressSound((showFido || showVendor || showDerive) && !pressed ? since : null, 'press');
   if (!showFido && !showVendor && !showDerive) return null;
   const exact = Math.max(0, Math.ceil((since + (showDerive ? DERIVE_WAIT_MS : WAIT_MS) - now) / 1000));
   const left = quiet ? Math.ceil(exact / 5) * 5 : exact;

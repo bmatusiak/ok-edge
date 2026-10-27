@@ -25,6 +25,8 @@ import {openBudget} from '../edgeNav';
 import {currentNet} from '../net';
 import {identity as identityLib} from 'node-onlykey-lib/edge';
 import {DEVICE_WORD} from '../platform';
+import {usePressSound} from './pressSound';
+import {activeBackend} from '../hooks/KeyContext';
 
 /* what each typed refusal means, in the person's words (the agent gets the code) */
 const REFUSAL_TEXT: Record<string, string> = {
@@ -151,6 +153,12 @@ export function EdgeRequestSheet() {
     setActing(true);
     fn();
   };
+  /*
+   * The desktop's and the browser's sound (the phone's is native): the question rings until it is answered, and the
+   * press after it until it is pressed - a hard key's too, which has no confirm state to ring by.
+   */
+  const waiting = s && (s.phase === 'ask' || s.phase === 'press') && !acting ? s.until : null;
+  usePressSound(waiting, s?.phase === 'ask' ? 'ask' : 'press');
   if (!s) return null;
   const a = s.ask;
   /* the budget is open: its card says the rest (Brad, 2026-10-07: "remove the old stuff at the top that is in the card") */
@@ -251,15 +259,22 @@ export function EdgeRequestSheet() {
                 {left !== null ? (
                   <Text style={[styles.countdown, left <= 15 && {color: theme.error}]}>{`Press within ${mmss(left)}`}</Text>
                 ) : null}
-                <Text style={styles.dim}>
-                  This {DEVICE_WORD} is also the key, so its press proves less than a hard key's.
-                </Text>
-                {refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
-                <View style={styles.row}>
-                  <Locate what={a.kind === 'identity' ? 'agent identity press' : `budget press "${a.view.reason}"`}>
-                    <Btn large title="Press the soft key" tone="primary" disabled={off || refusal !== null} onPress={consent(() => void pressFromSheet())} />
-                  </Locate>
-                </View>
+                {/* a hard key (the desktop's USB key) is pressed on the key itself: no button here, nothing about a soft key */}
+                {activeBackend() === 'usb' ? (
+                  <Text style={styles.dim}>Press the button on your OnlyKey.</Text>
+                ) : (
+                  <>
+                    <Text style={styles.dim}>
+                      This {DEVICE_WORD} is also the key, so its press proves less than a hard key's.
+                    </Text>
+                    {refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
+                    <View style={styles.row}>
+                      <Locate what={a.kind === 'identity' ? 'agent identity press' : `budget press "${a.view.reason}"`}>
+                        <Btn large title="Press the soft key" tone="primary" disabled={off || refusal !== null} onPress={consent(() => void pressFromSheet())} />
+                      </Locate>
+                    </View>
+                  </>
+                )}
               </>
             ) : null}
             {s.phase === 'pressed' ? (
