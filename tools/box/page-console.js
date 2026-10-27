@@ -8,7 +8,7 @@ const reload = args.includes('--reload');
 const filter = (args.find((a) => a.startsWith('--filter=')) || '').slice(9);
 const re = filter ? new RegExp(filter) : null;
 (async () => {
-  const pages = await (await fetch('http://127.0.0.1:9333/json')).json();
+  const pages = await (await fetch(`http://127.0.0.1:${process.env.CDP_PORT || 9333}/json`)).json();
   /* the web app's tab - local (apps.crp.to) or deployed (workers.dev) - never an open DevTools tab */
   const page = pages.find((p) => p.type === 'page' && /apps\.crp\.to|workers\.dev/.test(p.url) && !/^devtools:/.test(p.url))
     || pages.find((p) => p.type === 'page' && !/^devtools:/.test(p.url));
