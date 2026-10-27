@@ -85,6 +85,7 @@ import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
 import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom} from './src/serverRoom';
+import {HostChallengeSheet} from './src/ui/HostChallengeSheet';
 import {PressSheet} from './src/ui/PressSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
@@ -1220,6 +1221,8 @@ function Shell() {
       <StatusBar barStyle="light-content" />
       {/* an agent's budget request (Edge step 2): over whatever tab is open */}
       {hasSoftKeyPlugin('edge') || shell === 'desktop' ? <EdgeRequestSheet /> : null}
+      {/* the code this app asks a hard key for (src/hostChallenge.ts): over whatever tab is open */}
+      <HostChallengeSheet />
 
       {/* app plugins' watches run whatever tab is open (the Password Manager closes a key's store when it locks) */}
       {pluginWatches().map((Watch, i) => (

@@ -22,6 +22,7 @@ import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {currentNet} from './net';
 import {DEVICE_WORD} from './platform';
+import {challengeOpts} from './hostChallenge';
 
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
@@ -50,8 +51,13 @@ async function ensureMe(): Promise<void> {
   const identity = await bucketLib.bucketIdentity.readIdentity(ok);
   if (identity.id !== open.identity) { me = null; return; }
   console.log(`[bucket] ${open.identity.slice(0, 12)}: making this ${DEVICE_WORD}'s bucket key, once - the key asks for two presses`);
-  const bucketKey = await bucketLib.bucketIdentity.deriveBucketKey(ok, identity.publicKey);
-  const certificate = await bucketLib.bucketIdentity.certify(ok, identity.publicKey, bucketKey.publicKey);
+  /* a hard key may wait for a 3-button code: this host shows it (hostChallenge.ts), for each of the two asks */
+  let ask = challengeOpts(`Making this ${DEVICE_WORD}'s bucket key (1 of 2)`);
+  let bucketKey;
+  try { bucketKey = await bucketLib.bucketIdentity.deriveBucketKey(ok, identity.publicKey, ask.opts); } finally { ask.done(); }
+  ask = challengeOpts(`Certifying this ${DEVICE_WORD}'s bucket key (2 of 2)`);
+  let certificate;
+  try { certificate = await bucketLib.bucketIdentity.certify(ok, identity.publicKey, bucketKey.publicKey, ask.opts); } finally { ask.done(); }
   const text = JSON.stringify({i: okbytes.toHex(identity.publicKey), s: okbytes.toHex(bucketKey.secretKey), p: okbytes.toHex(bucketKey.publicKey), c: okbytes.toHex(certificate)});
   await AsyncStorage.setItem(KEY(open.identity), await NativeSecrets.boxSeal(ALIAS, okbytes.toHex(new TextEncoder().encode(text))));
   me = {id: open.identity, identityPublicKey: identity.publicKey, bucketKey, certificate};
