@@ -118,7 +118,8 @@ export async function handleTrade(msg: any, from: string, {allowed = phoneSyncAl
     const n = Object.values(out.taken || {}).reduce((a: number, b: any) => a + Number(b), 0);
     console.log(`[bucket] traded with a paired computer: took ${n}`);
     /* the Sync tab's state - and through it, a screen holding a decrypted copy of a changed store asks to decrypt again */
-    phoneSyncTraded(out.taken || {});
+    const b = tradeBucket()?.bucket;
+    phoneSyncTraded(out.taken || {}, b ? storeItems(b) : {});
   }
   if (out && out.ok === false) console.log(`[bucket] a trade was refused (${msg.type})`);
   return out;

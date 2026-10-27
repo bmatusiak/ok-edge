@@ -130,12 +130,20 @@ export function phoneSyncChecked(same: boolean, stores: Record<string, {items: n
   const line = same ? 'sync: in sync (a paired computer checked)' : `sync: trading - ${Object.keys(stores).filter(n => !stores[n].same).join(', ')} differ`;
   phoneState({stores: next, trading: !same, lines: keepLine(line), ...(same ? {last: {line, at, ok: true}} : {})});
 }
-/** The phone took a computer's records in: which stores, how many. */
-export function phoneSyncTraded(taken: Record<string, number>) {
+/**
+ * The phone took a computer's records in: which stores, how many. `items`: each store's count after the take - a store
+ * this device did not have yet (a blank web app, the box 2026-10-27: "changed by a sync never" beside 19 items it had
+ * just been given) is listed from it.
+ */
+export function phoneSyncTraded(taken: Record<string, number>, items: Record<string, number> = {}) {
   const at = Date.now();
   const changed = Object.keys(taken).filter(k => Number(taken[k]) > 0);
   const stores = {...(latest?.stores ?? {})};
-  for (const name of changed) if (stores[name]) stores[name] = {...stores[name], changedAt: at, same: true};
+  for (const name of changed) {
+    stores[name] = stores[name]
+      ? {...stores[name], ...(items[name] !== undefined ? {items: items[name]} : {}), changedAt: at, same: true}
+      : {items: items[name] ?? Number(taken[name]), same: true, checkedAt: at, changedAt: at};
+  }
   const n = changed.reduce((a, k) => a + Number(taken[k]), 0);
   const line = `sync: traded with a paired computer - took ${n}`;
   phoneState({stores, trading: false, last: {line, at, ok: true}, lines: keepLine(line), ...(changed.length ? {took: {stores: changed, at}} : {})});
