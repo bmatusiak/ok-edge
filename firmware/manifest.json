@@ -1,5 +1,5 @@
 {
-  "file": "v3.1.0-test-edge-ctap_bridge-fw80e3ba0-libfe9e293-fix0012-0013-0015-b5a69bc03.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-derive_secret-fw80e3ba0-libfe9e293-fix0012-0013-0015-b6c614f69.hex",
   "version": "v3.1.0",
   "firmware": "80e3ba0",
   "libraries": "fe9e293",
@@ -10,23 +10,25 @@
   ],
   "plugins": [
     "edge",
-    "ctap_bridge"
+    "ctap_bridge",
+    "derive_secret"
   ],
-  "buildHash": "5a69bc038760eb7d",
+  "buildHash": "6c614f692695d0b9",
   "sources": {
     "emulator/scripts/versions/v3.1.0.js": "b3e957ee6b0c",
     "emulator/scripts/versions/fixes-3.1.0.js": "dd8ddabae834",
     "emulator/scripts/versions/patches-3.1.0": "e9189d7abaef",
     "emulator/package.json": "efdab12e5786",
     "emulator/plugins/edge": "c952e7969755",
-    "emulator/plugins/ctap_bridge": "b165502b86b9"
+    "emulator/plugins/ctap_bridge": "6ffe2430cc6b",
+    "emulator/plugins/derive_secret": "f027a796da5a"
   },
-  "sourcesFrom": "node-onlykey-emulator ae0ae07",
+  "sourcesFrom": "node-onlykey-emulator 695581b",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
   "built": "2026-10-27",
   "tested": true,
-  "sha256": "678ef16bce2e861c85bb8ef2f5765fe80b0c5ce02d91e2265614f5d945190d2e",
-  "testedOn": "2026-10-27 key 2 (hard key): kit FIDO/WebAuthn set 79/0 incl. 43-silent-check; the web app's login on Windows 11 Chrome"
+  "sha256": "1b6ed76918deabca5b9f14fdb715040387f6d977974f862353dfce4b01940f9c",
+  "testedOn": "2026-10-27 key 2 (hard key): kit hard-key plugin tests 21/0 incl. derive_secret; the web app on Windows 11 Chrome opened its bucket under the derived key and filled from the box CLI"
 }
