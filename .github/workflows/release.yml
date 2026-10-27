@@ -58,6 +58,10 @@ jobs:
           path: ok-edge
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Plan - the recorded emulator commit, the version, the tag
         id: plan
         working-directory: ok-edge
@@ -71,10 +75,6 @@ jobs:
           echo "version_code=$code" >> "$GITHUB_OUTPUT"
           echo "tag=v$version-$code" >> "$GITHUB_OUTPUT"
           echo "release v$version-$code from main $(git rev-parse --short HEAD), firmware from emulator ${emulator:0:7}" >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
 
       - name: Firmware sources
         uses: ./ok-edge/.github/actions/firmware-sources
