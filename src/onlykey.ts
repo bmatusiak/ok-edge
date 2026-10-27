@@ -161,8 +161,15 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
        * as https://apps.crp.to (electron/main.js), the origin the tunnel asserts. Linux opens the FIDO
        * interface itself and keeps the CTAPHID path.
        */
-      /* the webapp: every key operation goes through the browser's WebAuthn, for the page's own site (lib RP_ID apps.crp.to by default) */
-      ...(backend === 'usb' && shell === 'webapp' ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname})}} : {}),
+      /*
+       * the webapp: every key operation goes through the browser's WebAuthn, for the page's own site. BOTH places
+       * the lib keeps an rpId name it - the ctap's and okcrypto's tunnel (rpIds, default apps.crp.to): on any other
+       * site (ok-edge.bmatusiak.workers.dev) a ctap naming the page and a tunnel naming apps.crp.to disagree, and the
+       * lib refuses the mismatch (RPID_MISMATCH) before the browser is asked anything - no prompt, nothing at the key.
+       */
+      ...(backend === 'usb' && shell === 'webapp'
+        ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname]}}
+        : {}),
       ...(backend === 'usb' && shell === 'desktop' && /Windows/.test(navigator.userAgent)
         ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials})}}
         : {}),

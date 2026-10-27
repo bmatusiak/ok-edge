@@ -9,7 +9,9 @@ const filter = (args.find((a) => a.startsWith('--filter=')) || '').slice(9);
 const re = filter ? new RegExp(filter) : null;
 (async () => {
   const pages = await (await fetch('http://127.0.0.1:9333/json')).json();
-  const page = pages.find((p) => p.type === 'page' && /apps\.crp\.to/.test(p.url)) || pages.find((p) => p.type === 'page');
+  /* the web app's tab - local (apps.crp.to) or deployed (workers.dev) - never an open DevTools tab */
+  const page = pages.find((p) => p.type === 'page' && /apps\.crp\.to|workers\.dev/.test(p.url) && !/^devtools:/.test(p.url))
+    || pages.find((p) => p.type === 'page' && !/^devtools:/.test(p.url));
   if (!page) { console.error('no page open (webapp.sh browser first)'); process.exit(1); }
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   let id = 0;
