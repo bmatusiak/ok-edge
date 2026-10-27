@@ -7,7 +7,8 @@
 #
 # THE ORDER IS BRAD'S ("the first thing the workflow needs to build is the firmware, then the apk ... one day i want to
 # have the firmware flashed from the phone app, so i want the apk to have the latest firmware hex before it is built"):
-#   1. firmware - the developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js)
+#   1. firmware - the test gate (a soft key from the same sources must pass the kit's 01-protocol), then the
+#                 developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js)
 #   2. android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
 #                 debug keystore until the OnlyKey signs releases through Edge
 #   3. webapp   - the release web app with the hex (docs/firmware) and the APK's manifest (docs/android), and the
@@ -43,7 +44,7 @@ env:
 jobs:
   firmware:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     outputs:
       emulator: ${{ steps.plan.outputs.emulator }}
       version: ${{ steps.plan.outputs.version }}
@@ -80,7 +81,7 @@ jobs:
         with:
           emulator_ref: ${{ steps.plan.outputs.emulator }}
 
-      # build-hardkey.sh reads Intel HEX with the kit's lib/flash.js (no packages needed for that)
+      # the test gate below; build-hardkey.sh also reads Intel HEX with its lib/flash.js
       - name: Checkout the test kit
         uses: actions/checkout@v4
         with:
@@ -90,6 +91,67 @@ jobs:
       # the record must be the build of these sources, or the hex would claim a test it never had
       - name: The record is the build of the recorded sources
         run: node ok-edge/tools/firmware.js check
+
+      # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol"; the pattern is onlykey-firmware-builds'
+      # latest.yml): the soft key is built from the SAME sources as the hex - the v3.1.0 recipe, its fixes, the hex's
+      # plugins, DEBUG on as on the hex - and the kit's 01-protocol must pass before a single image is made.
+
+      # The emulator maps the key's flash at its real, low addresses; Linux's default vm.mmap_min_addr (65536)
+      # forbids that, crypto then segfaults and most of 01-protocol SKIPS while the run still exits 0
+      - name: Let the emulator map low addresses
+        run: sudo sysctl -w vm.mmap_min_addr=4096
+
+      - name: Build the soft key from the same sources
+        working-directory: node-onlykey-emulator/emulator
+        env:
+          JOBS: max
+          OKEMU_VERSION: v3.1.0
+          OKEMU_PLUGINS: edge,ctap_bridge,derive_secret
+          OKEMU_DEBUG: 1
+        run: npm run rebuild
+
+      # the plugins' tests check the firmware against the lib that talks to it - the one ok-edge pins (the kit's own
+      # pinned copy is older: no keySite); the kit loads it through OKT_LIB_DIR (lib/plugin-ctx.js)
+      - name: Checkout the lib ok-edge pins
+        run: |
+          pin=$(node -p "require('./ok-edge/package.json').dependencies['node-onlykey-lib'].split('#')[1]")
+          git clone --quiet https://github.com/bmatusiak/node-onlykey-lib
+          git -C node-onlykey-lib checkout --quiet --detach "$pin"
+          (cd node-onlykey-lib && npm ci --ignore-scripts --no-audit --no-fund)
+
+      # the kit ignores its lock file on purpose; a plain install from package.json
+      - name: Install the test kit
+        working-directory: onlykey-testing
+        run: npm install --no-audit --no-fund
+
+      - name: Test gate - 01-protocol
+        working-directory: onlykey-testing
+        env:
+          OKT_LIB_DIR: ${{ github.workspace }}/node-onlykey-lib
+        run: |
+          node bin/okt.js caps || true
+          set -o pipefail
+          node bin/okt.js run 01-protocol 2>&1 | tee ../okt-gate.log
+          END=$(grep -a 'OKT-END' ../okt-gate.log | tail -1)
+          { echo '### Test gate (01-protocol)'; echo '```'; echo "${END:-no OKT-END line}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # NO FALSE GREEN: exit 0 says only that nothing FAILED. Crypto must have been available, and the skips must
+          # stay near the known ones (DEBUG-build webcrypt-policy skips)
+          grep -aqE 'yes crypto$' ../okt-gate.log \
+            || { echo "::error::the crypto capability was not available - the tests did not really run"; exit 1; }
+          SKIPS=$(echo "$END" | sed -nE 's/.*tests=[0-9]+p\/[0-9]+f\/([0-9]+)s.*/\1/p')
+          echo "skipped: ${SKIPS:-?}"
+          [ -n "$SKIPS" ] && [ "$SKIPS" -le 20 ] \
+            || { echo "::error::${SKIPS:-unknown} tests skipped - the gate is not trusted"; exit 1; }
+
+      - name: Upload the test gate's logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: okt-gate-${{ github.run_id }}
+          path: |
+            okt-gate.log
+            onlykey-testing/runs/
+          if-no-files-found: warn
 
       - name: Build the toolchain image
         run: docker build --quiet -t onlykey/onlykey-firmware-toolchain arduino-1.6.5-r5-teensy_127

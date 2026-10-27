@@ -45,7 +45,8 @@ runs:
         git -C OnlyKey-Firmware cat-file -e "${pins#* }^{commit}" || { echo "::error::OnlyKey-Firmware pin ${pins#* } is not in trustcrypto/OnlyKey-Firmware"; exit 1; }
         echo "pins: libraries ${pins% *}, OnlyKey-Firmware ${pins#* }"
 
-    # --ignore-scripts: the emulator is a gypfile package, and neither job needs its Node addon - only node-onlykey-lib
+    # --ignore-scripts: the emulator is a gypfile package, built later only where it is needed (the firmware job's test
+    # gate runs `npm run rebuild`); here only node-onlykey-lib
     # (the plugins' applier) resolved from emulator/. The Android build compiles the firmware with the NDK itself.
     - name: Install the emulator's packages (node-onlykey-lib at its pin)
       shell: bash
