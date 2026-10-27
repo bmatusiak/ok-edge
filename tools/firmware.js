@@ -63,7 +63,7 @@ function expected() {
     fixes: fixes.names,
     plugins: PLUGINS,
     site,
-    sources: Object.fromEntries(SOURCE_PATHS.map((p) => [p, git(EMU_REPO, 'rev-parse', `HEAD:${p}`).slice(0, 12)])),
+    sources: Object.fromEntries(SOURCE_PATHS.map((p) => [p, sourceHash(p).slice(0, 12)])),
   };
   /*
    * ONE HASH FOR EVERYTHING THE HEX IS BUILT FROM (Brad, 2026-10-27: "a patch hash so we dont need to keep rebuilding
@@ -72,9 +72,20 @@ function expected() {
    */
   want.buildHash = sha256(JSON.stringify({
     ...want,
-    sources: SOURCE_PATHS.map((p) => [p, git(EMU_REPO, 'rev-parse', `HEAD:${p}`)]),
+    sources: SOURCE_PATHS.map((p) => [p, sourceHash(p)]),
   })).slice(0, 16);
   return want;
+}
+
+/*
+ * ONLY WHAT IS COMPILED: a plugin's tests/ and its *.md never reach the firmware, so a kit-test fix or an AUDIT note
+ * is not a new build (2026-10-27: fixing the edge kit test moved the hash of a hex already tested on key 2). The hash
+ * of a path is the hash of its committed file list minus those - blob hashes, so any compiled byte still counts.
+ */
+function sourceHash(p) {
+  const files = git(EMU_REPO, 'ls-tree', '-r', 'HEAD', '--', p).split('\n')
+    .filter((l) => l && !/\/tests\//.test(l) && !/\.md$/.test(l));
+  return sha256(files.join('\n'));
 }
 
 /* firmware/ as committed at `rev`, or as on disk */
@@ -147,8 +158,9 @@ function build(force) {
   const box = execFileSync('ssh', [BOX, `cd ${BOX_EMU} && git status --porcelain -- ${SOURCE_PATHS.join(' ')} && ` +
     SOURCE_PATHS.map((p) => `git rev-parse HEAD:${p}`).join(' && ')], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] })
     .trim().split('\n');
-  const boxSources = box.slice(-SOURCE_PATHS.length).map((h) => h.slice(0, 12));
-  if (box.length !== SOURCE_PATHS.length || !SOURCE_PATHS.every((p, i) => boxSources[i] === want.sources[p])) {
+  /* the same trees, whole (tests included): the box's files are exactly this checkout's */
+  const here = SOURCE_PATHS.map((p) => git(EMU_REPO, 'rev-parse', `HEAD:${p}`));
+  if (box.length !== SOURCE_PATHS.length || !here.every((h, i) => box[i] === h)) {
     fail('the box\'s emulator clone is not at these sources (or has changes in them) - run tools/box/sync-to-box.sh emu first');
   }
   console.log(`firmware: building on the box: ${want.version} @ ${want.firmware}/${want.libraries}, fixes ${want.fixes.join(' ')}, plugins ${PLUGINS.join(',')}`);

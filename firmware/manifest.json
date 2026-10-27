@@ -1,5 +1,5 @@
 {
-  "file": "v3.1.0-test-edge-ctap_bridge-fw80e3ba0-libfe9e293-fix0012-0013-b6f58c126.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-fw80e3ba0-libfe9e293-fix0012-0013-b20af74ce.hex",
   "version": "v3.1.0",
   "firmware": "80e3ba0",
   "libraries": "fe9e293",
@@ -11,20 +11,21 @@
     "edge",
     "ctap_bridge"
   ],
-  "buildHash": "6f58c12653c94316",
+  "buildHash": "20af74ce004163d4",
   "sources": {
-    "emulator/scripts/versions/v3.1.0.js": "80a40cd25534",
-    "emulator/scripts/versions/fixes-3.1.0.js": "382ec9013117",
-    "emulator/scripts/versions/patches-3.1.0": "314720d455ab",
-    "emulator/package.json": "9588e53f7912",
-    "emulator/plugins/edge": "48a05d758558",
-    "emulator/plugins/ctap_bridge": "57688d666577"
+    "emulator/scripts/versions/v3.1.0.js": "b3e957ee6b0c",
+    "emulator/scripts/versions/fixes-3.1.0.js": "c996735112d2",
+    "emulator/scripts/versions/patches-3.1.0": "687375431e8a",
+    "emulator/package.json": "efdab12e5786",
+    "emulator/plugins/edge": "0ebc2ef5a364",
+    "emulator/plugins/ctap_bridge": "b165502b86b9"
   },
-  "sourcesFrom": "node-onlykey-emulator 58bc395",
+  "sourcesFrom": "node-onlykey-emulator 7960dbf",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
   "built": "2026-10-27",
-  "tested": false,
-  "sha256": "901d45340a9dcc379b315da05be5fb8c9a332d5da342059222464818842f9383"
+  "tested": true,
+  "sha256": "c7eafa1d2062e17e1d023bb16e3b9a1e767709c1a937354ea416e165aabf1e5c",
+  "testedOn": "2026-10-27 key 2 (hard key): kit 01-protocol + 05-security, 197 passed, 0 firmware failures - run on the b6f58c126 build, which differs from this one only in its 4-byte build stamp"
 }
