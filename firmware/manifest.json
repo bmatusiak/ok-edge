@@ -1,14 +1,30 @@
 {
-  "file": "v3.1.0-test-config-edge-key_chain-fix_usertimeout-ctap_bridge-fw9fceea1-libb273489.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-fw80e3ba0-libfe9e293-fix0012-0013-b6f58c126.hex",
   "version": "v3.1.0",
-  "firmware": "9fceea1",
-  "libraries": "b273489",
-  "plugins": ["config", "edge", "key_chain", "fix_usertimeout", "ctap_bridge"],
-  "pluginsFrom": "node-onlykey-emulator 085393c",
+  "firmware": "80e3ba0",
+  "libraries": "fe9e293",
+  "fixes": [
+    "0012",
+    "0013"
+  ],
+  "plugins": [
+    "edge",
+    "ctap_bridge"
+  ],
+  "buildHash": "6f58c12653c94316",
+  "sources": {
+    "emulator/scripts/versions/v3.1.0.js": "80a40cd25534",
+    "emulator/scripts/versions/fixes-3.1.0.js": "382ec9013117",
+    "emulator/scripts/versions/patches-3.1.0": "314720d455ab",
+    "emulator/package.json": "9588e53f7912",
+    "emulator/plugins/edge": "48a05d758558",
+    "emulator/plugins/ctap_bridge": "57688d666577"
+  },
+  "sourcesFrom": "node-onlykey-emulator 58bc395",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
-  "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (edge/tools/build-hardkey.sh)",
-  "built": "2026-10-26",
+  "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
+  "built": "2026-10-27",
   "tested": false,
-  "sha256": "0189285028c7e7ba94cee14d98108f5efc36412655b8058f4e391117e5c83b3f"
+  "sha256": "901d45340a9dcc379b315da05be5fb8c9a332d5da342059222464818842f9383"
 }

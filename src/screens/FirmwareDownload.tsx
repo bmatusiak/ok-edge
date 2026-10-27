@@ -25,8 +25,13 @@ type Manifest = {
   debug: boolean;
   sha256: string;
   site?: string;
+  /* the maintainer patches staged on the pins (emulator scripts/versions/patches-3.1.0) */
+  fixes?: string[];
+  /* one hash of everything the hex is built from (tools/firmware.js): same inputs, same hash */
+  buildHash?: string;
   /* false until this exact file has run on a hard key: said on the page, never left out */
   tested?: boolean;
+  testedOn?: string;
 };
 
 const BASE = '/firmware/';
@@ -66,8 +71,11 @@ export function FirmwareDownload() {
         {m.debug ? ' · DEBUG' : ''}
       </Text>
       <Text style={styles.line}>plugins: {m.plugins.join(', ')}</Text>
+      {m.fixes && m.fixes.length ? <Text style={styles.line}>fixes: {m.fixes.join(', ')}</Text> : null}
       {m.site ? <Text style={styles.line}>allowed site: {m.site}</Text> : null}
       {m.tested === false ? <Text style={styles.warn}>not yet tested on a hard key</Text> : null}
+      {m.tested && m.testedOn ? <Text style={styles.line}>tested: {m.testedOn}</Text> : null}
+      {m.buildHash ? <Text style={styles.line}>build {m.buildHash}</Text> : null}
       <Text style={styles.line} selectable>
         sha256 {m.sha256}
       </Text>

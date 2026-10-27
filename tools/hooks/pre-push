@@ -1,0 +1,13 @@
+#!/bin/sh
+# A push to main or cloudflare deploys the site (Cloudflare Workers Builds), and the site offers firmware/ as it is:
+# Cloudflare does not build firmware. So the commit being pushed must hold the build of the current firmware sources
+# (tools/firmware.js check). Installed by `node tools/firmware.js install-hook`.
+root=$(git rev-parse --show-toplevel)
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/cloudflare)
+      [ "$local_sha" = 0000000000000000000000000000000000000000 ] && continue
+      node "$root/tools/firmware.js" check "$local_sha" || exit 1 ;;
+  esac
+done
+exit 0
