@@ -99,7 +99,8 @@ jobs:
       # The emulator maps the key's flash at its real, low addresses; Linux's default vm.mmap_min_addr (65536)
       # forbids that, crypto then segfaults and most of 01-protocol SKIPS while the run still exits 0
       - name: Let the emulator map low addresses
-        run: sudo sysctl -w vm.mmap_min_addr=4096
+        # sudo only when needed: a host already set (the box, rehearsing under act -self-hosted) has no sudo to give
+        run: '[ "$(sysctl -n vm.mmap_min_addr)" -le 4096 ] || sudo sysctl -w vm.mmap_min_addr=4096'
 
       - name: Build the soft key from the same sources
         working-directory: node-onlykey-emulator/emulator
