@@ -118,7 +118,8 @@ export type EdgeRequest = {
   /** who asked: the paired computer, by its pairing name */
   from: string;
   reason: string;
-  scopes: {op: number; slot: number; cap: number}[];
+  /** identity: on a derived code (201-203, 221-223) the one identity the scope pays for (lib R11a: "ssh://...", "gpg://...") */
+  scopes: {op: number; slot: number; cap: number; identity?: string}[];
   /** R15b: the lifetime asked for, in minutes (absent = the key's 12 h) */
   ttlMinutes?: number;
 };

@@ -59,8 +59,10 @@ C "Agent: request a budget" wait:2 "▼ Edge Management" wait:2 >/dev/null
 waitfor '\[Approve\]' 40 || exit 1
 say "the sheet: $(echo "$L" | sed 's/.*Presses | //' | cut -c1-200)"
 C "Approve" >/dev/null
-sleep 3
-say "after Approve: $(labels | sed 's/.*Presses | //' | cut -c1-200)"
+# Approve runs the strict copy check first (its own key reads, ~6 s each over the tunnel): press only once the key asks
+waitfor 'Press the key to confirm\|edge: ' 240 || exit 1
+echo "$L" | grep -q 'edge: ' && { say "refused: $(echo "$L" | grep -o 'edge: [^|]*')"; exit 1; }
+say "the key waits for its press"
 say "press"
 press 1
 sleep 10

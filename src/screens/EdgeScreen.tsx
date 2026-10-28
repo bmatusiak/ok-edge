@@ -21,6 +21,7 @@ import {BottomDrawer, DRAWER_HANDLE} from '../ui/BottomDrawer';
 import {BudgetBlock} from '../ui/BudgetBlock';
 import {budgetStatus, budgetStatusText, type BudgetStatus} from '../budgetStatus';
 import {useEdge} from '../hooks/useEdge';
+import {TESTING_IDENTITY} from '../edgeSoftKey';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import {onSheet} from '../edgeAgents';
 import {consentRefusal} from '../debugGuard';
@@ -1134,7 +1135,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
             <View style={styles.row}>
               <Btn
                 title="Agent: request a budget"
-                onPress={() => edge.request('testing on this phone', 'Sign three agent messages (P-256)', [{op: OP.SIGN, slot: 222, cap: 3}])}
+                onPress={() => edge.request('testing on this phone', 'Sign three agent messages (P-256)', [{op: OP.SIGN, slot: 222, cap: 3, identity: TESTING_IDENTITY}])}
                 disabled={edge.busy}
               />
               <Btn title="Agent: one pressed sign" onPress={edge.agentSign} disabled={edge.busy} />

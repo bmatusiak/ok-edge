@@ -13,7 +13,14 @@
  * chain's own self-press links.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {approve as approveLib, chain, codes, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
+import {approve as approveLib, chain, codes, grants as grantsLib, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
+
+/*
+ * THE TESTING IDENTITY: the tab's test budget (EdgeScreen) and its test sign (agentSign) name this one identity, so
+ * the budget pays for exactly that sign. A scope on a derived code must name one (lib R11a): every identity of the
+ * curve shares the code, and an unnamed scope would pay for the person's own logins too.
+ */
+export const TESTING_IDENTITY = 'ssh://testing@okedge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import {getOnlyKey, type Backend} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
@@ -492,7 +499,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   async agentSign(text: string) {
     const app = await getOnlyKey('embedded');
     const message = receipts.messageHash(`okrn testing ${text} ${Date.now()}`);
-    const identity = receipts.messageHash('okrn testing identity');
+    const identity = grantsLib.identityLabel(TESTING_IDENTITY);
     const timer = setTimeout(() => { void OkEmu.pressQueue('1'); }, 1500);
     try {
       await app.okcrypto.agent.sign(identity, message, {keyType: 2, version: 2});
