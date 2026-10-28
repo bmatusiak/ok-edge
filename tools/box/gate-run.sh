@@ -43,7 +43,9 @@ for i in $(seq 1 "$RUNS"); do
     kill -0 "$kit" 2>/dev/null || break
     age=$(( $(date +%s) - $(stat -c %Y "$LOG") ))
     state=running; [ "$age" -ge 300 ] && state=SILENT
-    echo "   $(date +%T) $state: $(grep -a '^--- ' "$LOG" | tail -1 | cut -c5-70), $(grep -ac '     ok ' "$LOG") ok, last output ${age}s ago"
+    # the serial kit names the file it is in ("--- <file>"); the parallel one says a line a minute itself ("[okt] ...")
+    where=$(grep -aE '^\[okt\] |^--- [0-9]' "$LOG" | tail -1 | sed 's/^--- //' | cut -c1-150)
+    echo "   $(date +%T) $state: $where, $(grep -ac '     ok ' "$LOG") ok, last output ${age}s ago"
   done
   wait "$kit"
   code=$?
