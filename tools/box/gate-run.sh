@@ -2,6 +2,9 @@
 # THE RELEASE WORKFLOW'S TEST GATE, OUTSIDE THE WORKFLOW (.github/workflows/release.yml, job "gate"), on the box.
 #
 #   bash tools/box/gate-run.sh [<emulator dir>] [runs]
+#   setsid nohup bash tools/box/gate-run.sh ... > gate.log 2>&1 &   (and a window that only tails gate.log: closing a
+#                                                                    window then ends nothing - a run started IN a window
+#                                                                    died with it once, silently, mid-file)
 #
 # The gate's steps exactly: a PLAIN build (no sanitizer) of <emulator dir> staged as the gate stages it - the v3.1.0
 # recipe (its fixes), the hex's plugins, DEBUG on - then the kit's 00-sanity + 01-protocol against the lib ok-edge
@@ -30,8 +33,22 @@ export OKEMU_ROOT=$E
 pass=0
 for i in $(seq 1 "$RUNS"); do
   echo "== run $i: 00-sanity 01-protocol"
-  OKT_LIB_DIR=$LIB node bin/okt.js run 00-sanity 01-protocol > "$OUT/kit-$i.log" 2>&1
+  LOG=$OUT/kit-$i.log
+  OKT_LIB_DIR=$LIB node bin/okt.js run 00-sanity 01-protocol > "$LOG" 2>&1 &
+  kit=$!
+  # NEVER SILENT (Brad, 2026-10-28: "these tests should never go silent"): a line a minute while the kit runs - the
+  # file it is in, how many passed, how long since its last output (SILENT past 5 minutes) - so a stall or a death shows
+  while kill -0 "$kit" 2>/dev/null; do
+    for _ in $(seq 60); do kill -0 "$kit" 2>/dev/null || break; sleep 1; done
+    kill -0 "$kit" 2>/dev/null || break
+    age=$(( $(date +%s) - $(stat -c %Y "$LOG") ))
+    state=running; [ "$age" -ge 300 ] && state=SILENT
+    echo "   $(date +%T) $state: $(grep -a '^--- ' "$LOG" | tail -1 | cut -c5-70), $(grep -ac '     ok ' "$LOG") ok, last output ${age}s ago"
+  done
+  wait "$kit"
   code=$?
+  [ "$code" -gt 128 ] && echo "   the kit was KILLED by signal $((code - 128)) - last output: $(tail -1 "$LOG" | cut -c1-120)"
+  [ "$code" -gt 128 ] || echo "   the kit ended, exit $code"
   END=$(grep -a 'OKT-END' "$OUT/kit-$i.log" | tail -1)
   SKIPS=$(echo "$END" | sed -nE 's/.*tests=[0-9]+p\/[0-9]+f\/([0-9]+)s.*/\1/p')
   crypto=$(grep -aqE 'yes crypto$' "$OUT/kit-$i.log" && echo yes || echo NO)
