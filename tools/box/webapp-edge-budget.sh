@@ -38,8 +38,14 @@ waitfor '\[Continue\]\|\[Decrypt Bucket\]\|Locked' || exit 1
 echo "$L" | grep -q 'Locked' && {
   say "locked - the PIN on the key's buttons, then back to the page"
   press 1 2 3 4 5 6 1
-  sleep 1
-  timeout 10 node tools/box/page-click.js --eval 'window.dispatchEvent(new Event("focus")); 1' >/dev/null 2>&1
+  # back to the page as a person comes back to it - again every 5 s while it still says Locked (a minute at most): a
+  # focus that comes before the key has finished unlocking is answered "locked", and the page asks only on focus
+  # (2026-10-28: one nudge 1 s after the PIN, right after the key restarted, left the page Locked on an unlocked key)
+  for _ in $(seq 1 12); do
+    sleep 5
+    timeout 10 node tools/box/page-click.js --eval 'window.dispatchEvent(new Event("focus")); 1' >/dev/null 2>&1
+    waitfor '\[Continue\]\|\[Decrypt Bucket\]' 8 >/dev/null && break
+  done
   waitfor '\[Continue\]\|\[Decrypt Bucket\]' || exit 1
 }
 echo "$L" | grep -q '\[Continue\]' && { C "Continue" >/dev/null; waitfor '\[Decrypt Bucket\]' || exit 1; }
