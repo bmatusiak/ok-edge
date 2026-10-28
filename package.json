@@ -1,73 +1,8 @@
 {
-  "name": "ok-edge",
-  "version": "0.0.8",
+  "name": "ok-edge-site",
   "private": true,
-  "main": "index.ts",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "web": "expo start --web --port 8090",
-    "build:web": "expo export --platform web --output-dir dist/web",
-    "build:web:test": "expo export --platform web --dev --output-dir dist/web-test",
-    "build:webapp": "expo export --platform web --dev --output-dir docs",
-    "build:webapp:release": "expo export --platform web --output-dir docs",
-    "server:dev": "npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787",
-    "server:test": "node --test mcp-server/test/rooms.test.js",
-    "electron": "node electron/start.js",
-    "electron:dev": "cross-env OKEDGE_WEB_URL=http://localhost:8090 node electron/start.js",
-    "electron:test": "cross-env OKEDGE_FLAVOR=test node electron/start.js",
-    "build:electron": "npm run build:web && electron-builder --dir",
-    "build:android": "expo prebuild --platform android --no-install && cd android && gradlew assembleRelease",
-    "cli": "node node_modules/node-onlykey-lib/cli/index.js",
-    "typecheck": "tsc --noEmit -p ."
-  },
-  "dependencies": {
-    "@bmatusiak/rectify": "github:bmatusiak/rectify#a0d9f0e6e537053122273b1f763ac87ae461361c",
-    "@expo/metro-runtime": "~58.0.14",
-    "@react-native-async-storage/async-storage": "^3.1.1",
-    "events": "^3.3.0",
-    "expo": "~58.0.16",
-    "expo-status-bar": "~58.0.3",
-    "node-hid": "^3.4.0",
-    "node-onlykey-lib": "github:bmatusiak/node-onlykey-lib#10ac967476f1089e7ad378b2060af9d5e46ed98a",
-    "okedge-autofill": "file:./modules/okedge-autofill",
-    "okedge-native": "file:./modules/okedge-native",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "react-native": "0.88.0",
-    "react-native-safe-area-context": "~5.10.1",
-    "react-native-web": "~0.21.4",
-    "test-moniker": "file:../test-moniker"
-  },
+  "description": "The built OnlyKey Edge site (release workflow output) - deploy with npx wrangler deploy; nothing here is built",
   "devDependencies": {
-    "@types/jest": "^29.5.14",
-    "@types/react": "~19.3.0",
-    "@types/react-test-renderer": "^19.3.0",
-    "cross-env": "^10.0.0",
-    "electron": "^45.0.0",
-    "electron-builder": "^26.0.0",
-    "react-test-renderer": "^19.3.0",
-    "typescript": "~6.0.3"
-  },
-  "build": {
-    "appId": "com.okedge.desktop",
-    "productName": "ok-edge",
-    "files": [
-      "electron/**",
-      "dist/web/**",
-      "package.json",
-      "!node_modules/**"
-    ],
-    "directories": {
-      "output": "dist/electron"
-    },
-    "npmRebuild": false,
-    "extraMetadata": {
-      "main": "electron/main.js"
-    }
-  },
-  "optionalDependencies": {
-    "@stoprocent/noble": "github:bmatusiak/noble-ble#d41c7dd91130ae04603858249dd91edf2a324053",
-    "dbus-next": "^0.10.2"
+    "wrangler": "4.153.0"
   }
 }
