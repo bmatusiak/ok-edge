@@ -58,19 +58,16 @@ say "the tab is idle ($(enabled)) - requesting"
 C "Agent: request a budget" wait:2 "▼ Edge Management" wait:2 >/dev/null
 waitfor '\[Approve\]' 40 || exit 1
 say "the sheet: $(echo "$L" | sed 's/.*Presses | //' | cut -c1-200)"
-# the press waits for the key: a press the firmware is not waiting for is lost (an unlocked key types slot 1), and over
-# the tunnel the grant reaches the key seconds after the page says so. press.js --after holds it until the grant's own
-# debug line (its seed, as the kit's Edge-over-WebAuthn test waits), then 800 ms. The key's whole output goes to the log.
-PL=/tmp/webapp-grant-press.log
-(cd $P/node-onlykey-emulator/emulator && timeout 300 node bin/press.js --socket=/tmp/okemu-webapp.sock --after='Generating random number of size = 32' --after-timeout=290000 1 > $PL 2>&1 &)
-sleep 2
 C "Approve" >/dev/null
 # Approve runs the strict copy check first (its own key reads, ~6 s each over the tunnel)
 waitfor 'Press the key to confirm\|edge: ' 240 || exit 1
 echo "$L" | grep -q 'edge: ' && { say "refused: $(echo "$L" | grep -o 'edge: [^|]*')"; exit 1; }
-say "the key waits for its press"
-for _ in $(seq 1 60); do grep -q '^press: ' $PL && break; sleep 1; done
-say "$(grep '^press: ' $PL | tail -1)"
+# as a person presses: after reading the prompt. Over the tunnel the page asks as the grant's ceremony starts, before
+# the request is on the key, and a press the firmware is not waiting for is lost (an unlocked key types slot 1); the
+# key waits 20 s. (This soft key prints no debug lines, so press.js --after has no cue here.)
+say "the key asks for its press - pressing in 3 s"
+sleep 3
+press 1
 sleep 10
 say "the Edge tab now:"
 timeout 30 node tools/box/page-click.js --text 3000 2>&1 | grep -iv '^TEST BUILD\|^Testing mode' | sed -n '/^Budgets/,$p' | head -14 | cut -c1-200
