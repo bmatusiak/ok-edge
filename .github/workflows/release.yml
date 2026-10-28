@@ -7,15 +7,22 @@
 #
 # THE ORDER IS BRAD'S ("the first thing the workflow needs to build is the firmware, then the apk ... one day i want to
 # have the firmware flashed from the phone app, so i want the apk to have the latest firmware hex before it is built";
-# then "1 firmware, 2 testing and apk, 3 desktop + webapp"). A stage's jobs run side by side on their own runners:
-#   1. firmware - the developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js)
-#   2. gate     - a soft key from the same sources must pass the kit's 00-sanity + 01-protocol
+# then "1 firmware, 2 testing and apk, 3 desktop + webapp"; then "the test should be its own run, start after firmware
+# build and gate the publish step, so firmware, apk, webapp are built and ready while the test is running"):
+#   1. firmware - the developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js),
+#                 CHECKED before any app takes it in (Brad: "not limit us to checking the hex after its build before
+#                 it's included in the apps"): the record is the build of the sources, the code ends below the plugin
+#                 flash (build-hardkey.sh's size guard), the hex carries its build stamp - and the firmware size check,
+#                 once its limits are set, joins them here. A hex that fails a check is never uploaded.
+#   then, side by side on their own runners:
+#      gate     - a soft key from the same sources must pass the kit's 00-sanity + 01-protocol; the long test, so it
+#                 holds back only publish
 #      android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
 #                 debug keystore until the OnlyKey signs releases through Edge
-#   3. webapp   - the release web app with the hex (docs/firmware) and the APK's manifest (docs/android), and the
-#                 Worker bundled - the Downloads page then offers both; the desktop app joins this stage (phase 2)
-#   4. publish  - only with publish=true: a GitHub prerelease (APK + hex) and the built site committed to the
-#                 cloudflare branch; deployed by `wrangler deploy` when the repo has a CLOUDFLARE_API_TOKEN secret
+#        webapp - after android: the release web app with the hex (docs/firmware) and the APK's manifest
+#                 (docs/android), the Worker bundled - the Downloads page offers both; the desktop app joins it (phase 2)
+#   2. publish  - only with publish=true, after all of them: a GitHub prerelease (APK + hex) and the built site
+#                 committed to the cloudflare branch; deployed by `wrangler deploy` when the repo has CLOUDFLARE_API_TOKEN
 # Any fail = stop: a failed job cancels the whole run, so nothing after it starts and nothing beside it goes on - and
 # publish needs every job, so nothing is published from sources that fail the kit or a build that failed.
 #
@@ -122,7 +129,9 @@ jobs:
   # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol", then "00-sanity too"; the pattern is
   # onlykey-firmware-builds' latest.yml): a soft key built from the SAME sources as the hex - the v3.1.0 recipe, its
   # fixes, the hex's plugins, DEBUG on as on the hex - must pass the kit's 00-sanity and 01-protocol. It runs beside the
-  # APK build (stage 2); a failure cancels the run, the APK build with it, and nothing is published.
+  # builds, from the moment the hex exists, and only publish waits for it (Brad, 2026-10-28: "start after firmware build
+  # and gate the publish step"); a failure cancels the run, the builds with it, and nothing is published. The quick
+  # checks of the hex itself are not here: they end the firmware job, before the apps take the hex in.
   gate:
     needs: firmware
     runs-on: ubuntu-latest
@@ -326,7 +335,7 @@ jobs:
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   webapp:
-    needs: [firmware, gate, android]
+    needs: [firmware, android]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
