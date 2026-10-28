@@ -146,7 +146,7 @@ export function LoginScreen({
         * it too.
         */}
       <View style={styles.devFooter}>
-        {/* the web app: what it publishes - the Android app, the firmware for a developer key (DownloadsPage.tsx) */}
+        {/* the web app: what it publishes - its source code, the firmware for a developer key, the Android app, the command line (DownloadsPage.tsx) */}
         {shell === 'webapp' ? <Btn title="Downloads" onPress={() => setDownloads(true)} /> : null}
         {__DEV__ && onTesting ? (
           <View style={styles.devFooterInner}>

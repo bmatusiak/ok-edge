@@ -4,7 +4,9 @@
  *
  * Opened from the web app's login page. Each panel reads its manifest beside the web app (what the release workflow
  * publishes): the firmware for a developer key (FirmwareDownload.tsx) and the Android app (AndroidDownload.tsx). A
- * panel whose manifest is not there is left out; with neither, the page says so.
+ * panel whose manifest is not there is left out. Source code (SourceCode.tsx) and the command line (CliInstall.tsx)
+ * are fixed text and always shown. The desktop app's panel joins between Android and the command line once the release
+ * workflow packages it.
  */
 import React, {useEffect} from 'react';
 import {BackHandler, ScrollView, StyleSheet, Text, View} from 'react-native';
@@ -12,6 +14,8 @@ import {Btn, Section} from '../ui/components';
 import {theme} from '../ui/theme';
 import {FirmwareDownload, useFirmwareManifest} from './FirmwareDownload';
 import {AndroidDownload, useAndroidManifest} from './AndroidDownload';
+import {SourceCode} from './SourceCode';
+import {CliInstall} from './CliInstall';
 
 export function DownloadsPage({onBack}: {onBack: () => void}) {
   const firmware = useFirmwareManifest();
@@ -28,17 +32,23 @@ export function DownloadsPage({onBack}: {onBack: () => void}) {
         <Btn title="‹ Back" onPress={onBack} />
         <Text style={styles.title}>Downloads</Text>
       </View>
-      {android ? (
-        <Section title="Android app">
-          <AndroidDownload m={android} />
-        </Section>
-      ) : null}
+      {/* in Brad's order (2026-10-28): source code, firmware, android, desktop, cli */}
+      <Section title="Source code">
+        <SourceCode commit={android?.commit} />
+      </Section>
       {firmware ? (
         <Section title="Firmware for a developer key">
           <FirmwareDownload m={firmware} />
         </Section>
       ) : null}
-      {!android && !firmware ? <Text style={styles.dim}>Nothing is published beside this web app yet.</Text> : null}
+      {android ? (
+        <Section title="Android app">
+          <AndroidDownload m={android} />
+        </Section>
+      ) : null}
+      <Section title="Command line (onlykey-js)">
+        <CliInstall />
+      </Section>
     </ScrollView>
   );
 }
