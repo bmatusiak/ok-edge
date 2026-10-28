@@ -22,10 +22,15 @@ OUT=~/project/onlykey/release-rehearse/gate-run; mkdir -p "$OUT"
 [ -d "$E" ] && [ -d "$K" ] && [ -d "$LIB" ] || { echo "no emulator at $E, kit at $K or lib at $LIB"; exit 1; }
 [ "$(sysctl -n vm.mmap_min_addr)" -le 4096 ] || { echo "vm.mmap_min_addr is above 4096 - the emulator cannot map its flash"; exit 1; }
 cd "$E" || exit 1
+# NO_BUILD=1: the soft key <emulator dir> already holds, as built by an earlier run of this script (the build is minutes)
+if [ -n "$NO_BUILD" ]; then
+  echo "== no build (NO_BUILD): the soft key already in $E/build - $(jq -r '.version + " " + (.plugins | join(",")) + " debug=" + (.debug | tostring)' .stage/build.json 2>/dev/null)"
+else
 rm -rf .stage-src/v3.1.0
 echo "== build (plain): v3.1.0, edge,ctap_bridge,derive_secret, DEBUG"
 OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
 echo "build exit $? (sanitizer symbols: $(nm -u build/Release/onlykey_emulator.node | grep -c -E '__(a|t)san_'), must be 0)"
+fi
 cd "$K" || exit 1
 # the kit finds its emulator beside its OWN folder (lib/paths.js), which is not <emulator dir> when the kit is a
 # symlink - name it, or the kit tests whatever emulator build sits beside the real kit
