@@ -4,6 +4,9 @@
 # Edge tab, a test budget request, Approve, the press - then what the page says. Every step waits for what it needs on
 # screen (page-click.js --labels) and says what it saw when it does not come.
 #   bash tools/box/webapp-edge-budget.sh
+#   FRESH=1 ...   the browser forgets its Edge copy first (a new device: the copy anchors at the key's checkpoint)
+#   CONSOLE=/tmp/pc.log ...   the page's own [edge] lines kept in that file across the reload (page-console.js reloads
+#                 over its own DevTools connection, so the subscription survives it; a reload from outside drops it)
 source ~/.nvm/nvm.sh >/dev/null 2>&1
 P=~/project/onlykey
 cd $P/ok-edge || exit 1
@@ -17,9 +20,15 @@ waitfor() {
 }
 say() { echo "== $(date +%T) $*"; }
 
+[ -n "$FRESH" ] && say "a new copy: forgetting $(timeout 10 node tools/box/page-click.js --eval '(() => { const k = Object.keys(localStorage).filter(k => k.includes("edge.mirror.")); k.forEach(x => localStorage.removeItem(x)); return k.length; })()' 2>&1 | tail -1) stored copy"
 say "reload"
-w=$(DISPLAY=:10 xdotool search --name "ok-edge - Chromium" | head -1)
-DISPLAY=:10 xdotool windowactivate --sync "$w" key ctrl+shift+r
+if [ -n "$CONSOLE" ]; then
+  (timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &)
+  sleep 2
+else
+  w=$(DISPLAY=:10 xdotool search --name "ok-edge - Chromium" | head -1)
+  DISPLAY=:10 xdotool windowactivate --sync "$w" key ctrl+shift+r
+fi
 waitfor '\[Continue\]\|\[Decrypt Bucket\]\|Locked' || exit 1
 # the testnet soft key's PIN (1234561), on its buttons, when it has locked itself
 # then back to the page: it asks its key again when its window comes back to the front (useWebKey), never on a timer

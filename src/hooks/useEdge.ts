@@ -278,7 +278,15 @@ export function useEdge() {
   useEffect(() => {
     if (!wantReal) return;
     let stopped = false;
+    /*
+     * ONE HEAD READ AT A TIME (box, 2026-10-28): over the web app's tunnel a head read takes ~5 s, longer than the
+     * tick. Every tick started another: unlaned they cut an Edge CHECKPOINT from its MORE, laned they would queue
+     * faster than they drain and the tab would never be idle. A tick that finds the last read still out does nothing.
+     */
+    let reading = false;
     const t = setInterval(async () => {
+      if (reading) return;
+      reading = true;
       try {
         /*
          * A COMPUTER HOLDS THE KEY (Brad, 2026-10-06): the tab's reads would only
@@ -296,6 +304,8 @@ export function useEdge() {
         lastSeq.current = seq;
       } catch {
         /* the key busy, locked or gone: the next tick tries again */
+      } finally {
+        reading = false;
       }
     }, HEAD_POLL_MS);
     return () => {
