@@ -13,7 +13,7 @@
  * chain's own self-press links.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {approve as approveLib, chain, codes, grants as grantsLib, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
+import {approve as approveLib, chain, client as clientLib, codes, grants as grantsLib, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
 
 /*
  * THE TESTING IDENTITY: the tab's test budget (EdgeScreen) and its test sign (agentSign) name this one identity, so
@@ -506,6 +506,41 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /*
+   * TESTING MODE: a sign a budget PAYS - what an agent's use is (the MCP plan's items run as these): TX start over the
+   * key's head, the agent-derived P-256 sign (OKSIGN 222) for the testing identity with no press, then its receipt;
+   * the last use's receipt ends the budget. Through the lib's budget client (edge client.js, what onlykey-js edge exec
+   * runs) over this app's own key - the web app's WebAuthn tunnel included - so the use is checked the same way: the
+   * link is this use's, paid by this budget's self-press. The budget is the newest live one with a sign scope on 222
+   * for the testing identity (the tab's "Agent: request a budget"). No channel: this app is the phone, no note to send.
+   */
+  async budgetSign(text: string): Promise<{grantId: number; seq: number; paid: boolean}> {
+    const app = await getOnlyKey(this.backend);
+    const h = await this.edge.head();
+    const dev = toHex(this.deviceId);
+    let found: {grantId: number; kept: Kept} | null = null;
+    for (const id of [...(h.live ?? [])].sort((a: number, b: number) => b - a)) {
+      const raw = await AsyncStorage.getItem(REGISTRY() + dev + '.' + id);
+      const kept = raw ? (JSON.parse(raw) as Kept) : null;
+      if (kept && kept.scopes.some(sc => sc.slot === 222 && sc.identity === TESTING_IDENTITY)) { found = {grantId: id, kept}; break; }
+    }
+    if (!found) throw new Error('edge: no live budget for the testing identity on this key - request one first');
+    const {grantId, kept} = found;
+    /* the client's record of the budget, from the opening this app kept when it approved it (keepOpening) */
+    const record = {grantId, uses: kept.uses, genesis: kept.genesis, head: toHex(h.head), reason: kept.reason, scopes: kept.scopes, lifetime: kept.lifetime ?? 0, owed: [], deviceId: dev};
+    const store = {get: async () => JSON.stringify(record), set: async () => undefined};
+    const budget = await clientLib.createEdgeClient({edge: this.edge, channel: null, store}).resume(grantId);
+    const identity = grantsLib.identityLabel(TESTING_IDENTITY);
+    const message = receipts.messageHash(`okedge testing ${text} ${Date.now()}`);
+    /* the bytes the key signs - the message, then the identity's label (okcrypto agent.sign) - are what the TX start names */
+    const payload = new Uint8Array(message.length + identity.length);
+    payload.set(message);
+    payload.set(identity, message.length);
+    const {link} = await budget.use(payload, () => app.okcrypto.agent.sign(identity, message, {keyType: 2, version: 2}), {reason: `testing: ${text}`});
+    await budget.receipt(link, {code: 'OK', message: `testing: ${text} - signed`});
+    return {grantId, seq: link.seq, paid: link.paid};
   }
 
   /*

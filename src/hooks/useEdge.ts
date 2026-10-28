@@ -238,6 +238,13 @@ export function useEdge() {
     }
     return (await syncMirror(s)).view;
   }), [run]);
+  /* testing mode: a sign the open testing budget pays, and its receipt (SoftKeyEdge.budgetSign) */
+  const budgetSign = useCallback(() => run(async s => {
+    const k = s as Source & {budgetSign?: (t: string) => Promise<{grantId: number; seq: number; paid: boolean}>};
+    const r = await k.budgetSign?.('sign');
+    if (r) console.log(`[edge] testing sign #${r.seq}: ${r.paid ? `paid by budget ${r.grantId}` : 'NOT paid by the budget'}, receipt filed`);
+    return (await syncMirror(s)).view;
+  }), [run]);
   /* testing mode: an agent's pressed sign with no receipt (soft key only) */
   const agentSign = useCallback(() => run(async s => {
     const k = s as Source & {agentSign?: (t: string) => Promise<void>};
@@ -317,6 +324,6 @@ export function useEdge() {
   return {
     view, budgets, past, others, ownName, deviceViews, requests, busy, stopping, error, pressFor, copyCheck, keyState, ended, available: wantReal, fullSync,
     sync, verify, tamper, request, revoke, approve, press, decline,
-    hold, resume, settle, agentSign, continueBudget, dismissEnded, acceptLoss, exportBlocks,
+    hold, resume, settle, agentSign, budgetSign, continueBudget, dismissEnded, acceptLoss, exportBlocks,
   };
 }

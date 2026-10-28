@@ -1139,6 +1139,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
                 disabled={edge.busy}
               />
               <Btn title="Agent: one pressed sign" onPress={edge.agentSign} disabled={edge.busy} />
+              <Btn title="Agent: a sign the budget pays" onPress={edge.budgetSign} disabled={edge.busy} />
             </View>
             {/*
               * B7 stage 2's heartbeat test (spec 2026-10-04): hang the JS thread for good,
