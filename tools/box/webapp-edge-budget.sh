@@ -43,7 +43,7 @@ say "Edge tab, a test budget request"
 C "Menu" wait:2 "Edge" >/dev/null
 # the test button is disabled while the tab's own first sync is with the key (edge.busy); it reads the key in its turn
 sleep 15
-C "Open Edge Management" wait:2 "Agent: request a budget" wait:2 "Close" wait:2 >/dev/null
+C "Open Edge Management" wait:2 "Agent: request a budget" wait:2 "▼ Edge Management" wait:2 >/dev/null
 waitfor '\[Approve\]' 40 || exit 1
 say "the sheet: $(echo "$L" | sed 's/.*Presses | //' | cut -c1-200)"
 C "Approve" >/dev/null
