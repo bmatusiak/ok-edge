@@ -3,10 +3,9 @@
  * and put the panel in there, and create a new panel for the android apk").
  *
  * Opened from the web app's login page. Each panel reads its manifest beside the web app (what the release workflow
- * publishes): the firmware for a developer key (FirmwareDownload.tsx) and the Android app (AndroidDownload.tsx). A
- * panel whose manifest is not there is left out. Source code (SourceCode.tsx) and the command line (CliInstall.tsx)
- * are fixed text and always shown. The desktop app's panel joins between Android and the command line once the release
- * workflow packages it.
+ * publishes): the firmware for a developer key (FirmwareDownload.tsx), the Android app (AndroidDownload.tsx) and the
+ * desktop app (DesktopDownload.tsx). A panel whose manifest is not there is left out. Source code (SourceCode.tsx) and
+ * the command line (CliInstall.tsx) are fixed text and always shown.
  */
 import React, {useEffect} from 'react';
 import {BackHandler, ScrollView, StyleSheet, Text, View} from 'react-native';
@@ -14,12 +13,14 @@ import {Btn, Section} from '../ui/components';
 import {theme} from '../ui/theme';
 import {FirmwareDownload, useFirmwareManifest} from './FirmwareDownload';
 import {AndroidDownload, useAndroidManifest} from './AndroidDownload';
+import {DesktopDownload, useDesktopManifest} from './DesktopDownload';
 import {SourceCode} from './SourceCode';
 import {CliInstall} from './CliInstall';
 
 export function DownloadsPage({onBack}: {onBack: () => void}) {
   const firmware = useFirmwareManifest();
   const android = useAndroidManifest();
+  const desktop = useDesktopManifest();
   /* a phone's own Back goes back too, as the ‹ Back button does (the web app has none; harmless there) */
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { onBack(); return true; });
@@ -44,6 +45,11 @@ export function DownloadsPage({onBack}: {onBack: () => void}) {
       {android ? (
         <Section title="Android app">
           <AndroidDownload m={android} />
+        </Section>
+      ) : null}
+      {desktop ? (
+        <Section title="Desktop app">
+          <DesktopDownload packages={desktop} />
         </Section>
       ) : null}
       <Section title="Command line (onlykey-js)">

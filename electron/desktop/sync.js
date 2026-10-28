@@ -22,6 +22,7 @@
  */
 const { spawn } = require('child_process');
 const readline = require('readline');
+const nodeBinary = require('../node-binary');
 
 /* a service that ended (no phone in range, the radio off) is started again after this long */
 const RETRY_MS = 60 * 1000;
@@ -91,7 +92,7 @@ function runCli(args, onLine) {
   delete env.ELECTRON_RUN_AS_NODE;
   /* how this app's sync service is named to a second one on this computer (lib bucket/cli/service.js's lock) */
   env.OKEDGE_SYNC_WHO = 'the desktop app';
-  const proc = spawn(process.env.OKEDGE_NODE || 'node', [cliEntry(), ...args], {
+  const proc = spawn(nodeBinary(), [cliEntry(), ...args], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
     /* Windows gives a console program started from a GUI app a console window of its own */

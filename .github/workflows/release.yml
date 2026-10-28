@@ -1,4 +1,5 @@
-# THE RELEASE: firmware hex -> Android app (the hex inside) -> web app -> GitHub release + the cloudflare branch.
+# THE RELEASE: firmware hex -> Android app (the hex inside) + desktop app (Windows, Linux) -> web app -> GitHub release
+# + the cloudflare branch.
 #
 # BY HAND ONLY (Brad, 2026-10-27: "i want to trigger the builds from gh command or from github's website, no auto
 # building"): no push, schedule or other trigger. Run it from the Actions tab ("Run workflow") or with
@@ -14,7 +15,9 @@
 #
 #   test line:   gate ----------------------------------------------------.
 #                                                                          | both good
-#   build line:  firmware (build, check the hex) -> android -> webapp -> publish
+#   build line:  firmware (build, check the hex) -> android -----------.
+#                                                 -> desktop (windows) -+-> webapp -> publish
+#                                                 -> desktop (linux) ---'
 #
 #   either line fails -> the run is cancelled: the other line stops, publish never runs
 #
@@ -28,9 +31,14 @@
 #   then, on the build line:
 #      android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
 #                 debug keystore until the OnlyKey signs releases through Edge
-#        webapp - after android: the release web app with the hex (docs/firmware) and the APK's manifest
-#                 (docs/android), the Worker bundled - the Downloads page offers both; the desktop app joins it (phase 2)
-#   2. publish  - only with publish=true, after all of them: a GitHub prerelease (APK + hex) and the built site
+#      desktop  - beside android (Brad, 2026-10-28: "desktop package = go, linux and windows separated packages"): one
+#                 package per system - Windows .zip, Linux .tar.gz - each on a runner of that system, the soft key
+#                 inside built there from the same recorded sources with the phone's plugins
+#                 (tools/release/desktop-package.js)
+#        webapp - after android and desktop: the release web app with the hex (docs/firmware), the APK's manifest
+#                 (docs/android) and the desktop packages' (docs/desktop), the Worker bundled - the Downloads page
+#                 offers them all
+#   2. publish  - only with publish=true, after all of them: a GitHub prerelease (APK, desktop packages, hex) and the built site
 #                 committed to the cloudflare branch; deployed by `wrangler deploy` when the repo has CLOUDFLARE_API_TOKEN
 # Any fail = stop: a failed job cancels the whole run, so nothing after it starts and nothing beside it goes on - and
 # publish needs every job, so nothing is published from sources that fail the kit or a build that failed.
@@ -38,7 +46,11 @@
 # NO BUILDS ON MAIN (Brad: "this will keep our main from having builds"): every build goes to the release and the
 # cloudflare branch. Cloudflare's own builds are disabled - nothing builds the site but this workflow.
 #
-# The first run should be publish=false: it uploads the four builds as artifacts and changes nothing.
+# EVERY PUBLISHED RELEASE HAS ITS OWN VERSION (Brad, 2026-10-28: "we published under 0.0.8, so we need to bump before
+# releasing again"): with publish=true the plan step stops the run when a release of app.json's version is already
+# published - bump app.json and package.json first.
+#
+# The first run should be publish=false: it uploads the builds as artifacts and changes nothing.
 
 name: release
 
@@ -86,10 +98,19 @@ jobs:
       - name: Plan - the recorded emulator commit, the version, the tag
         id: plan
         working-directory: ok-edge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
           emulator=$(node -p "require('./firmware/manifest.json').emulatorCommit || ''")
           [ -n "$emulator" ] || { echo "::error::firmware/manifest.json has no emulatorCommit - run tools/firmware.js build"; exit 1; }
           version=$(node -p "require('./app.json').expo.version")
+          [ "$version" = "$(node -p "require('./package.json').version")" ] || { echo "::error::app.json's version $version is not package.json's"; exit 1; }
+          # a published version is never published again: the tags are v<version>-<code>
+          if [ "$PUBLISH" = true ]; then
+            taken=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 500 --json tagName --jq '.[].tagName' | grep -E "^v${version//./\\.}-[0-9]+$" | head -1 || true)
+            [ -z "$taken" ] || { echo "::error::version $version is already published ($taken) - bump app.json and package.json first"; exit 1; }
+          fi
           code=$((1000 + $(git rev-list --count HEAD)))
           echo "emulator=$emulator" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -353,8 +374,105 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
+  # THE DESKTOP APP, one package per system, each built on a runner of that system (Brad, 2026-10-28: "desktop package =
+  # go, linux and windows separated packages"): the soft key's native module and the Node it runs on are that system's,
+  # so nothing is cross-built. Beside android, after the firmware job (its plan: the version, the tag, the emulator).
+  desktop:
+    needs: firmware
+    strategy:
+      matrix:
+        include:
+          - { os: windows-latest, platform: win, name: windows }
+          - { os: ubuntu-latest, platform: linux, name: linux }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout ok-edge
+        uses: actions/checkout@v4
+        with:
+          path: ok-edge
+
+      - name: Checkout test-moniker
+        uses: actions/checkout@v4
+        with:
+          repository: bmatusiak/test-moniker
+          path: test-moniker
+
+      # this Node is packaged too: the soft key's native module is built for it (tools/release/desktop-package.js)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Firmware sources
+        uses: ./ok-edge/.github/actions/firmware-sources
+        with:
+          emulator_ref: ${{ needs.firmware.outputs.emulator }}
+
+      # the phone's soft key - the plugins modules/okedge-native/app.plugin.js builds the APK's with, read from there so
+      # the two cannot differ - with no DEBUG console; its build record goes into the app (OKEMU_APP_OUT), where the web
+      # export reads which features the soft key has
+      - name: Build the soft key from the same sources
+        working-directory: node-onlykey-emulator/emulator
+        env:
+          JOBS: max
+          OKEMU_VERSION: v3.1.0
+          OKEMU_APP_OUT: ${{ github.workspace }}/ok-edge/src/generated
+        run: |
+          export OKEMU_PLUGINS=$(node -e "console.log(require('fs').readFileSync('../../ok-edge/modules/okedge-native/app.plugin.js', 'utf8').match(/const PLUGINS = '([^']+)'/)[1])")
+          echo "soft key plugins: $OKEMU_PLUGINS"
+          npm run rebuild
+
+      # electron-builder fetches the Electron it packages itself
+      - name: Install ok-edge's packages
+        working-directory: ok-edge
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the web export (release)
+        working-directory: ok-edge
+        run: npm run build:web
+
+      # unsigned (no code-signing certificate yet): Windows says "unknown publisher" the first time it runs
+      - name: Package, check and describe it
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          node ok-edge/tools/release/desktop-package.js --platform ${{ matrix.platform }} \
+            --emulator node-onlykey-emulator/emulator --out out --repo "$GITHUB_REPOSITORY" \
+            --tag "${{ needs.firmware.outputs.tag }}" --version "${{ needs.firmware.outputs.version }}" \
+            --version-code "${{ needs.firmware.outputs.version_code }}" --commit "$GITHUB_SHA"
+          echo "desktop (${{ matrix.name }}): $(ls out | grep -v json)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: out/
+          if-no-files-found: error
+
+      # its manifest alone as well: the web app takes only that, not the package
+      - name: Upload its manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-manifest-${{ matrix.name }}
+          path: out/desktop-${{ matrix.name }}.json
+          if-no-files-found: error
+
+      # ANY FAIL = STOP (Brad, 2026-10-27: "the gate stops matrix 2 ... any fail = stop"): needs: keeps every later
+      # job from starting, but a failed job does not stop the one running beside it - so the run is cancelled, and
+      # the other jobs of its stage end with it. Not under act (no run to cancel).
+      - name: Stop the run - this job failed
+        if: failure() && !env.ACT
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
   webapp:
-    needs: [firmware, android]
+    needs: [firmware, android, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -385,6 +503,13 @@ jobs:
           name: android
           path: android-out
 
+      - name: The desktop packages' manifests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-manifest-*
+          path: desktop-out
+          merge-multiple: true
+
       - name: Install ok-edge's packages
         working-directory: ok-edge
         env:
@@ -399,6 +524,7 @@ jobs:
           npx --yes "wrangler@$(node -p "require('./package.json').scripts['server:dev'].match(/wrangler@([\d.]+)/)[1]")" deploy --dry-run --outdir worker-out
           mkdir -p docs/android
           cp ../android-out/manifest.json docs/android/manifest.json
+          node tools/release/desktop-package.js merge ../desktop-out/desktop-windows.json ../desktop-out/desktop-linux.json --out docs/desktop/manifest.json
 
       - name: Assemble the site
         working-directory: ok-edge
@@ -422,7 +548,7 @@ jobs:
 
   publish:
     if: inputs.publish
-    needs: [firmware, gate, android, webapp]
+    needs: [firmware, gate, android, desktop, webapp]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -437,12 +563,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       # a prerelease: Brad promotes it once it has run on his devices
-      - name: The GitHub prerelease (APK + hex)
+      - name: The GitHub prerelease (APK, desktop packages, hex)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           apk=$(ls artifacts/android/*.apk)
+          win=$(ls artifacts/desktop-windows/*.zip)
+          linux=$(ls artifacts/desktop-linux/*.tar.gz)
           hex=$(ls artifacts/firmware/*.hex)
           tested=$(node -p "const m=require('./artifacts/firmware/manifest.json'); m.tested ? 'tested: ' + m.testedOn : 'not yet tested on a hard key'")
           {
@@ -451,10 +579,14 @@ jobs:
             echo "- Android app: $(basename "$apk") - com.okrn, signed with the repo debug keystore"
             echo "  sha256 $(node -p "require('./artifacts/android/manifest.json').sha256")"
             echo "  signing certificate SHA-256 $(node -p "require('./artifacts/android/manifest.json').certSha256")"
+            echo "- Desktop app for Windows (x64, unzip and run ok-edge.exe; not code-signed): $(basename "$win")"
+            echo "  sha256 $(node -p "require('./artifacts/desktop-windows/desktop-windows.json').sha256")"
+            echo "- Desktop app for Linux (x64, unpack and run ./ok-edge): $(basename "$linux")"
+            echo "  sha256 $(node -p "require('./artifacts/desktop-linux/desktop-linux.json').sha256")"
             echo "- Firmware for a developer key (unsigned): $(basename "$hex") - $tested"
             echo "  sha256 $(node -p "require('./artifacts/firmware/manifest.json').sha256")"
           } > notes.md
-          gh release create "$TAG" "$apk" "$hex" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file notes.md
+          gh release create "$TAG" "$apk" "$win" "$linux" "$hex" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file notes.md
 
       # the built site, one commit per release on the cloudflare branch (created on the first run)
       - name: The site onto the cloudflare branch

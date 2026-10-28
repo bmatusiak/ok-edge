@@ -3,7 +3,7 @@
 /**
  * NativeOkEmu on the desktop: the soft key is node-onlykey-emulator (ok-edge stage 1b: one soft
  * key, built for the phone and for Node), run in ITS OWN Node.js process - electron/okemu-host.js,
- * started here with plain Node (OKEDGE_NODE, else `node` on the PATH). It cannot run in an Electron
+ * started here with plain Node (electron/node-binary.js: the packaged app's own, else `node` on the PATH). It cannot run in an Electron
  * process: Chromium reserves the low 4 GB that the 32-bit firmware's flash needs (okemu-host.js).
  *
  * This side relays the app's calls to the host and its events to the page, and keeps what the app
@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { fork } = require('child_process');
 const { app, BrowserWindow } = require('electron');
+const nodeBinary = require('../node-binary');
 
 let send = () => {};
 let host = null;
@@ -37,7 +38,7 @@ function startHost() {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   const proc = fork(path.join(__dirname, '..', 'okemu-host.js'), [], {
-    execPath: process.env.OKEDGE_NODE || 'node',
+    execPath: nodeBinary(),
     env,
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     /* Windows gives a console program started from a GUI app a console window of its own */
