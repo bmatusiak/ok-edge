@@ -16,7 +16,8 @@
 #                 Worker bundled - the Downloads page then offers both; the desktop app joins this stage (phase 2)
 #   4. publish  - only with publish=true: a GitHub prerelease (APK + hex) and the built site committed to the
 #                 cloudflare branch; deployed by `wrangler deploy` when the repo has a CLOUDFLARE_API_TOKEN secret
-# Stage 3 and publish need the gate: nothing is published from sources that fail the kit.
+# Any fail = stop: a failed job cancels the whole run, so nothing after it starts and nothing beside it goes on - and
+# publish needs every job, so nothing is published from sources that fail the kit or a build that failed.
 #
 # NO BUILDS ON MAIN (Brad: "this will keep our main from having builds"): every build goes to the release and the
 # cloudflare branch. Cloudflare's own builds are disabled - nothing builds the site but this workflow.
@@ -38,7 +39,7 @@ concurrency: release
 
 permissions:
   contents: write
-  # the gate cancels the run when it fails (gh run cancel)
+  # a failed job cancels the run (gh run cancel)
   actions: write
 
 env:
@@ -109,10 +110,19 @@ jobs:
           path: out/firmware/
           if-no-files-found: error
 
+      # ANY FAIL = STOP (Brad, 2026-10-27: "the gate stops matrix 2 ... any fail = stop"): needs: keeps every later
+      # job from starting, but a failed job does not stop the one running beside it - so the run is cancelled, and
+      # the other jobs of its stage end with it. Not under act (no run to cancel).
+      - name: Stop the run - this job failed
+        if: failure() && !env.ACT
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
   # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol", then "00-sanity too"; the pattern is
   # onlykey-firmware-builds' latest.yml): a soft key built from the SAME sources as the hex - the v3.1.0 recipe, its
   # fixes, the hex's plugins, DEBUG on as on the hex - must pass the kit's 00-sanity and 01-protocol. It runs beside the
-  # APK build (stage 2), and stage 3 and publish need it: a hex whose sources fail the kit is built, never published.
+  # APK build (stage 2); a failure cancels the run, the APK build with it, and nothing is published.
   gate:
     needs: firmware
     runs-on: ubuntu-latest
@@ -196,10 +206,10 @@ jobs:
             onlykey-testing/runs/
           if-no-files-found: warn
 
-      # A FAILED GATE STOPS STAGE 2 (Brad, 2026-10-27: "the gate stops matrix 2 - the final ending is pushing, so matrix 2
-      # needs to pass"): needs: already keeps stage 3 and publish from starting, but a failed job does not stop the job
-      # beside it - so the run is cancelled, and the APK build ends with it. Not under act (no run to cancel).
-      - name: Stop the run - the gate failed
+      # ANY FAIL = STOP (Brad, 2026-10-27: "the gate stops matrix 2 ... any fail = stop"): needs: keeps every later
+      # job from starting, but a failed job does not stop the one running beside it - so the run is cancelled, and
+      # the other jobs of its stage end with it. Not under act (no run to cancel).
+      - name: Stop the run - this job failed
         if: failure() && !env.ACT
         env:
           GH_TOKEN: ${{ github.token }}
@@ -306,6 +316,15 @@ jobs:
           path: out/
           if-no-files-found: error
 
+      # ANY FAIL = STOP (Brad, 2026-10-27: "the gate stops matrix 2 ... any fail = stop"): needs: keeps every later
+      # job from starting, but a failed job does not stop the one running beside it - so the run is cancelled, and
+      # the other jobs of its stage end with it. Not under act (no run to cancel).
+      - name: Stop the run - this job failed
+        if: failure() && !env.ACT
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
   webapp:
     needs: [firmware, gate, android]
     runs-on: ubuntu-latest
@@ -363,6 +382,15 @@ jobs:
           name: site
           path: site/
           if-no-files-found: error
+
+      # ANY FAIL = STOP (Brad, 2026-10-27: "the gate stops matrix 2 ... any fail = stop"): needs: keeps every later
+      # job from starting, but a failed job does not stop the one running beside it - so the run is cancelled, and
+      # the other jobs of its stage end with it. Not under act (no run to cancel).
+      - name: Stop the run - this job failed
+        if: failure() && !env.ACT
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   publish:
     if: inputs.publish
