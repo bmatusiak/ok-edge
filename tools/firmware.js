@@ -15,6 +15,7 @@
  *   node tools/firmware.js tested "<what ran>"   the recorded build passed on a hard key: the record says so, and every
  *                                                build of the same hash carries it (the page then drops its warning)
  *   node tools/firmware.js check [<rev>]         the record (as committed at <rev>) is the build of the current sources
+ *   node tools/firmware.js prod-only <dir>       a ci-build firmware/ folder down to the prod hex (the APK, the web app)
  *   node tools/firmware.js ci-build --out <dir> --src <dir> --kit <dir>
  *                                                the workflow's build, here, with no box: <src> holds OnlyKey-Firmware,
  *                                                libraries and arduino-1.6.5-r5-teensy_127; writes <dir>/firmware/
@@ -220,13 +221,23 @@ function tested(what) {
 
 /*
  * THE WORKFLOW'S BUILD (.github/workflows/release.yml, its first job): the same build-hardkey.sh as `build`, run here
- * on the CI machine from the checkouts beside this repo - no box. The hex and its manifest go to <out>/firmware/; the
- * manifest is the record's, with this file's sha256, and keeps "tested" only when this file IS the one tested.
+ * on the CI machine from the checkouts beside this repo - no box - TWICE, from the same sources and build stamp:
+ *
+ *   prod   DEBUG off: no debug console - the firmware a developer key runs for real
+ *   test   DEBUG on: the debug console the kit and key 2's tests drive. It prints key data, so it is for test keys
+ *          only - never live credentials, never a backup restored to it (Brad, 2026-10-28: "test firmware build exposes
+ *          debugging and should not be used with live credentials or restore backup to it, because it will expose
+ *          credentials"). The record (firmware/manifest.json) is this build's: its sha256 and "tested" are the test hex's.
+ *
+ * (Brad, 2026-10-28: "when github builds, it should do prod-release builds; only exception is firmware may provide both
+ * test and prod builds".) The hexes and one manifest go to <out>/firmware/: the record's fields with `builds`, one
+ * entry per hex - its file, sha256, debug, tested.
  *
  * THE SAME FILE, NOT THE SAME SOURCES (2026-10-28): the first workflow run built the record's build hash - same pins,
  * fixes, plugins, stamp - and got a different hex (8 bytes shorter; code, not strings) than the box build key 2 ran.
  * So the build is not yet reproducible across machines, and "tested" (the Downloads page: "until this exact file has
- * run on a hard key") stays only on a byte-identical file. A rebuild of the tested sources says so, untested.
+ * run on a hard key") stays only on a byte-identical file. A rebuild of the tested sources says so, untested. The prod
+ * hex is never "tested": the kit drives a key through the debug console it does not have.
  */
 function ciBuild(args) {
   const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? path.resolve(args[i + 1]) : null; };
@@ -236,44 +247,81 @@ function ciBuild(args) {
   if (!out || !src || !kit) fail('usage: node tools/firmware.js ci-build --out <dir> --src <dir> --kit <dir>');
   const want = expected();
   const record = JSON.parse(fs.readFileSync(path.join(DIR, 'manifest.json'), 'utf8'));
-  const work = path.join(out, 'fw-work');
-  fs.mkdirSync(work, { recursive: true });
-  console.log(`firmware: ci-build ${want.version} @ ${want.firmware}/${want.libraries}, fixes ${want.fixes.join(' ')}, plugins ${PLUGINS.join(',')}, build ${want.buildHash}`);
-  const r = spawnSync('bash', ['plugins/edge/tools/build-hardkey.sh'], {
-    cwd: EMU,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-    env: { ...process.env, FW_PIN: want.firmware, LIB_PIN: want.libraries, PLUGINS: PLUGINS.join(','), BUILD_STAMP: stampOf(want.buildHash), FW_SRC: src, FW_OUT: work, KIT: kit },
-  });
-  process.stdout.write(r.stdout || '');
-  const image = ((r.stdout || '').match(/== \S+ 6\. (\S+\.hex)/) || [])[1];
-  if (r.status !== 0 || !image) fail('the build did not finish (see above)');
-  const file = path.basename(image);
   const dest = path.join(out, 'firmware');
   fs.mkdirSync(dest, { recursive: true });
-  fs.copyFileSync(image, path.join(dest, file));
-  const hex = fs.readFileSync(path.join(dest, file));
-  if (!carriesStamp(hex.toString('latin1'), stampOf(want.buildHash))) fail(`${file} does not carry build stamp ${stampOf(want.buildHash)}`);
   const same = record.buildHash === want.buildHash;
-  const digest = sha256(hex);
-  const exact = same && record.sha256 === digest;
+
+  const buildOne = (flavor, debug) => {
+    const work = path.join(out, `fw-work-${flavor}`);
+    fs.mkdirSync(work, { recursive: true });
+    console.log(`firmware: ci-build (${flavor}, DEBUG ${debug ? 'on' : 'off'}) ${want.version} @ ${want.firmware}/${want.libraries}, fixes ${want.fixes.join(' ')}, plugins ${PLUGINS.join(',')}, build ${want.buildHash}`);
+    const r = spawnSync('bash', ['plugins/edge/tools/build-hardkey.sh'], {
+      cwd: EMU,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+      /* the size guard (build-hardkey.sh LIMIT) gates the prod hex alone; the test hex's limit is the end of the flash,
+         so its size is reported, never refused */
+      env: { ...process.env, FW_PIN: want.firmware, LIB_PIN: want.libraries, PLUGINS: PLUGINS.join(','), BUILD_STAMP: stampOf(want.buildHash), FW_SRC: src, FW_OUT: work, KIT: kit, DEBUG: debug ? '1' : '0', ...(debug ? { LIMIT: '0x40000' } : {}) },
+    });
+    process.stdout.write(r.stdout || '');
+    const image = ((r.stdout || '').match(/== \S+ 6\. (\S+\.hex)/) || [])[1];
+    if (r.status !== 0 || !image) fail(`the ${flavor} build did not finish (see above)`);
+    /* build-hardkey.sh names every image v<version>-test-...; the prod one says prod, without its -nodebug tag, and the
+       test one says DANGEROUS first (Brad, 2026-10-28: "with DANGEROUS in the filename for test builds") */
+    const file = debug ? `DANGEROUS-${path.basename(image)}` : path.basename(image).replace('-test-', '-prod-').replace('-nodebug', '');
+    fs.copyFileSync(image, path.join(dest, file));
+    const hex = fs.readFileSync(path.join(dest, file));
+    /* the hex checks gate the prod hex alone (Brad, 2026-10-28: "the hex build gate that checks size and confirms the
+       hex looks good, that check is only for the prod release firmware build"); the test hex's are reported */
+    if (!carriesStamp(hex.toString('latin1'), stampOf(want.buildHash))) {
+      if (!debug) fail(`${file} does not carry build stamp ${stampOf(want.buildHash)}`);
+      console.log(`firmware: note - the test hex ${file} does not carry build stamp ${stampOf(want.buildHash)}`);
+    }
+    const digest = sha256(hex);
+    /* only the test hex is the record's file; tested stays only on that exact file */
+    const exact = debug && same && record.sha256 === digest;
+    const entry = { flavor, file, sha256: digest, debug, tested: exact && record.tested === true };
+    if (entry.tested) entry.testedOn = record.testedOn;
+    const verdict = entry.tested ? ` - tested: ${entry.testedOn}`
+      : !debug ? ' - prod (no debug console): not kit-tested'
+        : exact ? ' - the recorded file, not yet tested'
+          : same ? ` - the recorded sources, but not the recorded file (sha256 ${String(record.sha256).slice(0, 12)}): untested`
+            : ' - NOT the recorded build: untested';
+    console.log(`firmware: ${dest}/${file} (sha256 ${digest.slice(0, 12)})${verdict}`);
+    return entry;
+  };
+
+  const builds = [buildOne('prod', false), buildOne('test', true)];
+  if (builds[0].file === builds[1].file) fail('the prod and test hexes have one name - build-hardkey.sh must tag DEBUG off');
+  const { file, sha256: _s, tested: _t, testedOn: _o, debug: _d, ...common } = record;
   const manifest = {
-    ...record,
-    file,
+    ...common,
     buildHash: want.buildHash,
     sources: want.sources,
     built: new Date().toISOString().slice(0, 10),
     builtBy: process.env.GITHUB_RUN_ID ? `release workflow run ${process.env.GITHUB_RUN_ID}` : 'ci-build',
-    tested: exact && record.tested === true,
-    sha256: digest,
+    builds,
   };
-  if (!manifest.tested) delete manifest.testedOn;
   fs.writeFileSync(path.join(dest, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  const verdict = manifest.tested ? ` - tested: ${manifest.testedOn}`
-    : exact ? ' - the recorded file, not yet tested'
-      : same ? ` - the recorded sources, but not the recorded file (sha256 ${String(record.sha256).slice(0, 12)}): untested`
-        : ' - NOT the recorded build: untested';
-  console.log(`firmware: ${dest}/${file} (sha256 ${digest.slice(0, 12)})${verdict}`);
+}
+
+/*
+ * THE PROD HEX ALONE, for what the release puts in front of people: the APK's assets and the web app's Downloads page
+ * (Brad, 2026-10-28: "the test hex is not displayed on the webapp to download, only in the github release section").
+ * In <dir> (a ci-build firmware/ folder): every hex but the prod one is removed and the manifest lists the prod build
+ * only. The test hex reaches the GitHub release from the workflow's own artifact, never through here.
+ */
+function prodOnly(dir) {
+  if (!dir) fail('usage: node tools/firmware.js prod-only <dir>');
+  const file = path.join(dir, 'manifest.json');
+  const m = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const prod = (m.builds || []).filter((b) => b.flavor === 'prod');
+  if (prod.length !== 1) fail(`${file} lists ${prod.length} prod builds - a ci-build manifest lists one`);
+  for (const f of fs.readdirSync(dir)) if (f.endsWith('.hex') && f !== prod[0].file) fs.rmSync(path.join(dir, f));
+  if (!fs.existsSync(path.join(dir, prod[0].file))) fail(`no ${prod[0].file} in ${dir}`);
+  m.builds = prod;
+  fs.writeFileSync(file, `${JSON.stringify(m, null, 2)}\n`);
+  console.log(`firmware: ${dir} holds the prod hex alone (${prod[0].file})`);
 }
 
 function installHook() {
@@ -290,4 +338,5 @@ else if (cmd === 'tested') tested(arg);
 else if (cmd === 'check') check(arg);
 else if (cmd === 'install-hook') installHook();
 else if (cmd === 'ci-build') ciBuild(process.argv.slice(3));
-else fail('usage: node tools/firmware.js build | tested "<what ran>" | check [<rev>] | ci-build --out <dir> --src <dir> --kit <dir> | install-hook');
+else if (cmd === 'prod-only') prodOnly(arg);
+else fail('usage: node tools/firmware.js build | tested "<what ran>" | check [<rev>] | ci-build --out <dir> --src <dir> --kit <dir> | prod-only <dir> | install-hook');

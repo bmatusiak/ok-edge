@@ -21,11 +21,16 @@
 #
 #   either line fails -> the run is cancelled: the other line stops, publish never runs
 #
-#   1. firmware - the developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js),
+#   1. firmware - the developer-key hexes, from the sources main's firmware/manifest.json records (tools/firmware.js):
+#                 PROD (no debug console) and TEST (DANGEROUS-..., the debug console the kit drives - it prints key data).
+#                 GitHub builds production releases; the firmware is the one exception that also gives a test build
+#                 (Brad, 2026-10-28), and the test hex goes to the GitHub release ALONE - never into the APK or onto the
+#                 web app ("hard to accidentally install, not directly pointed at from the apps"). The PROD hex is
 #                 CHECKED before any app takes it in (Brad: "not limit us to checking the hex after its build before
-#                 it's included in the apps"): the record is the build of the sources, the code ends below the plugin
-#                 flash (build-hardkey.sh's size guard), the hex carries its build stamp - and the firmware size check,
-#                 once its limits are set, joins them here. A hex that fails a check is never uploaded.
+#                 it's included in the apps"; "that check is only for the prod release firmware build"): the record is
+#                 the build of the sources, the code ends below the plugin flash (build-hardkey.sh's size guard), the
+#                 hex carries its build stamp - and the firmware size check, once its limits are set, joins them here.
+#                 A prod hex that fails a check is never uploaded.
 #      gate     - THE TEST LINE, from the start of the run on a runner of its own: a soft key from the same sources
 #                 must pass the kit's 00-sanity + 01-protocol; the long test, so it holds back only publish
 #   then, on the build line:
@@ -298,11 +303,17 @@ jobs:
           emulator_ref: ${{ needs.firmware.outputs.emulator }}
 
       # the hex just built, into firmware/ - the Gradle task stageDeveloperFirmware puts it in the APK's assets
-      - name: The hex into firmware/
+      - name: The hexes into firmware/
         uses: actions/download-artifact@v4
         with:
           name: firmware
           path: ok-edge/firmware
+
+      # A RELEASE APK CARRIES THE PROD HEX ONLY (Brad, 2026-10-28: "when github builds, it should do prod-release builds"):
+      # the test hex's debug console prints key data, so it is a download of its own, never inside an app
+      - name: Only the prod hex for the APK
+        working-directory: ok-edge
+        run: node tools/firmware.js prod-only firmware
 
       - name: Install ok-edge's packages
         working-directory: ok-edge
@@ -338,11 +349,12 @@ jobs:
           done
           node -e "const f=require('./ok-edge/src/generated/firmware.json'); if (f.debugLock === false) { console.error('the debugging lock is off'); process.exit(1) }" || bad=1
           if unzip -p "$apk" assets/index.android.bundle | grep -qa 'Soft Key firmware'; then echo "::error::the testing screen is in the bundle"; bad=1; fi
-          want=$(node -p "require('./ok-edge/firmware/manifest.json').file")
-          [ "$(unzip -p "$apk" "assets/developer_firmware/$want" | sha256sum | cut -d' ' -f1)" = "$(node -p "require('./ok-edge/firmware/manifest.json').sha256")" ] \
+          want=$(node -p "require('./ok-edge/firmware/manifest.json').builds[0].file")
+          [ "$(unzip -p "$apk" "assets/developer_firmware/$want" | sha256sum | cut -d' ' -f1)" = "$(node -p "require('./ok-edge/firmware/manifest.json').builds[0].sha256")" ] \
             || { echo "::error::the APK does not carry $want as built"; bad=1; }
+          if unzip -l "$apk" | grep -q 'developer_firmware/DANGEROUS-'; then echo "::error::the APK carries the test hex"; bad=1; fi
           [ $bad = 0 ]
-          echo "release checks: DEBUG off, debugging lock on, no testing screen, $want inside" >> "$GITHUB_STEP_SUMMARY"
+          echo "release checks: DEBUG off, debugging lock on, no testing screen, the prod hex $want inside (no test hex)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Name the APK and write its manifest
         env:
@@ -491,11 +503,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: The hex into firmware/
+      - name: The hexes into firmware/
         uses: actions/download-artifact@v4
         with:
           name: firmware
           path: ok-edge/firmware
+
+      # the Downloads page offers the prod hex alone; the test hex is in the GitHub release only
+      - name: Only the prod hex for the web app
+        working-directory: ok-edge
+        run: node tools/firmware.js prod-only firmware
 
       - name: The APK's manifest
         uses: actions/download-artifact@v4
@@ -538,8 +555,9 @@ jobs:
           if ls docs/_expo/static/js/web/ | grep -q d41d8cd98f00b204e9800998ecf8427e; then echo "::error::docs/ is a development export"; bad=1; fi
           if grep -qa 'Soft Key firmware' docs/_expo/static/js/web/*.js; then echo "::error::the testing screen is in the web app"; bad=1; fi
           if [ -f src/generated/firmware.json ] && node -e "process.exit(require('./src/generated/firmware.json').debugLock === false ? 0 : 1)"; then echo "::error::the debugging lock is off"; bad=1; fi
+          if ls docs/firmware | grep -q '^DANGEROUS-'; then echo "::error::the test hex is on the web app"; bad=1; fi
           [ $bad = 0 ]
-          echo "web app release checks: release export, no testing screen, debugging lock on" >> "$GITHUB_STEP_SUMMARY"
+          echo "web app release checks: release export, no testing screen, debugging lock on, the prod hex alone" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Assemble the site
         working-directory: ok-edge
@@ -586,8 +604,9 @@ jobs:
           apk=$(ls artifacts/android/*.apk)
           win=$(ls artifacts/desktop-windows/*.zip)
           linux=$(ls artifacts/desktop-linux/*.tar.gz)
-          hex=$(ls artifacts/firmware/*.hex)
-          tested=$(node -p "const m=require('./artifacts/firmware/manifest.json'); m.tested ? 'tested: ' + m.testedOn : 'not yet tested on a hard key'")
+          fw() { node -p "const b = require('./artifacts/firmware/manifest.json').builds.find((x) => x.flavor === '$1'); $2"; }
+          prod=artifacts/firmware/$(fw prod b.file)
+          test=artifacts/firmware/$(fw test b.file)
           {
             echo "Built by the release workflow (run $GITHUB_RUN_ID) from main ${GITHUB_SHA:0:7}."
             echo
@@ -598,10 +617,14 @@ jobs:
             echo "  sha256 $(node -p "require('./artifacts/desktop-windows/desktop-windows.json').sha256")"
             echo "- Desktop app for Linux (x64, unpack and run ./ok-edge): $(basename "$linux")"
             echo "  sha256 $(node -p "require('./artifacts/desktop-linux/desktop-linux.json').sha256")"
-            echo "- Firmware for a developer key (unsigned): $(basename "$hex") - $tested"
-            echo "  sha256 $(node -p "require('./artifacts/firmware/manifest.json').sha256")"
+            echo "- Firmware for a developer key (unsigned), prod - no debug console: $(basename "$prod")"
+            echo "  sha256 $(fw prod b.sha256)"
+            echo "- Firmware for a developer key (unsigned), TEST - debug console: $(basename "$test") - $(fw test "b.tested ? 'tested: ' + b.testedOn : 'not yet tested on a hard key'")"
+            echo "  sha256 $(fw test b.sha256)"
+            echo "  WARNING: the test firmware exposes debugging - its console prints key data. Never use it with live"
+            echo "  credentials and never restore a backup to it: it would expose them. For test keys only."
           } > notes.md
-          gh release create "$TAG" "$apk" "$win" "$linux" "$hex" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file notes.md
+          gh release create "$TAG" "$apk" "$win" "$linux" "$prod" "$test" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file notes.md
 
       # the built site, one commit per release on the cloudflare branch (created on the first run)
       - name: The site onto the cloudflare branch
