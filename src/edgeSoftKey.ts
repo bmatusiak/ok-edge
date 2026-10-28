@@ -634,7 +634,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     publicKeysPq.set(id, publicKeyPq);
     /* the key's latest checkpoint - once per action */
     const cached = this.sameHead && 'checkpoint' in this.sameHead ? this.sameHead.checkpoint : undefined;
-    const checkpoint = this.snap && 'checkpoint' in this.snap ? this.snap.checkpoint : cached !== undefined ? cached : want ? await this.edge.checkpoint().catch(() => null) : null;
+    /* a checkpoint the key would not give leaves the copy "unsigned" - the log says why, or nobody can tell (2026-10-28) */
+    const checkpoint = this.snap && 'checkpoint' in this.snap ? this.snap.checkpoint : cached !== undefined ? cached : want ? await this.edge.checkpoint().catch((e: unknown) => { console.warn(`[edge] checkpoint not read: ${(e as Error)?.message ?? e}`); return null; }) : null;
     /* only a checkpoint is kept for the action: a failed read (null) is asked again, not reused */
     if (want && this.snap && checkpoint) this.snap.checkpoint = checkpoint;
     if (want && this.sameHead && checkpoint) this.sameHead.checkpoint = checkpoint;
