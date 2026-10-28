@@ -80,10 +80,10 @@ say "the budget is open:"
 budget
 fi
 for i in $(seq 1 ${SIGNS:-0}); do
-  idle "Agent: a sign the budget pays" 300 || { say "the tab never went idle for sign $i"; exit 1; }
+  idle "Agent: a sign the budget pays" 600 || { say "the tab never went idle for sign $i"; exit 1; }
   say "sign $i of $SIGNS"
   C "Open Edge Management" wait:1 "Agent: a sign the budget pays" wait:2 "▼ Edge Management" >/dev/null
-  idle "Agent: a sign the budget pays" 300
+  idle "Agent: a sign the budget pays" 600
   timeout 10 node tools/box/page-click.js --text 3000 2>&1 | grep -o 'edge: .*' | head -1 | sed 's/^/   refused: /'
   budget 8 | grep -i 'uses\|spent\|ended\|Active\|No budget' | head -3 | sed 's/^/   /'
 done

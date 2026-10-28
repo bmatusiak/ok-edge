@@ -20,7 +20,8 @@ case "${1:-status}" in
     [ -n "$(loop)" ] && { echo "running (loop $(loop), daemon $(pid))"; exit 0; }
     [ -d "$STORE" ] || cp -a "$SRC" "$STORE"
     source ~/.nvm/nvm.sh >/dev/null
-    cd $ROOT/node-onlykey-emulator/emulator || exit 1
+    # EMU=<emulator dir>: another build of the soft key on the same storage (tunnel-speed.sh: with and without a patch)
+    cd "${EMU:-$ROOT/node-onlykey-emulator/emulator}" || exit 1
     : > "$LOG"
     setsid nohup bash -c "echo \$\$ > '$LOOP'; while :; do node bin/daemon.js --storage '$STORE' --socket '$SOCK' >> '$LOG' 2>&1; echo \"[softkey-gadget] the emulator exited - starting it again\" >> '$LOG'; sleep 1; done" > /dev/null 2>&1 < /dev/null &
     sleep 5; tail -2 "$LOG"
