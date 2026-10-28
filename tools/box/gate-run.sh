@@ -7,7 +7,7 @@
 #                                                                    died with it once, silently, mid-file)
 #
 # The gate's steps exactly: a PLAIN build (no sanitizer) of <emulator dir> staged as the gate stages it - the v3.1.0
-# recipe (its fixes), the hex's plugins, DEBUG on - then the kit's 00-sanity, 01-protocol, 07-lib and 08-plugins against the lib ok-edge
+# recipe (its fixes), the hex's plugins, DEBUG on - then the kit's 00-sanity, 01-protocol, 07-lib, 08-plugins and 09-patches (the staged patches' own tests) against the lib ok-edge
 # pins (OKT_LIB_DIR), with the gate's no-false-green checks (crypto available, skips <= 20). Run <runs> times, to see
 # whether a failure is steady or now and then. Default <emulator dir>: the rehearsal's scratch copy under act's
 # workspace, which has the kit and the lib beside it.
@@ -37,9 +37,9 @@ cd "$K" || exit 1
 export OKEMU_ROOT=$E
 pass=0
 for i in $(seq 1 "$RUNS"); do
-  echo "== run $i: 00-sanity 01-protocol 07-lib 08-plugins"
+  echo "== run $i: 00-sanity 01-protocol 07-lib 08-plugins 09-patches"
   LOG=$OUT/kit-$i.log
-  OKT_LIB_DIR=$LIB node bin/okt.js run 00-sanity 01-protocol 07-lib 08-plugins > "$LOG" 2>&1 &
+  OKT_LIB_DIR=$LIB node bin/okt.js run 00-sanity 01-protocol 07-lib 08-plugins 09-patches > "$LOG" 2>&1 &
   kit=$!
   # NEVER SILENT (Brad, 2026-10-28: "these tests should never go silent"): a line a minute while the kit runs - the
   # file it is in, how many passed, how long since its last output (SILENT past 5 minutes) - so a stall or a death shows
