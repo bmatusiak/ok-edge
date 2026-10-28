@@ -5,6 +5,9 @@
 # screen (page-click.js --labels) and says what it saw when it does not come.
 #   bash tools/box/webapp-edge-budget.sh
 #   FRESH=1 ...   the browser forgets its Edge copy first (a new device: the copy anchors at the key's checkpoint)
+#   NO_REQUEST=1 ...   no new budget: the signs below use the one already open (every budget is finished)
+#   SIGNS=3 ...   then that many signs the budget pays ("Agent: a sign the budget pays"), each with its receipt; the
+#                 last use's receipt ends the budget
 #   CONSOLE=/tmp/pc.log ...   the page's own [edge] lines kept in that file across the reload (page-console.js reloads
 #                 over its own DevTools connection, so the subscription survives it; a reload from outside drops it)
 source ~/.nvm/nvm.sh >/dev/null 2>&1
@@ -52,8 +55,12 @@ say "Edge tab, a test budget request"
 C "Menu" wait:2 "Edge" >/dev/null
 # the test button is disabled while the tab's own first sync is with the key (edge.busy): wait until it is not
 C "Open Edge Management" wait:2 >/dev/null
-enabled() { timeout 10 node tools/box/page-click.js --eval '[...document.querySelectorAll("[role=button],button")].some(e => e.textContent.trim() === "Agent: request a budget" && e.getAttribute("aria-disabled") !== "true" && !e.disabled)' 2>&1 | tail -1; }
-for _ in $(seq 1 120); do [ "$(enabled)" = true ] && break; sleep 1; done
+# a testing button is disabled while the tab works with the key (edge.busy): wait until it is not
+enabled() { timeout 10 node tools/box/page-click.js --eval "[...document.querySelectorAll('[role=button],button')].some(e => e.textContent.trim() === '${1:-Agent: request a budget}' && e.getAttribute('aria-disabled') !== 'true' && !e.disabled)" 2>&1 | tail -1; }
+idle() { for _ in $(seq 1 ${2:-120}); do [ "$(enabled "$1")" = true ] && return 0; sleep 1; done; return 1; }
+budget() { timeout 30 node tools/box/page-click.js --text 3000 2>&1 | grep -iv '^TEST BUILD\|^Testing mode' | sed -n '/^Budgets/,/Edge Management/p' | head -${1:-14} | cut -c1-200; }
+idle
+if [ -z "$NO_REQUEST" ]; then
 say "the tab is idle ($(enabled)) - requesting"
 C "Agent: request a budget" wait:2 "▼ Edge Management" wait:2 >/dev/null
 waitfor '\[Approve\]' 40 || exit 1
@@ -68,6 +75,17 @@ echo "$L" | grep -q 'edge: ' && { say "refused: $(echo "$L" | grep -o 'edge: [^|
 say "the key asks for its press - pressing in 3 s"
 sleep 3
 press 1
-sleep 10
+waitfor 'uses spent' 240 || exit 1
+say "the budget is open:"
+budget
+fi
+for i in $(seq 1 ${SIGNS:-0}); do
+  idle "Agent: a sign the budget pays" 300 || { say "the tab never went idle for sign $i"; exit 1; }
+  say "sign $i of $SIGNS"
+  C "Open Edge Management" wait:1 "Agent: a sign the budget pays" wait:2 "▼ Edge Management" >/dev/null
+  idle "Agent: a sign the budget pays" 300
+  timeout 10 node tools/box/page-click.js --text 3000 2>&1 | grep -o 'edge: .*' | head -1 | sed 's/^/   refused: /'
+  budget 8 | grep -i 'uses\|spent\|ended\|Active\|No budget' | head -3 | sed 's/^/   /'
+done
 say "the Edge tab now:"
-timeout 30 node tools/box/page-click.js --text 3000 2>&1 | grep -iv '^TEST BUILD\|^Testing mode' | sed -n '/^Budgets/,$p' | head -14 | cut -c1-200
+budget
