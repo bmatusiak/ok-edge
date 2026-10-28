@@ -23,6 +23,18 @@ const { app, BrowserWindow, ipcMain, protocol, net, session } = require('electro
 const { pathToFileURL } = require('url');
 
 /*
+ * A RELEASE OBEYS NO DEVELOPER SWITCH (Brad, 2026-10-28: "turn off test build for releases, and see what else needs to
+ * be turned off for release builds"). Every OKEDGE_* variable is a developer's: OKEDGE_WEB_URL loads any page into the
+ * window that holds the key bridge, OKEDGE_FLAVOR=test brings back the menu and devtools, OKEDGE_CONSOLE copies the
+ * page's log (which can carry key bytes) to stdout, OKEDGE_DRIVE runs a script in the page, OKEDGE_EMULATOR /
+ * OKEDGE_CLI / OKEDGE_NODE swap in other code. The packaged app (tools/release/desktop-package.js) clears them all
+ * before anything reads one - here, first, so the soft key's host and the sync service it starts inherit none either.
+ */
+if (app.isPackaged) {
+  for (const k of Object.keys(process.env)) if (k.startsWith('OKEDGE_')) delete process.env[k];
+}
+
+/*
  * THE TEST BUILD (OKEDGE_FLAVOR=test, electron/start.js): the development export in dist/web-test, the phone's debug
  * build - and its OWN page storage (a separate profile), so a test run never reads or writes what the prod build kept.
  * The origin stays https://apps.crp.to, so WebAuthn works the same.

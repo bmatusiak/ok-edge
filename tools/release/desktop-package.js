@@ -65,6 +65,8 @@ const WEB = path.join(ROOT, 'dist', 'web');
 /* ---------------------------------------------------------------- what a release must not carry */
 if (!fs.existsSync(path.join(WEB, 'index.html'))) fail(`no web export at ${WEB} - npm run build:web first`);
 const bundles = fs.readdirSync(path.join(WEB, '_expo', 'static', 'js', 'web')).filter((f) => f.endsWith('.js'));
+/* a development export (__DEV__ on: testing mode, Login Bypass) names its bundle by the md5 of nothing */
+if (bundles.some((f) => f.includes('d41d8cd98f00b204e9800998ecf8427e'))) fail('the web export is a development export - npm run build:web makes the release one');
 if (bundles.some((f) => fs.readFileSync(path.join(WEB, '_expo', 'static', 'js', 'web', f), 'utf8').includes('Soft Key firmware'))) {
   fail('the testing screen is in the web export - a release export (npm run build:web) leaves it out');
 }

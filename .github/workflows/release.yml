@@ -526,6 +526,21 @@ jobs:
           cp ../android-out/manifest.json docs/android/manifest.json
           node tools/release/desktop-package.js merge ../desktop-out/desktop-windows.json ../desktop-out/desktop-linux.json --out docs/desktop/manifest.json
 
+      # WHAT A RELEASE MUST NOT CARRY, as the APK's and the desktop packages' checks: a development export (Expo names its
+      # bundle by the hash of nothing - __DEV__ on: testing mode, Login Bypass), the testing screen in the bundle, a soft
+      # key build record with the debugging lock off (the red TEST BUILD banner)
+      - name: Release checks
+        working-directory: ok-edge
+        run: |
+          set -euo pipefail
+          bad=0
+          ls docs/_expo/static/js/web/*.js >/dev/null
+          if ls docs/_expo/static/js/web/ | grep -q d41d8cd98f00b204e9800998ecf8427e; then echo "::error::docs/ is a development export"; bad=1; fi
+          if grep -qa 'Soft Key firmware' docs/_expo/static/js/web/*.js; then echo "::error::the testing screen is in the web app"; bad=1; fi
+          if [ -f src/generated/firmware.json ] && node -e "process.exit(require('./src/generated/firmware.json').debugLock === false ? 0 : 1)"; then echo "::error::the debugging lock is off"; bad=1; fi
+          [ $bad = 0 ]
+          echo "web app release checks: release export, no testing screen, debugging lock on" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Assemble the site
         working-directory: ok-edge
         run: node tools/release/cloudflare-site.js --docs docs --worker worker-out --out ../site --commit "$GITHUB_SHA" --tag "${{ needs.firmware.outputs.tag }}"

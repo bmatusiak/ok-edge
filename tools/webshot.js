@@ -5,6 +5,7 @@
  * published, the way tools/tap.js checks the phone.
  *
  *   node tools/webshot.js --dir <web export> [--from <site>] [--tap Downloads]... [--out shot.png] [--width 420]
+ *   node tools/webshot.js --dir <web export> [--from <site>] --serve [port]    only serve it, to open in a browser
  *
  * Serves the export on a local port (unknown paths get index.html, as the Worker's single-page-application handling
  * does), with --from copying /android/manifest.json and /firmware/manifest.json from a live site so the panels that
@@ -45,14 +46,14 @@ async function copyManifests() {
   }
 }
 
-function serve() {
+function serve(port = 0) {
   const server = http.createServer((req, res) => {
     let file = path.join(DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
     if (!file.startsWith(DIR) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIR, 'index.html');
     res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream' });
     fs.createReadStream(file).pipe(res);
   });
-  return new Promise(r => server.listen(0, '127.0.0.1', () => r(server)));
+  return new Promise(r => server.listen(port, '127.0.0.1', () => r(server)));
 }
 
 /* one DevTools session on the page's target: send(method, params) -> result */
@@ -98,6 +99,13 @@ async function tap(send, label) {
   if (!CHROME) throw new Error('no Chrome found - set CHROME');
   if (!fs.existsSync(path.join(DIR, 'index.html'))) throw new Error(`no index.html in ${DIR}`);
   await copyManifests();
+  /* --serve [port]: only serve the export, for a person to open in a browser; runs until stopped */
+  if (args.includes('--serve')) {
+    const port = Number(opt('--serve')) || 8099;
+    const s = await serve(port);
+    console.log(`serving ${DIR} at http://127.0.0.1:${s.address().port}/ (Ctrl+C stops)`);
+    return;
+  }
   const server = await serve();
   const url = `http://127.0.0.1:${server.address().port}/`;
   const port = 9300 + Math.floor(Math.random() * 500);
