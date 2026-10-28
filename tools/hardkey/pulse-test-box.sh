@@ -13,7 +13,7 @@ grep -o '"plugins"[^]]*]' .stage/build.json
 
 step "2. kit: the soft-key plugin suite (Edge's own tests)"
 cd $ROOT/onlykey-testing || exit 1
-node bin/okt.js run 38-softkey-plugins --keep-going 2>&1 | tail -25
+node bin/okt.js run 08-plugins/01-softkey-plugins.test.js --keep-going 2>&1 | tail -25
 
 step "3. the hard key's image"
 cd $ROOT/node-onlykey-emulator/emulator/plugins/edge || exit 1
