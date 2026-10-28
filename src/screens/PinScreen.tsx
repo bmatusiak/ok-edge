@@ -9,6 +9,8 @@ import * as biometrics from '../biometrics';
 import {DuoPinForm} from '../ui/DuoPinForm';
 import {useActiveKey} from '../hooks/KeyContext';
 import {theme} from '../ui/theme';
+import {shell} from '../platform';
+import {armWebKey} from '../hooks/useWebKey';
 
 /**
  * The firmware accepts 7-10 digits, each of them a button number.
@@ -158,6 +160,16 @@ export function PinScreen({
   const [hasStoredPin, setHasStoredPin] = useState(false);
   const [bioBusy, setBioBusy] = useState(false);
   const [bioError, setBioError] = useState<string | null>(null);
+
+  /*
+   * ON THE WEB APP, THIS SCREEN ARMS THE KEY CHECK (useWebKey): a page asks its key only once armed - at Log in, and
+   * again when its window comes back to the front. Reached any other way (a dev build going straight to the This Key
+   * tab, a reload) the page was never armed, never asked, and stayed Locked while the key was unlocked (found on the
+   * box, 2026-10-28). Showing the PIN screen is the person's choice to use the key, wherever it is shown from.
+   */
+  useEffect(() => {
+    if (shell === 'webapp') armWebKey();
+  }, []);
 
   useEffect(() => {
     let alive = true;

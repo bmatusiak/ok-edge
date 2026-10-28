@@ -973,15 +973,6 @@ function Shell() {
   const [openSlot, setOpenSlot] = useState<{id: string; index: number; label: string | null} | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [phase, setPhase] = useState<Phase>(SPLASH_SEEN ? 'login' : 'splash');
-  /*
-   * THE WEB APP ON ITS PIN SCREEN ASKS ITS KEY (useWebKey): a page asks only once armed - at Log in, and again when its
-   * window comes back to the front. A page that reaches the PIN screen without Log in's press (a dev build stepping past
-   * the login page, a reload) was never armed and waited for an answer it would never ask for - Locked for good while
-   * the key was unlocked (found on the box, 2026-10-28). Being on the PIN screen is the person's choice to use the key.
-   */
-  useEffect(() => {
-    if (shell === 'webapp' && phase === 'pin') armWebKey();
-  }, [phase]);
   /* The first time inside after this process started: take the remembered tab, if any. */
   useEffect(() => {
     if (phase !== 'main' || resumeChecked.current) return;
