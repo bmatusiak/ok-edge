@@ -221,7 +221,12 @@ function tested(what) {
 /*
  * THE WORKFLOW'S BUILD (.github/workflows/release.yml, its first job): the same build-hardkey.sh as `build`, run here
  * on the CI machine from the checkouts beside this repo - no box. The hex and its manifest go to <out>/firmware/; the
- * manifest is the record's, with this file's sha256, and keeps "tested" only when this build's hash is the record's.
+ * manifest is the record's, with this file's sha256, and keeps "tested" only when this file IS the one tested.
+ *
+ * THE SAME FILE, NOT THE SAME SOURCES (2026-10-28): the first workflow run built the record's build hash - same pins,
+ * fixes, plugins, stamp - and got a different hex (8 bytes shorter; code, not strings) than the box build key 2 ran.
+ * So the build is not yet reproducible across machines, and "tested" (the Downloads page: "until this exact file has
+ * run on a hard key") stays only on a byte-identical file. A rebuild of the tested sources says so, untested.
  */
 function ciBuild(args) {
   const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? path.resolve(args[i + 1]) : null; };
@@ -250,6 +255,8 @@ function ciBuild(args) {
   const hex = fs.readFileSync(path.join(dest, file));
   if (!carriesStamp(hex.toString('latin1'), stampOf(want.buildHash))) fail(`${file} does not carry build stamp ${stampOf(want.buildHash)}`);
   const same = record.buildHash === want.buildHash;
+  const digest = sha256(hex);
+  const exact = same && record.sha256 === digest;
   const manifest = {
     ...record,
     file,
@@ -257,12 +264,16 @@ function ciBuild(args) {
     sources: want.sources,
     built: new Date().toISOString().slice(0, 10),
     builtBy: process.env.GITHUB_RUN_ID ? `release workflow run ${process.env.GITHUB_RUN_ID}` : 'ci-build',
-    tested: same && record.tested === true,
-    sha256: sha256(hex),
+    tested: exact && record.tested === true,
+    sha256: digest,
   };
   if (!manifest.tested) delete manifest.testedOn;
   fs.writeFileSync(path.join(dest, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`firmware: ${dest}/${file} (sha256 ${manifest.sha256.slice(0, 12)})${manifest.tested ? ` - tested: ${manifest.testedOn}` : same ? ' - the recorded build, not yet tested' : ' - NOT the recorded build: untested'}`);
+  const verdict = manifest.tested ? ` - tested: ${manifest.testedOn}`
+    : exact ? ' - the recorded file, not yet tested'
+      : same ? ` - the recorded sources, but not the recorded file (sha256 ${String(record.sha256).slice(0, 12)}): untested`
+        : ' - NOT the recorded build: untested';
+  console.log(`firmware: ${dest}/${file} (sha256 ${digest.slice(0, 12)})${verdict}`);
 }
 
 function installHook() {
