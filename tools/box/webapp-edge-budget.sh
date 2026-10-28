@@ -23,6 +23,18 @@ waitfor() {
 }
 say() { echo "== $(date +%T) $*"; }
 
+# THE KEY UNLOCKED BEFORE THE PAGE LOADS: a page that loads on a locked key shows This Key "Locked", and nothing there
+# asks the key again (only Log in and the PIN screen arm the page's key check) - 2026-10-28, after a soft key restart.
+# So the key's own state, read over USB (the lib CLI's status, read-only), and the PIN on its buttons only when it says
+# locked: the testnet soft key's PIN (1234561).
+keystate() { (cd $P/node-onlykey-lib && timeout 30 node cli/index.js status 2>&1 | awk '$1 == "state" {print $2}'); }
+if [ "$(keystate)" != unlocked ]; then
+  say "the key is $(keystate) - the PIN on its buttons"
+  press 1 2 3 4 5 6 1
+  for _ in $(seq 1 20); do [ "$(keystate)" = unlocked ] && break; sleep 2; done
+  [ "$(keystate)" = unlocked ] || { say "the key did not unlock"; exit 1; }
+fi
+say "the key is unlocked"
 [ -n "$FRESH" ] && say "a new copy: forgetting $(timeout 10 node tools/box/page-click.js --eval '(() => { const k = Object.keys(localStorage).filter(k => k.includes("edge.mirror.")); k.forEach(x => localStorage.removeItem(x)); return k.length; })()' 2>&1 | tail -1) stored copy"
 say "reload"
 if [ -n "$CONSOLE" ]; then
