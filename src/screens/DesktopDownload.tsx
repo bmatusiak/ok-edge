@@ -8,9 +8,9 @@
  *
  * What each system needs is said here, not left to be found out:
  *   Windows  the package is not code-signed yet, so SmartScreen asks once ("More info" -> "Run anyway")
- *   Linux    the soft key maps its flash at the key's real low addresses (the emulator's src/ok_hal.cpp; Windows and
- *            Android relocate it), which the default vm.mmap_min_addr (65536) forbids: it boots, then faults the first
- *            time it encrypts. 4096 is enough. A hard key on USB needs none of it - only the OnlyKey udev rules.
+ *   Linux    a key on USB needs the OnlyKey udev rules. The soft key needs nothing: its flash maps wherever the kernel
+ *            puts it, as on Windows and Android (the emulator's src/ok_hal.cpp, 2026-10-28), so no vm.mmap_min_addr
+ *            setting is asked of the user.
  */
 import React, {useEffect, useState} from 'react';
 import {Linking, StyleSheet, Text, View} from 'react-native';
@@ -85,17 +85,6 @@ export function DesktopDownload({packages}: {packages: DesktopPackage[]}) {
             onPress={() => void Linking.openURL(p.url)}
           />
           <Text style={styles.body}>{HOW[p.os].steps}</Text>
-          {p.os === 'linux' ? (
-            <>
-              <Text style={styles.warn}>
-                The soft key on Linux needs low memory addresses allowed (it faults the first time it encrypts without
-                this). Once, as root:
-              </Text>
-              <Text style={styles.code} selectable>
-                {'echo vm.mmap_min_addr=4096 | sudo tee /etc/sysctl.d/60-onlykey-softkey.conf\nsudo sysctl --system'}
-              </Text>
-            </>
-          ) : null}
           <Text style={styles.line}>{p.file}</Text>
           <Text style={styles.line} selectable>
             sha256 {p.sha256}
@@ -112,6 +101,4 @@ const styles = StyleSheet.create({
   pkg: {gap: 6},
   body: {color: theme.text, fontSize: 13, lineHeight: 19},
   line: {color: theme.textDim, fontSize: 11, lineHeight: 15},
-  warn: {color: theme.warn, fontSize: 12, lineHeight: 17},
-  code: {color: theme.text, fontSize: 12, fontFamily: theme.mono, backgroundColor: theme.inputBg, padding: 8, borderRadius: theme.radius},
 });
