@@ -6,15 +6,17 @@
 #     gh workflow run release.yml -f publish=true     # and publish: the prerelease + the cloudflare branch
 #
 # THE ORDER IS BRAD'S ("the first thing the workflow needs to build is the firmware, then the apk ... one day i want to
-# have the firmware flashed from the phone app, so i want the apk to have the latest firmware hex before it is built"):
-#   1. firmware - the test gate (a soft key from the same sources must pass the kit's 00-sanity + 01-protocol), then the
-#                 developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js)
-#   2. android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
+# have the firmware flashed from the phone app, so i want the apk to have the latest firmware hex before it is built";
+# then "1 firmware, 2 testing and apk, 3 desktop + webapp"). A stage's jobs run side by side on their own runners:
+#   1. firmware - the developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js)
+#   2. gate     - a soft key from the same sources must pass the kit's 00-sanity + 01-protocol
+#      android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
 #                 debug keystore until the OnlyKey signs releases through Edge
 #   3. webapp   - the release web app with the hex (docs/firmware) and the APK's manifest (docs/android), and the
-#                 Worker bundled - the Downloads page then offers both
+#                 Worker bundled - the Downloads page then offers both; the desktop app joins this stage (phase 2)
 #   4. publish  - only with publish=true: a GitHub prerelease (APK + hex) and the built site committed to the
 #                 cloudflare branch; deployed by `wrangler deploy` when the repo has a CLOUDFLARE_API_TOKEN secret
+# Stage 3 and publish need the gate: nothing is published from sources that fail the kit.
 #
 # NO BUILDS ON MAIN (Brad: "this will keep our main from having builds"): every build goes to the release and the
 # cloudflare branch. Cloudflare's own builds are disabled - nothing builds the site but this workflow.
@@ -36,6 +38,8 @@ concurrency: release
 
 permissions:
   contents: write
+  # the gate cancels the run when it fails (gh run cancel)
+  actions: write
 
 env:
   NODE_VERSION: 24
@@ -44,7 +48,7 @@ env:
 jobs:
   firmware:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     outputs:
       emulator: ${{ steps.plan.outputs.emulator }}
       version: ${{ steps.plan.outputs.version }}
@@ -81,7 +85,7 @@ jobs:
         with:
           emulator_ref: ${{ steps.plan.outputs.emulator }}
 
-      # the test gate below; build-hardkey.sh also reads Intel HEX with its lib/flash.js
+      # build-hardkey.sh reads Intel HEX with its lib/flash.js (no packages needed for that)
       - name: Checkout the test kit
         uses: actions/checkout@v4
         with:
@@ -92,9 +96,47 @@ jobs:
       - name: The record is the build of the recorded sources
         run: node ok-edge/tools/firmware.js check
 
-      # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol", then "00-sanity too"; the pattern is onlykey-firmware-builds'
-      # latest.yml): the soft key is built from the SAME sources as the hex - the v3.1.0 recipe, its fixes, the hex's
-      # plugins, DEBUG on as on the hex - and the kit's 00-sanity and 01-protocol must pass before a single image is made.
+      - name: Build the toolchain image
+        run: docker build --quiet -t onlykey/onlykey-firmware-toolchain arduino-1.6.5-r5-teensy_127
+
+      - name: Build the hex
+        run: node ok-edge/tools/firmware.js ci-build --out out --src "$GITHUB_WORKSPACE" --kit onlykey-testing
+
+      - name: Upload the firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/firmware/
+          if-no-files-found: error
+
+  # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol", then "00-sanity too"; the pattern is
+  # onlykey-firmware-builds' latest.yml): a soft key built from the SAME sources as the hex - the v3.1.0 recipe, its
+  # fixes, the hex's plugins, DEBUG on as on the hex - must pass the kit's 00-sanity and 01-protocol. It runs beside the
+  # APK build (stage 2), and stage 3 and publish need it: a hex whose sources fail the kit is built, never published.
+  gate:
+    needs: firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout ok-edge
+        uses: actions/checkout@v4
+        with:
+          path: ok-edge
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Firmware sources
+        uses: ./ok-edge/.github/actions/firmware-sources
+        with:
+          emulator_ref: ${{ needs.firmware.outputs.emulator }}
+
+      - name: Checkout the test kit
+        uses: actions/checkout@v4
+        with:
+          repository: bm-ok/onlykey-testing
+          path: onlykey-testing
 
       # The emulator maps the key's flash at its real, low addresses; Linux's default vm.mmap_min_addr (65536)
       # forbids that, crypto then segfaults and most of 01-protocol SKIPS while the run still exits 0
@@ -154,18 +196,14 @@ jobs:
             onlykey-testing/runs/
           if-no-files-found: warn
 
-      - name: Build the toolchain image
-        run: docker build --quiet -t onlykey/onlykey-firmware-toolchain arduino-1.6.5-r5-teensy_127
-
-      - name: Build the hex
-        run: node ok-edge/tools/firmware.js ci-build --out out --src "$GITHUB_WORKSPACE" --kit onlykey-testing
-
-      - name: Upload the firmware
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware
-          path: out/firmware/
-          if-no-files-found: error
+      # A FAILED GATE STOPS STAGE 2 (Brad, 2026-10-27: "the gate stops matrix 2 - the final ending is pushing, so matrix 2
+      # needs to pass"): needs: already keeps stage 3 and publish from starting, but a failed job does not stop the job
+      # beside it - so the run is cancelled, and the APK build ends with it. Not under act (no run to cancel).
+      - name: Stop the run - the gate failed
+        if: failure() && !env.ACT
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   android:
     needs: firmware
@@ -269,7 +307,7 @@ jobs:
           if-no-files-found: error
 
   webapp:
-    needs: [firmware, android]
+    needs: [firmware, gate, android]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -328,7 +366,7 @@ jobs:
 
   publish:
     if: inputs.publish
-    needs: [firmware, android, webapp]
+    needs: [firmware, gate, android, webapp]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
