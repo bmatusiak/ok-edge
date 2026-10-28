@@ -9,14 +9,23 @@
 # have the firmware flashed from the phone app, so i want the apk to have the latest firmware hex before it is built";
 # then "1 firmware, 2 testing and apk, 3 desktop + webapp"; then "the test should be its own run, start after firmware
 # build and gate the publish step, so firmware, apk, webapp are built and ready while the test is running"):
+# Two lines from the start of the run; when both are good, the build line completes with publish (Brad, 2026-10-28:
+# "at the end the 2 lines are good, then the build line can complete the publish"):
+#
+#   test line:   gate ----------------------------------------------------.
+#                                                                          | both good
+#   build line:  firmware (build, check the hex) -> android -> webapp -> publish
+#
+#   either line fails -> the run is cancelled: the other line stops, publish never runs
+#
 #   1. firmware - the developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js),
 #                 CHECKED before any app takes it in (Brad: "not limit us to checking the hex after its build before
 #                 it's included in the apps"): the record is the build of the sources, the code ends below the plugin
 #                 flash (build-hardkey.sh's size guard), the hex carries its build stamp - and the firmware size check,
 #                 once its limits are set, joins them here. A hex that fails a check is never uploaded.
-#   then, side by side on their own runners:
-#      gate     - a soft key from the same sources must pass the kit's 00-sanity + 01-protocol; the long test, so it
-#                 holds back only publish
+#      gate     - THE TEST LINE, from the start of the run on a runner of its own: a soft key from the same sources
+#                 must pass the kit's 00-sanity + 01-protocol; the long test, so it holds back only publish
+#   then, on the build line:
 #      android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
 #                 debug keystore until the OnlyKey signs releases through Edge
 #        webapp - after android: the release web app with the hex (docs/firmware) and the APK's manifest
@@ -128,12 +137,13 @@ jobs:
 
   # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol", then "00-sanity too"; the pattern is
   # onlykey-firmware-builds' latest.yml): a soft key built from the SAME sources as the hex - the v3.1.0 recipe, its
-  # fixes, the hex's plugins, DEBUG on as on the hex - must pass the kit's 00-sanity and 01-protocol. It runs beside the
-  # builds, from the moment the hex exists, and only publish waits for it (Brad, 2026-10-28: "start after firmware build
-  # and gate the publish step"); a failure cancels the run, the builds with it, and nothing is published. The quick
-  # checks of the hex itself are not here: they end the firmware job, before the apps take the hex in.
+  # fixes, the hex's plugins, DEBUG on as on the hex - must pass the kit's 00-sanity and 01-protocol. THE TEST LINE: it
+  # needs nothing from the build line (it builds its own soft key from the record's sources), so it starts with the run
+  # and only publish waits for it (Brad, 2026-10-28: "we can start the test same time as firmware build, if we do the
+  # firmware check after ... 2 lines, test line and build line; if any one of the lines fail, then stop the other"). A
+  # failure cancels the run, the build line with it. The quick checks of the hex itself end the firmware job, on the
+  # build line, before the apps take the hex in.
   gate:
-    needs: firmware
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -146,10 +156,19 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # from the record itself, as the firmware job reads it - so the test line starts with the run, not after the hex
+      - name: The recorded emulator commit
+        id: rec
+        working-directory: ok-edge
+        run: |
+          emulator=$(node -p "require('./firmware/manifest.json').emulatorCommit || ''")
+          [ -n "$emulator" ] || { echo "::error::firmware/manifest.json has no emulatorCommit"; exit 1; }
+          echo "emulator=$emulator" >> "$GITHUB_OUTPUT"
+
       - name: Firmware sources
         uses: ./ok-edge/.github/actions/firmware-sources
         with:
-          emulator_ref: ${{ needs.firmware.outputs.emulator }}
+          emulator_ref: ${{ steps.rec.outputs.emulator }}
 
       - name: Checkout the test kit
         uses: actions/checkout@v4
