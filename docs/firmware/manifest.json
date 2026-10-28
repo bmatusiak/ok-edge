@@ -27,7 +27,7 @@
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
   "built": "2026-10-28",
-  "builtBy": "release workflow run 40747032913",
+  "builtBy": "release workflow run 40751628444",
   "builds": [
     {
       "flavor": "prod",
