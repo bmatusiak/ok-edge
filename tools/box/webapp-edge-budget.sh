@@ -20,7 +20,9 @@ say() { echo "== $(date +%T) $*"; }
 say "reload"
 w=$(DISPLAY=:10 xdotool search --name "ok-edge - Chromium" | head -1)
 DISPLAY=:10 xdotool windowactivate --sync "$w" key ctrl+shift+r
-waitfor '\[Continue\]\|\[Decrypt Bucket\]' || exit 1
+waitfor '\[Continue\]\|\[Decrypt Bucket\]\|Locked' || exit 1
+# the testnet soft key's PIN (1234561), on its buttons, when it has locked itself
+echo "$L" | grep -q 'Locked' && { say "locked - the PIN on the key's buttons"; press 1 2 3 4 5 6 1; waitfor '\[Continue\]\|\[Decrypt Bucket\]' || exit 1; }
 echo "$L" | grep -q '\[Continue\]' && { C "Continue" >/dev/null; waitfor '\[Decrypt Bucket\]' || exit 1; }
 say "open the bucket"
 C "Decrypt Bucket" >/dev/null
