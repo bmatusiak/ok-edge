@@ -31,6 +31,8 @@ type StoredMirror = {
   messages: Record<string, string>;
   lastSeen: {seq: number; head: string} | null;
   lastSync: number | null;
+  /* where this copy starts: the key's checkpoint a new device anchored on (no history before it is held) */
+  anchor?: {seq: number; head: string};
   setAside?: {link: string; head: string; at: number}[];
   seen?: Record<string, number>;
   reasons?: Record<string, {computer: string; text: string; at: number}>;
@@ -78,6 +80,13 @@ export type Mirror = {
   messages: Record<number, string>;
   lastSeen: {seq: number; head: Uint8Array} | null;
   lastSync: number | null;
+  /*
+   * WHERE THIS COPY STARTS (Brad, 2026-10-28: "long Edge history - there is where checkpoint should be fixing the
+   * issue"). A new device - the web app in a fresh browser - does not read the key's history: it anchors its copy at
+   * the key's checkpoint (its head, signed with both halves, verified here) and holds only the links after it. Both
+   * checks start from it (lib copy.anchor: proven by welding to the head the key signs, never trusted alone).
+   */
+  anchor?: {seq: number; head: Uint8Array} | null;
   /*
    * Records that were never links of this chain, moved out of `links` (kept, not
    * deleted, so what happened stays readable). A late PICKUP reply, read one
@@ -245,6 +254,7 @@ async function readMirror(deviceId: Uint8Array): Promise<Mirror> {
     messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [Number(k), v])),
     lastSeen: s.lastSeen ? {seq: s.lastSeen.seq, head: fromHex(s.lastSeen.head)} : null,
     lastSync: s.lastSync,
+    anchor: s.anchor ? {seq: s.anchor.seq, head: fromHex(s.anchor.head)} : null,
     setAside: (s.setAside ?? []).map(x => ({link: fromHex(x.link), head: fromHex(x.head), at: x.at})),
     seen: Object.fromEntries(Object.entries(s.seen ?? {}).map(([k, v]) => [Number(k), v])),
     reasons: Object.fromEntries(Object.entries(s.reasons ?? {}).map(([k, v]) => [Number(k), v])),
@@ -266,6 +276,7 @@ export async function saveMirror(m: Mirror): Promise<void> {
     messages: Object.fromEntries(Object.entries(m.messages).map(([k, v]) => [String(k), v])),
     lastSeen: m.lastSeen ? {seq: m.lastSeen.seq, head: toHex(m.lastSeen.head)} : null,
     lastSync: m.lastSync,
+    ...(m.anchor ? {anchor: {seq: m.anchor.seq, head: toHex(m.anchor.head)}} : {}),
     seen: Object.fromEntries(Object.entries(m.seen).map(([k, v]) => [String(k), v])),
     ...(Object.keys(m.reasons).length ? {reasons: Object.fromEntries(Object.entries(m.reasons).map(([k, v]) => [String(k), v]))} : {}),
     ...(m.refusals.length ? {refusals: m.refusals} : {}),
@@ -522,7 +533,28 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
   const head = await source.head();
   lap('head');
   setAsideStrays(mirror, head.seq, now);
-  const have = mirror.links.length ? seqOf(mirror.links[mirror.links.length - 1]) : -1;
+  /*
+   * A NEW COPY STARTS AT THE KEY'S CHECKPOINT: nothing held yet and nothing verified - read one checkpoint, check
+   * both halves against the key's own public keys, and hold only what comes after it. A key that will not give a
+   * checkpoint that verifies for its current head leaves the copy as it was (the full read below, as before).
+   */
+  if (!mirror.links.length && !mirror.lastSeen && !mirror.anchor && head.seq >= 0 && source.copyKey) {
+    const k = await source.copyKey({checkpoint: true}).catch(() => null);
+    const cp = k?.checkpoint;
+    let good = false;
+    try {
+      good = !!(k?.publicKey && cp && cp.seq === head.seq && toHex(cp.head) === toHex(head.head) &&
+        chain.verifyCheckpoint({deviceId: chain.deviceIdOf(k.publicKey), seq: cp.seq, head: cp.head}, cp.signature, k.publicKey, cp.signaturePq ?? null, k.publicKeyPq ?? null));
+    } catch { good = false; }
+    if (good && cp) {
+      mirror.anchor = {seq: cp.seq, head: cp.head};
+      console.log(`[edge] copy ${toHex(source.deviceId).slice(0, 8)}: a new copy - anchored at the key's checkpoint #${cp.seq}; its history before it is not read`);
+    } else {
+      console.log(`[edge] copy ${toHex(source.deviceId).slice(0, 8)}: a new copy, but no checkpoint verified for #${head.seq} - reading the key's ring`);
+    }
+    lap('anchor');
+  }
+  const have = mirror.links.length ? seqOf(mirror.links[mirror.links.length - 1]) : mirror.anchor ? mirror.anchor.seq : -1;
   /*
    * From the next link this copy lacks - but never before the oldest link the
    * key still holds: anything older is gone from the key, and asking for it
@@ -728,7 +760,9 @@ export async function liveView(source: EdgeSource, mirror: Mirror, known?: {seq:
   const head = known ?? (await source.head());
   /* the key's public key and checkpoint: the caller's, when it has just read them (syncNow) - not a second read */
   const key = knownKey !== undefined ? knownKey : source.copyKey ? await source.copyKey() : null;
-  const ring = async () => (head.seq >= 0 ? source.read(head.ringFrom, head.seq - head.ringFrom + 1) : []);
+  /* an anchored copy holds nothing before its anchor, and needs nothing before it from the key */
+  const ringStart = (h: {ringFrom: number}) => Math.max(h.ringFrom, mirror.anchor ? mirror.anchor.seq + 1 : 0);
+  const ring = async () => (head.seq >= ringStart(head) ? source.read(ringStart(head), head.seq - ringStart(head) + 1) : []);
   /* the receipt pairing on its own turn of the JS thread, not stacked on the check (rows, A13: 215 ms) */
   await new Promise<void>(r => setTimeout(r, 0));
   receiptsBySeq(mirror);
@@ -754,7 +788,7 @@ export async function liveView(source: EdgeSource, mirror: Mirror, known?: {seq:
   if (view.verdict.kind !== 'unsigned' || !source.copyKey) return view;
   const head2 = await source.head();
   const key2 = await source.copyKey().catch(() => null);
-  const ring2 = head2.seq >= 0 ? await source.read(head2.ringFrom, head2.seq - head2.ringFrom + 1) : [];
+  const ring2 = head2.seq >= ringStart(head2) ? await source.read(ringStart(head2), head2.seq - ringStart(head2) + 1) : [];
   return evaluate(mirror, head2, ring2, key2);
 }
 
@@ -1011,11 +1045,15 @@ function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ring
       return viewOf({kind: 'tampered', seq: cp.seq, reason: 'bad-checkpoint'}, new Set());
     }
   }
-  const sealed = was ? null : sealedStart(mirror, head, key);
+  const sealed = was || mirror.anchor ? null : sealedStart(mirror, head, key);
+  /* an anchored copy is checked from its anchor (lib copy.assess from: the welds to the signed head prove it) */
+  const anchor = mirror.anchor ?? null;
   const assessWith = (seal: {seq: number; head: Uint8Array} | null) => copy.assess(
     {links: mirror.links, openings: key?.openings ?? {}},
     {publicKey: key?.publicKey, publicKeyPq: key?.publicKeyPq ?? null, deviceId: mirror.deviceId, head: {seq: head.seq, head: head.head}, held, checkpoint: cp},
-    {ringFrom: head.ringFrom, lastSeen: mirror.lastSeen ?? undefined, ...(seal ? {sealed: seal} : {})},
+    anchor
+      ? {from: {seq: anchor.seq, head: anchor.head}, ringFrom: head.ringFrom}
+      : {ringFrom: head.ringFrom, lastSeen: mirror.lastSeen ?? undefined, ...(seal ? {sealed: seal} : {})},
   );
   let a = sealed ? assessWith(sealed) : null;
   if (a && sealed && !a.chain.failure && !a.open.length) {

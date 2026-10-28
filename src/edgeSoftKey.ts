@@ -678,7 +678,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const a = await chainState.validity(this);
     if (!a.ok || !a.head) return {ok: false, reason: a.view.verdict.kind};
     const mirror = await loadMirror(this.deviceId);
-    const r = await this.edge.grants.check({links: mirror.links, openings: await this.openings()}).catch((e: unknown) => ({ok: false, reason: String((e as Error)?.message ?? e)}));
+    /* an anchored copy (a new device): the strict check starts from its anchor too (lib copy.anchor) */
+    const r = await this.edge.grants.check({links: mirror.links, openings: await this.openings(), ...(mirror.anchor ? {anchor: mirror.anchor} : {})}).catch((e: unknown) => ({ok: false, reason: String((e as Error)?.message ?? e)}));
     if (!r?.ok) return {ok: false, reason: `the strict check: ${r?.reason ?? 'not ok'}${r?.seq !== undefined ? ` at #${r.seq}` : ''}`};
     if (toHex(r.head) !== toHex(a.head.head)) return {ok: false, reason: 'the key moved during the check - try again'};
     return {ok: true, head: r.head};
