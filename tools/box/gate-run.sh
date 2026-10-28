@@ -24,6 +24,9 @@ echo "== build (plain): v3.1.0, edge,ctap_bridge,derive_secret, DEBUG"
 OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
 echo "build exit $? (sanitizer symbols: $(nm -u build/Release/onlykey_emulator.node | grep -c -E '__(a|t)san_'), must be 0)"
 cd "$K" || exit 1
+# the kit finds its emulator beside its OWN folder (lib/paths.js), which is not <emulator dir> when the kit is a
+# symlink - name it, or the kit tests whatever emulator build sits beside the real kit
+export OKEMU_ROOT=$E
 pass=0
 for i in $(seq 1 "$RUNS"); do
   echo "== run $i: 00-sanity 01-protocol"
