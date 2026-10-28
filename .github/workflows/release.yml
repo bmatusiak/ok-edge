@@ -7,7 +7,7 @@
 #
 # THE ORDER IS BRAD'S ("the first thing the workflow needs to build is the firmware, then the apk ... one day i want to
 # have the firmware flashed from the phone app, so i want the apk to have the latest firmware hex before it is built"):
-#   1. firmware - the test gate (a soft key from the same sources must pass the kit's 01-protocol), then the
+#   1. firmware - the test gate (a soft key from the same sources must pass the kit's 00-sanity + 01-protocol), then the
 #                 developer-key hex, from the sources main's firmware/manifest.json records (tools/firmware.js)
 #   2. android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
 #                 debug keystore until the OnlyKey signs releases through Edge
@@ -92,9 +92,9 @@ jobs:
       - name: The record is the build of the recorded sources
         run: node ok-edge/tools/firmware.js check
 
-      # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol"; the pattern is onlykey-firmware-builds'
+      # THE TEST GATE (Brad, 2026-10-27: "test gate with 01 protocol", then "00-sanity too"; the pattern is onlykey-firmware-builds'
       # latest.yml): the soft key is built from the SAME sources as the hex - the v3.1.0 recipe, its fixes, the hex's
-      # plugins, DEBUG on as on the hex - and the kit's 01-protocol must pass before a single image is made.
+      # plugins, DEBUG on as on the hex - and the kit's 00-sanity and 01-protocol must pass before a single image is made.
 
       # The emulator maps the key's flash at its real, low addresses; Linux's default vm.mmap_min_addr (65536)
       # forbids that, crypto then segfaults and most of 01-protocol SKIPS while the run still exits 0
@@ -125,16 +125,16 @@ jobs:
         working-directory: onlykey-testing
         run: npm install --no-audit --no-fund
 
-      - name: Test gate - 01-protocol
+      - name: Test gate - 00-sanity, 01-protocol
         working-directory: onlykey-testing
         env:
           OKT_LIB_DIR: ${{ github.workspace }}/node-onlykey-lib
         run: |
           node bin/okt.js caps || true
           set -o pipefail
-          node bin/okt.js run 01-protocol 2>&1 | tee ../okt-gate.log
+          node bin/okt.js run 00-sanity 01-protocol 2>&1 | tee ../okt-gate.log
           END=$(grep -a 'OKT-END' ../okt-gate.log | tail -1)
-          { echo '### Test gate (01-protocol)'; echo '```'; echo "${END:-no OKT-END line}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### Test gate (00-sanity, 01-protocol)'; echo '```'; echo "${END:-no OKT-END line}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           # NO FALSE GREEN: exit 0 says only that nothing FAILED. Crypto must have been available, and the skips must
           # stay near the known ones (DEBUG-build webcrypt-policy skips)
           grep -aqE 'yes crypto$' ../okt-gate.log \
