@@ -46,14 +46,22 @@ build() {   # build <name>: released | p0014
 
 prove() {   # prove <name>: the test on that build, as a person runs it
   local E=$W/$1/node-onlykey-emulator/emulator S=$W/$1-storage log=$W/test-$1.log daemon=
+  # the firmware's CPU_RESTART() exits the emulator process (config mode is entered through one): a loop respawns it,
+  # as pm2 does for the gadget soft key, so the key comes back the way a hard key does after its restart
   start() {
-    (cd "$E" && exec node bin/daemon.js --storage "$S" --quiet >> "$W/daemon-$1.log" 2>&1) &
+    (cd "$E" && while :; do node bin/daemon.js --storage "$S" --quiet >> "$W/daemon-$1.log" 2>&1; sleep 0.5; done) &
     daemon=$!
-    for _ in $(seq 60); do [ "$(onlykeys)" = 1 ] && break; sleep 0.5; done
-    [ "$(onlykeys)" = 1 ] || { say "the soft key did not appear on USB"; kill "$daemon"; exit 1; }
-    sleep 2
+    usb_back
   }
-  stop() { kill "$daemon" 2>/dev/null; wait "$daemon" 2>/dev/null; for _ in $(seq 40); do [ "$(onlykeys)" = 0 ] && break; sleep 0.25; done; }
+  usb_back() {
+    for _ in $(seq 60); do [ "$(onlykeys)" = 1 ] && break; sleep 0.5; done
+    [ "$(onlykeys)" = 1 ] || { say "the soft key did not appear on USB"; stop; exit 1; }
+    sleep 3
+  }
+  stop() {
+    pkill -P "$daemon" 2>/dev/null; kill "$daemon" 2>/dev/null; wait "$daemon" 2>/dev/null
+    for _ in $(seq 40); do [ "$(onlykeys)" = 0 ] && break; sleep 0.25; done
+  }
   press() { (cd "$E" && timeout 30 node bin/press.js "$@" >> "$W/press-$1.log" 2>&1); sleep 1; }
 
   say "$1: a key with its PIN set (the kit's 'initialized' state)"
@@ -64,7 +72,11 @@ prove() {   # prove <name>: the test on that build, as a person runs it
 
   start
   say "$1: unlock, then config mode (hold 6, the PIN again), then the three keys - the test's step 1"
-  press $PIN; press 6:hold; press $PIN
+  # as the kit does it (lib/device enterConfigMode): unlocked and settled, a long press of 6 restarts the key locked;
+  # the PIN again then opens it in config mode
+  press $PIN; sleep 3; press 6:hold
+  sleep 2; usb_back
+  press $PIN; sleep 2
   for k in "ECC1 c d 2a2cb91da5fb77b12a99c0eb872f4cdf4566b25172c1163c7da518730a6d0777" \
            "ECC2 c d 77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a" \
            "ECC3 c d 6a2cb91da5fb77b12a99c0eb872f4cdf4566b25172c1163c7da518730a6d0770"; do
