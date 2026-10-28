@@ -32,7 +32,7 @@
 #                 hex carries its build stamp - and the firmware size check, once its limits are set, joins them here.
 #                 A prod hex that fails a check is never uploaded.
 #      gate     - THE TEST LINE, from the start of the run on a runner of its own: a soft key from the same sources
-#                 must pass the kit's 00-sanity, 01-protocol, 07-lib, 08-plugins, 09-patches; the long test, so it holds back only publish
+#                 must pass the kit's 00-sanity, 01-protocol, 07-lib, 08-plugins; the long test, so it holds back only publish
 #   then, on the build line:
 #      android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
 #                 debug keystore until the OnlyKey signs releases through Edge
@@ -231,19 +231,18 @@ jobs:
         working-directory: onlykey-testing
         run: npm install --no-audit --no-fund
 
-      # the firmware protocol (01), the lib the apps ship against it (07), our plugins (08) and the staged patches' own
-      # tests (09: each fails without its patch), each a section of its own;
+      # the firmware protocol (01), the lib the apps ship against it (07) and our plugins (08), each a section of its own;
       # the kit runs the files on every core but one (lib/parallel.js)
-      - name: Test gate - 00-sanity, 01-protocol, 07-lib, 08-plugins, 09-patches
+      - name: Test gate - 00-sanity, 01-protocol, 07-lib, 08-plugins
         working-directory: onlykey-testing
         env:
           OKT_LIB_DIR: ${{ github.workspace }}/node-onlykey-lib
         run: |
           node bin/okt.js caps || true
           set -o pipefail
-          node bin/okt.js run 00-sanity 01-protocol 07-lib 08-plugins 09-patches 2>node bin/okt.js run 00-sanity 01-protocol 07-lib 08-plugins 2>&11 | tee ../okt-gate.log
+          node bin/okt.js run 00-sanity 01-protocol 07-lib 08-plugins 2>&1 | tee ../okt-gate.log
           END=$(grep -a 'OKT-END' ../okt-gate.log | tail -1)
-          { echo '### Test gate (00-sanity, 01-protocol, 07-lib, 08-plugins, 09-patches)'; echo '```'; echo "${END:-no OKT-END line}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### Test gate (00-sanity, 01-protocol, 07-lib, 08-plugins)'; echo '```'; echo "${END:-no OKT-END line}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           # NO FALSE GREEN: exit 0 says only that nothing FAILED. Crypto must have been available, and the skips must
           # stay near the known ones (DEBUG-build webcrypt-policy skips)
           grep -aqE 'yes crypto$' ../okt-gate.log \

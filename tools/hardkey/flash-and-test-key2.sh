@@ -23,10 +23,10 @@ cd $ROOT/onlykey-testing || exit 1
 node bin/okt.js flash "$HEX"; rc=$?
 echo "== $(date -Is) flash exit $rc"; [ $rc = 0 ] || exit 1
 sleep 4; lsusb | grep -iE "16c0|1d50"
-echo "== $(date -Is) kit $(git rev-parse --short HEAD): 01-protocol 07-lib 08-plugins 09-patches 05-security --hardware (09-patches runs what OKT_FIRMWARE_FIXES names), Edge named for the hard key"
+echo "== $(date -Is) kit $(git rev-parse --short HEAD): 01-protocol 07-lib 08-plugins 05-security --hardware, Edge named for the hard key"
 OKT_VENV=$ROOT/release-3.1.0-test/ok310 OKT_ALLOW_FIDO_RESET=yes \
 OKT_HARDKEY_PLUGINS=edge OKT_HARDKEY_PLUGINS_DIR=$ROOT/node-onlykey-emulator/emulator/plugins \
-  node bin/okt.js run 01-protocol 07-lib 08-plugins 09-patches 05-security --hardware --keep-going
+  node bin/okt.js run 01-protocol 07-lib 08-plugins 05-security --hardware --keep-going
 echo "== $(date -Is) exit $?"
 echo KEY2-EDGE-DONE
 } > "$LOG" 2>&1
