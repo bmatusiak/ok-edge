@@ -23,8 +23,8 @@
     "emulator/plugins/ctap_bridge": "35ae2f350c51",
     "emulator/plugins/derive_secret": "fa685adaa9e5"
   },
-  "sourcesFrom": "node-onlykey-emulator 799e41c",
-  "emulatorCommit": "799e41cab62479eff3d07b90d7e52bb157110e7e",
+  "sourcesFrom": "node-onlykey-emulator 18ded20",
+  "emulatorCommit": "18ded20810bcca4ada1996d7975c452b7cc0a7c4",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
