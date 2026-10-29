@@ -26,6 +26,7 @@ import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {RULES} from './bucketRules';
 import {phoneSyncTraded} from './sync';
 import {shell} from './platform';
+import {attachAgents, detachAgents} from './mcpAgents';
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 declare const location: {origin: string; host: string} | undefined;
@@ -134,6 +135,7 @@ export function leaveServerRoom(): void {
   room = null;
   joinedFor = null;
   if (r) r.close();
+  detachAgents();
   set({status: 'off', why: null, you: null, peers: []});
 }
 
@@ -172,6 +174,8 @@ export async function joinServerRoom(): Promise<void> {
     console.log(`[room] joined ${new URL(url).host} as ${device.name}: ${r.peers().length} other device(s) online`);
     /* the room was joined with the key's proof, so it may trade while the bucket it joined for is open */
     r.serve((from: string, message: any) => handleTrade(message, from, {allowed: () => tradeBucket()?.identity === me.id}));
+    /* the agents that ask this identity (the server's /mcp): their plans, live, and the owner's answers (mcpAgents.ts) */
+    attachAgents(r, Array.from(me.identityPublicKey as Uint8Array, (b: number) => b.toString(16).padStart(2, '0')).join(''));
     r.on('peer', (p: any) => {
       set({peers: r.peers()});
       console.log(`[room] ${p.up ? `${p.up.name} (${p.up.kind}) came online` : `${p.down} left`}`);

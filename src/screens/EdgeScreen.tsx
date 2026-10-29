@@ -30,6 +30,7 @@ import {ReviewSheet} from '../ui/ReviewSheet';
 import {useYourDevices, type DeviceLink, type YourDevice} from '../hooks/useYourDevices';
 import {bannerLine, onDevicesChanged, waitingCount} from '../edgeDevices';
 import {EdgeAgentsCard} from '../ui/EdgeAgentsCard';
+import {AgentsCard} from '../ui/AgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
 import type {EdgeRow, EdgeView, Verdict} from '../edgeStore';
 import type {EdgeBudget, EdgeCopyCheck, EdgeRequest} from '../edgeFake';
@@ -917,6 +918,9 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
       </View>
     )});
   }
+  /* the AI agents asking this identity on the server's /mcp, each with its plan inline (src/ui/AgentsCard.tsx) */
+  items.push({key: 's-agents', kind: 'section', title: 'Agents'});
+  items.push({key: 'agents', kind: 'node', render: () => <AgentsCard />});
   items.push({key: 's-budgets', kind: 'section', title: 'Budgets'});
   items.push({key: 'budgets', kind: 'node', render: () => (
     <>
