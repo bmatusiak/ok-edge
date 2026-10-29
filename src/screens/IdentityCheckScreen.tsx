@@ -25,6 +25,7 @@ import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 import {Linking} from 'react-native';
+import * as bucketLib from 'node-onlykey-lib/bucket';
 
 /*
  * THE KEY NAMES ANOTHER SITE (Brad, 2026-10-29: "if i go to apps.crp.to, it reads my key and sees i use a private mcp, it
@@ -85,16 +86,19 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         /*
          * THE LOGIN PLAN (lib identity.login; PROPOSAL-login-plan.md; Brad, 2026-10-29: "1 press = logs into our app";
          * "this gives me a log in log in the edge blockchain"): the bucket's derive, the identity proof on a first login
-         * here, this device's bucket key certificate while none is kept - in ONE Edge budget, one press, each a link with
-         * its receipt, named for the app and the site. The bucket key itself is the key's shared secret, which no budget
-         * pays: on a first login here it still asks its code. A key without the login budget logs in as before.
+         * here, this device's bucket key (a derive under the key's site) and its certificate while none is kept - in ONE
+         * Edge budget, one press, each a link with its receipt, named for the app and the site. A key without the login
+         * budget logs in as before.
          */
         const keyKept = await proofKept(read.identity);
         const signs = (read.bucket === 'none' ? 1 : 0) + (keyKept ? 0 : 1);
+        /* the identity plugin's read, held (no key request): the bucket key's label names its public key */
+        const held = await (identity as any).load();
+        const derives = [bucketLabelOf(read.identity), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
         await (identity as any).login(async () => {
           await open();
           if (!keyKept) await proofMaterial();
-        }, {reason: loginReason(), derives: [bucketLabelOf(read.identity)], signs, onPress: () => setOpen({kind: 'press'})});
+        }, {reason: loginReason(), derives, signs, onPress: () => setOpen({kind: 'press'})});
       }
       onContinue();
     } catch (e: unknown) {

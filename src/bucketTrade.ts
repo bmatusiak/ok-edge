@@ -33,7 +33,13 @@ const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 type Me = {id: string; identityPublicKey: Uint8Array; bucketKey: {secretKey: Uint8Array; publicKey: Uint8Array}; certificate: Uint8Array};
 const ALIAS = 'bucketkey';
-const KEY = (id: string) => `okrn.bucketkey.${currentNet() === 'test' ? 'test.' : ''}${id}`;
+/*
+ * THE KEPT COPY NAMES ITS VERSION (lib bucket-identity BUCKET_KEY_VERSION): v2 is derive_secret's derive under the site the
+ * key names. A v1 copy (the ECDH, before 2026-10-29) is not read - the bucket key is made again at the next login, and the
+ * old copy dropped then; the bucket itself is another thing (bucketStore.ts) and stays as it is.
+ */
+const KEY = (id: string) => `okrn.bucketkey.v${bucketLib.bucketIdentity.BUCKET_KEY_VERSION}.${currentNet() === 'test' ? 'test.' : ''}${id}`;
+const OLD_KEY = (id: string) => `okrn.bucketkey.${currentNet() === 'test' ? 'test.' : ''}${id}`;
 let me: Me | null = null;
 
 /* is this device's bucket key for the identity kept already? (the login plan: its certificate is a signature the budget pays) */
@@ -57,16 +63,20 @@ async function ensureMe(): Promise<void> {
   /* the identity plugin's read, held (lib plugins/identity): the same identity the bucket opened for */
   const identity = await (await getOnlyKey(activeBackend())).identity.load();
   if (identity.id !== open.identity) { me = null; return; }
-  console.log(`[bucket] ${open.identity.slice(0, 12)}: making this ${DEVICE_WORD}'s bucket key, once - the key asks for two presses`);
-  /* a hard key may wait for a 3-button code: this host shows it (hostChallenge.ts), for each of the two asks */
-  let ask = challengeOpts(`Making this ${DEVICE_WORD}'s bucket key (1 of 2)`);
-  let bucketKey;
-  try { bucketKey = await bucketLib.bucketIdentity.deriveBucketKey(ok, identity.publicKey, ask.opts); } finally { ask.done(); }
-  ask = challengeOpts(`Certifying this ${DEVICE_WORD}'s bucket key (2 of 2)`);
+  console.log(`[bucket] ${open.identity.slice(0, 12)}: making this ${DEVICE_WORD}'s bucket key, once - under ${identity.site ?? 'no site'}`);
+  /*
+   * THE KEY'S OWN SITE, NO OTHER (Brad, 2026-10-29: "we derive by rpid ... no fallback, other domains should not derive the
+   * same key"): the derive is touchless, bound to the site the key names (ctap_bridge), the same on every device of the
+   * identity; a key that names none has no bucket key here (the lib says so: NO_KEY_SITE).
+   */
+  const bucketKey = await bucketLib.bucketIdentity.deriveBucketKeyAt(ok, identity.publicKey, identity.site);
+  /* the certificate is a signature: a hard key may wait for a 3-button code, which this host shows (hostChallenge.ts) */
+  const ask = challengeOpts(`Certifying this ${DEVICE_WORD}'s bucket key`);
   let certificate;
   try { certificate = await bucketLib.bucketIdentity.certify(ok, identity.publicKey, bucketKey.publicKey, ask.opts); } finally { ask.done(); }
   const text = JSON.stringify({i: okbytes.toHex(identity.publicKey), s: okbytes.toHex(bucketKey.secretKey), p: okbytes.toHex(bucketKey.publicKey), c: okbytes.toHex(certificate)});
   await AsyncStorage.setItem(KEY(open.identity), await NativeSecrets.boxSeal(ALIAS, okbytes.toHex(new TextEncoder().encode(text))));
+  await AsyncStorage.removeItem(OLD_KEY(open.identity));
   me = {id: open.identity, identityPublicKey: identity.publicKey, bucketKey, certificate};
 }
 
@@ -78,7 +88,7 @@ const answer = bucketLib.trade.peerSide({
 });
 
 /**
- * This device's proof material for the open bucket's identity (made once through the key: two presses), or null when
+ * This device's proof material for the open bucket's identity (made once through the key: a derive and a signature), or null when
  * no bucket is open or the key is another identity's. Joining the identity's room on the user's server needs it first
  * (serverRoom.ts).
  */
