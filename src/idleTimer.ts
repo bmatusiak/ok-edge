@@ -64,7 +64,7 @@ async function expire(): Promise<void> {
   if (!running) return;
   if (Date.now() - lastActive < IDLE_MS) { arm(); return; }
   if (budgetsUntil > Date.now()) {
-    console.log(`[idle] 15 minutes with nothing done - an Edge budget is open: the check waits until it ends (${new Date(budgetsUntil).toLocaleTimeString()})`);
+    console.log(`[idle] ${Math.round(IDLE_MS / 60000)} minute(s) with nothing done - an Edge budget is open: the check waits until it ends (${new Date(budgetsUntil).toLocaleTimeString()})`);
     timer = setTimeout(() => { void expire(); }, budgetsUntil - Date.now() + 1000);
     return;
   }
@@ -76,12 +76,12 @@ async function expire(): Promise<void> {
     await (okcrypto as any).keySite({timeoutMs: 15000});
     answered = true;
   } catch (e) {
-    console.log(`[idle] 15 minutes with nothing done, and the key did not answer (${String((e as Error)?.message ?? e)}) - logging out`);
+    console.log(`[idle] ${Math.round(IDLE_MS / 60000)} minute(s) with nothing done, and the key did not answer (${String((e as Error)?.message ?? e)}) - logging out`);
   }
   checking = false;
   if (!running) return;
   if (!answered) { void logOut(); return; }
-  console.log('[idle] 15 minutes with nothing done - the key still answers: the session goes on');
+  console.log(`[idle] ${Math.round(IDLE_MS / 60000)} minute(s) with nothing done - the key still answers: the session goes on`);
   lastActive = Date.now();
   tell();
   arm();

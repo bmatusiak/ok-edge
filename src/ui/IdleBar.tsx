@@ -24,7 +24,7 @@ export function IdleBar() {
   if (!s.running) return null;
   const left = s.checking ? 1 : Math.max(0, Math.min(1, 1 - (now - s.lastActive) / IDLE_MS));
   return (
-    <View style={styles.track} pointerEvents="none" accessibilityLabel={s.checking ? 'checking the key' : `session: ${Math.ceil(left * 15)} of 15 minutes left`}>
+    <View style={styles.track} pointerEvents="none" accessibilityLabel={s.checking ? 'checking the key' : `session: ${Math.ceil((left * IDLE_MS) / 60000)} of ${Math.round(IDLE_MS / 60000)} minutes left`}>
       <View style={[styles.bar, {width: `${left * 100}%`, backgroundColor: s.checking ? theme.warn : theme.textDim}]} />
     </View>
   );
