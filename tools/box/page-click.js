@@ -19,16 +19,19 @@ const args = process.argv.slice(2);
 const FIND = (label) => `(() => {
   const seen = [], want = ${JSON.stringify(label)};
   const off = (el) => !!el.closest('[aria-disabled="true"], button:disabled');
+  /* the centre of a control INSIDE the window: one below the fold is scrolled into view first - a mouse event at
+   * coordinates off the screen hits nothing (2026-10-28: the request button at the foot of the open Edge Management) */
+  const at = (el) => { el.scrollIntoView({block: 'center', inline: 'center'}); const q = el.getBoundingClientRect(); return {x: q.left + q.width / 2, y: q.top + q.height / 2, disabled: off(el)}; };
   for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') continue;
     /* an icon button says what it is only in its aria-label (React Native's accessibilityLabel) */
     const aria = el.getAttribute('aria-label');
-    if (aria && want !== null && aria === want) return {x: r.left + r.width / 2, y: r.top + r.height / 2, disabled: off(el)};
+    if (aria && want !== null && aria === want) return at(el);
     if (aria) seen.push('[' + aria + ']');
     const t = (el.innerText || '').trim();
     if (!t || [...el.children].some((c) => (c.innerText || '').trim() === t)) continue;
-    if (want !== null && t === want) return {x: r.left + r.width / 2, y: r.top + r.height / 2, disabled: off(el)};
+    if (want !== null && t === want) return at(el);
     if (t.length <= 40 && !t.includes('\\n')) seen.push(t);
   }
   return {seen: [...new Set(seen)]};
