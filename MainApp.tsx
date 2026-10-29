@@ -1777,7 +1777,7 @@ function Shell() {
           }
         />
         {/* the session's time left: a thin line along the bottom (src/ui/IdleBar.tsx) */}
-        <IdleBar />
+        <IdleBar quiet={testing.enabled} />
       </SafeAreaView>
       </BtKeyboardProvider>
     </KeyBackendProvider>
