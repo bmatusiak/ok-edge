@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The web app's Edge budget, end to end, on the box: Chromium (webapp.sh site) on the gadget soft key (softkey-gadget.sh),
+# The web app's Edge budget, end to end, on the box: Chromium (webapp.sh site) on the gadget soft key (softkey-gadget.sh)
+# or on key 2 (KEY=hard),
 # driven as a person would - reload, the identity check, open the bucket (its code entered on the key's buttons), the
 # Edge tab, a test budget request, Approve, the press - then what the page says. Every step waits for what it needs on
 # screen (page-click.js --labels) and says what it saw when it does not come.
@@ -12,12 +13,20 @@
 #   STOP_AFTER=bucket ...   end once the bucket is open (the login's timeline: tools/box/timeline.js)
 #   CONSOLE=/tmp/pc.log ...   the page's own [edge] lines kept in that file across the reload (page-console.js reloads
 #                 over its own DevTools connection, so the subscription survives it; a reload from outside drops it)
+#   KEY=hard ...   key 2 (a hard key, test hex, kit PINs) on the box's USB instead: its buttons pressed through its
+#                 debug console (hardkey-press.js); stop the gadget soft key first, or Chrome sees two keys
 source ~/.nvm/nvm.sh >/dev/null 2>&1
 P=~/project/onlykey
 cd $P/ok-edge || exit 1
 C() { timeout 20 node tools/box/page-click.js "$@" 2>&1 | tail -1; }
 labels() { timeout 10 node tools/box/page-click.js --labels 2>&1 | tail -1; }
-press() { (cd $P/node-onlykey-emulator/emulator && timeout 30 node bin/press.js --socket=/tmp/okemu-webapp.sock --quiet "$@" 2>&1 | tail -1); }
+if [ "$KEY" = hard ]; then
+  press() { timeout 70 node tools/box/hardkey-press.js "$@" 2>&1 | tail -1; }
+  PIN="1 1 1 1 1 1 1"   # the kit's PIN (key 2 was set up by the kit)
+else
+  press() { (cd $P/node-onlykey-emulator/emulator && timeout 30 node bin/press.js --socket=/tmp/okemu-webapp.sock --quiet "$@" 2>&1 | tail -1); }
+  PIN="1 2 3 4 5 6 1"   # the testnet soft key's
+fi
 L=
 # the identity check's bucket button: Decrypt Bucket (one kept here) or Create Bucket (none)
 BUCKET_BUTTON='\[Decrypt Bucket\]\|\[Create Bucket\]'
@@ -31,11 +40,11 @@ say() { echo "== $(date +%T.%3N) $*"; }
 # THE KEY UNLOCKED BEFORE THE PAGE LOADS: a page that loads on a locked key shows This Key "Locked", and nothing there
 # asks the key again (only Log in and the PIN screen arm the page's key check) - 2026-10-28, after a soft key restart.
 # So the key's own state, read over USB (the lib CLI's status, read-only), and the PIN on its buttons only when it says
-# locked: the testnet soft key's PIN (1234561).
+# locked: the key's PIN ($PIN above).
 keystate() { (cd $P/node-onlykey-lib && timeout 30 node cli/index.js status 2>&1 | awk '$1 == "state" {print $2}'); }
 if [ "$(keystate)" != unlocked ]; then
   say "the key is $(keystate) - the PIN on its buttons"
-  press 1 2 3 4 5 6 1
+  press $PIN
   for _ in $(seq 1 20); do [ "$(keystate)" = unlocked ] && break; sleep 2; done
   [ "$(keystate)" = unlocked ] || { say "the key did not unlock"; exit 1; }
 fi
@@ -56,11 +65,11 @@ else
   DISPLAY=:10 xdotool windowactivate --sync "$w" key ctrl+shift+r
 fi
 waitfor "\[Continue\]\|$BUCKET_BUTTON\|Locked" || exit 1
-# the testnet soft key's PIN (1234561), on its buttons, when it has locked itself
+# the key's PIN, on its buttons, when it has locked itself
 # then back to the page: it asks its key again when its window comes back to the front (useWebKey), never on a timer
 echo "$L" | grep -q 'Locked' && {
   say "locked - the PIN on the key's buttons, then back to the page"
-  press 1 2 3 4 5 6 1
+  press $PIN
   # back to the page as a person comes back to it - again every 5 s while it still says Locked (a minute at most): a
   # focus that comes before the key has finished unlocking is answered "locked", and the page asks only on focus
   # (2026-10-28: one nudge 1 s after the PIN, right after the key restarted, left the page Locked on an unlocked key)
