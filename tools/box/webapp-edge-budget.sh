@@ -71,15 +71,25 @@ press $code
 waitfor '\[Menu\]' || exit 1
 say "Edge tab, a test budget request"
 C "Menu" wait:2 "Edge" >/dev/null
-# the test button is disabled while the tab's own first sync is with the key (edge.busy): wait until it is not
-C "Open Edge Management" wait:2 >/dev/null
-# a testing button is disabled while the tab works with the key (edge.busy): wait until it is not
-enabled() { timeout 10 node tools/box/page-click.js --eval "[...document.querySelectorAll('[role=button],button')].some(e => e.textContent.trim() === '${1:-Agent: request a budget}' && e.getAttribute('aria-disabled') !== 'true' && !e.disabled)" 2>&1 | tail -1; }
-idle() { for _ in $(seq 1 ${2:-120}); do [ "$(enabled "$1")" = true ] && return 0; sleep 1; done; return 1; }
+# THE TESTING BUTTONS LIVE IN EDGE MANAGEMENT, and one there is disabled while the tab works with the key (edge.busy).
+# A button that is not on the screen is not a busy tab (2026-10-28: the panel closed after the request read as "never
+# idle" for 10 minutes): button() tells absent from disabled, and idle() opens the panel when it is closed - its header
+# toggles, so only then.
+button() { timeout 10 node tools/box/page-click.js --eval "(() => { const b = [...document.querySelectorAll('[role=button],button')].find(e => e.textContent.trim() === '$1'); return !b ? 'absent' : (b.getAttribute('aria-disabled') === 'true' || b.disabled) ? 'disabled' : 'enabled'; })()" 2>&1 | tail -1 | tr -d '"'; }
+panel() { labels | grep -q '▼ Edge Management' || C "Open Edge Management" wait:2 >/dev/null; }
+idle() {
+  local s=
+  for _ in $(seq 1 ${2:-120}); do
+    s=$(button "$1"); [ "$s" = enabled ] && return 0
+    [ "$s" = absent ] && panel
+    sleep 1
+  done
+  say "never usable: \"$1\" (last seen: $s)"; return 1
+}
 budget() { timeout 30 node tools/box/page-click.js --text 3000 2>&1 | grep -iv '^TEST BUILD\|^Testing mode' | sed -n '/^Budgets/,/Edge Management/p' | head -${1:-14} | cut -c1-200; }
-idle
 if [ -z "$NO_REQUEST" ]; then
-say "the tab is idle ($(enabled)) - requesting"
+idle "Agent: request a budget" || exit 1
+say "the tab is idle - requesting"
 C "Agent: request a budget" wait:2 "▼ Edge Management" wait:2 >/dev/null
 waitfor '\[Approve\]' 40 || exit 1
 say "the sheet: $(echo "$L" | sed 's/.*Presses | //' | cut -c1-200)"
@@ -98,10 +108,13 @@ say "the budget is open:"
 budget
 fi
 for i in $(seq 1 ${SIGNS:-0}); do
-  idle "Agent: a sign the budget pays" 600 || { say "the tab never went idle for sign $i"; exit 1; }
+  idle "Agent: a sign the budget pays" 600 || exit 1
   say "sign $i of $SIGNS"
-  C "Open Edge Management" wait:1 "Agent: a sign the budget pays" wait:2 "▼ Edge Management" >/dev/null
-  idle "Agent: a sign the budget pays" 600
+  C "Agent: a sign the budget pays" >/dev/null
+  sleep 2
+  # the sign, its receipt and the tab's sync after it: the button comes back when they are done
+  idle "Agent: a sign the budget pays" 600 || exit 1
+  say "sign $i done"
   timeout 10 node tools/box/page-click.js --text 3000 2>&1 | grep -o 'edge: .*' | head -1 | sed 's/^/   refused: /'
   budget 8 | grep -i 'uses\|spent\|ended\|Active\|No budget' | head -3 | sed 's/^/   /'
 done
