@@ -72,6 +72,12 @@ export function useWebKey({log}: {log: (level: LogLevel, text: string) => void})
       setIdentity(parsed);
       setCapabilities(device_.version.capabilities(parsed));
       setVersion(parsed?.version ?? '');
+      /*
+       * KNOWN AT ONCE, NOT AT THE NEXT RENDER (box timeline, 2026-10-28: the login connected twice, 0.14 s apart -
+       * an ask that came right after this one answered still read the old state and connected again). The ask's
+       * guard reads the ref; setDevice brings the screen along on its own time.
+       */
+      deviceRef.current = 'unlocked';
       setDevice('unlocked');
       log('info', `tunnel connect -> "${status}"`);
       console.log(`[webkey] tunnel connect ok: ${JSON.stringify(status)}`);
