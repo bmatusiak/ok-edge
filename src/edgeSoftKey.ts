@@ -29,6 +29,8 @@ import OkEmu from './transport/OkEmu';
 import {chainState, evaluate, loadMirror, takeOwnLinks, type EdgeView} from './edgeStore';
 /* keys whose shared records this app run has offered already (desktop) */
 const takenShared = new Set<string>();
+const saidShared = new Map<string, string>();
+let bucketSharedWhy = '';
 
 /*
  * THIS KEY'S LOG AS THE OPEN BUCKET HOLDS IT (the identity bucket's `edge-logs`, `edge-logs-test` on the testnet), in the
@@ -39,8 +41,9 @@ function bucketShared(deviceIdHex: string): {mark: string; links: [string, strin
   const {tradeBucket} = require('./bucketStore');
   const {logblocks} = require('node-onlykey-lib/edge');
   const open = tradeBucket();
-  if (!open) return null;
+  if (!open) { bucketSharedWhy = 'no bucket open'; return null; }
   const store = currentNet() === 'test' ? 'edge-logs-test' : 'edge-logs';
+  bucketSharedWhy = `the bucket's ${store} holds no log for ${deviceIdHex.slice(0, 8)} (${Object.keys(open.bucket.stores[store] ?? {}).length} keys there)`;
   const recs = (open.bucket.stores[store] ?? {}) as Record<string, {v: string; at: string; archived?: boolean}>;
   const dev = logblocks.devOf(deviceIdHex);
   const entries: Record<string, string> = {};
@@ -204,7 +207,10 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       shared = (await desktop.invoke('okedge:sharedLinks', id)) as typeof shared;
     } else {
       const fromBucket = bucketShared(id);
-      if (!fromBucket || takenShared.has(`${id}:${fromBucket.mark}`)) return;
+      /* why nothing was taken, said once each time it changes (every refresh asks; a quiet one says nothing) */
+      const why = !fromBucket ? bucketSharedWhy : takenShared.has(`${id}:${fromBucket.mark}`) ? `already taken (${fromBucket.mark})` : null;
+      if (why && saidShared.get(id) !== why) { saidShared.set(id, why); console.log(`[edge] shared records: ${why}`); }
+      if (why) return;
       takenShared.add(`${id}:${fromBucket.mark}`);
       shared = fromBucket;
     }
