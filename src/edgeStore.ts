@@ -1085,7 +1085,13 @@ function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ring
   }
   const result = a.chain;
   const unverified = new Set<number>();
-  for (const g of result.gaps) for (let s = g.from; s <= g.to; s++) unverified.add(s);
+  /*
+   * UNVERIFIED IS WHAT IS REALLY MISSING (lib copy.assess `missing`): a gap's links the key vouches for are checked -
+   * the ones its ring holds, and the link right after a verified LOSS whose `next` hash matches it (R24). Green1 (key 3),
+   * 2026-10-29: the LOSS #586 for #565-#577 carries #578's hash, yet #578 was drawn unverified and the take refused
+   * all of the CLI's links for it - the lib had it as vouched all along.
+   */
+  for (const g of a.missing) for (let s = g.from; s <= g.to; s++) unverified.add(s);
   /*
    * NOTHING AT OR BEFORE THE ANCHOR WAS CHECKED (copy.assess from the anchor leaves those links out): they are not drawn
    * green, and takeOwnLinks never keeps one on this check's word. Found 2026-10-29 (the audit for the CLI's history in
