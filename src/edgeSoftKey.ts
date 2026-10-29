@@ -862,6 +862,21 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * copy stops verifying at its grant-create link: the tab's Approve, an
    * agent's request, and the e2e suite (ctx.edgeCopy).
    */
+  /*
+   * THE LOGIN'S BUDGET, FILED LIKE ANY OTHER (lib identity.login onOpened / onUse; Brad, 2026-10-29: "after login, it gets
+   * added into the budget history"): the login opens its budget through the lib before the Edge tab has a source, so
+   * this files its opening words and each use's receipt message under the key's device id - the one the lib already
+   * holds (edge.publicKey, no request after the first). The tab's history lists it; the copy checks its links.
+   */
+  static loginFiler(edge: any, from: string) {
+    let at: Promise<SoftKeyEdge> | null = null;
+    const me = () => (at ??= edge.publicKey().then((p: {deviceId: Uint8Array}) => new SoftKeyEdge(edge, p.deviceId)));
+    return {
+      onOpened: async (g: any, o: {reason: string; scopes: any[]; lifetime: number}) => { await (await me()).keepOpening(g, {...o, from}); },
+      onUse: async (u: {seq: number; message: string}) => { await require('./edgeStore').addNote((await me()).deviceId, {computer: '', seq: u.seq, receiptMsg: u.message}); },
+    };
+  }
+
   async keepOpening(g: any, o: {reason: string; scopes: any[]; from: string; lifetime: number; computer?: string}) {
     const kept: Kept = {
       v: 1,

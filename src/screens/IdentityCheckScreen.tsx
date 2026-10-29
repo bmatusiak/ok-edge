@@ -19,7 +19,8 @@ import {theme} from '../ui/theme';
 import {netTag} from '../net';
 import {bucketLabelsOf, openIdentityBucket, openLegacyStorage} from '../bucketStore';
 import {proofKept, proofMaterial} from '../bucketTrade';
-import {shell} from '../platform';
+import {DEVICE_WORD, shell} from '../platform';
+import {SoftKeyEdge} from '../edgeSoftKey';
 import {readKeyIdentity} from '../keyIdentity';
 import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
@@ -77,7 +78,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
     if (read.kind !== 'read') { openLegacyStorage(); onContinue(); return; }
     setOpen({kind: 'opening'});
     try {
-      const {okcrypto, identity} = await getOnlyKey(activeBackend());
+      const {okcrypto, identity, edge} = await getOnlyKey(activeBackend());
       const open = () => openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}), read.edgeIdentity);
       if (read.bucket === 'kept' || typeof (identity as any)?.login !== 'function') {
         /* the desktop's shared file: opened with no press - nothing for a login budget to pay */
@@ -95,10 +96,11 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         /* the identity plugin's read, held (no key request): the bucket key's label names its public key */
         const held = await (identity as any).load();
         const derives = [...(await bucketLabelsOf(read.identity, read.edgeIdentity)), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
+        /* filed as this app's own budget: the Edge tab's history lists the login, its copy checks the login's links */
         await (identity as any).login(async () => {
           await open();
           if (!keyKept) await proofMaterial();
-        }, {reason: loginReason(), derives, signs, onPress: () => setOpen({kind: 'press'})});
+        }, {reason: loginReason(), derives, signs, onPress: () => setOpen({kind: 'press'}), ...SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`)});
       }
       onContinue();
     } catch (e: unknown) {
