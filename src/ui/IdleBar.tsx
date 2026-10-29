@@ -2,9 +2,9 @@
  * THE SESSION'S TIME LEFT (Brad, 2026-10-29: "on the bottom of the app, a thin progress bar for the timer, fixed full
  * width, simply just a visual cue for the expiry of the session for the user"; "can we center it, so it shrinks into the
  * center over time"). The idle timer's 15 minutes (src/idleTimer.ts) as a thin line along the bottom of the app: full
- * after anything is done, green (Brad: "gray is hard to see"), shrinking from both ends into the centre as the minutes pass,
- * yellow while the key is
- * checked at the end. Nothing while the timer is not running (the login screens, the shells it is off on).
+ * after anything is done, green (Brad: "gray is hard to see"), shrinking from both ends into the centre as the minutes
+ * pass, yellow while the key is checked at the end. Nothing while the timer is not running (the login screens, the
+ * shells it is off on).
  *
  * MOTION: a smooth, continuous shrink - except in testing mode, where nothing moves continuously (quiet: drawn in steps
  * every 15 seconds). A development build can show the production motion in testing mode too (sessionStorage
