@@ -85,6 +85,7 @@ import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
 import {registerWebCache, setLoggedIn, updateAtSplash} from './src/webUpdate';
 import {UpdateSheet} from './src/ui/UpdateSheet';
+import {onOtherTabs} from './src/webTabs';
 
 /*
  * THE WEB APP'S UPDATE CHECK, ONCE A PAGE LOAD (src/webUpdate.ts): a newer build on the server reloads the page fresh
@@ -1036,6 +1037,9 @@ function Shell() {
   const [phase, setPhase] = useState<Phase>(SPLASH_SEEN ? 'login' : 'splash');
   /* past the PIN, a newer web build asks (UpdateSheet) instead of reloading the page by itself (src/webUpdate.ts) */
   useEffect(() => { setLoggedIn(phase === 'identity' || phase === 'main'); }, [phase]);
+  /* the web app open in other tabs too: warned in each (src/webTabs.ts) */
+  const [otherTabs, setOtherTabs] = useState(0);
+  useEffect(() => onOtherTabs(setOtherTabs), []);
   /* The first time inside after this process started: take the remembered tab, if any. */
   useEffect(() => {
     if (phase !== 'main' || resumeChecked.current) return;
@@ -1382,6 +1386,18 @@ function Shell() {
                 dotColor={keys.backend === 'embedded' ? ledColor(emu.led) : null}
               />
             </Pressable>
+          </View>
+        ) : null}
+
+        {/*
+          OPEN IN ANOTHER TAB TOO (Brad, 2026-10-29: "WARN the user with a banner about the multiple chrome tab windows
+          open"): the tabs ask one key and write one bucket on their own - said in every one while another is open.
+        */}
+        {otherTabs > 0 ? (
+          <View style={[styles.testing, {borderColor: theme.error}]}>
+            <Text style={[styles.testingText, {color: theme.error}]}>
+              {`This app is open in ${otherTabs} other tab${otherTabs === 1 ? '' : 's'} - close ${otherTabs === 1 ? 'it' : 'them'}: tabs share one key and one bucket, and get in each other's way`}
+            </Text>
           </View>
         ) : null}
 
