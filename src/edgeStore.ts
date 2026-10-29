@@ -313,14 +313,18 @@ const seqOf = (r: EdgeLinkRecord) => chain.decodeLink(r.link).seq;
 /*
  * THE ANCHOR A CHECK STARTS FROM, or null: a fresh copy is anchored at the key's checkpoint (no history read before it),
  * but once it holds the chain from its start - the CLI's history came in (edgeSoftKey.takeShared) - the anchor no longer
- * stands in for anything: the check runs from genesis and every link is checked (chain.chainStart: seq 0, or a CONTINUE).
+ * stands in for anything: the check runs from genesis and every link is checked (chain.chainStart: seq 0, or a CONTINUE;
+ * or a LOSS in the copy covering everything before its first link - the key accepted those as gone, and the full check
+ * verifies that LOSS like any link: box key 2, 2026-10-29, whose CLI copy starts at #110 after a LOSS of #0-#109).
  */
 function anchorOf(mirror: Mirror): {seq: number; head: Uint8Array} | null {
   if (!mirror.anchor) return null;
   const first = mirror.links[0];
   if (!first) return mirror.anchor;
   const f = chain.decodeLink(first.link);
-  return f.seq === 0 || f.op === codes.OP.CONTINUE ? null : mirror.anchor;
+  if (f.seq === 0 || f.op === codes.OP.CONTINUE) return null;
+  const covered = copy.lossesIn(mirror.links).some((l: {from: number; to: number}) => l.from === 0 && l.to >= f.seq - 1);
+  return covered ? null : mirror.anchor;
 }
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
 
