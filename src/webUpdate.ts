@@ -80,9 +80,20 @@ export function onOutdated(l: Listener): () => void {
   if (outdated) l(outdated);
   return () => { listeners.delete(l); };
 }
+/*
+ * LOGGED IN, NO RELOAD BY ITSELF (Brad, 2026-10-29: "after a user login has happened, no auto reload, because that logs
+ * them out - so a sheet popup with dismiss and reload"): before the PIN (the splash, the login screen) a newer build
+ * reloads the page as at the splash; past it, the sheet asks (UpdateSheet). MainApp says which.
+ */
+let loggedIn = false;
+export function setLoggedIn(v: boolean): void { loggedIn = v; }
 if (on && typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || outdated) return;
-    void newest().then((v) => { if (v && v !== WEB_BUILD) notify(v); });
+    if (document.visibilityState !== 'visible') return;
+    void newest().then((v) => {
+      if (!v || v === WEB_BUILD) return;
+      if (loggedIn) notify(v);
+      else void updateAtSplash();
+    });
   });
 }

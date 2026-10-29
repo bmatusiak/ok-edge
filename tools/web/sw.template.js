@@ -27,7 +27,13 @@ const LIVE = (p) => p === '/version.json' || p === '/sw.js' || p === '/mcp' || p
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin || LIVE(url.pathname)) return;
-  /* every route is the one page (the server's single-page handling): the cached index.html, else the network */
-  const want = e.request.mode === 'navigate' ? '/index.html' : e.request;
-  e.respondWith(caches.open(CACHE).then((c) => c.match(want)).then((hit) => hit || fetch(e.request)));
+  /*
+   * every route is the one page (the server's single-page handling): the cached '/', else the network. Never
+   * /index.html: the server answers it with a redirect to /, and a redirected response served for a page load is refused
+   * by the browser (box, 2026-10-29: the reload ended in ERR_FAILED)
+   */
+  const want = e.request.mode === 'navigate' ? '/' : e.request;
+  /* a cached response that came by a redirect is served as a plain copy - a page load refuses a redirected one */
+  const plain = (r) => (r && r.redirected ? r.blob().then((b) => new Response(b, { status: r.status, statusText: r.statusText, headers: r.headers })) : r);
+  e.respondWith(caches.open(CACHE).then((c) => c.match(want)).then(plain).then((hit) => hit || fetch(e.request)));
 });

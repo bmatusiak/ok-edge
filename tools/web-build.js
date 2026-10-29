@@ -38,6 +38,9 @@ const files = [];
     files.push(rel);
   }
 })(docs);
+/* the page itself as '/': the server redirects /index.html there (the worker serves '/' for every route) */
+const page = files.indexOf('/index.html');
+if (page !== -1) files[page] = '/';
 files.sort();
 
 fs.writeFileSync(path.join(docs, 'version.json'), `${JSON.stringify({ version, commit, at: new Date().toISOString(), dev })}\n`);

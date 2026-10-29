@@ -83,7 +83,8 @@ import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
-import {onOutdated, registerWebCache, reloadFresh, updateAtSplash} from './src/webUpdate';
+import {registerWebCache, setLoggedIn, updateAtSplash} from './src/webUpdate';
+import {UpdateSheet} from './src/ui/UpdateSheet';
 
 /*
  * THE WEB APP'S UPDATE CHECK, ONCE A PAGE LOAD (src/webUpdate.ts): a newer build on the server reloads the page fresh
@@ -1033,6 +1034,8 @@ function Shell() {
   const [openSlot, setOpenSlot] = useState<{id: string; index: number; label: string | null} | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [phase, setPhase] = useState<Phase>(SPLASH_SEEN ? 'login' : 'splash');
+  /* past the PIN, a newer web build asks (UpdateSheet) instead of reloading the page by itself (src/webUpdate.ts) */
+  useEffect(() => { setLoggedIn(phase === 'identity' || phase === 'main'); }, [phase]);
   /* The first time inside after this process started: take the remembered tab, if any. */
   useEffect(() => {
     if (phase !== 'main' || resumeChecked.current) return;
@@ -1057,9 +1060,7 @@ function Shell() {
   /* the splash also waits for the web app's update check (a newer build reloads the page from there) */
   const [webReady, setWebReady] = useState(shell !== 'webapp');
   useEffect(() => { void webChecked.then(() => setWebReady(true)); }, []);
-  /* a newer build pushed while this tab was open: said, the refresh is the person's */
-  const [outdatedBuild, setOutdatedBuild] = useState<string | null>(null);
-  useEffect(() => onOutdated(setOutdatedBuild), []);
+
   /*
    * LOG IN STARTS THE SOFT KEY (a build with testing mode; Brad, 2026-10-07): once
    * it answers, a blank key goes to setup and any other to the PIN - the same
@@ -1385,16 +1386,6 @@ function Shell() {
         ) : null}
 
         {/*
-          THIS PAGE IS AN OLD BUILD (Brad, 2026-10-29: "if a push happens, and a browser tab is using the old version, it
-          will tell the user to refresh its page"): its cache and worker are cleared and the page loads the newer one.
-        */}
-        {outdatedBuild ? (
-          <Pressable onPress={() => { void reloadFresh(); }} style={styles.testing}>
-            <Text style={styles.testingText}>A newer version of this app is out - tap to refresh</Text>
-          </Pressable>
-        ) : null}
-
-        {/*
           A TEST build made with OKRN_DEBUG_LOCK=off (Brad, 2026-10-05): the debugging
           lock is off, so a computer with adb could approve and press. Said in red on
           every screen, so this build can never pass for a pre-release - release.js
@@ -1487,6 +1478,8 @@ function Shell() {
         <PressSheet waiting={keyWaiting} fido={{needed: fido.presenceNeeded, canPress: emu.canPress === true, confirm: fido.confirm}} />
         {/* a derive the soft key answered unasked (field 30 = none): said, sound once, closes itself (SilentUseSheet) */}
         <SilentUseSheet />
+        {/* a newer build of the web app pushed while this tab was open, someone logged in: the sheet asks (src/webUpdate.ts) */}
+        <UpdateSheet />
 
         {/*
           THE KEYBOARD MUST NOT COVER THE FIELD BEING TYPED IN.
