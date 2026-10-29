@@ -19,7 +19,9 @@ source ~/.nvm/nvm.sh >/dev/null 2>&1
 P=~/project/onlykey
 cd $P/ok-edge || exit 1
 C() { timeout 20 node tools/box/page-click.js "$@" 2>&1 | tail -1; }
-labels() { timeout 10 node tools/box/page-click.js --labels 2>&1 | tail -1; }
+# the controls, then the page's text: --labels leaves long texts out, and the login's prompt is one ("Press the key to
+# open this identity's bucket" - the login budget's one press, no code sheet)
+labels() { timeout 10 node tools/box/page-click.js --labels 2>&1 | tail -1; printf ' || '; timeout 10 node tools/box/page-click.js --text 1500 2>&1 | tr '\n' ' '; }
 if [ "$KEY" = hard ]; then
   press() { timeout 70 node tools/box/hardkey-press.js "$@" 2>&1 | tail -1; }
   PIN="1 1 1 1 1 1 1"   # the kit's PIN (key 2 was set up by the kit)
@@ -92,6 +94,13 @@ C "$(echo "$L" | grep -o 'Decrypt Bucket\|Create Bucket' | head -1)" >/dev/null
 for n in 1 2 3; do
   waitfor 'Press the key\|\[Menu\]' || exit 1
   echo "$L" | grep -q '\[Menu\]' && break
+  # THE LOGIN BUDGET (identity.login): one physical press opens it, and its prompt stays up until the app opens - pressed
+  # once; then the app, or a code sheet a request outside the budget still asks
+  if ! echo "$L" | grep -q 'Press the key |' && echo "$L" | grep -q "Press the key to open this identity's bucket"; then
+    [ -z "$LOGIN_PRESSED" ] && { say "the page asks for the press (the login budget)"; press 1; LOGIN_PRESSED=1; }
+    waitfor '\[Menu\]\|Press the key |' || exit 1
+    echo "$L" | grep -q '\[Menu\]' && break
+  fi
   what=$(echo "$L" | sed -E 's/.*Press the key \| ([^|]*) \|.*/\1/' | cut -c1-60)
   code=$(echo "$L" | sed -E 's/.*press these buttons in order: \| //' | grep -oE '[1-6]' | head -3 | tr '\n' ' ')
   say "the page asks for a code ($what): $code"
