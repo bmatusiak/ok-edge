@@ -84,6 +84,8 @@ import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {endSession, keptSession} from './src/webSession';
 import {logOut} from './src/logOut';
+import {setIdleRunning} from './src/idleTimer';
+import {IdleBar} from './src/ui/IdleBar';
 import {shell} from './src/platform';
 import {registerWebCache, setLoggedIn, updateAtSplash} from './src/webUpdate';
 import {UpdateSheet} from './src/ui/UpdateSheet';
@@ -1130,6 +1132,8 @@ function Shell() {
   const awaitingUnlock = useRef(false);
   /* past the identity check for this unlock (its Continue / Decrypt Bucket); a lock or a key switch takes it back */
   const [passed, setPassed] = useState(false);
+  /* the idle timer runs while someone is in the app (src/idleTimer.ts; the web app only for now) */
+  useEffect(() => { setIdleRunning(phase === 'main' && passed); }, [phase, passed]);
   /*
    * THE IDENTITY'S ROOM ON THE USER'S SERVER (src/serverRoom.ts): joined once the bucket is open, left when it closes.
    * The web app's server is the one that served it; the phone's, the one set in the Sync tab. (The desktop's bucket is
@@ -1772,6 +1776,8 @@ function Shell() {
             />
           }
         />
+        {/* the session's time left: a thin line along the bottom (src/ui/IdleBar.tsx) */}
+        <IdleBar />
       </SafeAreaView>
       </BtKeyboardProvider>
     </KeyBackendProvider>

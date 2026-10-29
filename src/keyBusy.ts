@@ -81,6 +81,8 @@ export function noteSettle(e: {ms: number; why?: string}) {
 export function noteTunnel(e: TunnelEvent) {
   if (e.phase === 'begin') timeline(`begin #${e.id} ${whatOf(e.msg, e.slot)}`);
   if (e.phase === 'end') timeline(`end #${e.id} ${whatOf(e.msg, e.slot)} steps=${e.step} ${e.ok ? 'ok' : 'failed'}`);
+  /* the key answered: activity for the idle timer (src/idleTimer.ts - "if the key is detected as still responding") */
+  if (e.phase === 'end' && e.ok) require('./idleTimer').touch('key');
   if (e.phase === 'begin') {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     ops += 1;
