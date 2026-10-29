@@ -45,6 +45,11 @@ async function takeOtherLogs(ownIdHex: string): Promise<void> {
   const {logblocks, copyfile} = require('node-onlykey-lib/edge');
   const open = tradeBucket();
   if (!open) return;
+  /* judged only under this device's owner key (its own nametag statement): none yet - nothing marked, asked again later */
+  if (!(await require('./edgeDevices').ownerKey())) {
+    if (saidShared.get('others') !== 'no owner key') { saidShared.set('others', 'no owner key'); console.log("[edge] other devices' logs: waiting - name this device first (its nametag gives the owner key they are judged by)"); }
+    return;
+  }
   const own = logblocks.devOf(ownIdHex);
   for (const store of currentNet() === 'test' ? ['edge-logs-test'] : ['edge-logs']) {
     const recs = (open.bucket.stores[store] ?? {}) as Record<string, {v: string | null; at: string; archived?: boolean}>;
