@@ -41,7 +41,8 @@ say() { echo "== $(date +%T.%3N) $*"; }
 # asks the key again (only Log in and the PIN screen arm the page's key check) - 2026-10-28, after a soft key restart.
 # So the key's own state, read over USB (the lib CLI's status, read-only), and the PIN on its buttons only when it says
 # locked: the key's PIN ($PIN above).
-keystate() { (cd $P/node-onlykey-lib && timeout 30 node cli/index.js status 2>&1 | awk '$1 == "state" {print $2}'); }
+# (the lib ok-edge pins, node_modules: it has node-hid - the box's lib checkout does not, and its status reads nothing)
+keystate() { timeout 30 node node_modules/node-onlykey-lib/cli/index.js status 2>&1 | awk '$1 == "state" {print $2}'; }
 if [ "$(keystate)" != unlocked ]; then
   say "the key is $(keystate) - the PIN on its buttons"
   press $PIN
