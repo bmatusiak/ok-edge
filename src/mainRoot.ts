@@ -1,5 +1,5 @@
 /**
- * OK-RN'S APP AS A ROOT (PhoneApp.tsx, a copy of ok-rn's App.tsx), behind ok-rn's start-up guard -
+ * THE APP AS A ROOT ON EVERY PLATFORM (MainApp.tsx - once a copy of ok-rn's App.tsx, so it was PhoneApp; renamed 2026-10-29: it is the phone's, the desktop's and the web app's alike), behind ok-rn's start-up guard -
  * the phone's root (entry.android.ts) and the desktop's (entry.ts, on Electron).
  */
 import React from 'react';
@@ -10,9 +10,9 @@ import { startupFailure, StartupBoundary } from './StartupFailure';
  * (a native module this APK lacks) would otherwise leave the launch splash up
  * forever with nothing to read. See src/StartupFailure.tsx.
  */
-export function phoneRoot(): React.ComponentType {
+export function mainRoot(): React.ComponentType {
   try {
-    const App = require('../PhoneApp').default;
+    const App = require('../MainApp').default;
     return function GuardedApp() {
       return React.createElement(StartupBoundary, null, React.createElement(App));
     };

@@ -681,6 +681,11 @@ function RadioStatus({
   );
 }
 
+/* the keyboard's state in words, for the Activity tab - read inside the phone's keyboard provider, as the bar's ⌨ is */
+function KeyboardState() {
+  return <Text style={{color: theme.text, fontSize: 13}}>{useSharedBtKeyboard().state}</Text>;
+}
+
 export default function App() {
   /* every derive the soft key answers goes into the Key Chain list (plugins/key_chain) */
   useEffect(() => startKeyChainRecorder(), []);
@@ -692,8 +697,6 @@ export default function App() {
 }
 
 function Shell() {
-  /* the keyboard's state, for the Activity tab's Bluetooth section (the bar's ⌨ reads the same) */
-  const btKeyboard = useSharedBtKeyboard();
   // One log buffer per source so switching views does not interleave traffic.
   const usbLog = useLog();
   const fidoLog = useLog();
@@ -1371,7 +1374,8 @@ function Shell() {
         {!buildInfo.debugLock ? (
           <View style={[styles.testing, {borderColor: theme.error}]}>
             <Text style={[styles.testingText, {color: theme.error}]}>
-              TEST BUILD - debugging lock OFF: with adb on, a computer could approve and press
+              {/* adb is the phone's alone: elsewhere the lock means nothing, and only the build's kind is said (Brad, 2026-10-29) */}
+              {shell === 'android' ? 'TEST BUILD - debugging lock OFF: with adb on, a computer could approve and press' : 'TEST BUILD - not a release'}
             </Text>
           </View>
         ) : null}
@@ -1585,7 +1589,7 @@ function Shell() {
           ) : tab === 'Bluetooth' ? (
             <BluetoothScreen fido={fido} on={btOn} setOn={setBtOn} auto={auto} canPress={emu.canPress === true} testing={testing.enabled} onOpenSync={() => setTab('Sync')} />
           ) : tab === 'Activity' ? (
-            <ActivityScreen bt={shell === 'android' ? {on: btOn, fido: fido.state, keyboard: btKeyboard.state} : null} onOpen={t => setTab(t as Tab)} />
+            <ActivityScreen bt={shell === 'android' ? {on: btOn, fido: fido.state, keyboard: <KeyboardState />} : null} onOpen={t => setTab(t as Tab)} />
           ) : tab === 'Sync' ? (
             <SyncScreen testing={testing.enabled} />
           ) : tab === 'Settings' ? (

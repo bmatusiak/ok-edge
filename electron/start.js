@@ -27,7 +27,7 @@ const EXPORT = path.join(ROOT, 'dist', TEST ? 'web-test' : 'web', 'index.html');
 const BUILD = TEST ? 'build:web:test' : 'build:web';
 
 /* what the web export is built from: the app's JavaScript and assets, and the lockfile (a lib re-pin) */
-const SOURCE_FILES = ['App.tsx', 'PhoneApp.tsx', 'index.ts', 'app.json', 'metro.config.js', 'tsconfig.json',
+const SOURCE_FILES = ['App.tsx', 'MainApp.tsx', 'index.ts', 'app.json', 'metro.config.js', 'tsconfig.json',
   'package.json', 'package-lock.json'];
 const SOURCE_DIRS = ['src', '__e2e_tests__', 'assets', 'modules'];
 /* native code and build output under those dirs are not in the web export */

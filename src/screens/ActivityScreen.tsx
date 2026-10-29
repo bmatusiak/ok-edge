@@ -18,8 +18,8 @@ import {useSync} from '../sync';
 import {onRoomState, roomState, type RoomState} from '../serverRoom';
 import {agentsState, onAgents, type AgentsState} from '../mcpAgents';
 
-/* the phone's Bluetooth, as the bar's radio icons read it (PhoneApp RadioStatus) */
-export type BtActivity = {on: boolean; fido: string; keyboard: string};
+/* the phone's Bluetooth, as the bar's radio icons read it (MainApp RadioStatus) */
+export type BtActivity = {on: boolean; fido: string; keyboard: React.ReactNode};
 
 const ago = (at: number | undefined | null, now: number): string => {
   if (!at) return 'none since the app started';
@@ -31,11 +31,11 @@ const lastOf = (c: IoChannel, now: number): string => {
   return l ? `${ago(l.at, now)} (${l.count} since the app started)` : 'none since the app started';
 };
 
-function Row({label, value}: {label: string; value: string}) {
+function Row({label, value}: {label: string; value: React.ReactNode}) {
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+      {typeof value === 'string' ? <Text style={styles.value}>{value}</Text> : value}
     </View>
   );
 }

@@ -1,11 +1,11 @@
 /**
- * THE PHONE'S ROOT: ok-rn's app (phoneRoot.ts) and the two other roots ok-rn's index.js registers,
+ * THE PHONE'S ROOT: ok-rn's app (mainRoot.ts) and the two other roots ok-rn's index.js registers,
  * with its notes. The other shells take entry.ts. Metro picks this file by its .android extension.
  */
 import { AppRegistry } from 'react-native';
-import { phoneRoot } from './phoneRoot';
+import { mainRoot } from './mainRoot';
 
-export const root = phoneRoot();
+export const root = mainRoot();
 
 export function registerMore(): void {
   /*
