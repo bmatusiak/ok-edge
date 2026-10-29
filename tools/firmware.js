@@ -191,6 +191,8 @@ function build(force) {
   const manifest = {
     file,
     version: want.version,
+    /* the version the key reports (version_control: the base + our build) - the check compares it like the rest */
+    release: want.release,
     firmware: want.firmware,
     libraries: want.libraries,
     fixes: want.fixes,

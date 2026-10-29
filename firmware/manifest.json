@@ -1,6 +1,7 @@
 {
   "file": "v3.1.0-test-edge-ctap_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-bc932822f.hex",
   "version": "v3.1.0",
+  "release": "v3.1.01",
   "firmware": "80e3ba0",
   "libraries": "fe9e293",
   "fixes": [
