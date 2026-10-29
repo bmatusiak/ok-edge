@@ -34,33 +34,41 @@ let bucketSharedWhy = '';
 
 /*
  * THIS KEY'S LOG AS THE OPEN BUCKET HOLDS IT (the identity bucket's `edge-logs`, `edge-logs-test` on the testnet), in the
- * shape the desktop's shared records come in - or null when the bucket is closed or holds none. mark: the device's key
- * count and newest write, so a take runs again only when a trade changed the log.
+ * shape the desktop's shared records come in - or null when the bucket is closed or holds none. mark: the store, the
+ * device's key count and newest write, so a take runs again only when a trade changed the log.
+ *
+ * A DEVICE ID IS ONE CHAIN, whichever net a host filed it under (box, 2026-10-29: the CLI ran hard key 2 with
+ * --test-mode and filed its log in edge-logs-test; the web app had the same key on live and looked in edge-logs). The
+ * nets keep the soft key's two slots apart - two chains, two device ids - so this device's log is read from this net's
+ * store first, and from the other only when this one holds none of it: never another chain's links.
  */
 function bucketShared(deviceIdHex: string): {mark: string; links: [string, string, string | null][]; openings: unknown[]; notes: any} | null {
   const {tradeBucket} = require('./bucketStore');
   const {logblocks} = require('node-onlykey-lib/edge');
   const open = tradeBucket();
   if (!open) { bucketSharedWhy = 'no bucket open'; return null; }
-  const store = currentNet() === 'test' ? 'edge-logs-test' : 'edge-logs';
-  bucketSharedWhy = `the bucket's ${store} holds no log for ${deviceIdHex.slice(0, 8)} (${Object.keys(open.bucket.stores[store] ?? {}).length} keys there)`;
-  const recs = (open.bucket.stores[store] ?? {}) as Record<string, {v: string; at: string; archived?: boolean}>;
   const dev = logblocks.devOf(deviceIdHex);
-  const entries: Record<string, string> = {};
-  let newest = '';
-  for (const [k, r] of Object.entries(recs)) {
-    if (!k.startsWith(`${dev}.`) || !r || r.archived || r.v === null) continue;
-    entries[k] = r.v;
-    if (r.at > newest) newest = r.at;
+  const stores = currentNet() === 'test' ? ['edge-logs-test', 'edge-logs'] : ['edge-logs', 'edge-logs-test'];
+  for (const store of stores) {
+    const recs = (open.bucket.stores[store] ?? {}) as Record<string, {v: string | null; at: string; archived?: boolean}>;
+    const entries: Record<string, string> = {};
+    let newest = '';
+    for (const [k, r] of Object.entries(recs)) {
+      if (!k.startsWith(`${dev}.`) || !r || r.archived || r.v === null) continue;
+      entries[k] = r.v;
+      if (r.at > newest) newest = r.at;
+    }
+    const j = logblocks.join(entries, deviceIdHex);
+    if (!j || !j.links.length) continue;
+    return {
+      mark: `${store}:${Object.keys(entries).length}@${newest}`,
+      links: j.links.map((l: {link: string; head: string; reveal?: string}) => [l.link, l.head, l.reveal ?? null] as [string, string, string | null]),
+      openings: j.openings ?? [],
+      notes: j.notes,
+    };
   }
-  const j = logblocks.join(entries, deviceIdHex);
-  if (!j || !j.links.length) return null;
-  return {
-    mark: `${Object.keys(entries).length}@${newest}`,
-    links: j.links.map((l: {link: string; head: string; reveal?: string}) => [l.link, l.head, l.reveal ?? null] as [string, string, string | null]),
-    openings: j.openings ?? [],
-    notes: j.notes,
-  };
+  bucketSharedWhy = `the bucket holds no log for ${deviceIdHex.slice(0, 8)} (${stores.map(s => `${s} ${Object.keys(open.bucket.stores[s] ?? {}).length} keys`).join(', ')})`;
+  return null;
 }
 import type {EdgeBudget, EdgeCopyCheck, EdgeCopyKey, EdgeEnded, EdgeInbox, EdgeKeyState, EdgeLinkRecord, EdgeRequest, EdgeSource} from './edgeFake';
 import {currentNet, edgeKey} from './net';
