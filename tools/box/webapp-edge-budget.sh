@@ -127,7 +127,9 @@ say "the tab is idle - requesting"
 C "Agent: request a budget" wait:2 "▼ Edge Management" wait:2 >/dev/null
 waitfor '\[Approve\]' 40 || exit 1
 say "the sheet: $(echo "$L" | sed 's/.*Presses | //' | cut -c1-200)"
-waits() { [ -n "$CONSOLE" ] && grep -ac 'the key waits for its press' "$CONSOLE" 2>/dev/null || echo 0; }
+# one number always: grep -c prints 0 AND fails on no match, so "|| echo 0" printed "0 0" and every compare errored -
+# the loop below ran its whole 90 s and the press came after the key's 20 s (key 2, 2026-10-29)
+waits() { local n=0; [ -n "$CONSOLE" ] && n=$(grep -ac 'the key waits for its press' "$CONSOLE" 2>/dev/null); echo "${n:-0}"; }
 asked=$(waits)
 C "Approve" >/dev/null
 # Approve runs the strict copy check first (its own key reads, ~6 s each over the tunnel)
