@@ -86,6 +86,7 @@ import {shell} from './src/platform';
 import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom} from './src/serverRoom';
 import {HostChallengeSheet} from './src/ui/HostChallengeSheet';
+import {KeyBusySheet} from './src/ui/KeyBusySheet';
 import {PressSheet} from './src/ui/PressSheet';
 import {SilentUseSheet} from './src/ui/SilentUseSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
@@ -1224,6 +1225,8 @@ function Shell() {
       {hasSoftKeyPlugin('edge') || shell === 'desktop' ? <EdgeRequestSheet /> : null}
       {/* the code this app asks a hard key for (src/hostChallenge.ts): over whatever tab is open */}
       <HostChallengeSheet />
+      {/* the key working over WebAuthn (src/keyBusy.ts): wait, with its progress - over whatever tab is open */}
+      <KeyBusySheet />
 
       {/* app plugins' watches run whatever tab is open (the Password Manager closes a key's store when it locks) */}
       {pluginWatches().map((Watch, i) => (

@@ -39,7 +39,7 @@ say "the key is unlocked"
 say "reload"
 if [ -n "$CONSOLE" ]; then
   # its pid kept and stopped when this run ends: a listener left behind writes into the next run's log twice over
-  timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &
+  timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|keybusy|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &
   PC=$!
   trap 'kill $PC 2>/dev/null' EXIT
   sleep 2
@@ -96,6 +96,8 @@ say "the tab is idle - requesting"
 C "Agent: request a budget" wait:2 "▼ Edge Management" wait:2 >/dev/null
 waitfor '\[Approve\]' 40 || exit 1
 say "the sheet: $(echo "$L" | sed 's/.*Presses | //' | cut -c1-200)"
+waits() { [ -n "$CONSOLE" ] && grep -ac 'the key waits for its press' "$CONSOLE" 2>/dev/null || echo 0; }
+asked=$(waits)
 C "Approve" >/dev/null
 # Approve runs the strict copy check first (its own key reads, ~6 s each over the tunnel)
 waitfor 'Press the key to confirm\|edge: ' 240 || exit 1
@@ -103,8 +105,16 @@ echo "$L" | grep -q 'edge: ' && { say "refused: $(echo "$L" | grep -o 'edge: [^|
 # as a person presses: after reading the prompt. Over the tunnel the page asks as the grant's ceremony starts, before
 # the request is on the key, and a press the firmware is not waiting for is lost (an unlocked key types slot 1); the
 # key waits 20 s. (This soft key prints no debug lines, so press.js --after has no cue here.)
-say "the key asks for its press - pressing in 3 s"
-sleep 3
+if [ -n "$CONSOLE" ]; then
+  # the page's own word that the request is on the key (src/keyBusy.ts, after the grant's first ceremony): only then a
+  # press can land - over the slow tunnel the lib waits out the key's last reply first, and 3 s came before the request
+  for _ in $(seq 1 180); do [ "$(waits)" -gt "$asked" ] && break; sleep 0.5; done
+  say "the page says the key waits for its press ($(waits) > $asked) - pressing"
+  sleep 0.8
+else
+  say "the key asks for its press - pressing in 3 s"
+  sleep 3
+fi
 press 1
 waitfor 'uses spent' 240 || exit 1
 say "the budget is open:"
