@@ -3,7 +3,7 @@
 # already delivered, so the lib asks again without its 5.5 s wait). One workload, two builds of the gadget soft key
 # from one emulator commit - with and without our release (version_control) - on the same storage, in Chrome:
 #   before   v3.1.0 as the maintainer published it       the web app built as the live site is (the lib waits)
-#   after    our release (version_control: its patches, 0016 among them)   the web app built with EXPO_PUBLIC_KEY_WIPES_DELIVERED=1
+#   after    our release (version_control: v3.1.01, 0016 among its patches) - the lib reads the version and skips the waits
 # The workload (webapp-edge-budget.sh FRESH=1 SIGNS=3): a new copy's first sync (head, the key's checkpoint with its
 # ML-DSA half), a budget request, Approve and its press, then three signs the budget pays with their receipts (the
 # third ends the budget). Results in ~/project/onlykey/tunnel-speed/<build>.txt.
@@ -43,11 +43,9 @@ use() {     # use <before|after>: the gadget soft key on that build, the web app
   sleep 2
   EMU=$E bash "$EDGE/tools/box/softkey-gadget.sh" start | tail -1
   say "the gadget runs $1: fixes $(jq -c .fixes "$E/.stage/build.json")"
-  local flag=
-  [ "$1" = after ] && flag=1
-  (cd "$EDGE" && EXPO_PUBLIC_KEY_WIPES_DELIVERED=$flag bash tools/box/webapp.sh build | tail -1)
+  (cd "$EDGE" && bash tools/box/webapp.sh build | tail -1)
   (cd "$EDGE" && HTTPS=1 bash tools/box/server.sh restart 2>&1 | tail -1)
-  say "the web app built with EXPO_PUBLIC_KEY_WIPES_DELIVERED=${flag:-unset}"
+  say "the web app built (the lib reads the key's version: v3.1.01 on, no waits)"
 }
 
 run() {     # run <before|after>

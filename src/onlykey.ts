@@ -168,17 +168,9 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
        * site (ok-edge.bmatusiak.workers.dev) a ctap naming the page and a tunnel naming apps.crp.to disagree, and the
        * lib refuses the mismatch (RPID_MISMATCH) before the browser is asked anything - no prompt, nothing at the key.
        */
-      /*
-       * EXPERIMENTAL: EXPO_PUBLIC_KEY_WIPES_DELIVERED=1 at build - the key this page talks to carries emulator patch
-       * 0016 (a new request wipes a delivered reply), so the lib asks it again without the 5.5 s wait (okcrypto
-       * wipesDeliveredReply). Only the box's testnet soft key is built with it (OKEMU_EXPERIMENTAL=1); the release
-       * workflow never sets this, so the live site waits as every key without the patch needs.
-       */
+      /* (a key with emulator patch 0016 - our v3.1.01 on - is asked without the 5.5 s waits: the lib reads it from the version) */
       ...(backend === 'usb' && shell === 'webapp'
-        ? {okcrypto: {
-            ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname],
-            ...(process.env.EXPO_PUBLIC_KEY_WIPES_DELIVERED === '1' ? {wipesDeliveredReply: true} : {}),
-          }}
+        ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname]}}
         : {}),
       ...(backend === 'usb' && shell === 'desktop' && /Windows/.test(navigator.userAgent)
         ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials})}}
