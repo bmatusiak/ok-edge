@@ -82,6 +82,8 @@ import {EdgeRequestSheet} from './src/ui/EdgeRequestSheet';
 import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
+import {endSession, keptSession} from './src/webSession';
+import {logOut} from './src/logOut';
 import {shell} from './src/platform';
 import {registerWebCache, setLoggedIn, updateAtSplash} from './src/webUpdate';
 import {UpdateSheet} from './src/ui/UpdateSheet';
@@ -1037,6 +1039,18 @@ function Shell() {
   const [phase, setPhase] = useState<Phase>(SPLASH_SEEN ? 'login' : 'splash');
   /* past the PIN, a newer web build asks (UpdateSheet) instead of reloading the page by itself (src/webUpdate.ts) */
   useEffect(() => { setLoggedIn(phase === 'identity' || phase === 'main'); }, [phase]);
+  /*
+   * A LOGIN THIS TAB KEPT (webSession.ts, chosen at the identity check): on a reload the login screen goes on by itself
+   * - the key is asked (armWebKey), and the identity check opens the bucket with no press. Once a page load.
+   */
+  const keptGoneOn = useRef(false);
+  useEffect(() => {
+    if (shell !== 'webapp' || phase !== 'login' || keptGoneOn.current || !keptSession()) return;
+    keptGoneOn.current = true;
+    console.log('[session] this tab kept its login - going on past the login screen');
+    armWebKey();
+    setPhase('pin');
+  }, [phase]);
   /* the web app open in other tabs too: warned in each (src/webTabs.ts) */
   const [otherTabs, setOtherTabs] = useState(0);
   useEffect(() => onOtherTabs(setOtherTabs), []);
@@ -1129,6 +1143,8 @@ function Shell() {
     if (lastDoorKey.current === doorKey) return;
     lastDoorKey.current = doorKey;
     awaitingUnlock.current = true;
+    /* another key while inside: this tab's kept login ends with the door (not a key first armed on a page load) */
+    if (passed) void endSession('another key');
     setPassed(false);
     closeBucket();
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
@@ -1166,7 +1182,7 @@ function Shell() {
       if (emu.device === 'unlocked' && !awaitingUnlock.current && configMode !== PRE) {
         setPhase(prev => (prev === 'identity' || (prev === 'main' && passed) ? prev : 'identity'));
       } else {
-        if (passed) setPassed(false);
+        if (passed) { setPassed(false); void endSession('the key locked'); }
         closeBucket();
         setPhase('main');
       }
@@ -1202,8 +1218,9 @@ function Shell() {
       }
       // It relocked while we were inside (or at the identity check).
       if (prev === 'main' || prev === 'identity') {
-        /* the door closed: the opened bucket goes with it */
+        /* the door closed: the opened bucket goes with it, and a login this tab kept (webSession.ts) */
         closeBucket();
+        void endSession('the key locked or was unplugged');
         setPassed(false);
         /*
          * WHY THE DOOR CLOSED, to logcat.
@@ -1749,7 +1766,8 @@ function Shell() {
             <Btn
               title="Log out"
               onPress={() => {
-                void OkEmu.restartApp();
+                /* every shell (src/logOut.ts): the web app had no restart, so the button did nothing there */
+                void logOut();
               }}
             />
           }

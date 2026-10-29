@@ -450,6 +450,38 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
 }
 
 /*
+ * A KEPT LOGIN, ON A RELOAD (webSession.ts; Brad, 2026-10-29: stay logged in, asked at login): this identity's rows
+ * opened with the secret this tab kept from its login - no derive, no press. The key was read just now (the identity
+ * check: present, unlocked, this identity), and the rows opening with that secret and naming this identity is the
+ * proof (identity proveByRows). None kept, or they do not open: false, and the login asks as always.
+ */
+export async function openIdentityBucketWithSecret(identity: string, secret: Uint8Array): Promise<boolean> {
+  if (desktop) return false;
+  const id = identity.toLowerCase();
+  const cache = rowCache(id);
+  const kept = await cache.all();
+  if (!Object.keys(kept).length) return false;
+  const identityService = (await getOnlyKey(activeBackend())).identity;
+  let bucket: Bucket;
+  try {
+    bucket = identityService.proveByRows({rows: kept, key: secret, rules: RULES}).bucket as Bucket;
+  } catch (e) {
+    console.log(`[bucket] ${id.slice(0, 12)}: the kept login did not open the rows - ${String((e as Error)?.message ?? e)}`);
+    return false;
+  }
+  const key = Uint8Array.from(secret);
+  door = {kind: 'sealed', identity: id, bucket, key, movedPrefixes: new Set(), rows: cache, rowKeys: bucketLib.sealedCopy.keysOf({secretKey: key}), rowTags: await cache.table()};
+  await moveOldRecords();
+  console.log(`[bucket] ${id.slice(0, 12)}: opened with this tab's kept login - no press`);
+  return true;
+}
+
+/** The open bucket's secret (a copy), for a login the person chose to keep (webSession.ts) - null unless sealed and open. */
+export function doorSecret(): Uint8Array | null {
+  return door.kind === 'sealed' ? Uint8Array.from(door.key) : null;
+}
+
+/*
  * THE DESKTOP: switch to the bucket this computer already keeps opened (no press) - moved first from the Edge identity
  * id it was kept under before, if so; else open the sealed one it kept in the page before (the key's press) or make a
  * new one, and keep it in the shared file from now on.

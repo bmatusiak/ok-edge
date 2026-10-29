@@ -11,13 +11,15 @@
  * bucket the web app was handed (plan S5/S6). Nothing asked yet: it shows what it read, then Continue.
  */
 import React, {useEffect, useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {Logo} from '../ui/Logo';
 import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
 import {netTag} from '../net';
-import {bucketLabelsOf, openIdentityBucket, openLegacyStorage} from '../bucketStore';
+import {bucketLabelsOf, doorSecret, openIdentityBucket, openIdentityBucketWithSecret, openLegacyStorage} from '../bucketStore';
+import {canKeepSession, keepSession, keptSession, takeSession} from '../webSession';
+import {currentNet} from '../net';
 import {proofKept, proofMaterial} from '../bucketTrade';
 import {DEVICE_WORD, shell} from '../platform';
 import {SoftKeyEdge} from '../edgeSoftKey';
@@ -68,6 +70,11 @@ function loginReason(): string {
 export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: string; onContinue: () => void; onPress?: () => void}) {
   const [read, setRead] = useState<Read>({kind: 'checking'});
   const [open, setOpen] = useState<Open>({kind: 'idle'});
+  /*
+   * STAY LOGGED IN ON THIS TAB (webSession.ts; Brad, 2026-10-29: asked at login): the web app only, unchosen until the
+   * person ticks it, for this login only - every reload until the browser exits goes back in with no press.
+   */
+  const [stay, setStay] = useState(false);
 
   /*
    * THE BUTTON OPENS THIS IDENTITY'S BUCKET (Brad, 2026-10-24: "a button press here is needed to decrypt the
@@ -102,10 +109,32 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
           if (!keyKept) await proofMaterial();
         }, {reason: loginReason(), derives, signs, onPress: () => setOpen({kind: 'press'}), ...SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`)});
       }
+      /* chosen: this login kept for the tab's next load (the bucket's secret, encrypted - webSession.ts) */
+      if (stay && read.kind === 'read') {
+        const secret = doorSecret();
+        if (secret) await keepSession(read.identity, currentNet(), secret).catch((e: unknown) => console.log(`[session] not kept: ${String((e as Error)?.message ?? e)}`));
+      }
       onContinue();
     } catch (e: unknown) {
       setOpen({kind: 'failed', why: String((e as Error)?.message ?? e)});
     }
+  };
+
+  /*
+   * A KEPT LOGIN (webSession.ts): the key read just now is present, unlocked and this identity - its rows opened with
+   * the secret the tab kept, no press, and the app opens. One that does not open is dropped: the login asks as always.
+   */
+  const continueKept = async (): Promise<boolean> => {
+    if (read.kind !== 'read') return false;
+    const k = keptSession();
+    if (!k || k.identity !== read.identity.toLowerCase()) return false;
+    setOpen({kind: 'opening'});
+    const secret = await takeSession(read.identity, currentNet());
+    const ok = secret ? await openIdentityBucketWithSecret(read.identity, secret).catch(() => false) : false;
+    if (secret) secret.fill(0);
+    if (!ok) { setOpen({kind: 'idle'}); return false; }
+    onContinue();
+    return true;
   };
   const [attempt, setAttempt] = useState(0);
 
@@ -123,6 +152,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
    * already keeps its bucket opened (the desktop after its first open) - the app opens by itself. Once per read.
    */
   useEffect(() => {
+    if (read.kind === 'read' && read.bucket === 'sealed' && keptSession()) { void continueKept(); return; }
     if (read.kind === 'read' && read.bucket === 'kept') void continueAndOpen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [read]);
@@ -166,6 +196,12 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         {open.kind === 'press' ? <SkipPressHint /> : null}
         {open.kind === 'failed' ? <Text style={[styles.hint, {color: theme.error}]}>{`The bucket did not open: ${open.why}`}</Text> : null}
         {read.kind === 'none' ? <Btn title="Try again" onPress={() => setAttempt(n => n + 1)} /> : null}
+        {canKeepSession && read.kind === 'read' && read.bucket !== 'kept' ? (
+          <Pressable accessibilityRole="checkbox" accessibilityState={{checked: stay}} accessibilityLabel="Stay authenticated until the browser exits" onPress={() => setStay(s => !s)} style={styles.stay}>
+            <Text style={[styles.stayBox, stay && styles.stayOn]}>{stay ? '✓' : ''}</Text>
+            <Text style={styles.stayText}>Stay authenticated until the browser exits - a reload goes back in with no press. Log out, a lock or unplugging the key ends it sooner.</Text>
+          </Pressable>
+        ) : null}
         <Btn
           title={open.kind === 'failed' ? 'Try again' : action}
           /* on a page that is not the key's own site, the way to the key's site is the main action (apps.crp.to as the shorthand for a private MCP) */
@@ -184,5 +220,9 @@ const styles = StyleSheet.create({
   press: {color: theme.warn, fontSize: 14, fontWeight: '600'},
   hint: {marginTop: 14, maxWidth: 320, color: theme.textDim, fontSize: 12, textAlign: 'center', lineHeight: 17},
   action: {marginTop: 28, width: '100%', maxWidth: 320, gap: 12},
+  stay: {flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 4},
+  stayBox: {width: 20, height: 20, borderWidth: 1, borderColor: theme.textDim, borderRadius: 4, color: theme.text, textAlign: 'center', lineHeight: 18, fontSize: 13},
+  stayOn: {borderColor: theme.text},
+  stayText: {flex: 1, color: theme.textDim, fontSize: 12, lineHeight: 17},
   elsewhere: {marginTop: 8, width: '100%', maxWidth: 320, gap: 8, alignItems: 'center'},
 });
