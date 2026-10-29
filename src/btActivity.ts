@@ -23,8 +23,14 @@ export const IO_STEP_MS = 250;
 
 const listeners = new Set<(channel: IoChannel, at: number) => void>();
 
+/* when each channel last had traffic, and how often since the app started - the Activity tab's "last activity" (Brad, 2026-10-29) */
+const last: Partial<Record<IoChannel, {at: number; count: number}>> = {};
+export function ioLast(channel: IoChannel): {at: number; count: number} | null {
+  return last[channel] ?? null;
+}
 export function ioPulse(channel: IoChannel): void {
   const at = Date.now();
+  last[channel] = {at, count: (last[channel]?.count ?? 0) + 1};
   for (const fn of [...listeners]) {
     try { fn(channel, at); } catch { /* a status icon never breaks the traffic it shows */ }
   }

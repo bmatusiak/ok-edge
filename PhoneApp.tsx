@@ -85,6 +85,7 @@ import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
 import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom, onRoomState, roomState, type RoomState} from './src/serverRoom';
+import {ActivityScreen} from './src/screens/ActivityScreen';
 import {HostChallengeSheet} from './src/ui/HostChallengeSheet';
 import {KeyBusySheet} from './src/ui/KeyBusySheet';
 import {PressSheet} from './src/ui/PressSheet';
@@ -144,6 +145,8 @@ const TABS = [
   'Preferences',
   'Bluetooth',
   'Sync',
+  /* the status icons' one tab (Brad, 2026-10-29): reached by pressing any of them, so not in the menu */
+  'Activity',
   'Advanced',
   'Log',
 ] as const;
@@ -193,7 +196,7 @@ type Tab = (typeof TABS)[number] | typeof IN_DEV_TAB | typeof EDGE_TAB | typeof 
  *   Encrypt, Decrypt - merged into Encrypt/Decrypt (one tab, a switch at the top).
  *   Keys - replaced by Key Chain.
  */
-const HIDDEN_TABS: readonly Tab[] = ['PIN Setup', 'Preferences', 'Backup/Restore', 'Firmware', 'Advanced', 'Slots', 'Encrypt', 'Decrypt', 'Keys'];
+const HIDDEN_TABS: readonly Tab[] = ['Activity', 'PIN Setup', 'Preferences', 'Backup/Restore', 'Firmware', 'Advanced', 'Slots', 'Encrypt', 'Decrypt', 'Keys'];
 
 /*
  * DEBUG BUILDS ONLY (Brad, 2026-10-11: "Log tab,, is for testing debugging so it should not be
@@ -689,6 +692,8 @@ export default function App() {
 }
 
 function Shell() {
+  /* the keyboard's state, for the Activity tab's Bluetooth section (the bar's ⌨ reads the same) */
+  const btKeyboard = useSharedBtKeyboard();
   // One log buffer per source so switching views does not interleave traffic.
   const usbLog = useLog();
   const fidoLog = useLog();
@@ -1322,19 +1327,25 @@ function Shell() {
 
               Blue is armed, green is connected, grey is off.
             */}
-            {/* the phone's only: no Bluetooth on the desktop, none needed on the web (ANDROID_ONLY_TABS) */}
-            {shell === 'android' ? (
-              <RadioStatus
-                on={btOn}
-                setOn={setBtOn}
-                fido={fido}
-                auto={auto}
-                onPress={() => setTab('Bluetooth')}
-              />
-            ) : null}
-            {/* sync (⇄) and the MCP (🔗) on every platform (Brad, 2026-10-29) - beside the phone's radio icons */}
-            <SyncStatus onPress={() => setTab('Sync')} />
-            <McpStatus onPress={() => setTab('Sync')} />
+            {/*
+              THE STATUS ICONS, ONE GROUP (Brad, 2026-10-29: "a single activity panel, containing all icons so they're
+              not spaced or separated - a press on any icon takes you to the same panel now"): the phone's radio icons
+              (no Bluetooth on the desktop, none needed on the web - ANDROID_ONLY_TABS), then sync (⇄) and the MCP (🔗) on
+              every platform. Any of them opens the Activity tab, which leads on to each one's own tab.
+            */}
+            <View style={styles.barMid}>
+              {shell === 'android' ? (
+                <RadioStatus
+                  on={btOn}
+                  setOn={setBtOn}
+                  fido={fido}
+                  auto={auto}
+                  onPress={() => setTab('Activity')}
+                />
+              ) : null}
+              <SyncStatus onPress={() => setTab('Activity')} />
+              <McpStatus onPress={() => setTab('Activity')} />
+            </View>
 
             <Pressable
               onPress={() => setTab('This Key')}
@@ -1573,6 +1584,8 @@ function Shell() {
             <KeysScreen emu={emu} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} />
           ) : tab === 'Bluetooth' ? (
             <BluetoothScreen fido={fido} on={btOn} setOn={setBtOn} auto={auto} canPress={emu.canPress === true} testing={testing.enabled} onOpenSync={() => setTab('Sync')} />
+          ) : tab === 'Activity' ? (
+            <ActivityScreen bt={shell === 'android' ? {on: btOn, fido: fido.state, keyboard: btKeyboard.state} : null} onOpen={t => setTab(t as Tab)} />
           ) : tab === 'Sync' ? (
             <SyncScreen testing={testing.enabled} />
           ) : tab === 'Settings' ? (
