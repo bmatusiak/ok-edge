@@ -186,6 +186,33 @@ async function setIn(store: string, key: string, value: string | null): Promise<
 }
 
 /*
+ * MANY KEYS OF ONE STORE, ONE WRITE (Phase 5: the Edge log's blocks): the phone and the web app seal the whole bucket at
+ * every write, so a batch is set in memory and sealed once; the desktop's shared file takes each key. null with no bucket
+ * open (nothing written): what the store holds, and the write, are the open bucket's.
+ */
+export async function storeEntries(store: string): Promise<Record<string, string> | null> {
+  if (door.kind === 'sealed') {
+    const out: Record<string, string> = {};
+    for (const [k, r] of Object.entries((door.bucket.stores[store] ?? {}) as Record<string, {v: string | null; archived?: boolean}>)) if (r && !r.archived && r.v !== null) out[k] = r.v;
+    return out;
+  }
+  if (door.kind === 'kept') return ((await desktop!.invoke('okedge:bucketEntries', door.identity, door.net, store)) as Record<string, string> | null) ?? {};
+  return null;
+}
+export async function writeEntries(store: string, entries: Record<string, string>): Promise<boolean> {
+  if (!Object.keys(entries).length) return door.kind === 'sealed' || door.kind === 'kept';
+  if (door.kind === 'kept') {
+    await desktop!.invoke('okedge:bucketSetMany', door.identity, door.net, store, entries);
+    return true;
+  }
+  if (door.kind !== 'sealed') return false;
+  const kv = bucketLib.kv(door.bucket, store);
+  for (const [k, v] of Object.entries(entries)) kv.setItem(k, v);
+  await persist();
+  return true;
+}
+
+/*
  * WHAT MOVES IN (copy first, as B3.0 did): a feature's old plain record, on the current net, into its store in
  * the bucket. Stored in the bucket first, then the plain one removed - a stop between the two leaves both, never
  * neither. A key the bucket already has is not overwritten: the old record is left for the next look.

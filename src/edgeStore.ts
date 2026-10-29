@@ -637,6 +637,8 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
   if (live && view.verdict.kind === 'verified' && ownKey?.checkpoint) takeSeal(mirror, head, ownKey.checkpoint, live);
   await saveMirror(mirror);
   lap('save');
+  /* Phase 5: a copy that verified goes into the identity bucket too (edgeSoftKey fileOwnLog) - not waited for here */
+  if (view.verdict.kind === 'verified' && typeof (source as any).openingWords === 'function') void require('./edgeSoftKey').fileOwnLog(source, mirror, ownKey?.checkpoint ?? null);
   /* B7: new alarms become phone notifications - every sync, the tab's and the background copy's */
   await raiseAlarms(mirror, view, live ?? []).catch(() => {});
   lap('alarms');

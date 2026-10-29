@@ -78,6 +78,62 @@ async function takeOtherLogs(ownIdHex: string): Promise<void> {
 let bucketSharedWhy = '';
 
 /*
+ * THIS APP'S OWN LOG INTO THE BUCKET (PROPOSAL-sync-and-identity.md Phase 5; Brad, 2026-10-29: "after login, it gets added
+ * into the budget history, and then because the bucket changes, it will upload the bucket changes"). The read side above
+ * takes this key's log from the bucket; this files what this app's copy holds back into it - the same blocks the CLI
+ * writes (lib logblocks), merged into what is there (logblocks.fileInto: a fresh web app holds less than the CLI filed),
+ * so the CLI, your other devices and the server's room see this app's budgets - the login's too.
+ *
+ * After a sync whose copy VERIFIED only: an unchecked link is never filed for others to take. The parts are the ones
+ * this app hands a paired computer (edgeAgents GIVE): the links, the seals, the key's checkpoint with both halves (the
+ * one the sync just checked, else the newest seal that keeps its ML-DSA half), this device's nametag statement, the
+ * budgets' opening words and the notes. No key request: all of it is already here. One filing at a time; a sync that
+ * lands during one files once more after it.
+ */
+let filing: Promise<void> | null = null;
+let fileAgain: (() => Promise<void>) | null = null;
+export function fileOwnLog(source: SoftKeyEdge, mirror: any, checkpoint: EdgeCopyKey['checkpoint']): Promise<void> {
+  const run = () => fileOwnLogNow(source, mirror, checkpoint).catch((e: unknown) => console.log(`[edge] this key's log: not filed in the bucket - ${String((e as Error)?.message ?? e)}`));
+  if (filing) { fileAgain = run; return filing; }
+  filing = run().then(async () => {
+    while (fileAgain) { const next = fileAgain; fileAgain = null; await next(); }
+  }).finally(() => { filing = null; });
+  return filing;
+}
+async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeCopyKey['checkpoint']): Promise<void> {
+  const {storeEntries, writeEntries} = require('./bucketStore');
+  const {logblocks} = require('node-onlykey-lib/edge');
+  const store = currentNet() === 'test' ? 'edge-logs-test' : 'edge-logs';
+  const have: Record<string, string> | null = await storeEntries(store);
+  if (!have || !mirror.links.length) return;
+  const hex = (b: Uint8Array | null | undefined) => (b ? toHex(b) : '');
+  const seals = (mirror.seals ?? []) as {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array}[];
+  const anchor = checkpoint?.signaturePq?.length ? checkpoint : [...seals].reverse().find(s => s.signaturePq?.length) ?? null;
+  const own = await require('./edgeDevices').ownStatement(toHex(source.deviceId));
+  const j = {
+    v: 1,
+    deviceId: toHex(source.deviceId),
+    links: mirror.links.map((r: EdgeLinkRecord) => ({link: hex(r.link), head: hex(r.head), ...(r.reveal ? {reveal: hex(r.reveal)} : {})})),
+    lastSeen: mirror.lastSeen ? {seq: mirror.lastSeen.seq, head: hex(mirror.lastSeen.head)} : null,
+    ...(mirror.publicKey ? {publicKey: hex(mirror.publicKey)} : {}),
+    ...(mirror.publicKeyPq ? {publicKeyPq: hex(mirror.publicKeyPq)} : {}),
+    seals: seals.map(s => ({seq: s.seq, head: hex(s.head), signature: hex(s.signature), ...(s.signaturePq?.length ? {signaturePq: hex(s.signaturePq)} : {})})),
+    openings: await source.openingWords().catch(() => []),
+    notes: {reasons: Object.fromEntries(Object.entries(mirror.reasons ?? {}).map(([k, v]) => [k, (v as {text: string}).text])), messages: mirror.messages ?? {}, seen: mirror.seen ?? {}},
+    ...(anchor ? {checkpoint: {seq: anchor.seq, head: hex(anchor.head), signature: hex(anchor.signature), signaturePq: hex(anchor.signaturePq ?? null)}} : {}),
+    ...(own ? {statement: {deviceId: own.deviceId, publicKey: own.publicKey, publicKeyPq: own.publicKeyPq, seq: own.seq, nametag: own.nametag, signature: own.signature, signaturePq: own.signaturePq}} : {}),
+  };
+  const {changed, forks} = logblocks.fileInto(have, j);
+  for (const f of forks) console.log(`[edge] this key's log: NOT filed - ${f}`);
+  const n = Object.keys(changed).length;
+  if (!n) return;
+  await writeEntries(store, changed);
+  console.log(`[edge] this key's log: filed in the bucket (${store}) - ${n} key(s) changed, ${mirror.links.length} link(s) held here`);
+  /* the bucket changed: a trade with the devices in the room now, not at the next join */
+  require('./serverRoom').bucketChanged();
+}
+
+/*
  * THIS KEY'S LOG AS THE OPEN BUCKET HOLDS IT (the identity bucket's `edge-logs`, `edge-logs-test` on the testnet), in the
  * shape the desktop's shared records come in - or null when the bucket is closed or holds none. mark: the store, the
  * device's key count and newest write, so a take runs again only when a trade changed the log.

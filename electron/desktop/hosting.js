@@ -179,5 +179,11 @@ module.exports = {
       else kv.setItem(key, String(value));
       return true;
     },
+    /* a whole store, and many keys in one locked write (the Edge log's blocks; src/bucketStore.ts storeEntries / writeEntries) */
+    'okedge:bucketEntries': (identity, net, store) => bucketHome().kv(bucketHome().identityAt(identity, net, store)).entries(),
+    'okedge:bucketSetMany': (identity, net, store, entries) => {
+      bucketHome().kv(bucketHome().identityAt(identity, net, store)).setMany(Object.fromEntries(Object.entries(entries || {}).map(([k, v]) => [k, String(v)])));
+      return true;
+    },
   },
 };

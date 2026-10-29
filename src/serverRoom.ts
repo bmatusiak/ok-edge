@@ -217,6 +217,16 @@ function rejoinLater(): void {
   setTimeout(() => { void joinServerRoom(); }, wait);
 }
 
+/*
+ * THE BUCKET CHANGED HERE (Brad, 2026-10-29: "because the bucket changes, it will upload the bucket changes back to mcp" -
+ * edgeSoftKey fileOwnLog, this key's log filed): a trade with every device in the room now, under the same rule as a
+ * join (tradeSoon: one starter per pair; a CLI starts its own). Not joined: nothing - the next join trades.
+ */
+export function bucketChanged(): void {
+  if (!room) return;
+  for (const p of room.peers()) tradeSoon(p);
+}
+
 /** The Server panel's Try again: one more join, which asks the key again when it has to. */
 export function retryServerRoom(): void {
   retries = 0;
