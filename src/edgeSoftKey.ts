@@ -210,7 +210,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       /* why nothing was taken, said once each time it changes (every refresh asks; a quiet one says nothing) */
       const why = !fromBucket ? bucketSharedWhy : takenShared.has(`${id}:${fromBucket.mark}`) ? `already taken (${fromBucket.mark})` : null;
       if (why && saidShared.get(id) !== why) { saidShared.set(id, why); console.log(`[edge] shared records: ${why}`); }
-      if (why) return;
+      if (why || !fromBucket) return;
       takenShared.add(`${id}:${fromBucket.mark}`);
       shared = fromBucket;
     }
