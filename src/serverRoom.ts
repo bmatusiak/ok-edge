@@ -199,6 +199,7 @@ export async function joinServerRoom(): Promise<void> {
       rejoinLater();
     });
     for (const p of r.peers()) tradeSoon(p);
+    sealedSoon('joined');
   } catch (e) {
     const why = String((e as Error)?.message ?? e);
     console.log(`[room] not joined: ${why}`);
@@ -225,6 +226,43 @@ function rejoinLater(): void {
 export function bucketChanged(): void {
   if (!room) return;
   for (const p of room.peers()) tradeSoon(p);
+  sealedSoon('this bucket changed');
+}
+
+/*
+ * THE SERVER'S SEALED COPY (lib bucket/src/sealedcopy.js; Phase 3; Brad, 2026-10-29: "we load the key on a fresh session
+ * empty, and it then needs to compare the remote and session, and decide"). At each join and each change here: the
+ * room's table (keyed ids and change tags, a few KB) against this bucket's, then only the rows that differ - the server's
+ * newer ones taken through the stores' own rules, this side's put sealed. With the heads row: each Edge log's newest link
+ * the copy holds. Whoever is online or not, a fresh session catches up from it. In the trades' queue: one change to the
+ * bucket at a time. A server not set to keep this identity: said once, nothing sent.
+ */
+let sealedSaid = '';
+function sealedSoon(why: string): void {
+  tradeChain = tradeChain.then(() => sealedSync(why)).catch((e: unknown) => console.log(`[room] the sealed copy: not synced - ${String((e as Error)?.message ?? e)}`));
+}
+async function sealedSync(why: string): Promise<void> {
+  const r = room;
+  const open = tradeBucket();
+  const me = await proofMaterial();
+  if (!r || !open || !me) return;
+  const store = r.sealedStore();
+  if (!(await store.on())) {
+    if (sealedSaid !== 'off') { sealedSaid = 'off'; console.log('[room] the sealed copy: this server keeps none for this identity'); }
+    return;
+  }
+  const {logblocks} = require('node-onlykey-lib/edge');
+  const entries = (name: string) => Object.fromEntries(Object.entries((open.bucket.stores[name] ?? {}) as Record<string, {v: string | null; archived?: boolean}>).filter(([, x]) => x && !x.archived && x.v !== null).map(([k, x]) => [k, x.v as string]));
+  const heads = {...logblocks.newestSeqs(entries('edge-logs')), ...logblocks.newestSeqs(entries('edge-logs-test'))};
+  ioPulse('sync');
+  const res = await bucketLib.sealedCopy.syncWith(open.bucket, bucketLib.sealedCopy.keysOf(me.bucketKey), store, {rules: RULES, randomBytes, heads});
+  for (const x of res.refused) console.log(`[room] the sealed copy: a row refused - ${x}`);
+  if (count(res.taken)) {
+    await saveTradedBucket();
+    phoneSyncTraded(res.taken);
+  }
+  sealedSaid = 'on';
+  console.log(`[room] the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
 }
 
 /** The Server panel's Try again: one more join, which asks the key again when it has to. */
