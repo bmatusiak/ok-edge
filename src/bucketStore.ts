@@ -27,6 +27,8 @@ import {currentNet} from './net';
 import {desktop} from './platform';
 import {storeItems} from './bucketRules';
 import {challengeOpts} from './hostChallenge';
+import {forgetIdentities, getOnlyKey} from './onlykey';
+import {activeBackend} from './hooks/KeyContext';
 import {noteOwnSecret} from './ownAsks';
 
 type Bucket = ReturnType<typeof bucketLib.create>;
@@ -117,10 +119,11 @@ export function saveTradedBucket(): Promise<void> {
   return persist();
 }
 
-/** The door closed (a lock, another key): an opened bucket in memory goes with it, and its key is wiped. */
+/** The door closed (a lock, another key): an opened bucket in memory goes with it, and its key is wiped - and who the key was is forgotten (the next key proves itself again). */
 export function closeBucket(): void {
   if (door.kind === 'sealed') door.key.fill(0);
   door = {kind: 'closed'};
+  forgetIdentities();
 }
 
 /** The key has no identity to seal a bucket to: its stores keep today's plain storage. */
@@ -242,12 +245,13 @@ export function bucketStorage(store: () => string, legacy: (key: string) => stri
  * key's press included. A door already open is used as it is.
  */
 export async function ensureBucketOpen(
-  app: {edge?: {probe(o?: {timeoutMs?: number}): Promise<string>; identityId(): Promise<string>}; okcrypto: unknown},
+  app: {edge?: {probe(o?: {timeoutMs?: number}): Promise<string>; identityId(): Promise<string>}; okcrypto: unknown; identity: {load(): Promise<{id: string}>}},
   onPress?: () => void,
 ): Promise<void> {
   if (door.kind !== 'closed') return;
-  const okcrypto = app.okcrypto as Okcrypto & {agent: {publicKey: Function}};
-  const {id} = await bucketLib.bucketIdentity.readIdentity(okcrypto);
+  const okcrypto = app.okcrypto as Okcrypto;
+  /* who the key is: the identity plugin's read, held (lib plugins/identity) - not the key asked again */
+  const {id} = await app.identity.load();
   await openIdentityBucket(id, okcrypto, onPress, await edgeIdentityOf(app));
 }
 
@@ -295,12 +299,17 @@ export async function bucketState(identity: string, previous?: string | null): P
  * derive_secret) - no migration, pre-v1: it is dropped and the bucket filled again by a sync.
  */
 function openSealed(text: string, key: Uint8Array): Bucket | null {
-  try {
-    if (JSON.parse(text)?.format !== 'onlykey-bucket-sealed') return null;
-  } catch {
-    return null;
-  }
+  if (!isSealedForm(text)) return null;
   return bucketLib.open(text, {key}).bucket;
+}
+
+/* a bucket sealed to the key's derived secret (not the older X-Wing form, which is dropped) */
+function isSealedForm(text: string): boolean {
+  try {
+    return JSON.parse(text)?.format === 'onlykey-bucket-sealed';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -318,8 +327,22 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   console.log(`[bucket] ${id.slice(0, 12)}: ${stored ? `a sealed bucket is stored${stored.owner !== id ? ' (under the Edge identity - moved now)' : ''} - opened with the key's bucket key` : 'none stored - sealing a new one'}`);
   /* the bucket key: derived once here; every later write seals with it, no key and no press */
   const key = await bucketKey(id, okcrypto, onPress);
-  const opened = stored ? openSealed(stored.text, key) : null;
+  /*
+   * THE KEY PROVES IT IS THE IDENTITY'S (lib plugins/identity, Brad 2026-10-28: "verify they are the key ... anything
+   * that uses the identity plugin needs to verify the key is true"). The sealed bucket this device kept for the
+   * identity opening with the secret the key just derived is the proof - no press beyond the derive's. With none kept
+   * (a first login here, or the X-Wing form dropped) there is nothing to open: the key signs a fresh challenge with
+   * the identity's key first, so a device that only repeats someone's public key cannot seal a bucket under it.
+   */
+  const identityService = (await getOnlyKey(activeBackend())).identity;
+  const sealedForm = stored ? isSealedForm(stored.text) : false;
+  const opened = stored && sealedForm ? identityService.proveByBucket({sealed: stored.text, key}).bucket as Bucket : null;
   if (stored && !opened) console.log(`[bucket] ${id.slice(0, 12)}: the stored bucket is in the X-Wing form - dropped (no migration); a sync fills it again`);
+  if (!opened) {
+    const ask = challengeOpts('Proving this key holds the identity');
+    try { await identityService.verify(ask.opts); } finally { ask.done(); }
+    console.log(`[bucket] ${id.slice(0, 12)}: the key proved the identity (a fresh challenge signed) - sealing a new bucket`);
+  }
   const bucket = opened ?? bucketLib.create({owner: id});
   bucket.owner = id;
   door = {kind: 'sealed', identity: id, bucket, key, movedPrefixes: new Set()};

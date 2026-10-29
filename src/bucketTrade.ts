@@ -48,7 +48,8 @@ async function ensureMe(): Promise<void> {
   }
   const {okcrypto} = await getOnlyKey(activeBackend());
   const ok = okcrypto as any;
-  const identity = await bucketLib.bucketIdentity.readIdentity(ok);
+  /* the identity plugin's read, held (lib plugins/identity): the same identity the bucket opened for */
+  const identity = await (await getOnlyKey(activeBackend())).identity.load();
   if (identity.id !== open.identity) { me = null; return; }
   console.log(`[bucket] ${open.identity.slice(0, 12)}: making this ${DEVICE_WORD}'s bucket key, once - the key asks for two presses`);
   /* a hard key may wait for a 3-button code: this host shows it (hostChallenge.ts), for each of the two asks */

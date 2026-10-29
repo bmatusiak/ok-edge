@@ -9,7 +9,6 @@
  * key again.
  */
 import {useEffect, useState} from 'react';
-import * as bucketLib from 'node-onlykey-lib/bucket';
 import {bucketState} from './bucketStore';
 import {ensureNametag} from './edgeDevices';
 import {SoftKeyEdge} from './edgeSoftKey';
@@ -50,19 +49,25 @@ export async function readKeyIdentity(alive: () => boolean = () => true): Promis
      * (useHardKey), and a question asked in that moment timed out - asked again a moment later, it answered.
      * So the bucket identity is asked twice more, 1.5 s apart, before "could not read" is said.
      */
-    const {okcrypto} = await getOnlyKey(activeBackend());
-    let identity: string | null = null;
+    /*
+     * THE IDENTITY PLUGIN READS IT, ONCE (lib plugins/identity, Brad 2026-10-28: "the identity check basically uses the
+     * identity plugin"): the bucket identity and the key's site, held for every feature after this - the bucket open,
+     * Edge, the sync room - so none of them asks the key again.
+     */
+    const app = await getOnlyKey(activeBackend());
+    let held: {id: string; site: string | null} | null = null;
     let why = '';
-    for (let n = 0; n < 3 && alive() && !identity; n++) {
+    for (let n = 0; n < 3 && alive() && !held; n++) {
       try {
-        identity = (await bucketLib.bucketIdentity.readIdentity(okcrypto as any)).id;
+        held = await app.identity.load();
       } catch (e: unknown) {
         why = String((e as Error)?.message ?? e);
         if (n < 2) await new Promise(r => setTimeout(r, 1500));
       }
     }
     if (!alive()) return null;
-    if (!identity) return keep({kind: 'none', why: `Could not read this key's bucket identity: ${why}`, at: Date.now()});
+    if (!held) return keep({kind: 'none', why: `Could not read this key's bucket identity: ${why}`, at: Date.now()});
+    const identity = held.id;
     /* Edge, when the key has it: this device's nametag, and its Edge identity - only to move a bucket kept under it */
     const soft = await SoftKeyEdge.open().catch(() => null);
     const edgeIdentity = soft ? (await soft.identityId().catch(() => null))?.toLowerCase() ?? null : null;
@@ -70,11 +75,10 @@ export async function readKeyIdentity(alive: () => boolean = () => true): Promis
     /* asked here so the check's button says what it will do; unknown is treated as the press it may need */
     const bucket = await bucketState(identity, edgeIdentity).catch(() => 'sealed' as const);
     /*
-     * THE KEY'S SITE - where its bucket sync lives (src/serverRoom.ts setKeySite): ctap_bridge's site, read from the
-     * key itself. A key without ctap_bridge, or with it off, has none: no server, Bluetooth only.
+     * THE KEY'S SITE - where its bucket sync lives (src/serverRoom.ts setKeySite): ctap_bridge's site, as the identity
+     * plugin read it from the key. A key without ctap_bridge, or with it off, has none: no server, Bluetooth only.
      */
-    const site = await (okcrypto as any).keySite?.().then((r: {on: boolean; site: string | null}) => (r.on ? r.site : null)).catch(() => null) ?? null;
-    setKeySite(site);
+    setKeySite(held.site ?? null);
     if (!alive()) return null;
     return keep({kind: 'read', identity, edgeIdentity, nametag: statement?.nametag ?? null, bucket, at: Date.now()});
   } catch (e: unknown) {

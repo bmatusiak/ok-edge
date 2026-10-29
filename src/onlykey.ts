@@ -21,6 +21,7 @@ import sessionPlugin from 'node-onlykey-lib/plugins/session';
 import devicePlugin from 'node-onlykey-lib/plugins/device';
 import okcryptoPlugin from 'node-onlykey-lib/plugins/okcrypto';
 import edgePlugin from 'node-onlykey-lib/plugins/edge';
+import identityPlugin from 'node-onlykey-lib/plugins/identity';
 import {createWebAuthnCtap} from 'node-onlykey-lib/transport/webauthn';
 
 import OkEmu, {type Iface} from './transport/OkEmu';
@@ -62,6 +63,12 @@ export type OnlyKeyApp = {
    * it sends nothing until called.
    */
   edge: any;
+  /*
+   * WHO THIS KEY IS, read once and held, and PROVEN (lib plugins/identity): the bucket identity, the key's site, each
+   * feature's part - every screen and feature asks it instead of the key, and anything that trusts the key asks
+   * requireVerified().
+   */
+  identity: any;
   transport: any;
   destroy: () => Promise<void>;
 };
@@ -115,6 +122,14 @@ function storeFor(backend: Backend) {
  * at startup - the screen mounting while the auto-start effect runs - share one
  * app instead of building two against the same firmware.
  */
+/**
+ * The key's identity forgotten (a lock, another key - src/bucketStore.ts closeBucket): on every key this process has
+ * booted, so the next read asks the key again and no key is taken for the one before it (lib plugins/identity forget).
+ */
+export function forgetIdentities(): void {
+  for (const app of booting.values()) void app.then((a) => a.identity?.forget?.()).catch(() => undefined);
+}
+
 export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
   const existing = booting.get(backend);
   if (existing) {
@@ -135,6 +150,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       devicePlugin,
       okcryptoPlugin,
       edgePlugin,
+      identityPlugin,
     ];
 
     /*
@@ -192,6 +208,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
         device: started.services.device,
         okcrypto: started.services.okcrypto,
         edge: started.services.edge,
+        identity: started.services.identity,
         transport: started.services.transport,
         destroy: () => started.destroy(),
       });
