@@ -25,7 +25,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {currentNet} from './net';
 import {desktop} from './platform';
-import {storeItems} from './bucketRules';
+import {RULES, storeItems} from './bucketRules';
+import {rowCache, type RowStore} from './rowCache';
 import {challengeOpts} from './hostChallenge';
 import {forgetIdentities, getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
@@ -106,7 +107,8 @@ const KEY = (identity: string): string => `okrn.bucket.${currentNet() === 'test'
 type Door =
   | {kind: 'closed'}
   | {kind: 'legacy'}
-  | {kind: 'sealed'; identity: string; bucket: Bucket; key: Uint8Array; movedPrefixes: Set<string>}
+  /* rows: where it is kept (rowCache.ts), under rowKeys (from key); rowTags: what the rows hold now, so a write puts only what changed */
+  | {kind: 'sealed'; identity: string; bucket: Bucket; key: Uint8Array; movedPrefixes: Set<string>; rows: RowStore; rowKeys: RowKeys; rowTags: Record<string, string>}
   | {kind: 'kept'; identity: string; net: string; movedPrefixes: Set<string>};
 let door: Door = {kind: 'closed'};
 
@@ -157,12 +159,25 @@ export function openLegacyStorage(): void {
   door = {kind: 'legacy'};
 }
 
-/* the phone: store the opened bucket sealed again; the in-memory bucket is already changed */
+type RowKeys = ReturnType<typeof bucketLib.sealedCopy.keysOf>;
+/*
+ * THE PHONE AND THE WEB APP: store what changed in the opened bucket (the in-memory bucket is already changed) - its
+ * changed units as rows (rowCache.ts; lib sealedcopy.js), each sealed under keys from this bucket's own key, and the
+ * owner row once. Not the whole bucket sealed again: a write of one record is one row.
+ */
 function persist(): Promise<void> {
   const d = door;
   if (d.kind !== 'sealed') return Promise.resolve();
-  const text = bucketLib.seal(d.bucket, d.key, randomBytes, {keyVersion: SEAL_VERSION});
-  const run = writes.then(() => AsyncStorage.setItem(KEY(d.identity), text));
+  const run = writes.then(async () => {
+    const t = bucketLib.sealedCopy.table(d.bucket, d.rowKeys, {rules: RULES});
+    const ids = Object.keys(t.rows).filter(id => d.rowTags[id] !== t.rows[id]);
+    const rows: Record<string, {tag: string; blob: string}> = ids.length ? bucketLib.sealedCopy.sealRows(d.bucket, d.rowKeys, ids, {rules: RULES, randomBytes}) : {};
+    const o = bucketLib.sealedCopy.sealOwner(d.identity, d.rowKeys, randomBytes);
+    if (d.rowTags[o.id] !== o.tag) rows[o.id] = {tag: o.tag, blob: o.blob};
+    if (!Object.keys(rows).length) return;
+    await d.rows.put(rows);
+    for (const [id, r] of Object.entries(rows)) d.rowTags[id] = r.tag;
+  });
   writes = run.catch(() => {});
   return run;
 }
@@ -344,6 +359,7 @@ export async function bucketState(identity: string, previous?: string | null): P
     if (await desktop.invoke('okedge:bucketHas', id, currentNet())) return 'kept';
     if (previous && previous !== id && (await desktop.invoke('okedge:bucketHas', previous, currentNet()))) return 'kept';
   }
+  if (Object.keys(await rowCache(id).table()).length) return 'sealed';
   return (await sealedUnder(id, previous)) !== null ? 'sealed' : 'none';
 }
 
@@ -376,6 +392,22 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   const id = identity.toLowerCase();
   const prev = previous ? previous.toLowerCase() : null;
   if (desktop) return openKept(id, okcrypto, onPress, prev);
+  /*
+   * KEPT AS ROWS (rowCache.ts): opened from them - the rows opening with the secret the key derives, and naming this
+   * identity, is the proof (identity proveByRows). Rows that do not open are not this key's: refused, never written over.
+   */
+  const cache = rowCache(id);
+  const kept = await cache.all();
+  if (Object.keys(kept).length) {
+    console.log(`[bucket] ${id.slice(0, 12)}: kept as ${Object.keys(kept).length} rows - opened with the key's bucket key`);
+    const key = await bucketKey(id, okcrypto, onPress);
+    const identityService = (await getOnlyKey(activeBackend())).identity;
+    const bucket = identityService.proveByRows({rows: kept, key, rules: RULES}).bucket as Bucket;
+    console.log(`[identity] ${id.slice(0, 12)}: proven - the key opened the rows this device kept for it`);
+    door = {kind: 'sealed', identity: id, bucket, key, movedPrefixes: new Set(), rows: cache, rowKeys: bucketLib.sealedCopy.keysOf({secretKey: key}), rowTags: await cache.table()};
+    await moveOldRecords();
+    return {created: false, pressed: true};
+  }
   const stored = await sealedUnder(id, prev);
   console.log(`[bucket] ${id.slice(0, 12)}: ${stored ? `a sealed bucket is stored${stored.owner !== id ? ' (under the Edge identity - moved now)' : ''} - opened with the key's bucket key` : 'none stored - sealing a new one'}`);
   /*
@@ -404,11 +436,15 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   }
   const bucket = opened ?? bucketLib.create({owner: id});
   bucket.owner = id;
-  door = {kind: 'sealed', identity: id, bucket, key, movedPrefixes: new Set()};
+  door = {kind: 'sealed', identity: id, bucket, key, movedPrefixes: new Set(), rows: cache, rowKeys: bucketLib.sealedCopy.keysOf({secretKey: key}), rowTags: {}};
   const resealed = !!opened && openKey !== key;
   if (resealed) console.log(`[bucket] ${id.slice(0, 12)}: sealed again under the key's site (v${storedVersion} -> v${SEAL_VERSION}) - every record kept`);
-  if (!opened || stored!.owner !== id || resealed) await persist();
-  if (stored && stored.owner !== id) await AsyncStorage.removeItem(KEY(stored.owner));
+  /* every unit as a row now; the one-blob seal it came from removed once the rows are written */
+  await persist();
+  if (stored) {
+    await AsyncStorage.removeItem(KEY(stored.owner));
+    console.log(`[bucket] ${id.slice(0, 12)}: now kept as ${Object.keys((door as any).rowTags).length} rows - the one-blob seal removed`);
+  }
   await moveOldRecords();
   return {created: !opened, pressed: true};
 }
