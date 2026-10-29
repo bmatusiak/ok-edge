@@ -9,7 +9,10 @@ import * as bucketLib from 'node-onlykey-lib/bucket';
 const keychain = require('node-onlykey-lib/keychain');
 
 const kcRule = bucketLib.rules.keychain(keychain.list);
+/* each device's Edge log, as blocks: links are signed and unique - their union; a fork is reported, never repaired */
+const logsRule = bucketLib.rules.edgeLogs(require('node-onlykey-lib/edge').logblocks);
 export const RULES = {
+  'edge-logs': logsRule, 'edge-logs-test': logsRule,
   keychain: kcRule, 'keychain-test': kcRule,
   guestbook: bucketLib.rules.guestbook(), 'guestbook-test': bucketLib.rules.guestbook(),
   passwords: bucketLib.rules.passwords(),

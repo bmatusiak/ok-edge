@@ -59,6 +59,12 @@ export function useEdge() {
       /* once per key normally: more often means something re-opens it (and drops what the last one held) */
       console.log(`[edge] key opened for ${backend} (was ${was}): ${real ? `edge on ${real.backend}` : 'no edge'}`);
     }
+    /*
+     * THE CLI'S HISTORY, ONCE A TRADE BRINGS IT (edgeSoftKey.takeShared): the key stays open across refreshes, so its
+     * open alone would miss a log that came in later. A memory read of the open bucket - the key is asked only when
+     * the bucket's log for it changed.
+     */
+    if (real) await real.takeShared().catch((e: any) => console.log(`[edge] shared records: not read - ${String(e?.message ?? e)}`));
     return real;
     /*
      * backend IS A DEPENDENCY (box, 2026-10-28): with [wantReal] alone this kept the backend of the hook's first

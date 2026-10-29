@@ -309,6 +309,19 @@ export async function forgetMirror(deviceId: Uint8Array): Promise<void> {
 }
 
 const seqOf = (r: EdgeLinkRecord) => chain.decodeLink(r.link).seq;
+
+/*
+ * THE ANCHOR A CHECK STARTS FROM, or null: a fresh copy is anchored at the key's checkpoint (no history read before it),
+ * but once it holds the chain from its start - the CLI's history came in (edgeSoftKey.takeShared) - the anchor no longer
+ * stands in for anything: the check runs from genesis and every link is checked (chain.chainStart: seq 0, or a CONTINUE).
+ */
+function anchorOf(mirror: Mirror): {seq: number; head: Uint8Array} | null {
+  if (!mirror.anchor) return null;
+  const first = mirror.links[0];
+  if (!first) return mirror.anchor;
+  const f = chain.decodeLink(first.link);
+  return f.seq === 0 || f.op === codes.OP.CONTINUE ? null : mirror.anchor;
+}
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /*
@@ -761,7 +774,8 @@ export async function liveView(source: EdgeSource, mirror: Mirror, known?: {seq:
   /* the key's public key and checkpoint: the caller's, when it has just read them (syncNow) - not a second read */
   const key = knownKey !== undefined ? knownKey : source.copyKey ? await source.copyKey() : null;
   /* an anchored copy holds nothing before its anchor, and needs nothing before it from the key */
-  const ringStart = (h: {ringFrom: number}) => Math.max(h.ringFrom, mirror.anchor ? mirror.anchor.seq + 1 : 0);
+  const anchor = anchorOf(mirror);
+  const ringStart = (h: {ringFrom: number}) => Math.max(h.ringFrom, anchor ? anchor.seq + 1 : 0);
   const ring = async () => (head.seq >= ringStart(head) ? source.read(ringStart(head), head.seq - ringStart(head) + 1) : []);
   /* the receipt pairing on its own turn of the JS thread, not stacked on the check (rows, A13: 215 ms) */
   await new Promise<void>(r => setTimeout(r, 0));
@@ -1045,9 +1059,9 @@ function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ring
       return viewOf({kind: 'tampered', seq: cp.seq, reason: 'bad-checkpoint'}, new Set());
     }
   }
-  const sealed = was || mirror.anchor ? null : sealedStart(mirror, head, key);
   /* an anchored copy is checked from its anchor (lib copy.assess from: the welds to the signed head prove it) */
-  const anchor = mirror.anchor ?? null;
+  const anchor = anchorOf(mirror);
+  const sealed = was || anchor ? null : sealedStart(mirror, head, key);
   const assessWith = (seal: {seq: number; head: Uint8Array} | null) => copy.assess(
     {links: mirror.links, openings: key?.openings ?? {}},
     {publicKey: key?.publicKey, publicKeyPq: key?.publicKeyPq ?? null, deviceId: mirror.deviceId, head: {seq: head.seq, head: head.head}, held, checkpoint: cp},
@@ -1068,6 +1082,13 @@ function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ring
   const result = a.chain;
   const unverified = new Set<number>();
   for (const g of result.gaps) for (let s = g.from; s <= g.to; s++) unverified.add(s);
+  /*
+   * NOTHING AT OR BEFORE THE ANCHOR WAS CHECKED (copy.assess from the anchor leaves those links out): they are not drawn
+   * green, and takeOwnLinks never keeps one on this check's word. Found 2026-10-29 (the audit for the CLI's history in
+   * the web app): links offered from before a fresh copy's anchor came out "verified" unchecked. A copy that reaches
+   * back to the chain's start has no anchor (anchorOf) - the full check from genesis decides every link.
+   */
+  if (anchor) for (const {f} of decoded) if (f.seq <= anchor.seq) unverified.add(f.seq);
   let verdict: Verdict;
   const open: {from: number; to: number}[] = a.open;
   const lost: {from: number; to: number}[] = a.missing;

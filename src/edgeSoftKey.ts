@@ -29,8 +29,38 @@ import OkEmu from './transport/OkEmu';
 import {chainState, evaluate, loadMirror, takeOwnLinks, type EdgeView} from './edgeStore';
 /* keys whose shared records this app run has offered already (desktop) */
 const takenShared = new Set<string>();
+
+/*
+ * THIS KEY'S LOG AS THE OPEN BUCKET HOLDS IT (the identity bucket's `edge-logs`, `edge-logs-test` on the testnet), in the
+ * shape the desktop's shared records come in - or null when the bucket is closed or holds none. mark: the device's key
+ * count and newest write, so a take runs again only when a trade changed the log.
+ */
+function bucketShared(deviceIdHex: string): {mark: string; links: [string, string, string | null][]; openings: unknown[]; notes: any} | null {
+  const {tradeBucket} = require('./bucketStore');
+  const {logblocks} = require('node-onlykey-lib/edge');
+  const open = tradeBucket();
+  if (!open) return null;
+  const store = currentNet() === 'test' ? 'edge-logs-test' : 'edge-logs';
+  const recs = (open.bucket.stores[store] ?? {}) as Record<string, {v: string; at: string; archived?: boolean}>;
+  const dev = logblocks.devOf(deviceIdHex);
+  const entries: Record<string, string> = {};
+  let newest = '';
+  for (const [k, r] of Object.entries(recs)) {
+    if (!k.startsWith(`${dev}.`) || !r || r.archived || r.v === null) continue;
+    entries[k] = r.v;
+    if (r.at > newest) newest = r.at;
+  }
+  const j = logblocks.join(entries, deviceIdHex);
+  if (!j || !j.links.length) return null;
+  return {
+    mark: `${Object.keys(entries).length}@${newest}`,
+    links: j.links.map((l: {link: string; head: string; reveal?: string}) => [l.link, l.head, l.reveal ?? null] as [string, string, string | null]),
+    openings: j.openings ?? [],
+    notes: j.notes,
+  };
+}
 import type {EdgeBudget, EdgeCopyCheck, EdgeCopyKey, EdgeEnded, EdgeInbox, EdgeKeyState, EdgeLinkRecord, EdgeRequest, EdgeSource} from './edgeFake';
-import {edgeKey} from './net';
+import {currentNet, edgeKey} from './net';
 
 const {DECISION, OP} = codes;
 
@@ -157,12 +187,27 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * a hard key holds only its newest links, and what the CLI picked up before is there. Offered
    * the way a computer offers links to a phone, under the same rules (edgeStore.takeOwnLinks).
    * Once per key per app run: later links the tab reads from the key itself.
+   *
+   * EVERYWHERE ELSE, FROM THE IDENTITY BUCKET (PROPOSAL-sync-and-identity.md Phase 2; Brad, 2026-10-29: "plugin my live
+   * key, and see budget history over in the webapp from the cli"): the CLI files each device's log in the bucket's
+   * `edge-logs` store as blocks (lib edge/src/logblocks.js), a trade brings them here, and this key's own log is taken
+   * the same way - nothing is asked of the key for them that the take does not ask anyway. Again only when the bucket's
+   * log for this key changed (a later trade brought more): the newest write and the key count say so.
    */
-  private async takeShared(): Promise<void> {
-    if (shell !== 'desktop' || takenShared.has(toHex(this.deviceId))) return;
-    takenShared.add(toHex(this.deviceId));
-    const {desktop} = require('./platform');
-    const shared = (await desktop.invoke('okedge:sharedLinks', toHex(this.deviceId))) as {links: [string, string, string | null][]; openings: unknown[]; notes: any} | null;
+  async takeShared(): Promise<void> {
+    const id = toHex(this.deviceId);
+    let shared: {links: [string, string, string | null][]; openings: unknown[]; notes: any} | null;
+    if (shell === 'desktop') {
+      if (takenShared.has(id)) return;
+      takenShared.add(id);
+      const {desktop} = require('./platform');
+      shared = (await desktop.invoke('okedge:sharedLinks', id)) as typeof shared;
+    } else {
+      const fromBucket = bucketShared(id);
+      if (!fromBucket || takenShared.has(`${id}:${fromBucket.mark}`)) return;
+      takenShared.add(`${id}:${fromBucket.mark}`);
+      shared = fromBucket;
+    }
     if (!shared || !shared.links.length) return;
     const offered = shared.links.map(([l, h, r]) => ({link: fromHex(l), head: fromHex(h), reveal: r ? fromHex(r) : null}));
     /*
