@@ -8,6 +8,7 @@
 #   NO_REQUEST=1 ...   no new budget: the signs below use the one already open (every budget is finished)
 #   SIGNS=3 ...   then that many signs the budget pays ("Agent: a sign the budget pays"), each with its receipt; the
 #                 last use's receipt ends the budget
+#   STOP_AFTER=bucket ...   end once the bucket is open (the login's timeline: tools/box/timeline.js)
 #   CONSOLE=/tmp/pc.log ...   the page's own [edge] lines kept in that file across the reload (page-console.js reloads
 #                 over its own DevTools connection, so the subscription survives it; a reload from outside drops it)
 source ~/.nvm/nvm.sh >/dev/null 2>&1
@@ -21,7 +22,8 @@ waitfor() {
   for _ in $(seq 1 ${2:-60}); do L=$(labels); echo "$L" | grep -q "$1" && return 0; sleep 0.5; done
   echo "!! never saw: $1 - the screen: $(echo "$L" | cut -c1-240)"; return 1
 }
-say() { echo "== $(date +%T) $*"; }
+# the time to the ms: tools/box/timeline.js lines these steps up with the page's own [timeline] lines
+say() { echo "== $(date +%T.%3N) $*"; }
 
 # THE KEY UNLOCKED BEFORE THE PAGE LOADS: a page that loads on a locked key shows This Key "Locked", and nothing there
 # asks the key again (only Log in and the PIN screen arm the page's key check) - 2026-10-28, after a soft key restart.
@@ -39,7 +41,7 @@ say "the key is unlocked"
 say "reload"
 if [ -n "$CONSOLE" ]; then
   # its pid kept and stopped when this run ends: a listener left behind writes into the next run's log twice over
-  timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|keybusy|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &
+  timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|keybusy|timeline|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &
   PC=$!
   trap 'kill $PC 2>/dev/null' EXIT
   sleep 2
@@ -63,15 +65,19 @@ echo "$L" | grep -q 'Locked' && {
   done
   waitfor '\[Continue\]\|\[Decrypt Bucket\]' || exit 1
 }
-echo "$L" | grep -q '\[Continue\]' && { C "Continue" >/dev/null; waitfor '\[Decrypt Bucket\]' || exit 1; }
+say "the page shows $(echo "$L" | grep -o '\[Continue\]\|\[Decrypt Bucket\]' | head -1)"
+echo "$L" | grep -q '\[Continue\]' && { say "Continue"; C "Continue" >/dev/null; waitfor '\[Decrypt Bucket\]' || exit 1; say "the page shows [Decrypt Bucket]"; }
 say "open the bucket"
 C "Decrypt Bucket" >/dev/null
 waitfor 'Press the key' || exit 1
+say "the page asks for the bucket's code"
 code=$(echo "$L" | sed -E "s/.*Opening this identity.s bucket \| //" | grep -oE '[1-6]' | head -3 | tr '\n' ' ')
 say "its code: $code"
 # shellcheck disable=SC2086
 press $code
 waitfor '\[Menu\]' || exit 1
+say "the bucket is open"
+[ "$STOP_AFTER" = bucket ] && exit 0
 say "Edge tab, a test budget request"
 C "Menu" wait:2 "Edge" >/dev/null
 # THE TESTING BUTTONS LIVE IN EDGE MANAGEMENT, and one there is disabled while the tab works with the key (edge.busy).

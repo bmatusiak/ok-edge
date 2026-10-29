@@ -64,8 +64,22 @@ function set(b: KeyBusy | null) {
   for (const l of [...listeners]) l(b);
 }
 
+/*
+ * THE TIMELINE (Brad, 2026-10-28: "measure the entire process from start of the webapp login to the end of bucket,
+ * see why in-between actions have a huge gap"): debug builds log each operation's begin and end and each wait the
+ * lib takes before one, on the wall clock in ms - so the time between two requests can be split into the lib's waits
+ * and everything else (the page's own work, the browser). tools/box/timeline.js reads them with the box flow's steps.
+ */
+const timeline = (text: string) => { if (__DEV__) console.log(`[timeline] ${Date.now()} ${text}`); };
+/** okcrypto.on('settle', noteSettle) - the lib waits before a request (the key's last reply, its timers) */
+export function noteSettle(e: {ms: number; why?: string}) {
+  timeline(`wait ${Math.round(e.ms)} ms: ${e.why ?? ''}`);
+}
+
 /** okcrypto.on('tunnel', noteTunnel) - one operation's progress */
 export function noteTunnel(e: TunnelEvent) {
+  if (e.phase === 'begin') timeline(`begin #${e.id} ${whatOf(e.msg, e.slot)}`);
+  if (e.phase === 'end') timeline(`end #${e.id} ${whatOf(e.msg, e.slot)} steps=${e.step} ${e.ok ? 'ok' : 'failed'}`);
   if (e.phase === 'begin') {
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     ops += 1;
