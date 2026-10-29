@@ -58,7 +58,14 @@ export function useEdge() {
     /* the key the app is using now: another one (unplugged, picked) is opened afresh */
     if (!real || real.backend !== backend) real = await SoftKeyEdge.open();
     return real;
-  }, [wantReal]);
+    /*
+     * backend IS A DEPENDENCY (box, 2026-10-28): with [wantReal] alone this kept the backend of the hook's first
+     * render. In the web app wantReal never changes (its firmware has the edge plugin), so a hook mounted while the
+     * app was still on its default 'embedded' compared every later call against it - the opened key says 'usb' -
+     * and re-opened the key on EVERY call: each head poll and each button a probe and a PUBKEY over the tunnel, and
+     * the new SoftKeyEdge dropped the requests the last one held ("Agent: request a budget" showed nothing).
+     */
+  }, [wantReal, backend]);
 
   const run = useCallback(async (work: (s: Source) => Promise<EdgeView>) => {
     setBusy(true);
