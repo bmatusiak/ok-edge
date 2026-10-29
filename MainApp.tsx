@@ -215,7 +215,13 @@ const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
  * Every tab is on the web app now: Sync shows the web app its server (the cli pair and the sync service stay the phone's
  * and the desktop's - SyncScreen shows the web app only Identity, Server and Features).
  */
-const NOT_WEB_TABS: readonly Tab[] = [];
+/*
+ * NOT IN THE WEB APP (Brad, 2026-10-29: "webapp has no softkey, and no vendor interface, so panels and elements that rely on
+ * them can be hidden for webapp"): a page reaches a hard key over WebAuthn only (the lib's tunnel - derives, the vault,
+ * composite sign/decrypt, Edge), so a tab built on vendor messages or raw CTAPHID can only fail there. Settings: PIN,
+ * preferences, backup/restore, firmware, advanced are vendor messages; Passkeys: CTAPHID's credential management.
+ */
+const NOT_WEB_TABS: readonly Tab[] = ['Settings', 'Passkeys'];
 
 /*
  * The drawer's tabs: testing mode adds its own; Edge also comes with a soft key that has it.
@@ -1534,7 +1540,8 @@ function Shell() {
                * right now, for this login.
                */
               keyPick={
-                keys.attached === true
+                /* the web app has no soft key to pick (MainApp NOT_WEB_TABS): the hard key is the only key there */
+                keys.attached === true && shell !== 'webapp'
                   ? {
                       value: keys.backend === 'usb' ? 'Hard key' : 'Soft Key',
                       onChange: next =>
@@ -1564,7 +1571,8 @@ function Shell() {
               <SlotEditorScreen slot={openSlot} emu={emu} onBack={() => setOpenSlot(null)} blockScreenshots={BLOCK_SCREENSHOTS} />
             ) : (
               <KeyScreen emu={emu} keys={keys} configMode={configMode === PRE} onCheckConfig={() => void checkConfig()} checking={checking}
-                slots={<SlotsScreen panel onOpen={slot => setOpenSlot(slot)} />} />
+                /* slots are read and written with vendor messages, which a page cannot send */
+                slots={shell === 'webapp' ? undefined : <SlotsScreen panel onOpen={slot => setOpenSlot(slot)} />} />
             )
           ) : tab === 'Slots' ? (
             openSlot ? (
