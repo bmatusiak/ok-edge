@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 /*
- * hardkey-press.js - the buttons of a HARD key on the box's USB, pressed through its DEBUG console (Linux, a test hex
- * only: a production build has no console, so only a person's fingers press it).
+ * hardkey-press.js - the buttons of a HARD key on this computer's USB, pressed through its DEBUG console (the box's
+ * Linux by hidraw; Windows by node-hid - a test hex only: a production build has no console, so only a person's
+ * fingers press it). --watch reads the console, so what the key itself did is seen next to what a browser did.
  *
  *   node tools/box/hardkey-press.js 1 2 3 4 5 6 1      a PIN: seven taps, in one console line
  *   node tools/box/hardkey-press.js 1:hold             button 1 held (tap | hold | long | longest)
@@ -66,10 +67,31 @@ function line(presses) {
   return text;
 }
 
-/* one OUT report: hidraw's first byte is the report number (0: the console uses none), then the 32 bytes */
+/*
+ * ON WINDOWS (and anywhere not Linux) through node-hid (2026-10-29: key 1 on the Windows PC, for Chrome's silent check
+ * there): Windows hands the key's FIDO interface to webauthn.dll alone, but the console (0xFFC9) is an ordinary HID
+ * interface any program may open next to the browser. The node is node-hid's path; Windows has no gadget to skip.
+ */
+const LINUX = process.platform === 'linux';
+function hid() {
+  try { return require('node-hid'); } catch { throw new Error('node-hid is not installed here (ok-edge\'s node_modules has it)'); }
+}
+function hidConsole() {
+  const found = hid().devices().filter((d) => d.vendorId === 0x1d50 && d.productId === 0x60fc && d.usagePage === 0xffc9);
+  if (!found.length) throw new Error('no OnlyKey debug console on USB (a production build has none) - plug in a test key');
+  if (found.length > 1) throw new Error(`more than one OnlyKey console on USB (${found.length}) - leave one`);
+  return found[0].path;
+}
+
+/* one OUT report: the first byte is the report number (0: the console uses none), then the 32 bytes */
 function send(node, text) {
   const report = Buffer.alloc(1 + LINE_MAX);
   Buffer.from(`${text}\n`, 'ascii').copy(report, 1);
+  if (!LINUX) {
+    const dev = new (hid().HID)(node);
+    try { dev.write([...report]); } finally { dev.close(); }
+    return;
+  }
   const fd = fs.openSync(node, 'r+');
   try { fs.writeSync(fd, report); } finally { fs.closeSync(fd); }
 }
@@ -77,7 +99,13 @@ function send(node, text) {
 /* the console's lines as they come (64-byte IN reports, the text null-padded), until onLine returns true */
 function readLines(node, onLine, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const s = fs.createReadStream(node, { highWaterMark: 64 });
+    let s;
+    if (LINUX) {
+      s = fs.createReadStream(node, { highWaterMark: 64 });
+    } else {
+      const dev = new (hid().HID)(node);
+      s = { on: (ev, f) => dev.on(ev, f), destroy: () => dev.close() };
+    }
     let buf = '';
     const done = (err, v) => { clearTimeout(t); s.destroy(); if (err) reject(err); else resolve(v); };
     const t = timeoutMs ? setTimeout(() => done(new Error(`no console line matched in ${timeoutMs / 1000} s`)), timeoutMs) : null;
@@ -96,11 +124,13 @@ function readLines(node, onLine, timeoutMs) {
 
 async function main(argv) {
   if (argv.includes('--list')) {
+    if (!LINUX) { console.log(`${hidConsole()} console hard key`); return 0; }
     for (const x of nodes()) console.log(`${x.node} ${x.seremu ? 'console' : '       '} ${x.gadget ? 'gadget soft key' : 'hard key'}`);
     return 0;
   }
-  const node = hardConsole();
-  if (argv.includes('--watch')) { await readLines(node, (l) => { console.log(l); return false; }, 0); return 0; }
+  const node = LINUX ? hardConsole() : hidConsole();
+  /* --watch: each line with the time it came, to the ms - to line up with the page's own [timeline] lines */
+  if (argv.includes('--watch')) { await readLines(node, (l) => { console.log(`${new Date().toISOString().slice(11, 23)} ${l}`); return false; }, 0); return 0; }
   const after = (argv.find((a) => a.startsWith('--after=')) || '').slice(8);
   const timeout = Number((argv.find((a) => a.startsWith('--timeout=')) || '').slice(10)) || 60;
   const presses = argv.filter((a) => !a.startsWith('--'));
