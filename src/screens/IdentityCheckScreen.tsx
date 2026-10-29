@@ -17,7 +17,9 @@ import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
 import {netTag} from '../net';
-import {openIdentityBucket, openLegacyStorage} from '../bucketStore';
+import {bucketLabelOf, openIdentityBucket, openLegacyStorage} from '../bucketStore';
+import {proofKept, proofMaterial} from '../bucketTrade';
+import {shell} from '../platform';
 import {readKeyIdentity} from '../keyIdentity';
 import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
@@ -32,6 +34,22 @@ type Read =
 /* opening the bucket after Continue: asking the key, waiting for its press, or what went wrong */
 type Open = {kind: 'idle'} | {kind: 'opening'} | {kind: 'press'} | {kind: 'failed'; why: string};
 
+/*
+ * WHAT A LOGIN'S BUDGET IS NAMED (Brad, 2026-10-29: the site, the app, the device, the time - no IP): its reason, the words
+ * kept with its opening and listed in every device's budget history. The site is the page's own (a browser binds the
+ * key's answers to it); the app and the browser are what this app says of itself; the time is the opening's.
+ */
+declare const location: {host: string} | undefined;
+declare const navigator: {userAgent?: string} | undefined;
+function loginReason(): string {
+  if (shell === 'webapp') {
+    const ua = String(navigator?.userAgent ?? '');
+    const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'a browser';
+    return `log in: the web app in ${browser} at ${typeof location !== 'undefined' ? location.host : 'its site'}`;
+  }
+  return `log in: the ${shell === 'desktop' ? 'desktop' : 'phone'} app`;
+}
+
 export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: string; onContinue: () => void; onPress?: () => void}) {
   const [read, setRead] = useState<Read>({kind: 'checking'});
   const [open, setOpen] = useState<Open>({kind: 'idle'});
@@ -45,8 +63,26 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
     if (read.kind !== 'read') { openLegacyStorage(); onContinue(); return; }
     setOpen({kind: 'opening'});
     try {
-      const {okcrypto} = await getOnlyKey(activeBackend());
-      await openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}), read.edgeIdentity);
+      const {okcrypto, identity} = await getOnlyKey(activeBackend());
+      const open = () => openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}), read.edgeIdentity);
+      if (read.bucket === 'kept' || typeof (identity as any)?.login !== 'function') {
+        /* the desktop's shared file: opened with no press - nothing for a login budget to pay */
+        await open();
+      } else {
+        /*
+         * THE LOGIN PLAN (lib identity.login; PROPOSAL-login-plan.md; Brad, 2026-10-29: "1 press = logs into our app";
+         * "this gives me a log in log in the edge blockchain"): the bucket's derive, the identity proof on a first login
+         * here, this device's bucket key certificate while none is kept - in ONE Edge budget, one press, each a link with
+         * its receipt, named for the app and the site. The bucket key itself is the key's shared secret, which no budget
+         * pays: on a first login here it still asks its code. A key without the login budget logs in as before.
+         */
+        const keyKept = await proofKept(read.identity);
+        const signs = (read.bucket === 'none' ? 1 : 0) + (keyKept ? 0 : 1);
+        await (identity as any).login(async () => {
+          await open();
+          if (!keyKept) await proofMaterial();
+        }, {reason: loginReason(), derives: [bucketLabelOf(read.identity)], signs, onPress: () => setOpen({kind: 'press'})});
+      }
       onContinue();
     } catch (e: unknown) {
       setOpen({kind: 'failed', why: String((e as Error)?.message ?? e)});

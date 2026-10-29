@@ -38,6 +38,8 @@ type Okcrypto = {
 
 /* the label of this identity's bucket key: one per identity, so two identities on one key never share it */
 const bucketKeyLabel = (identity: string): string => `okedge/bucket/v1/${identity.toLowerCase()}`;
+/* the same label, for the login plan: the one derive its budget pays to open this bucket (keyIdentity loginPlan) */
+export const bucketLabelOf = bucketKeyLabel;
 const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n));
 
 /*

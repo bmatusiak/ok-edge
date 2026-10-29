@@ -35,6 +35,11 @@ const ALIAS = 'bucketkey';
 const KEY = (id: string) => `okrn.bucketkey.${currentNet() === 'test' ? 'test.' : ''}${id}`;
 let me: Me | null = null;
 
+/* is this device's bucket key for the identity kept already? (the login plan: its certificate is a signature the budget pays) */
+export async function proofKept(identity: string): Promise<boolean> {
+  return Boolean(await AsyncStorage.getItem(KEY(identity.toLowerCase())));
+}
+
 /* this phone's bucket key and certificate for the open bucket's identity: kept sealed, or made once */
 async function ensureMe(): Promise<void> {
   const open = tradeBucket();
