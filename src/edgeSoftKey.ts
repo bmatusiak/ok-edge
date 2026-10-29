@@ -30,6 +30,46 @@ import {chainState, evaluate, loadMirror, takeOwnLinks, type EdgeView} from './e
 /* keys whose shared records this app run has offered already (desktop) */
 const takenShared = new Set<string>();
 const saidShared = new Map<string, string>();
+
+/*
+ * YOUR OTHER DEVICES' LOGS FROM THE BUCKET (Brad, 2026-10-29, of key 1's old live chain, its key since wiped: "that log
+ * has value" - "it can be verified without probing the key as long as the identity key matches"). The CLI files every
+ * log of this identity in the bucket (lib copy.adoptAll); each other device's goes through edgeDevices.receiveLog - the
+ * same judge as a log a computer brings: that device's checkpoint with both halves under the key its log carries, its
+ * owner statement under YOUR owner key (one per backup: every key restored from it has it), the whole log against the
+ * checkpoint. No key request; a log that does not check is kept apart with its warning. Once per log per change.
+ */
+const takenOther = new Set<string>();
+async function takeOtherLogs(ownIdHex: string): Promise<void> {
+  const {tradeBucket} = require('./bucketStore');
+  const {logblocks, copyfile} = require('node-onlykey-lib/edge');
+  const open = tradeBucket();
+  if (!open) return;
+  const own = logblocks.devOf(ownIdHex);
+  for (const store of currentNet() === 'test' ? ['edge-logs-test'] : ['edge-logs']) {
+    const recs = (open.bucket.stores[store] ?? {}) as Record<string, {v: string | null; at: string; archived?: boolean}>;
+    const live = Object.entries(recs).filter(([, r]) => r && !r.archived && r.v !== null);
+    for (const dev of logblocks.devices(live.map(([k]) => k))) {
+      if (dev === own) continue;
+      const mine = live.filter(([k]) => k.startsWith(`${dev}.`));
+      const mark = `${dev}:${mine.length}@${mine.reduce((m, [, r]) => (r.at > m ? r.at : m), '')}`;
+      if (takenOther.has(mark)) continue;
+      takenOther.add(mark);
+      const j = logblocks.join(Object.fromEntries(mine.map(([k, r]) => [k, r.v as string])), JSON.parse(recs[`${dev}.meta`].v as string).deviceId);
+      if (!j || !j.links.length || !j.checkpoint || !j.statement || !j.publicKey) {
+        console.log(`[edge] other devices' logs: ${dev.slice(0, 8)} has no checkpoint or statement - not judged`);
+        continue;
+      }
+      const c = copyfile.fromJSON(j, fromHex(j.deviceId));
+      const {receiveLog} = require('./edgeDevices');
+      const r = await receiveLog({
+        deviceId: c.deviceId, publicKey: c.publicKey, publicKeyPq: c.publicKeyPq, records: c.links, checkpoint: c.checkpoint,
+        statement: c.statement, from: 'the identity bucket', openings: j.openings ?? [], notes: j.notes,
+      });
+      console.log(`[edge] other devices' logs: "${c.statement.nametag}" (${dev.slice(0, 8)}) - ${r.held ? `${r.count} link(s) judged` : 'nothing new'}`);
+    }
+  }
+}
 let bucketSharedWhy = '';
 
 /*
@@ -214,6 +254,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       const {desktop} = require('./platform');
       shared = (await desktop.invoke('okedge:sharedLinks', id)) as typeof shared;
     } else {
+      await takeOtherLogs(id).catch((e: any) => console.log(`[edge] other devices' logs: not read - ${String(e?.message ?? e)}`));
       const fromBucket = bucketShared(id);
       /* why nothing was taken, said once each time it changes (every refresh asks; a quiet one says nothing) */
       const why = !fromBucket ? bucketSharedWhy : takenShared.has(`${id}:${fromBucket.mark}`) ? `already taken (${fromBucket.mark})` : null;
