@@ -38,7 +38,10 @@ say "the key is unlocked"
 [ -n "$FRESH" ] && say "a new copy: forgetting $(timeout 10 node tools/box/page-click.js --eval '(() => { const k = Object.keys(localStorage).filter(k => k.includes("edge.mirror.")); k.forEach(x => localStorage.removeItem(x)); return k.length; })()' 2>&1 | tail -1) stored copy"
 say "reload"
 if [ -n "$CONSOLE" ]; then
-  (timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &)
+  # its pid kept and stopped when this run ends: a listener left behind writes into the next run's log twice over
+  timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &
+  PC=$!
+  trap 'kill $PC 2>/dev/null' EXIT
   sleep 2
 else
   w=$(DISPLAY=:10 xdotool search --name "ok-edge - Chromium" | head -1)
