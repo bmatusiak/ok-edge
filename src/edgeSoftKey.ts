@@ -491,6 +491,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       const raw = await AsyncStorage.getItem(REGISTRY() + toHex(this.deviceId) + '.' + id);
       out.push(this.budgetFrom(id, raw ? JSON.parse(raw) : null, mirror));
     }
+    /* an open budget holds the idle check off until it ends (src/idleTimer.ts) - with the latest end the key will let it run to */
+    require('./idleTimer').setBudgetsOpen(out.map(b => b.endsAt ?? Date.now() + DEFAULT_LIFETIME_MINUTES * 60000));
     return out;
   }
 

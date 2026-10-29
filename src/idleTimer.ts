@@ -9,7 +9,8 @@
  * report, no press): it answers - still there and unlocked, the timer starts again; it does not (locked, unplugged,
  * gone) - the person is logged out (logOut.ts). That check is the only request this app makes of the key on a timer.
  *
- * Running only while someone is logged in (MainApp: the app's main phase); stopped on the login screens.
+ * An open Edge budget holds the check off until it ends (setBudgetsOpen, below). Running only while someone is logged in
+ * (MainApp: the app's main phase); stopped on the login screens.
  */
 import {shell} from './platform';
 import {getOnlyKey} from './onlykey';
@@ -47,11 +48,26 @@ function arm(): void {
   timer = setTimeout(() => { void expire(); }, Math.max(1000, left));
 }
 
+/*
+ * AN OPEN EDGE BUDGET HOLDS THE CHECK OFF (Brad, 2026-10-29: "if an edge budget is open, idle check is skipped until the
+ * budget is complete or expired"): the app's last read of the key's live budgets (edgeSoftKey budgets), each with when
+ * it runs out. While one is open the check waits for the latest of them; one that ended sooner leaves at the next read.
+ */
+let budgetsUntil = 0;
+export function setBudgetsOpen(endsAt: number[]): void {
+  budgetsUntil = endsAt.length ? Math.max(...endsAt) : 0;
+}
+
 /* the 15 minutes ran out - unless something happened meanwhile (then only the timer moves on) */
 async function expire(): Promise<void> {
   timer = null;
   if (!running) return;
   if (Date.now() - lastActive < IDLE_MS) { arm(); return; }
+  if (budgetsUntil > Date.now()) {
+    console.log(`[idle] 15 minutes with nothing done - an Edge budget is open: the check waits until it ends (${new Date(budgetsUntil).toLocaleTimeString()})`);
+    timer = setTimeout(() => { void expire(); }, budgetsUntil - Date.now() + 1000);
+    return;
+  }
   checking = true;
   tell();
   let answered = false;
