@@ -83,6 +83,13 @@ import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
+import {onOutdated, registerWebCache, reloadFresh, updateAtSplash} from './src/webUpdate';
+
+/*
+ * THE WEB APP'S UPDATE CHECK, ONCE A PAGE LOAD (src/webUpdate.ts): a newer build on the server reloads the page fresh
+ * before anything else runs; offline, the app goes on from its cache. The worker is registered after it.
+ */
+const webChecked: Promise<void> = updateAtSplash().catch(() => undefined).then(() => registerWebCache());
 import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom, onRoomState, roomState, type RoomState} from './src/serverRoom';
 import {ActivityScreen} from './src/screens/ActivityScreen';
@@ -1047,6 +1054,12 @@ function Shell() {
    * half-spread. Leaving it waits for this AND for the firmware to settle.
    */
   const [splashDone, setSplashDone] = useState(SPLASH_SEEN);
+  /* the splash also waits for the web app's update check (a newer build reloads the page from there) */
+  const [webReady, setWebReady] = useState(shell !== 'webapp');
+  useEffect(() => { void webChecked.then(() => setWebReady(true)); }, []);
+  /* a newer build pushed while this tab was open: said, the refresh is the person's */
+  const [outdatedBuild, setOutdatedBuild] = useState<string | null>(null);
+  useEffect(() => onOutdated(setOutdatedBuild), []);
   /*
    * LOG IN STARTS THE SOFT KEY (a build with testing mode; Brad, 2026-10-07): once
    * it answers, a blank key goes to setup and any other to the PIN - the same
@@ -1179,7 +1192,7 @@ function Shell() {
        * Log in or Enter testing mode picks the net (useOkEmu ensureStarted, Brad
        * 2026-10-07): there 'stopped' is the settled state.
        */
-      if (prev === 'splash' && splashDone && (emu.state !== 'stopped' || __DEV__) && emu.state !== 'starting') {
+      if (prev === 'splash' && splashDone && webReady && (emu.state !== 'stopped' || __DEV__) && emu.state !== 'starting') {
         return 'login';
       }
       // It relocked while we were inside (or at the identity check).
@@ -1209,7 +1222,7 @@ function Shell() {
      * 'unlocked' since the PIN landed - so without it the door would never
      * reopen and the check button would look dead.
      */
-  }, [testing.enabled, emu.device, emu.state, configMode, splashDone, doorKey, passed]);
+  }, [testing.enabled, emu.device, emu.state, configMode, splashDone, webReady, doorKey, passed]);
 
   /* testing mode before the identity check: only This Key and Testing are shown - any other tab goes to Testing */
   useEffect(() => {
@@ -1369,6 +1382,16 @@ function Shell() {
               />
             </Pressable>
           </View>
+        ) : null}
+
+        {/*
+          THIS PAGE IS AN OLD BUILD (Brad, 2026-10-29: "if a push happens, and a browser tab is using the old version, it
+          will tell the user to refresh its page"): its cache and worker are cleared and the page loads the newer one.
+        */}
+        {outdatedBuild ? (
+          <Pressable onPress={() => { void reloadFresh(); }} style={styles.testing}>
+            <Text style={styles.testingText}>A newer version of this app is out - tap to refresh</Text>
+          </Pressable>
         ) : null}
 
         {/*
