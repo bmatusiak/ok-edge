@@ -213,7 +213,7 @@ jobs:
         env:
           JOBS: max
           OKEMU_VERSION: v3.1.0
-          OKEMU_PLUGINS: edge,ctap_bridge,derive_secret
+          OKEMU_PLUGINS: edge,ctap_bridge,derive_secret,version_control
           OKEMU_DEBUG: 1
         run: npm run rebuild
 

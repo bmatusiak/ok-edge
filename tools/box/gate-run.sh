@@ -28,7 +28,7 @@ if [ -n "$NO_BUILD" ]; then
 else
 rm -rf .stage-src/v3.1.0
 echo "== build (plain): v3.1.0, edge,ctap_bridge,derive_secret, DEBUG"
-OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
+OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret,version_control OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
 echo "build exit $? (sanitizer symbols: $(nm -u build/Release/onlykey_emulator.node | grep -c -E '__(a|t)san_'), must be 0)"
 fi
 cd "$K" || exit 1

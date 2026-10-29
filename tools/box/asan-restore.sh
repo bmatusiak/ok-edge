@@ -22,7 +22,7 @@ LIB=$(dirname "$EMU_REPO")/node-onlykey-lib
 OUT=~/project/onlykey/release-rehearse/asan-restore; mkdir -p "$OUT"
 ASAN_LIB=$(g++ -print-file-name=libasan.so)
 [ -d "$E" ] && [ -d "$K" ] || { echo "no emulator at $E or kit at $K"; exit 1; }
-export OKEMU_VERSION=v3.1.0 OKEMU_DEBUG=1 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret
+export OKEMU_VERSION=v3.1.0 OKEMU_DEBUG=1 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret,version_control
 cd "$E" || exit 1
 rm -rf .stage-src/v3.1.0
 node scripts/stage.js > "$OUT/stage.log" 2>&1 || { echo "stage failed (see $OUT/stage.log)"; exit 1; }

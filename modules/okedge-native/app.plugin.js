@@ -16,7 +16,7 @@
 const path = require('path');
 const { withSettingsGradle, withGradleProperties } = require('expo/config-plugins');
 
-const PLUGINS = 'config,edge,key_chain,ctap_bridge,derive_secret';
+const PLUGINS = 'config,edge,key_chain,ctap_bridge,derive_secret,version_control';
 
 const withOkEmuProject = (config) => withSettingsGradle(config, (c) => {
   if (!c.modResults.contents.includes("include ':okemu'")) {

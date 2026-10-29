@@ -4,15 +4,18 @@
 # <commit>, so the box's own soft keys (the gadget, the desktop app) are never rebuilt.
 #   bash tools/box/plugin-test.sh <emulator commit> <kit section> <test name substring>
 #   bash tools/box/plugin-test.sh c177e66 08-plugins "is refused, before any press"
-#   OKEMU_EXPERIMENTAL=1 bash tools/box/plugin-test.sh <commit> "00-sanity 01-protocol 07-lib 08-plugins" -
-#     the experimental patches too (its own build folder), whole sections ("-": every test, the kit's parallel jobs)
-# DEBUG v3.1.0 (the kit presses through the debug console) with the web app's plugins, its fixes as every build has
-# them. Prints PLUGIN-TEST <commit>: PASS | FAIL, the kit's own lines above it.
+#   AS_PUBLISHED=1 bash tools/box/plugin-test.sh <commit> "00-sanity 01-protocol 07-lib 08-plugins" -
+#     without the version_control plugin: the maintainer's 3.1.0 as published (no patches) - its own build folder;
+#     with it (the default), our release: the patches its version.json lists; "-" runs whole sections (every test,
+#     the kit's parallel jobs)
+# DEBUG v3.1.0 (the kit presses through the debug console) with the web app's plugins. Prints
+# PLUGIN-TEST <commit>: PASS | FAIL, the kit's own lines above it.
 source ~/.nvm/nvm.sh >/dev/null 2>&1
 P=~/project/onlykey
 C=${1:?emulator commit}; SECTION=${2:?kit section}; NAME=${3:?test name substring or -}
-EXP=${OKEMU_EXPERIMENTAL:-0}
-D=$P/plugin-test/$C$([ "$EXP" = 1 ] && echo -exp)
+ASIS=${AS_PUBLISHED:-0}
+PL=edge,ctap_bridge,derive_secret$([ "$ASIS" = 1 ] || echo ,version_control)
+D=$P/plugin-test/$C$([ "$ASIS" = 1 ] && echo -as-published)
 E=$D/node-onlykey-emulator/emulator
 say() { echo "== $(date +%T) $*"; }
 if [ ! -f "$E/build/Release/onlykey_emulator.node" ]; then
@@ -20,8 +23,8 @@ if [ ! -f "$E/build/Release/onlykey_emulator.node" ]; then
   git clone -q "$P/node-onlykey-emulator" "$D/node-onlykey-emulator" && git -C "$D/node-onlykey-emulator" checkout -q "$C" || { say "no commit $C"; exit 1; }
   cp -a "$P/node-onlykey-emulator/emulator/node_modules" "$E/"
   for s in OnlyKey-Firmware libraries arduino-1.6.5-r5-teensy_127; do ln -s "$P/$s" "$D/$s"; done
-  say "build $C: v3.1.0, edge,ctap_bridge,derive_secret, DEBUG"
-  (cd "$E" && OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret OKEMU_DEBUG=1 OKEMU_EXPERIMENTAL=$EXP JOBS=max npm run rebuild > "$D/build.log" 2>&1) \
+  say "build $C: v3.1.0, $PL, DEBUG"
+  (cd "$E" && OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=$PL OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$D/build.log" 2>&1) \
     || { say "build FAILED - $D/build.log"; exit 1; }
 fi
 say "kit $SECTION --test \"$NAME\" on $C ($(jq -c .fixes "$E/.stage/build.json"))"

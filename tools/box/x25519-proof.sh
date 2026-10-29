@@ -2,8 +2,8 @@
 # THE PROOF FOR PATCH 0014 (X25519 clamping): its test - python-onlykey's x25519_check.py, the RFC 7748 vector - run
 # exactly as its own instructions tell a person to, against two soft keys built from one emulator commit and presented
 # as real OnlyKeys on USB (the emulator's gadget):
-#   released   3.1.0 as the maintainer published it (OKEMU_RC_FIXES=0)          - the test must say FAIL
-#   p0014      3.1.0 + patch 0014 alone (the only patch folder kept, HOLD off)  - the test must say PASS
+#   released   3.1.0 as the maintainer published it (no version_control plugin) - the test must say FAIL
+#   p0014      3.1.0 + patch 0014 alone (a version_control listing only it, HOLD off) - the test must say PASS
 # Both DEBUG (the presses go through the debug console). Every step's output stays in ~/project/onlykey/x25519-proof.
 #   setsid nohup bash tools/box/x25519-proof.sh > ~/project/onlykey/x25519-proof/proof.log 2>&1 &
 # Never with a hard key on the box's USB: python-onlykey talks to the first OnlyKey it finds, and the test overwrites
@@ -30,16 +30,19 @@ build() {   # build <name>: released | p0014
   git clone -q "$SRC" "$d/node-onlykey-emulator"
   cp -a "$SRC/emulator/node_modules" "$d/node-onlykey-emulator/emulator/"
   for s in OnlyKey-Firmware libraries arduino-1.6.5-r5-teensy_127; do ln -s "$P/$s" "$d/$s"; done
-  local E=$d/node-onlykey-emulator/emulator rc=1
+  local E=$d/node-onlykey-emulator/emulator pl=
   if [ "$1" = released ]; then
-    rc=0
+    pl=
   else
-    # 0014 alone: the other patch folders out, its HOLD off, the staged list regenerated from what is left
+    # 0014 alone: its HOLD off, the staged list regenerated, and a version_control release listing only it
+    pl=version_control
+    printf '{"base": "3.1.0", "build": 1, "patches": ["0014"]}
+' > "$d/node-onlykey-emulator/emulator/plugins/version_control/version.json"
     (cd "$d/node-onlykey-emulator/$PATCHDIR" && for f in 00*; do case $f in 0014-*) rm -f "$f/HOLD" ;; *) rm -rf "$f" ;; esac; done)
     (cd "$d/node-onlykey-emulator/emulator" && node scripts/versions/gen-fixes.js 3.1.0 >/dev/null) || { say "gen-fixes failed"; exit 1; }
   fi
   say "build $1 at $(git -C "$d/node-onlykey-emulator" rev-parse --short HEAD)"
-  (cd "$E" && OKEMU_VERSION=v3.1.0 OKEMU_RC_FIXES=$rc OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$W/build-$1.log" 2>&1) \
+  (cd "$E" && OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=$pl OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$W/build-$1.log" 2>&1) \
     || { say "build $1 FAILED - $W/build-$1.log"; exit 1; }
   say "built $1: fixes $(jq -c .fixes "$E/.stage/build.json"), debug $(jq -c .debug "$E/.stage/build.json")"
 }

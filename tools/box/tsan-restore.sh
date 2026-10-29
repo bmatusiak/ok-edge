@@ -23,7 +23,7 @@ OUT=~/project/onlykey/release-rehearse/tsan-restore; mkdir -p "$OUT"
 TSAN_LIB=$(g++ -print-file-name=libtsan.so)
 [ -d "$E" ] && [ -d "$K" ] || { echo "no emulator at $E or kit at $K"; exit 1; }
 [ -f "$TSAN_LIB" ] || { echo "no libtsan ($TSAN_LIB)"; exit 1; }
-export OKEMU_VERSION=v3.1.0 OKEMU_DEBUG=1 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret
+export OKEMU_VERSION=v3.1.0 OKEMU_DEBUG=1 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret,version_control
 cd "$E" || exit 1
 rm -rf .stage-src/v3.1.0
 node scripts/stage.js > "$OUT/stage.log" 2>&1 || { echo "stage failed (see $OUT/stage.log)"; exit 1; }

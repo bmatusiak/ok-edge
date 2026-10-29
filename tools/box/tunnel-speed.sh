@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # THE SPEED OF THE WEB APP'S TUNNEL, before and after emulator patch 0016 (experimental: a new request wipes a reply
 # already delivered, so the lib asks again without its 5.5 s wait). One workload, two builds of the gadget soft key
-# from one emulator commit - the only difference is 0016 - on the same storage, in Chrome on the box:
-#   before   v3.1.0 + its RC fixes                      the web app built as the live site is (the lib waits)
-#   after    the same + 0016 (OKEMU_EXPERIMENTAL=1)     the web app built with EXPO_PUBLIC_KEY_WIPES_DELIVERED=1
+# from one emulator commit - with and without our release (version_control) - on the same storage, in Chrome:
+#   before   v3.1.0 as the maintainer published it       the web app built as the live site is (the lib waits)
+#   after    our release (version_control: its patches, 0016 among them)   the web app built with EXPO_PUBLIC_KEY_WIPES_DELIVERED=1
 # The workload (webapp-edge-budget.sh FRESH=1 SIGNS=3): a new copy's first sync (head, the key's checkpoint with its
 # ML-DSA half), a budget request, Approve and its press, then three signs the budget pays with their receipts (the
 # third ends the budget). Results in ~/project/onlykey/tunnel-speed/<build>.txt.
@@ -22,15 +22,15 @@ mkdir -p "$W"
 say() { echo "== $(date +%T) $*"; }
 
 build() {   # build <before|after>
-  local d=$W/$1 exp=0
-  [ "$1" = after ] && exp=1
+  local d=$W/$1 pl=$PLUGINS
+  [ "$1" = after ] && pl=$PLUGINS,version_control
   rm -rf "$d"; mkdir -p "$d"
   git clone -q "$SRC" "$d/node-onlykey-emulator"
   cp -a "$SRC/emulator/node_modules" "$d/node-onlykey-emulator/emulator/"
   for s in OnlyKey-Firmware libraries arduino-1.6.5-r5-teensy_127; do ln -s "$P/$s" "$d/$s"; done
   local E=$d/node-onlykey-emulator/emulator
-  say "build $1 at $(git -C "$d/node-onlykey-emulator" rev-parse --short HEAD) (OKEMU_EXPERIMENTAL=$exp)"
-  (cd "$E" && OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=$PLUGINS OKEMU_DEBUG=0 OKEMU_EXPERIMENTAL=$exp JOBS=max npm run rebuild > "$W/build-$1.log" 2>&1) \
+  say "build $1 at $(git -C "$d/node-onlykey-emulator" rev-parse --short HEAD) (plugins $pl)"
+  (cd "$E" && OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=$pl OKEMU_DEBUG=0 JOBS=max npm run rebuild > "$W/build-$1.log" 2>&1) \
     || { say "build $1 FAILED - $W/build-$1.log"; exit 1; }
   say "built $1: fixes $(jq -c .fixes "$E/.stage/build.json"), plugins $(jq -c .plugins "$E/.stage/build.json"), debug $(jq -c .debug "$E/.stage/build.json")"
 }

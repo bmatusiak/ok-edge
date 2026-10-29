@@ -37,7 +37,8 @@ const DIR = path.join(ROOT, 'firmware');
 const EMU_REPO = path.resolve(ROOT, '..', 'node-onlykey-emulator');
 const EMU = path.join(EMU_REPO, 'emulator');
 /* the web app's firmware: Edge, the browser's way in, and the derived secrets its stores are encrypted under. Never a softKeyOnly plugin (build-hardkey.sh refuses them) */
-const PLUGINS = ['edge', 'ctap_bridge', 'derive_secret'];
+/* version_control: our release on the maintainer's base - the version the key reports and the patches it carries (its version.json) */
+const PLUGINS = ['edge', 'ctap_bridge', 'derive_secret', 'version_control'];
 /* what the hex is built from, as paths in the emulator repo: a change in any of them is a new build */
 const SOURCE_PATHS = [
   'emulator/scripts/versions/v3.1.0.js',
@@ -60,14 +61,16 @@ function expected() {
   const dirty = git(EMU_REPO, 'status', '--porcelain', '--', ...SOURCE_PATHS);
   if (dirty) fail(`the emulator has uncommitted changes in the firmware's sources - commit them first:\n${dirty}`);
   const version = require(path.join(EMU, 'scripts/versions/v3.1.0.js'));
-  const fixes = require(path.join(EMU, 'scripts/versions/fixes-3.1.0.js'));
+  const ours = require(path.join(EMU, 'plugins/version_control/plugin.js'));
   const site = (fs.readFileSync(path.join(EMU, 'plugins/ctap_bridge/src/okplugin_ctap_bridge.cpp'), 'utf8')
     .match(/#define CB_SITE_DEFAULT "([^"]+)"/) || [])[1];
   const want = {
     version: version.version,
     firmware: version.pins['OnlyKey-Firmware'],
     libraries: version.pins.libraries,
-    fixes: fixes.names,
+    /* the patches are the release's: exactly version_control's list (scripts/versions/v3.1.0.js picks them the same way) */
+    fixes: ours.patches,
+    release: `v${ours.version}`,
     plugins: PLUGINS,
     site,
     sources: Object.fromEntries(SOURCE_PATHS.map((p) => [p, sourceHash(p).slice(0, 12)])),
@@ -112,7 +115,7 @@ function differences(rev) {
   const { manifest: m, hexes, read } = posted(rev);
   const out = [];
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  for (const k of ['version', 'firmware', 'libraries', 'fixes', 'plugins', 'site']) {
+  for (const k of ['version', 'release', 'firmware', 'libraries', 'fixes', 'plugins', 'site']) {
     if (!same(m[k], want[k])) out.push(`${k}: posted ${JSON.stringify(m[k])}, the sources say ${JSON.stringify(want[k])}`);
   }
   for (const [p, h] of Object.entries(want.sources)) {

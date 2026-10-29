@@ -33,7 +33,7 @@ echo "== cores: core_pattern $(cut -c1-40 /proc/sys/kernel/core_pattern)... ulim
 cd "$E" || exit 1
 rm -rf .stage-src/v3.1.0
 echo "== build (plain + -g): v3.1.0, edge,ctap_bridge,derive_secret, DEBUG"
-CFLAGS="-g" CXXFLAGS="-g" OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
+CFLAGS="-g" CXXFLAGS="-g" OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret,version_control OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
 echo "build exit $? (debug info: $(readelf -S build/Release/onlykey_emulator.node 2>/dev/null | grep -c debug_info) section)"
 NODE_ADDON="$E/build/Release/onlykey_emulator.node"
 
