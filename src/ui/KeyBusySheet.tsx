@@ -18,7 +18,8 @@ export function KeyBusySheet() {
   useEffect(() => onHostChallenge(setC), []);
   if (!b || c) return null;
   const pct = Math.min(100, Math.round((100 * b.step) / b.steps));
-  const counts = [`Step ${Math.min(b.step, b.steps)} of ${b.steps}`];
+  /* the step in progress, counted from 1 (the bar fills by the steps done) */
+  const counts = [`Step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`];
   if (b.ops > 1) counts.push(`request ${b.ops}`);
   if (b.waiting) counts.push(`${b.waiting} more waiting`);
   return (

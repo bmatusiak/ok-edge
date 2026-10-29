@@ -68,13 +68,13 @@ const FIND = (label) => `(() => {
       if (a.startsWith('wait:')) { await new Promise((r) => setTimeout(r, Number(a.slice(5)) * 1000)); continue; }
       let at = await evaluate(FIND(a));
       if (!at || at.x === undefined) throw new Error(`"${a}" is not on screen; there: ${(at?.seen || []).join(' | ')}`);
-      /* a disabled control: wait for it (the tab's own work with the key ends), up to 10 s, then say so */
-      for (let n = 0; at && at.disabled && n < 50; n++) {
+      /* a disabled control: wait for it (the page's own work with the key ends - ~6 s a request on a key without 0016), up to 60 s, then say so */
+      for (let n = 0; at && at.disabled && n < 300; n++) {
         await new Promise((r) => setTimeout(r, 200));
         at = await evaluate(FIND(a));
         if (!at || at.x === undefined) throw new Error(`"${a}" left the screen while it was disabled`);
       }
-      if (at.disabled) throw new Error(`"${a}" stayed disabled for 10 s - not clicked`);
+      if (at.disabled) throw new Error(`"${a}" stayed disabled for 60 s - not clicked`);
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
         await call('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
       }

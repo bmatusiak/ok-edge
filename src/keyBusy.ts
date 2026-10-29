@@ -41,7 +41,7 @@ const EDGE_WHAT: Record<number, string> = {
 const EDGE_PRESSED = new Set([0x10, 0x14, 0x21, 0x34]);
 const MSG_WHAT: Record<number, string> = {
   0xe4: 'connecting to the key', 0xec: 'reading a public key', 0xed: 'signing', 0xf0: 'decrypting',
-  0xf3: 'collecting an answer', 0xfc: 'deriving a secret',
+  0xf3: 'collecting an answer', 0xfb: "reading the key's allowed site", 0xfc: 'deriving a secret',
 };
 const whatOf = (msg: number, slot: number) =>
   msg === OKEDGE ? `Edge: ${EDGE_WHAT[slot] ?? `request ${slot}`}` : MSG_WHAT[msg] ?? `request 0x${msg.toString(16)}`;
