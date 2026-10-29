@@ -8,8 +8,13 @@
  *                      fresh nonce (node-onlykey-lib bucket/src/room.js) - the key alone, no code, no account - and
  *                      then passes frames to the others by device id. The server never holds a bucket byte: frames
  *                      are passed as they come, and the trade over them is proved and sealed end to end (M2).
+ *   /mcp               the MCP face (mcp.js): an AI agent builds a sign/decrypt plan for an identity; the plan shows
+ *                      live in that identity's room, whose owner accepts the agent, approves and presses
  *   anything else      the web app (docs/, the static build), one page for every route.
- * The MCP face (agents) joins in M5.
+ *
+ * THE ROOM AND THE AGENTS. Per identity, the room keeps which agents its owner accepted or blocked (written only by the
+ * identity's own joined devices - an agent can never accept itself) and a mirror of the plans that target it, so a
+ * device that joins later sees them. The owner's devices hear {t:'mcp', ev, ...} and answer {t:'mcp-re', op, ...}.
  *
  * HIBERNATION: the room accepts its sockets through the Durable Object's hibernation API, so a quiet room is evicted
  * from memory and costs nothing while its devices stay connected; each socket's state lives in its attachment, not in
@@ -18,9 +23,13 @@
 import { DurableObject } from 'cloudflare:workers';
 import bucketLib from 'node-onlykey-lib/bucket';
 import bytes from 'node-onlykey-lib/bytes';
+import { handleMcp, McpSession, AgentSession } from './mcp.js';
+
+export { McpSession, AgentSession };
 
 const { room } = bucketLib;
 const ROOM_PATH = /^\/ws\/([0-9a-f]{32})$/;
+const AGENT_STATES = ['accepted', 'blocked', 'removed'];
 /* the largest frame passed on: a first sync of post-quantum keys is ~240 KB; room to spare, never unbounded */
 const MAX_FRAME = 4 * 1024 * 1024;
 /* a socket that has not joined by then is closed: an open connection with no proof holds nothing open for long */
@@ -29,6 +38,7 @@ const JOIN_WITHIN_MS = 30_000;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === '/mcp') return handleMcp(request, env);
     const m = ROOM_PATH.exec(url.pathname);
     if (!m) return env.ASSETS.fetch(request);
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('a websocket only', { status: 426 });
@@ -109,6 +119,8 @@ export class IdentityRoom extends DurableObject {
       }
       case 'peers':
         return send(ws, { t: 'peers', peers: this.joined().filter(([s]) => s !== ws).map(([, a]) => a.device) });
+      case 'mcp-re':
+        return send(ws, await this.fromOwner(me.room, msg));
       default:
         return send(ws, { t: 'error', why: `unknown message ${JSON.stringify(msg && msg.t)}` });
     }
@@ -129,6 +141,113 @@ export class IdentityRoom extends DurableObject {
     const others = this.joined().filter(([s]) => s !== ws);
     if (others.some(([, b]) => b.device.id === a.device.id)) return;
     for (const [other] of others) send(other, { t: 'peer', down: a.device.id });
+  }
+
+  /* ------------------------------------------------------------------ the agents and their plans (mcp.js) */
+
+  /* to every joined device of this identity - the owner's web app, phone, desktop */
+  tell(msg) { for (const [ws] of this.joined()) send(ws, { t: 'mcp', ...msg }); }
+  async agentOf(id) { return this.ctx.storage.get(`agent:${id}`); }
+  async plans() { return [...(await this.ctx.storage.list({ prefix: 'plan:' })).values()]; }
+
+  /*
+   * An agent's plan, shown (new or changed): the agent is entered as pending the first time it targets this identity,
+   * so the owner sees who asks before anything can be submitted. A blocked agent's plans are not shown.
+   */
+  async show(plan) {
+    let a = await this.agentOf(plan.agent.id);
+    if (!a) {
+      a = { id: plan.agent.id, name: plan.agent.name, state: 'pending', first: Date.now() };
+      await this.ctx.storage.put(`agent:${a.id}`, a);
+      this.tell({ ev: 'agent', agent: a });
+    } else if (a.name !== plan.agent.name) {
+      a = { ...a, name: plan.agent.name };
+      await this.ctx.storage.put(`agent:${a.id}`, a);
+    }
+    a = { ...a, last: Date.now() };
+    await this.ctx.storage.put(`agent:${a.id}`, a);
+    if (a.state === 'blocked') return { agent_state: a.state, owner_online: this.joined().length > 0, shown: false };
+    await this.ctx.storage.put(`plan:${plan.id}`, plan);
+    this.tell({ ev: 'plan', plan });
+    return { agent_state: a.state, owner_online: this.joined().length > 0, shown: true };
+  }
+
+  async withdraw(planId, why) {
+    if (!(await this.ctx.storage.get(`plan:${planId}`))) return;
+    await this.ctx.storage.delete(`plan:${planId}`);
+    this.tell({ ev: 'plan-gone', plan: planId, why });
+  }
+
+  /* status, for the agent: its state here (unknown until it targets a plan here) and whether an owner is online */
+  async agentStatus(me) {
+    const a = await this.agentOf(me.id);
+    return { agent_state: a ? a.state : 'unknown', owner_online: this.joined().length > 0 };
+  }
+
+  /* submit: only an accepted agent, only with an owner device online to approve it - the web app runs it from here */
+  async submit(plan) {
+    const a = await this.agentOf(plan.agent.id);
+    if (!a || a.state !== 'accepted') {
+      return { ok: false, why: `the owner has not accepted you yet (${a ? a.state : 'unknown'}): they see your plan in their web app and accept you there` };
+    }
+    if (!this.joined().length) return { ok: false, why: 'no owner device is online to approve it - try again when the owner has the web app open' };
+    await this.ctx.storage.put(`plan:${plan.id}`, plan);
+    this.tell({ ev: 'submit', plan });
+    return { ok: true };
+  }
+
+  async fill(planId, item, data) {
+    const plan = await this.ctx.storage.get(`plan:${planId}`);
+    if (!plan || !['running', 'paused'].includes(plan.state)) return { ok: false, why: 'the plan is not running here' };
+    if (!this.joined().length) return { ok: false, why: 'no owner device is online' };
+    const it = plan.items.find((x) => x.item === item);
+    if (it) Object.assign(it, data);
+    await this.ctx.storage.put(`plan:${planId}`, plan);
+    this.tell({ ev: 'fill', plan: planId, item, ...data });
+    return { ok: true };
+  }
+
+  async finish(planId) {
+    const plan = await this.ctx.storage.get(`plan:${planId}`);
+    if (!plan) return { ok: false, why: 'the plan is not here' };
+    if (!this.joined().length) return { ok: false, why: 'no owner device is online to end its budget' };
+    this.tell({ ev: 'finish', plan: planId });
+    return { ok: true };
+  }
+
+  /*
+   * An owner device's answer ({t:'mcp-re', op}): the agents (list, accept, block, remove), or a plan's progress, which
+   * goes on to the agent. Only a joined device gets here (webSocketMessage) - the identity's own key proved it.
+   */
+  async fromOwner(roomId, msg) {
+    if (msg.op === 'agents') return { t: 'mcp', ev: 'agents', agents: [...(await this.ctx.storage.list({ prefix: 'agent:' })).values()], plans: await this.plans() };
+    if (msg.op === 'agent') {
+      if (!AGENT_STATES.includes(msg.state)) return { t: 'error', why: `an agent is ${AGENT_STATES.join(' | ')}` };
+      const a = await this.agentOf(String(msg.agent || ''));
+      if (!a) return { t: 'error', why: 'no such agent here' };
+      if (msg.state === 'removed') await this.ctx.storage.delete(`agent:${a.id}`);
+      else await this.ctx.storage.put(`agent:${a.id}`, { ...a, state: msg.state });
+      /* block and remove take effect at once: the agent's plans that are not running go from every device */
+      if (msg.state !== 'accepted') {
+        for (const p of await this.plans()) {
+          if (p.agent.id === a.id && !['running', 'paused'].includes(p.state)) await this.withdraw(p.id, `agent ${msg.state}`);
+        }
+      }
+      this.tell({ ev: 'agent', agent: { ...a, state: msg.state } });
+      return { t: 'mcp', ev: 'ok', op: 'agent' };
+    }
+    if (msg.op === 'plan') {
+      const plan = await this.ctx.storage.get(`plan:${String(msg.plan || '')}`);
+      if (!plan) return { t: 'error', why: 'no such plan here' };
+      const r = await this.env.AGENTS.get(this.env.AGENTS.idFromName(plan.agent.id)).fromRoom(roomId, msg);
+      if (!r.ok) return { t: 'error', why: r.why };
+      if (msg.state) plan.state = msg.state;
+      for (const x of Array.isArray(msg.results) ? msg.results : []) plan.results = { ...plan.results, [x.item]: x };
+      await this.ctx.storage.put(`plan:${plan.id}`, plan);
+      this.tell({ ev: 'plan', plan });
+      return { t: 'mcp', ev: 'ok', op: 'plan' };
+    }
+    return { t: 'error', why: `unknown mcp-re op ${JSON.stringify(msg.op)}` };
   }
 
   /* close the sockets that never joined in time; come back while any are still waiting */

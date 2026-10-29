@@ -8,7 +8,9 @@
  * where tools/release/cloudflare-site.js writes this config without the build and with the Worker already bundled. A local run keeps the docs/ already built
  * (the box's --dev build: npm run build:webapp, tools/box/webapp.sh).
  *
- * run_worker_first: /ws/* reaches the Worker even though the single-page fallback would answer every path with the app.
+ * run_worker_first: /ws/* and /mcp reach the Worker even though the single-page fallback would answer every path with
+ * the app. Durable Objects: ROOMS (an identity's room), MCP_SESSIONS (one MCP session: which agent said hello), AGENTS
+ * (one agent: its plans) - mcp-server/src/mcp.js.
  * new_sqlite_classes: the free plan's Durable Objects are the SQLite-backed kind.
  */
 {
@@ -22,8 +24,15 @@
     "directory": "./docs",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/ws/*"]
+    "run_worker_first": ["/ws/*", "/mcp"]
   },
-  "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "IdentityRoom" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["IdentityRoom"] }]
+  "durable_objects": { "bindings": [
+    { "name": "ROOMS", "class_name": "IdentityRoom" },
+    { "name": "MCP_SESSIONS", "class_name": "McpSession" },
+    { "name": "AGENTS", "class_name": "AgentSession" }
+  ] },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["IdentityRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["McpSession", "AgentSession"] }
+  ]
 }
