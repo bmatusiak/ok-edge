@@ -11,16 +11,13 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, type EdgeKeyState, type EdgeRequest, type EdgeSource} from '../edgeFake';
 import {SoftKeyEdge} from '../edgeSoftKey';
-import {computerHoldsKey, onKeyFree} from '../vendorBridge';
+import {onKeyFree} from '../vendorBridge';
 import {hasSoftKeyPlugin} from '../buildInfo';
 import {useBackend} from './KeyContext';
 import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
 import NativeShare from 'okedge-native/specs/NativeShare';
 
 type Source = EdgeSource & EdgeInbox;
-
-/* how often the open Edge tab checks whether the key's chain moved */
-const HEAD_POLL_MS = 4000;
 
 let real: SoftKeyEdge | null = null;
 
@@ -142,7 +139,7 @@ export function useEdge() {
   }, [sync, wantReal]);
   /**
    * The Sync button: a full check from the root (Brad, 2026-10-06) - this session's
-   * remembered results are dropped first. Pull-down, presses and the 4 s poll use sync.
+   * remembered results are dropped first. Pull-down, presses and a computer letting the key go use sync.
    */
   const fullSync = useCallback(() => run(async s => {
     forgetVerifiedFor(s.deviceId);
@@ -279,61 +276,17 @@ export function useEdge() {
   }, [sync]);
 
   /*
-   * THE CARD FOLLOWS THE KEY (spec session, 2026-10-03, bug 2): an agent spends
-   * straight on the key over Bluetooth, not through this tab, so the copy fell
-   * behind and the card said 0 spent. While the tab is open, read the key's head
-   * every few seconds; when it moved, sync - the budgets and their spend reload.
-   * Safe beside an agent: a computer's conversation holds the key's lane
-   * (vendorBridge), and this read waits its turn.
+   * THE CARD FOLLOWS THE KEY, AND THE KEY IS NEVER ASKED ON A TIMER (Brad, 2026-10-29: "re-reads the chain head every
+   * few seconds makes it unusable" - on Windows every read is two ceremonies, the silent check first, and a paid sign
+   * took 90-105 s queued behind them; on the box the tab was never idle). The 4 s head poll (2026-10-03, bug 2: an
+   * agent spends straight on the key over Bluetooth and the card said 0 spent) is gone. The tab reads the key when it
+   * opens, on pull-down, after each of its own actions (run), and once a paired computer lets the key go - its
+   * conversation is over, so whatever it spent is on the key now.
    */
-  const lastSeq = useRef<number | null>(null);
-  const syncWhenFree = useRef(false);
   useEffect(() => {
     if (!wantReal) return;
-    return onKeyFree(() => {
-      if (!syncWhenFree.current) return;
-      syncWhenFree.current = false;
-      void sync();
-    });
+    return onKeyFree(() => { void sync(); });
   }, [wantReal, sync]);
-  useEffect(() => {
-    if (!wantReal) return;
-    let stopped = false;
-    /*
-     * ONE HEAD READ AT A TIME (box, 2026-10-28): over the web app's tunnel a head read takes ~5 s, longer than the
-     * tick. Every tick started another: unlaned they cut an Edge CHECKPOINT from its MORE, laned they would queue
-     * faster than they drain and the tab would never be idle. A tick that finds the last read still out does nothing.
-     */
-    let reading = false;
-    const t = setInterval(async () => {
-      if (reading) return;
-      reading = true;
-      try {
-        /*
-         * A COMPUTER HOLDS THE KEY (Brad, 2026-10-06): the tab's reads would only
-         * queue behind the agent (6-7 s each, measured) - skip, and sync once the
-         * key is free (the effect below).
-         */
-        if (computerHoldsKey()) {
-          syncWhenFree.current = true;
-          return;
-        }
-        const s = await source();
-        if (!s || stopped) return;
-        const {seq} = await s.head();
-        if (lastSeq.current !== null && seq !== lastSeq.current) void sync();
-        lastSeq.current = seq;
-      } catch {
-        /* the key busy, locked or gone: the next tick tries again */
-      } finally {
-        reading = false;
-      }
-    }, HEAD_POLL_MS);
-    return () => {
-      stopped = true;
-      clearInterval(t);
-    };
-  }, [wantReal, source, sync]);
 
   return {
     view, budgets, past, others, ownName, deviceViews, requests, busy, stopping, error, pressFor, copyCheck, keyState, ended, available: wantReal, fullSync,
