@@ -27,6 +27,7 @@ import {RULES} from './bucketRules';
 import {phoneSyncTraded} from './sync';
 import {shell} from './platform';
 import {attachAgents, detachAgents} from './mcpAgents';
+import {ioPulse} from './btActivity';
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 declare const location: {origin: string; host: string} | undefined;
@@ -173,7 +174,15 @@ export async function joinServerRoom(): Promise<void> {
     set({status: 'joined', why: null, you: device, peers: r.peers()});
     console.log(`[room] joined ${new URL(url).host} as ${device.name}: ${r.peers().length} other device(s) online`);
     /* the room was joined with the key's proof, so it may trade while the bucket it joined for is open */
-    r.serve((from: string, message: any) => handleTrade(message, from, {allowed: () => tradeBucket()?.identity === me.id}));
+    r.serve(async (from: string, message: any) => {
+      const out: any = await handleTrade(message, from, {allowed: () => tradeBucket()?.identity === me.id});
+      /* a trade another device started, answered here: it is this device's last trade too (the ⇄ shows it, as its own) */
+      if (message?.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
+        const who = r.peers().find((p: RoomPeer) => p.id === from);
+        set({last: {with: who ? who.name : from, at: Date.now(), line: 'traded - answered its trade'}});
+      }
+      return out;
+    });
     /* the agents that ask this identity (the server's /mcp): their plans, live, and the owner's answers (mcpAgents.ts) */
     attachAgents(r, Array.from(me.identityPublicKey as Uint8Array, (b: number) => b.toString(16).padStart(2, '0')).join(''));
     r.on('peer', (p: any) => {
@@ -241,7 +250,8 @@ async function tradeWith(peer: RoomPeer): Promise<void> {
   const open = tradeBucket();
   const me = await proofMaterial();
   if (!r || !open || !me) return;
-  const send = (m: any) => r.request(peer.id, m, {timeoutMs: ANSWER_MS});
+  /* the ⇄ flashes for every trade message this device sends in the room (btActivity 'sync') */
+  const send = (m: any) => { ioPulse('sync'); return r.request(peer.id, m, {timeoutMs: ANSWER_MS}); };
   const c = bucketLib.trade.computerSide({bucket: open.bucket, me, randomBytes, rules: RULES});
   const m2 = c.prove(await send(c.hello()));
   const done = (line: string) => {

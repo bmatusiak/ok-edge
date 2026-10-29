@@ -16,6 +16,8 @@
  * person at a device of the identity accepts an agent or approves a plan, and only the key's press opens a budget.
  */
 
+import {ioPulse} from './btActivity';
+
 export type AgentState = 'pending' | 'accepted' | 'blocked';
 export type Agent = {id: string; name: string; state: AgentState; first?: number; last?: number};
 export type PlanItem = {
@@ -107,7 +109,7 @@ function heard(m: any): void {
 export function attachAgents(r: any, identityPublicKey: string): void {
   room = r;
   set({online: true, identityPublicKey});
-  r.on('mcp', (m: any) => { if (room === r) heard(m); });
+  r.on('mcp', (m: any) => { if (room === r) { ioPulse('mcp'); heard(m); } });
   r.on('close', () => { if (room === r) { room = null; set({online: false}); } });
   void r.agents().then(
     (x: {agents: Agent[]; plans: Plan[]}) => { if (room === r) set({agents: x.agents, plans: x.plans}); },

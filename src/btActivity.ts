@@ -15,7 +15,8 @@
  * keystroke reports; src/sync.ts: the sync service trading, the desktop's 🔁). Nothing here is read back - it is only
  * for the eye.
  */
-export type IoChannel = 'key' | 'keyboard' | 'sync';
+/* sync: a bucket trade over any carrier (Bluetooth, the server's room, the desktop's file/IPC service) - the ⇄; mcp: an agent's message from the server's /mcp - the 🔗 (Brad, 2026-10-29) */
+export type IoChannel = 'key' | 'keyboard' | 'sync' | 'mcp';
 
 export const IO_SHOW_MS = 1000;
 export const IO_STEP_MS = 250;

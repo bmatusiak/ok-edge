@@ -84,7 +84,7 @@ import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {shell} from './src/platform';
 import {armWebKey} from './src/hooks/useWebKey';
-import {joinServerRoom, leaveServerRoom} from './src/serverRoom';
+import {joinServerRoom, leaveServerRoom, onRoomState, roomState, type RoomState} from './src/serverRoom';
 import {HostChallengeSheet} from './src/ui/HostChallengeSheet';
 import {KeyBusySheet} from './src/ui/KeyBusySheet';
 import {PressSheet} from './src/ui/PressSheet';
@@ -333,13 +333,26 @@ function useIoPurple(match: (c: IoChannel) => boolean, solid: boolean): boolean 
  *     the key's ⚿ flash lasts as long as its traffic.
  * It leads to the Sync tab, as the radio icons lead to Bluetooth.
  */
+/*
+ * EVERY PLATFORM (Brad, 2026-10-29: "i just want to ensure its show on all platforms"): the ⇄ was the desktop's only.
+ * Its sync now comes from wherever this device trades - the desktop's service (file/IPC and its phones), the phone's
+ * Bluetooth, the server's room (the web app has only that) - and the purple flash from any of them (btActivity 'sync').
+ */
+function useRoom(): RoomState {
+  const [s, setS] = useState<RoomState>(roomState());
+  useEffect(() => onRoomState(setS), []);
+  return s;
+}
 function SyncStatus({onPress}: {onPress: () => void}) {
   const s = useSync();
+  const room = useRoom();
   const io = useIoPurple(c => c === 'sync', false);
+  /* the room's last trade reached the other device (its line says traded / in sync) */
+  const roomOk = !!room.last && /^(traded|in sync)/.test(room.last.line);
   const color = io ? theme.io
-    : !s || !s.enabled ? theme.textDim
-    : s.service === 'running' && s.last?.ok ? theme.ok
-    : theme.warn;
+    : (s && s.enabled && s.service === 'running' && s.last?.ok) || roomOk ? theme.ok
+    : (s && s.enabled) || room.status === 'joined' ? theme.warn
+    : theme.textDim;
   return (
     <Pressable
       onPress={onPress}
@@ -347,6 +360,31 @@ function SyncStatus({onPress}: {onPress: () => void}) {
       accessibilityLabel="Sync status"
       style={({pressed}) => [styles.barMid, pressed && styles.pressed]}>
       <Text style={[styles.barIcon, {color}]}>{'⇄'}</Text>
+    </Pressable>
+  );
+}
+
+/*
+ * 🔗 THE MCP (Brad, 2026-10-29: "i want 🔗 for the MCP (enabled/activity colors like other icons)"): the server's room,
+ * where the agents asking this identity reach it (mcpAgents.ts). Grey - no server; yellow - joining, or not joined (the
+ * Server panel says why); green - in the room; purple flashing - an agent's message arriving (btActivity 'mcp'). Drawn
+ * as text (U+FE0E asks for the plain glyph, so it takes the colour like ᛒ ⌨ ⚿ - where a platform still draws the
+ * emoji, the bar under it carries the colour). It leads to the Sync tab, where the Server panel is.
+ */
+function McpStatus({onPress}: {onPress: () => void}) {
+  const room = useRoom();
+  const io = useIoPurple(c => c === 'mcp', false);
+  const color = io ? theme.io
+    : room.status === 'joined' ? theme.ok
+    : room.status === 'joining' || room.status === 'error' ? theme.warn
+    : theme.textDim;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="MCP status"
+      style={({pressed}) => [styles.barMid, pressed && styles.pressed]}>
+      <Text style={[styles.barIcon, {color, borderBottomWidth: 2, borderBottomColor: color}]}>{'\u{1F517}︎'}</Text>
     </Pressable>
   );
 }
@@ -1294,8 +1332,9 @@ function Shell() {
                 onPress={() => setTab('Bluetooth')}
               />
             ) : null}
-            {/* the desktop's status icon in the same place (Brad, 2026-10-25): the sync service it hosts */}
-            {shell === 'desktop' ? <SyncStatus onPress={() => setTab('Sync')} /> : null}
+            {/* sync (⇄) and the MCP (🔗) on every platform (Brad, 2026-10-29) - beside the phone's radio icons */}
+            <SyncStatus onPress={() => setTab('Sync')} />
+            <McpStatus onPress={() => setTab('Sync')} />
 
             <Pressable
               onPress={() => setTab('This Key')}

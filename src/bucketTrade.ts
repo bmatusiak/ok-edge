@@ -21,6 +21,7 @@ import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {currentNet} from './net';
+import {ioPulse} from './btActivity';
 import {DEVICE_WORD} from './platform';
 import {challengeOpts} from './hostChallenge';
 
@@ -98,6 +99,8 @@ export function isTradeMessage(msg: any): boolean {
  */
 export async function handleTrade(msg: any, from: string, {allowed = phoneSyncAllowed}: {allowed?: () => boolean} = {}): Promise<unknown> {
   console.log(`[bucket] ${msg.type} arrived (${JSON.stringify(msg).length} bytes)`);
+  /* the ⇄ flashes for every trade message this device answers - over Bluetooth or the server's room alike */
+  ioPulse('sync');
   /* the Sync tab's switch off, or no bucket open: the same plain refusal as any other (no hint about the bucket) */
   if (!allowed()) { console.log(`[bucket] ${msg.type}: refused (sync is off here)`); return {ok: false, refusal: 'no'}; }
   if (msg.type === bucketLib.trade.TYPES.HELLO) await ensureMe().catch((e: unknown) => { me = null; console.log(`[bucket] no proof material: ${String((e as Error)?.message ?? e)}`); });
