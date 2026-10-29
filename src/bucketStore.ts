@@ -337,11 +337,12 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   const identityService = (await getOnlyKey(activeBackend())).identity;
   const sealedForm = stored ? isSealedForm(stored.text) : false;
   const opened = stored && sealedForm ? identityService.proveByBucket({sealed: stored.text, key}).bucket as Bucket : null;
+  if (opened) console.log(`[identity] ${id.slice(0, 12)}: proven - the key opened the bucket this device kept for it`);
   if (stored && !opened) console.log(`[bucket] ${id.slice(0, 12)}: the stored bucket is in the X-Wing form - dropped (no migration); a sync fills it again`);
   if (!opened) {
     const ask = challengeOpts('Proving this key holds the identity');
     try { await identityService.verify(ask.opts); } finally { ask.done(); }
-    console.log(`[bucket] ${id.slice(0, 12)}: the key proved the identity (a fresh challenge signed) - sealing a new bucket`);
+    console.log(`[identity] ${id.slice(0, 12)}: proven - the key signed a fresh challenge with the identity key; sealing a new bucket`);
   }
   const bucket = opened ?? bucketLib.create({owner: id});
   bucket.owner = id;

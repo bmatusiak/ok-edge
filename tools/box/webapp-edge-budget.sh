@@ -8,6 +8,7 @@
 #   NO_REQUEST=1 ...   no new budget: the signs below use the one already open (every budget is finished)
 #   SIGNS=3 ...   then that many signs the budget pays ("Agent: a sign the budget pays"), each with its receipt; the
 #                 last use's receipt ends the budget
+#   NO_BUCKET=1 ...   a first login here: the page's sealed buckets forgotten, so the key proves the identity first
 #   STOP_AFTER=bucket ...   end once the bucket is open (the login's timeline: tools/box/timeline.js)
 #   CONSOLE=/tmp/pc.log ...   the page's own [edge] lines kept in that file across the reload (page-console.js reloads
 #                 over its own DevTools connection, so the subscription survives it; a reload from outside drops it)
@@ -37,11 +38,14 @@ if [ "$(keystate)" != unlocked ]; then
   [ "$(keystate)" = unlocked ] || { say "the key did not unlock"; exit 1; }
 fi
 say "the key is unlocked"
+# NO_BUCKET=1: the page forgets the sealed buckets it kept (okrn.bucket.*) - a first login on this device: nothing to
+# open, so the key proves the identity by signing a fresh challenge before a new bucket is sealed (lib plugins/identity)
+[ -n "$NO_BUCKET" ] && say "no bucket kept: forgetting $(timeout 10 node tools/box/page-click.js --eval '(() => { const k = Object.keys(localStorage).filter(k => k.startsWith("okrn.bucket.")); k.forEach(x => localStorage.removeItem(x)); return k.length; })()' 2>&1 | tail -1) sealed bucket(s)"
 [ -n "$FRESH" ] && say "a new copy: forgetting $(timeout 10 node tools/box/page-click.js --eval '(() => { const k = Object.keys(localStorage).filter(k => k.includes("edge.mirror.")); k.forEach(x => localStorage.removeItem(x)); return k.length; })()' 2>&1 | tail -1) stored copy"
 say "reload"
 if [ -n "$CONSOLE" ]; then
   # its pid kept and stopped when this run ends: a listener left behind writes into the next run's log twice over
-  timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|keybusy|timeline|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &
+  timeout 900 node tools/box/page-console.js 890 --reload --filter='edge|keybusy|timeline|identity|bucket|copy|checkpoint|anchor|exception|error' > "$CONSOLE" 2>&1 &
   PC=$!
   trap 'kill $PC 2>/dev/null' EXIT
   sleep 2
@@ -69,12 +73,20 @@ say "the page shows $(echo "$L" | grep -o '\[Continue\]\|\[Decrypt Bucket\]' | h
 echo "$L" | grep -q '\[Continue\]' && { say "Continue"; C "Continue" >/dev/null; waitfor '\[Decrypt Bucket\]' || exit 1; say "the page shows [Decrypt Bucket]"; }
 say "open the bucket"
 C "Decrypt Bucket" >/dev/null
-waitfor 'Press the key' || exit 1
-say "the page asks for the bucket's code"
-code=$(echo "$L" | sed -E "s/.*Opening this identity.s bucket \| //" | grep -oE '[1-6]' | head -3 | tr '\n' ' ')
-say "its code: $code"
-# shellcheck disable=SC2086
-press $code
+# each code the page asks for, as a person reads it off the sheet (HostChallengeSheet: "Press the key | <what> | On your
+# OnlyKey, press these buttons in order: | 1 | 2 | 5"): the bucket's derive, and on a first login - no sealed bucket to
+# open - the identity's proof before it (lib plugins/identity verify), until the app is open
+for n in 1 2 3; do
+  waitfor 'Press the key\|\[Menu\]' || exit 1
+  echo "$L" | grep -q '\[Menu\]' && break
+  what=$(echo "$L" | sed -E 's/.*Press the key \| ([^|]*) \|.*/\1/' | cut -c1-60)
+  code=$(echo "$L" | sed -E 's/.*press these buttons in order: \| //' | grep -oE '[1-6]' | head -3 | tr '\n' ' ')
+  say "the page asks for a code ($what): $code"
+  # shellcheck disable=SC2086
+  press $code
+  # the next prompt, or the app: wait for this one to go (its code would be pressed twice)
+  for _ in $(seq 1 60); do L=$(labels); echo "$L" | grep -q "$what" || break; sleep 0.5; done
+done
 waitfor '\[Menu\]' || exit 1
 say "the bucket is open"
 [ "$STOP_AFTER" = bucket ] && exit 0
