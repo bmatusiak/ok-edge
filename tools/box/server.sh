@@ -4,7 +4,7 @@
 #   [HTTPS=1] tools/box/server.sh start|stop|restart|status|test
 # HTTPS=1: https://apps.crp.to:8787 with the dev certificate, so the web app it serves can reach a key (M2 testing).
 # start: npm run server:dev in its own session (log ~/project/onlykey/logs/server-dev.log), waits for "Ready on".
-# test:  the M1 room tests against it (mcp-server/test/rooms.test.js).
+# test:  the room and MCP tests against it (mcp-server/test/rooms.test.js, mcp.test.js); HTTPS=1 for a server started so.
 # wrangler dev does not reload code synced from Windows reliably: restart after a sync.
 source ~/.nvm/nvm.sh >/dev/null
 cd ~/project/onlykey/ok-edge || exit 1
@@ -45,6 +45,10 @@ case "${1:-status}" in
   stop) stop ;;
   restart) stop; start ;;
   status) running && echo "running $(cat "$PID")" || echo "not running" ;;
-  test) OKS_URL=http://127.0.0.1:8787 timeout 120 node --test mcp-server/test/rooms.test.js 2>&1 | grep -E "^✔|^✖|^ℹ (tests|pass|fail)" ;;
+  # the room and MCP tests; a server started HTTPS=1 is reached over loopback, its dev certificate not checked (it names
+  # apps.crp.to, not 127.0.0.1) - this run only, never the browser's
+  test)
+    if [ -n "$HTTPS" ]; then export OKS_URL=https://127.0.0.1:8787 NODE_TLS_REJECT_UNAUTHORIZED=0; else export OKS_URL=http://127.0.0.1:8787; fi
+    timeout 180 node --test --test-timeout=30000 mcp-server/test/rooms.test.js mcp-server/test/mcp.test.js 2>&1 | grep -E "^✔|^✖|^ℹ (tests|pass|fail)|AssertionError" ;;
   *) echo "usage: $0 start|stop|restart|status|test"; exit 1 ;;
 esac
