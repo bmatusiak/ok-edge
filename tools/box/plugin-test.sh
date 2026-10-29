@@ -24,4 +24,7 @@ fi
 say "kit $SECTION --test \"$NAME\" on $C ($(jq -c .fixes "$E/.stage/build.json"))"
 cd "$P/onlykey-testing" || exit 1
 OKEMU_ROOT=$E OKT_LIB_DIR=$P/node-onlykey-lib node bin/okt.js run "$SECTION" --test "$NAME" --jobs 1 2>&1 | tee "$D/kit.log" | tail -25
-grep -qE "(^|[^0-9])0 failed|fail(ed)?:? 0\b" "$D/kit.log" && ! grep -qE "[1-9][0-9]* failed" "$D/kit.log" && echo "PLUGIN-TEST $C: PASS" || echo "PLUGIN-TEST $C: FAIL"
+# the kit's own verdict line: OKT-END ... tests=<passed>p/<failed>f/<skipped>s - a pass is at least one test passed, none failed
+v=$(grep -o 'tests=[0-9]*p/[0-9]*f' "$D/kit.log" | tail -1)
+p=$(echo "$v" | sed -E 's/tests=([0-9]+)p.*/\1/'); f=$(echo "$v" | sed -E 's/.*p\/([0-9]+)f/\1/')
+[ -n "$v" ] && [ "$p" -ge 1 ] && [ "$f" = 0 ] && echo "PLUGIN-TEST $C: PASS ($v)" || echo "PLUGIN-TEST $C: FAIL (${v:-no verdict line})"
