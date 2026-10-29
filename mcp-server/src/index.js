@@ -119,8 +119,11 @@ export class IdentityRoom extends DurableObject {
       }
       case 'peers':
         return send(ws, { t: 'peers', peers: this.joined().filter(([s]) => s !== ws).map(([, a]) => a.device) });
-      case 'mcp-re':
-        return send(ws, await this.fromOwner(me.room, msg));
+      case 'mcp-re': {
+        /* the reply carries the device's own id for it (re): the room's broadcasts reach the sender too, before it */
+        const r = await this.fromOwner(me.room, msg);
+        return send(ws, msg.re !== undefined ? { ...r, re: msg.re } : r);
+      }
       default:
         return send(ws, { t: 'error', why: `unknown message ${JSON.stringify(msg && msg.t)}` });
     }

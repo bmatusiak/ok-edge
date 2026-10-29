@@ -29,15 +29,21 @@ function nodes() {
   const dir = '/sys/class/hidraw';
   return fs.readdirSync(dir).map((n) => {
     const dev = path.join(dir, n, 'device');
-    const uevent = fs.readFileSync(path.join(dev, 'uevent'), 'utf8');
-    const desc = fs.readFileSync(path.join(dev, 'report_descriptor'));
-    return {
-      node: `/dev/${n}`,
-      onlykey: /HID_ID=0003:00001D50:000060FC/i.test(uevent),
-      /* the descriptor opens with Usage Page (06 lo hi): 0xFFC9 is SEREMU */
-      seremu: desc[0] === 0x06 && desc[1] === 0xc9 && desc[2] === 0xff,
-      gadget: fs.realpathSync(dev).includes('dummy'),
-    };
+    /* a device unplugging while this reads (the gadget stopping) leaves a node half gone: skipped */
+    try {
+      const uevent = fs.readFileSync(path.join(dev, 'uevent'), 'utf8');
+      const desc = fs.readFileSync(path.join(dev, 'report_descriptor'));
+      return {
+        node: `/dev/${n}`,
+        onlykey: /HID_ID=0003:00001D50:000060FC/i.test(uevent),
+        /* the descriptor opens with Usage Page (06 lo hi): 0xFFC9 is SEREMU */
+        seremu: desc[0] === 0x06 && desc[1] === 0xc9 && desc[2] === 0xff,
+        gadget: fs.realpathSync(dev).includes('dummy'),
+      };
+    } catch (e) {
+      if (e.code === 'ENOENT') return { onlykey: false };
+      throw e;
+    }
   }).filter((x) => x.onlykey);
 }
 
