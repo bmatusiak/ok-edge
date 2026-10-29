@@ -21,7 +21,17 @@ const FIND = (label) => `(() => {
   const off = (el) => !!el.closest('[aria-disabled="true"], button:disabled');
   /* the centre of a control INSIDE the window: one below the fold is scrolled into view first - a mouse event at
    * coordinates off the screen hits nothing (2026-10-28: the request button at the foot of the open Edge Management) */
-  const at = (el) => { el.scrollIntoView({block: 'center', inline: 'center'}); const q = el.getBoundingClientRect(); return {x: q.left + q.width / 2, y: q.top + q.height / 2, disabled: off(el)}; };
+  /* covered: something else is on top at the centre (a sheet's backdrop: the wait-for-the-key sheet, 2026-10-28) -
+   * a click there reaches the cover, not the control, so it waits like a disabled one */
+  const at = (el) => {
+    el.scrollIntoView({block: 'center', inline: 'center'});
+    const q = el.getBoundingClientRect();
+    const x = q.left + q.width / 2, y = q.top + q.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    const control = el.closest('[role="button"], button, a') || el;
+    const covered = !hit || !(control.contains(hit) || hit.contains(control));
+    return {x, y, disabled: off(el) || covered, covered};
+  };
   for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') continue;
@@ -74,7 +84,7 @@ const FIND = (label) => `(() => {
         at = await evaluate(FIND(a));
         if (!at || at.x === undefined) throw new Error(`"${a}" left the screen while it was disabled`);
       }
-      if (at.disabled) throw new Error(`"${a}" stayed disabled for 60 s - not clicked`);
+      if (at.disabled) throw new Error(`"${a}" stayed ${at.covered ? "covered" : "disabled"} for 60 s - not clicked`);
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
         await call('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
       }

@@ -8,7 +8,8 @@
  * lib reports each operation (okcrypto 'tunnel': begin, plan, a step per ceremony, end); this keeps what KeyBusySheet
  * shows: what the key is doing, its steps, how many operations this run of them has had, and how many wait behind.
  *
- * Shown only when an operation lasts past SHOW_AFTER_MS (a quick one would only flash), and kept up HIDE_AFTER_MS
+ * Shown only when an operation lasts past SHOW_AFTER_MS (a quick one would only flash), and kept up HIDE_AFTER_MS (0.3 s:
+ * the gaps between back-to-back requests measured at most 0.13 s, and a sheet up longer takes the next click)
  * after the last one ends, so a run of operations - a sync, an Approve - is one sheet that counts on, not a flicker.
  */
 export type KeyBusy = {
@@ -26,7 +27,7 @@ export type KeyBusy = {
 type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean};
 
 const SHOW_AFTER_MS = 250;
-const HIDE_AFTER_MS = 700;
+const HIDE_AFTER_MS = 300;
 const OKEDGE = 0xf8;
 /* the Edge requests by their sub-op (lib edge/plugin SUB), as a person would say them */
 const EDGE_WHAT: Record<number, string> = {
