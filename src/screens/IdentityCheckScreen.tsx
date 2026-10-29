@@ -17,7 +17,7 @@ import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
 import {netTag} from '../net';
-import {bucketLabelOf, openIdentityBucket, openLegacyStorage} from '../bucketStore';
+import {bucketLabelsOf, openIdentityBucket, openLegacyStorage} from '../bucketStore';
 import {proofKept, proofMaterial} from '../bucketTrade';
 import {shell} from '../platform';
 import {readKeyIdentity} from '../keyIdentity';
@@ -94,7 +94,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         const signs = (read.bucket === 'none' ? 1 : 0) + (keyKept ? 0 : 1);
         /* the identity plugin's read, held (no key request): the bucket key's label names its public key */
         const held = await (identity as any).load();
-        const derives = [bucketLabelOf(read.identity), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
+        const derives = [...(await bucketLabelsOf(read.identity, read.edgeIdentity)), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
         await (identity as any).login(async () => {
           await open();
           if (!keyKept) await proofMaterial();

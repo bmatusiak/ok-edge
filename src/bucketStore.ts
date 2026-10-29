@@ -3,8 +3,8 @@
  * press here is needed to decrypt the container").
  *
  * One bucket per identity per net. It is stored SEALED UNDER A KEY THE ONLYKEY DERIVES (PROPOSAL-derived-keys.md,
- * Brad 2026-10-27; firmware plugin derive_secret): okcrypto.deriveSecret("okedge/bucket/v1/<identity>"), the touchless
- * key - 32 bytes in one request, protected by the key's derive setting (field 30: the code by default) until the
+ * Brad 2026-10-27; firmware plugin derive_secret): okcrypto.deriveSecret("okedge/bucket/v2/<identity>") under the site
+ * the key names (bucketKey, below), the touchless key - 32 bytes in one request, protected by the key's derive setting (field 30: the code by default) until the
  * person unprotects it - and the app seals with it itself (lib bucket.seal, AES-256-GCM). It replaced the age file to
  * the key's X-Wing recipient, which the key had to decapsulate: a 1,289-byte answer in chunks, two WebAuthn round
  * trips each on Windows. No migration (pre-v1): a bucket still stored in the X-Wing form is dropped and filled again
@@ -33,13 +33,29 @@ import {noteOwnSecret} from './ownAsks';
 
 type Bucket = ReturnType<typeof bucketLib.create>;
 type Okcrypto = {
-  deriveSecret(label: string, opts?: {touch?: boolean; confirm?: (a: {digits?: number[] | null}) => void; timeoutMs?: number}): Promise<Uint8Array>;
+  deriveSecret(label: string, opts?: {touch?: boolean; confirm?: (a: {digits?: number[] | null}) => void; timeoutMs?: number; rpId?: string}): Promise<Uint8Array>;
 };
 
-/* the label of this identity's bucket key: one per identity, so two identities on one key never share it */
-const bucketKeyLabel = (identity: string): string => `okedge/bucket/v1/${identity.toLowerCase()}`;
-/* the same label, for the login plan: the one derive its budget pays to open this bucket (keyIdentity loginPlan) */
-export const bucketLabelOf = bucketKeyLabel;
+/*
+ * THE SEAL'S KEY, BY VERSION (Brad, 2026-10-29: "yes reseal, the rpid set is our protection - move away from the old derive
+ * to new derive means resealing, then we do it"):
+ *   2  derived under the site the key names (ctap_bridge), on every host - no other site derives it, and a key that
+ *      names none has no bucket here (no fallback: the lib's NO_KEY_SITE, as for the bucket key);
+ *   1  the derive at each host's own default site (before 2026-10-29) - read once to open a bucket sealed with it, which
+ *      is then sealed again with 2; never written.
+ * One label per identity per version, so two identities on one key never share a key, and a v1 key is never a v2 one.
+ */
+const SEAL_VERSION = 2;
+const bucketKeyLabel = (identity: string, version = SEAL_VERSION): string => `okedge/bucket/v${version}/${identity.toLowerCase()}`;
+/*
+ * THE LOGIN PLAN'S DERIVES TO OPEN THIS BUCKET (IdentityCheckScreen): the v2 one, and the v1 one too while the stored
+ * bucket is still sealed with it (this login reseals it) - each a derive its budget pays.
+ */
+export async function bucketLabelsOf(identity: string, previous?: string | null): Promise<string[]> {
+  const stored = await sealedUnder(identity.toLowerCase(), previous ? previous.toLowerCase() : null);
+  const v = stored ? bucketLib.sealedKeyVersion(stored.text) : null;
+  return [bucketKeyLabel(identity), ...(v !== null && v !== SEAL_VERSION ? [bucketKeyLabel(identity, v)] : [])];
+}
 const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n));
 
 /*
@@ -47,14 +63,22 @@ const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8A
  * whether it asks first (the 3-button code by default): the code is shown by this host (hostChallenge.ts, the same
  * sheet as the bucket key's), and onPress says the key is waiting - the soft key's press is the app's to give.
  */
-async function bucketKey(identity: string, okcrypto: Okcrypto, onPress?: () => void): Promise<Uint8Array> {
+async function bucketKey(identity: string, okcrypto: Okcrypto, onPress?: () => void, version = SEAL_VERSION): Promise<Uint8Array> {
+  /* v2: the key's own site, read by the identity plugin and held (no extra request once read) */
+  let rpId: string | undefined;
+  if (version === SEAL_VERSION) {
+    const site = (await (await getOnlyKey(activeBackend())).identity.load()).site;
+    if (typeof site !== 'string' || !site) throw Object.assign(new Error("this key names no site (ctap_bridge) - its bucket is sealed under that site, and there is no other"), {code: 'NO_KEY_SITE'});
+    rpId = site;
+  }
   const ask = challengeOpts("Opening this identity's bucket");
   /* the soft key's sheet names this derive (its record carries only the label's hash) */
-  noteOwnSecret(bucketKeyLabel(identity), false, "Opening this identity's bucket");
+  noteOwnSecret(bucketKeyLabel(identity, version), false, "Opening this identity's bucket");
   try {
-    return await okcrypto.deriveSecret(bucketKeyLabel(identity), {
+    return await okcrypto.deriveSecret(bucketKeyLabel(identity, version), {
       confirm: (a) => { onPress?.(); ask.opts.confirm({digits: a.digits ?? undefined}); },
       timeoutMs: 40000,
+      ...(rpId ? {rpId} : {}),
     });
   } finally {
     ask.done();
@@ -137,7 +161,7 @@ export function openLegacyStorage(): void {
 function persist(): Promise<void> {
   const d = door;
   if (d.kind !== 'sealed') return Promise.resolve();
-  const text = bucketLib.seal(d.bucket, d.key, randomBytes);
+  const text = bucketLib.seal(d.bucket, d.key, randomBytes, {keyVersion: SEAL_VERSION});
   const run = writes.then(() => AsyncStorage.setItem(KEY(d.identity), text));
   writes = run.catch(() => {});
   return run;
@@ -327,8 +351,13 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   if (desktop) return openKept(id, okcrypto, onPress, prev);
   const stored = await sealedUnder(id, prev);
   console.log(`[bucket] ${id.slice(0, 12)}: ${stored ? `a sealed bucket is stored${stored.owner !== id ? ' (under the Edge identity - moved now)' : ''} - opened with the key's bucket key` : 'none stored - sealing a new one'}`);
-  /* the bucket key: derived once here; every later write seals with it, no key and no press */
+  /*
+   * the bucket key: derived once here; every later write seals with it, no key and no press. A bucket sealed with the
+   * v1 key is opened with that one, once, and sealed again with v2 below - its records kept as they are.
+   */
+  const storedVersion = stored ? bucketLib.sealedKeyVersion(stored.text) : null;
   const key = await bucketKey(id, okcrypto, onPress);
+  const openKey = storedVersion !== null && storedVersion !== SEAL_VERSION ? await bucketKey(id, okcrypto, onPress, storedVersion) : key;
   /*
    * THE KEY PROVES IT IS THE IDENTITY'S (lib plugins/identity, Brad 2026-10-28: "verify they are the key ... anything
    * that uses the identity plugin needs to verify the key is true"). The sealed bucket this device kept for the
@@ -338,7 +367,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
    */
   const identityService = (await getOnlyKey(activeBackend())).identity;
   const sealedForm = stored ? isSealedForm(stored.text) : false;
-  const opened = stored && sealedForm ? identityService.proveByBucket({sealed: stored.text, key}).bucket as Bucket : null;
+  const opened = stored && sealedForm ? identityService.proveByBucket({sealed: stored.text, key: openKey}).bucket as Bucket : null;
   if (opened) console.log(`[identity] ${id.slice(0, 12)}: proven - the key opened the bucket this device kept for it`);
   if (stored && !opened) console.log(`[bucket] ${id.slice(0, 12)}: the stored bucket is in the X-Wing form - dropped (no migration); a sync fills it again`);
   if (!opened) {
@@ -349,7 +378,9 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   const bucket = opened ?? bucketLib.create({owner: id});
   bucket.owner = id;
   door = {kind: 'sealed', identity: id, bucket, key, movedPrefixes: new Set()};
-  if (!opened || stored!.owner !== id) await persist();
+  const resealed = !!opened && openKey !== key;
+  if (resealed) console.log(`[bucket] ${id.slice(0, 12)}: sealed again under the key's site (v${storedVersion} -> v${SEAL_VERSION}) - every record kept`);
+  if (!opened || stored!.owner !== id || resealed) await persist();
   if (stored && stored.owner !== id) await AsyncStorage.removeItem(KEY(stored.owner));
   await moveOldRecords();
   return {created: !opened, pressed: true};
@@ -374,7 +405,7 @@ async function openKept(id: string, okcrypto: Okcrypto, onPress?: () => void, pr
   }
   const stored = await sealedUnder(id, previous);
   console.log(`[bucket] ${id.slice(0, 12)}: ${stored ? 'a sealed bucket from the page - opened once with the key\'s bucket key' : 'none kept - a new one'}`);
-  const opened = stored ? openSealed(stored.text, await bucketKey(id, okcrypto, onPress)) : null;
+  const opened = stored ? openSealed(stored.text, await bucketKey(id, okcrypto, onPress, bucketLib.sealedKeyVersion(stored.text) ?? SEAL_VERSION)) : null;
   const bucket = opened ?? bucketLib.create({owner: id});
   bucket.owner = id;
   await desktop!.invoke('okedge:bucketKeep', id, net, bucketLib.serialize(bucket));
