@@ -24,7 +24,7 @@ import {budgetStatus} from '../budgetStatus';
 import {openBudget} from '../edgeNav';
 import {currentNet} from '../net';
 import {identity as identityLib} from 'node-onlykey-lib/edge';
-import {DEVICE_WORD} from '../platform';
+import {DEVICE_WORD, shell} from '../platform';
 import {usePressSound} from './pressSound';
 import {activeBackend} from '../hooks/KeyContext';
 
@@ -32,10 +32,10 @@ import {activeBackend} from '../hooks/KeyContext';
 const REFUSAL_TEXT: Record<string, string> = {
   declined: 'You declined. The agent was told "declined".',
   timeout: 'Nobody answered in time. The agent was told "timeout". Until you close this, new requests are refused without asking - nobody is here to answer them.',
-  copy_unverified: 'This phone\'s copy of the chain does not verify, so nothing was sent to the key. The agent was told "copy_unverified".',
+  copy_unverified: `This ${DEVICE_WORD}'s copy of the chain does not verify, so nothing was sent to the key. The agent was told "copy_unverified".`,
   receipt_owed: 'A receipt is owed for an earlier use. The agent was told "receipt_owed".',
   invalid: 'The request could not be a budget. The agent was told "invalid".',
-  busy: 'Another request was on the phone. The agent was told "busy" and may ask again.',
+  busy: `Another request was on this ${DEVICE_WORD}. The agent was told "busy" and may ask again.`,
 };
 
 /* the agent identity (SPEC H7): a computer sets it, nothing reaches the key */
@@ -191,7 +191,7 @@ export function EdgeRequestSheet() {
                   </Text>
                 ) : null}
                 <Text style={styles.dim}>
-                  Every computer paired with this phone uses it: the same ssh and gpg keys. Approving is a tap - the key already signed the certificate on the computer.
+                  {`${shell === 'android' ? 'Every computer paired with this phone' : `Every agent that asks this ${DEVICE_WORD}`} uses it: the same ssh and gpg keys. Approving is a tap - the key already signed the certificate on the computer.`}
                 </Text>
               </>
             ) : (

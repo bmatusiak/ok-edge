@@ -11,11 +11,11 @@ import {StyleSheet, Text, View} from 'react-native';
 import {identity as identityLib} from 'node-onlykey-lib/edge';
 import {loadKept, onIdentity, type KeptIdentity} from '../edgeIdentity';
 import {DrawerArea} from './BottomDrawer';
-import {shell} from '../platform';
+import {DEVICE_WORD} from '../platform';
 import {theme} from './theme';
 
-/* the device this app runs on: the phone, or on the desktop this computer (its key is the hard key) */
-const HERE = shell === 'desktop' ? 'this computer' : 'this phone';
+/* the device this app runs on: this phone, this computer or this browser */
+const HERE = `this ${DEVICE_WORD}`;
 
 export function AgentIdentityCard() {
   const [kept, setKept] = useState<KeptIdentity | null | undefined>(undefined);

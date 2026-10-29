@@ -13,7 +13,7 @@ import {NEEDS_CONFIG_MODE, NOT_IN_CONFIG_MODE, ON, type ConfigState} from '../ui
 import {summarizeBackup} from '../backupFile';
 import type {BackupSummary} from '../backupFile';
 import type {EmuSession} from '../hooks/useOkEmu';
-import {SHOW_SCROLLBARS} from '../platform';
+import {DEVICE_WORD, SHOW_SCROLLBARS} from '../platform';
 
 /*
  * Backup and restore.
@@ -334,8 +334,8 @@ export function BackupScreen({
       );
       setStatus(
         shown
-          ? 'Handed to the app you chose. Delete it from this phone once it is somewhere safe.'
-          : 'Nothing on this phone can receive a file.',
+          ? `Handed to the app you chose. Delete it from this ${DEVICE_WORD} once it is somewhere safe.`
+          : `Nothing on this ${DEVICE_WORD} can receive a file.`,
       );
     } catch (e) {
       setError(String((e as Error)?.message ?? e));

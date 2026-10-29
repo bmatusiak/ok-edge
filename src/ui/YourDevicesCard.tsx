@@ -16,6 +16,7 @@ import {SoftKeyEdge} from '../edgeSoftKey';
 import {useYourDevices} from '../hooks/useYourDevices';
 import {Btn, Section} from './components';
 import {theme} from './theme';
+import {DEVICE_WORD} from '../platform';
 
 const short = (id: string) => `${id.slice(0, 8)}…${id.slice(-8)}`;
 
@@ -56,11 +57,11 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
 
   return (
     <>
-      <Section title="This phone">
+      <Section title={`This ${DEVICE_WORD}`}>
         {/* while the default is being signed, the device name it will be - never a bare 'No nametag yet' to tap at (2026-10-08) */}
         <Text style={styles.op}>{own ? own.nametag : devName ? `${devName} (signing…)` : 'No nametag yet'}</Text>
         {own ? <Text style={styles.dim}>{`Device ${short(own.deviceId)}`}</Text> : null}
-        <Text style={styles.dim}>Your other devices see this phone by its nametag. The key signs it; no press.</Text>
+        <Text style={styles.dim}>{`Your other devices see this ${DEVICE_WORD} by its nametag. The key signs it; no press.`}</Text>
         {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
         <View style={styles.row}>
           <Btn title={own ? 'Change nametag…' : 'Set nametag…'} onPress={() => { setDraft(own?.nametag ?? devName); setEditing(true); }} disabled={busy} />
@@ -88,8 +89,8 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
       <Modal transparent animationType="fade" visible={editing} onRequestClose={() => setEditing(false)}>
         <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.dialog}>
-            <Text style={styles.op}>This phone's nametag</Text>
-            <Text style={styles.dim}>A name or a tag your other devices will see for this phone.</Text>
+            <Text style={styles.op}>{`This ${DEVICE_WORD}'s nametag`}</Text>
+            <Text style={styles.dim}>{`A name or a tag your other devices will see for this ${DEVICE_WORD}.`}</Text>
             <TextInput style={styles.input} value={draft} onChangeText={setDraft} placeholder={devName || 'a name or a tag'} placeholderTextColor={theme.textDim} maxLength={64} autoFocus />
             {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
             <View style={styles.row}>

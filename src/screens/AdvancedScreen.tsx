@@ -365,7 +365,7 @@ export function AdvancedScreen({
       <Section title="On a computer">
         <Text style={styles.note}>
           Guides for the agents that run on a desktop with the key plugged
-          into it. Nothing here happens on the phone.
+          into it. Nothing here happens in this app.
         </Text>
         {AGENTS.map(tool => (
           <View key={tool.label} style={styles.tool}>

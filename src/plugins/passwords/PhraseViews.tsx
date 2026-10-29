@@ -6,6 +6,7 @@ import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import {nameDerive} from '../../pressAsk';
 import {Btn, Section, Segmented} from '../../ui/components';
 import {theme} from '../../ui/theme';
+import {shell} from '../../platform';
 import type {Manager} from './stores';
 import type {PhraseOkcrypto} from './usePasswordManager';
 
@@ -205,7 +206,8 @@ export function PhraseEntry({entry, phraseKey, act}: {entry: any; phraseKey: Phr
           {words ? <Btn title="Hide" onPress={() => setWords(null)} /> : <Btn title="Show words" tone="primary" onPress={show} />}
         </View>
       </Section>
-      {words ? (
+      {/* the phone's only: it types as a Bluetooth keyboard */}
+      {shell === 'android' && words ? (
         <Section title="Type on the computer">
           {canType ? (
             next < words.length ? (

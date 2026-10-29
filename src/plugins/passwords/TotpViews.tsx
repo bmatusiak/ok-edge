@@ -5,6 +5,7 @@ import {totp as totpLib} from 'node-onlykey-lib/passwords';
 import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import {Btn, Section} from '../../ui/components';
 import {theme} from '../../ui/theme';
+import {shell} from '../../platform';
 import {CountdownBar, useQuietMotion} from '../../ui/CountdownBar';
 
 export {useQuietMotion};
@@ -241,7 +242,8 @@ export function TotpCode({
           <Text style={styles.dim}>Sealed again with its own key: edit it to step the counter.</Text>
         )
       ) : null}
-      {onToSlot && slotReady(totp) ? (
+      {/* not on the web app: a slot write needs the vendor interface */}
+      {shell !== 'webapp' && onToSlot && slotReady(totp) ? (
         <View style={styles.buttons}>
           <Btn title="Put on a key slot" onPress={onToSlot} />
         </View>

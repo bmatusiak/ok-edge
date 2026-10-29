@@ -24,7 +24,7 @@ import {usePasswordManager} from './usePasswordManager';
 import type {Manager} from './stores';
 import type {DeriveOkcrypto} from './innerKeys';
 import type {PhraseOkcrypto} from './usePasswordManager';
-import {SHOW_SCROLLBARS} from '../../platform';
+import {SHOW_SCROLLBARS, shell} from '../../platform';
 
 /*
  * THE PASSWORDS TAB. The list opens with the store key (stores.ts: the key's touchless derive) - by
@@ -435,8 +435,11 @@ function OpenStore({
   if (!q && !entries.length) items.push({key: 'none', kind: 'row', tone: 'dim', title: 'No passwords yet', subtitle: '+ Add makes the first one.'});
   /* the panels below belong to the whole store, not to a filtered view */
   if (!filtered) {
-    items.push({key: 's-autofill', kind: 'section', title: 'Autofill'});
-    items.push({key: 'autofill', kind: 'node', render: () => <AutofillCard />});
+    /* the phone's only: Android Autofill */
+    if (shell === 'android') {
+      items.push({key: 's-autofill', kind: 'section', title: 'Autofill'});
+      items.push({key: 'autofill', kind: 'node', render: () => <AutofillCard />});
+    }
     items.push({key: 's-move', kind: 'section', title: 'Move passwords'});
     items.push({
       key: 'move',
@@ -596,7 +599,8 @@ function EntryView({
           <Btn title="Edit" onPress={() => act(onEdit)} />
         </View>
       </Section>
-      {entry.kind === 'login' && (entry.username || entry.password) ? (
+      {/* the phone's only: it types as a Bluetooth keyboard */}
+      {shell === 'android' && entry.kind === 'login' && (entry.username || entry.password) ? (
         <Section title="Type on the computer">
           {canType ? (
             <>

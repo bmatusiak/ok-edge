@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {StyleSheet, Text, TextInput, View} from 'react-native';
 import {Btn, KeyValue, Section, Segmented} from '../ui/components';
 import {theme} from '../ui/theme';
+import {DEVICE_WORD} from '../platform';
 import {ON, type ConfigState} from '../ui/configModeNotes';
 import {getOnlyKey} from '../onlykey';
 import {supports} from '../firmwareFeatures';
@@ -332,7 +333,7 @@ export function FirmwareScreen({
       {source === 'Bundled' ? (
         <>
           <Text style={styles.note}>
-            Shipped inside the app, so this works with the phone offline. These
+            Shipped inside the app, so this works with this {DEVICE_WORD} offline. These
             are the files in the repo's signed_firmware folder at build time.
           </Text>
           {bundled === null ? (
@@ -356,7 +357,7 @@ export function FirmwareScreen({
         <>
           <Text style={styles.note}>
             For a release newer than this build. The picker reaches Drive and
-            anywhere else the phone can open a document from.
+            anywhere else this {DEVICE_WORD} can open a document from.
           </Text>
           <Btn
             title={busy === 'load' ? 'Opening…' : 'Choose a file'}

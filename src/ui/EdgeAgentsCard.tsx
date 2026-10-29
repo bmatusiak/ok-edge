@@ -15,6 +15,12 @@ import {agentRequestsOn, setAgentRequestsOn} from '../edgeAgents';
 import {Section} from './components';
 import {theme} from './theme';
 import {DrawerArea} from './BottomDrawer';
+import {shell} from '../platform';
+
+/* where an agent's request comes from, on each shell */
+const AGENT_FROM = shell === 'android' ? 'a computer paired with this phone (Bluetooth tab)'
+  : shell === 'desktop' ? 'a computer agent on this computer (Sync tab)'
+  : 'an agent through the server (Sync tab, the Server panel)';
 
 /* inDrawer: laid out as an area of the Edge Management drawer (src/ui/BottomDrawer.tsx) */
 export function EdgeAgentsCard({inDrawer = false}: {onChanged?: () => void; changed?: unknown; inDrawer?: boolean; testingMode?: boolean}) {
@@ -24,7 +30,7 @@ export function EdgeAgentsCard({inDrawer = false}: {onChanged?: () => void; chan
   const explain = (
     <Text style={styles.dim}>
       {on
-        ? 'Requests on: an agent on a computer paired with this phone (Bluetooth tab) may ask for budgets; each still shows here and needs your press.'
+        ? `Requests on: an agent on ${AGENT_FROM} may ask for budgets; each still shows here and needs your press.`
         : 'Requests off: every budget request is refused unread.'}
     </Text>
   );

@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {StyleSheet, Text, TextInput, View} from 'react-native';
 import {Btn, Segmented} from './components';
 import {theme} from './theme';
+import {DEVICE_WORD} from '../platform';
 import {useActiveKey} from '../hooks/KeyContext';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 
@@ -161,7 +162,7 @@ export function VaultList({
       try {
         const {okcrypto} = await getKey();
         await okcrypto.deviceVault.forget(row.serviceId);
-        onStatus(`${row.serviceId} deleted. The blob is gone from this phone.`);
+        onStatus(`${row.serviceId} deleted. The blob is gone from this ${DEVICE_WORD}.`);
         await refresh();
       } catch (e) {
         onError(String((e as Error)?.message ?? e));
@@ -221,7 +222,7 @@ export function VaultList({
     try {
       const {okcrypto} = await getKey();
       await okcrypto.deviceVault.forgetAll();
-      onStatus('Every stored credential deleted from this phone.');
+      onStatus(`Every stored credential deleted from this ${DEVICE_WORD}.`);
       await refresh();
     } catch (e) {
       onError(String((e as Error)?.message ?? e));
@@ -364,7 +365,7 @@ export function VaultList({
           />
           <Text style={styles.note}>
             Each blob stays sealed by whichever key made it, so an import from
-            another phone only opens with the OnlyKey that sealed it.
+            another device only opens with the OnlyKey that sealed it.
           </Text>
         </>
       ) : null}

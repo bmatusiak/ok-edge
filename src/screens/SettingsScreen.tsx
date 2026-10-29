@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useState, type ReactNode} from 'react';
 import {BackHandler, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {Btn, Section} from '../ui/components';
 import {theme} from '../ui/theme';
+import {shell} from '../platform';
 
 /*
  * SETTINGS (Brad, 2026-10-11: "i need a new tab called Setting, that opens a view with buttons
@@ -69,7 +70,10 @@ const ABOUT: Record<SettingsPage, {what: string; risk: string; level: Level}> = 
     level: 'danger',
   },
   Preferences: {
-    what: "Settings you can change back: the key's own preferences, the keyboard layout, unlock with biometrics, and this phone's permissions and passkey provider.",
+    /* biometrics, permissions and the passkey provider are the phone's only */
+    what: shell === 'android'
+      ? "Settings you can change back: the key's own preferences, the keyboard layout, unlock with biometrics, and this phone's permissions and passkey provider."
+      : "Settings you can change back: the key's own preferences and the keyboard layout.",
     risk: 'Nothing here is one-way: every setting can be set again.',
     level: 'safe',
   },

@@ -5,6 +5,7 @@ import {Btn, Section, Segmented} from '../ui/components';
 import {NEEDS_CONFIG_MODE, ON, type ConfigState} from '../ui/configModeNotes';
 import {ConfigModePanel} from '../ui/ConfigModePanel';
 import {theme} from '../ui/theme';
+import {DEVICE_WORD} from '../platform';
 import {useActiveKey, useBackend, useKeyName} from '../hooks/KeyContext';
 import {useSecureScreen} from '../hooks/useSecureScreen';
 import type {EmuSession} from '../hooks/useOkEmu';
@@ -202,7 +203,7 @@ export function KeyChainScreen({
       return 'saved';
     } catch (e) {
       await holdForBucket(next);
-      if ((e as {code?: string})?.code !== 'EBUCKET_CLOSED') setError(`Key Chain could not save the list (${String((e as Error)?.message ?? e)}); it is kept on this phone and added when it can be.`);
+      if ((e as {code?: string})?.code !== 'EBUCKET_CLOSED') setError(`Key Chain could not save the list (${String((e as Error)?.message ?? e)}); it is kept on this ${DEVICE_WORD} and added when it can be.`);
       return 'held';
     }
   }, []);
@@ -242,7 +243,7 @@ export function KeyChainScreen({
         const raw = await keychainList.getItem('list');
         if (raw) setEntries(keychain.list.parse(raw));
       } catch (e) {
-        setError(`The Key Chain list on this phone could not be read: ${String((e as Error)?.message ?? e)}`);
+        setError(`The Key Chain list on this ${DEVICE_WORD} could not be read: ${String((e as Error)?.message ?? e)}`);
       }
       const cached = await loadJson<{slot: number; kind: string; bits?: number; label: string}[] | null>(CACHE_KEY, null);
       if (cached) setSlots(cached);
@@ -656,7 +657,7 @@ export function KeyChainScreen({
       });
       const pgpSaved = await saveEntries(keychain.list.merge(entries, [made]).entries);
       setWritten(true);
-      setStatus(`PGP key made and loaded: ${loaded.map(l => `${l.role} in ${slotName(l.slot)}`).join(', ')}. ${pgpSaved === 'saved' ? 'Its public key is in "On this App"' : 'Its public key is kept on this phone and goes into Key Chain when the bucket is open again (after the restart)'}. Restart to finish.`);
+      setStatus(`PGP key made and loaded: ${loaded.map(l => `${l.role} in ${slotName(l.slot)}`).join(', ')}. ${pgpSaved === 'saved' ? 'Its public key is in "On this App"' : `Its public key is kept on this ${DEVICE_WORD} and goes into Key Chain when the bucket is open again (after the restart)`}. Restart to finish.`);
       return true;
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
@@ -696,7 +697,7 @@ export function KeyChainScreen({
       const kept = entries.map(x => (x.type === 'composite' && (x.slots || []).includes(g.slot) && keychain.list.present(x) ? {...x, gone: now} : x));
       const pqcSaved = await saveEntries(keychain.list.merge(kept, [entry]).entries);
       setWritten(true);
-      setStatus(`+PQC PGP key made and loaded in ${slotName(g.slot)}. ${pqcSaved === 'saved' ? 'Its public key is in Key Chain' : 'Its public key is kept on this phone and goes into Key Chain when the bucket is open again (after the restart)'}. Restart to finish.`);
+      setStatus(`+PQC PGP key made and loaded in ${slotName(g.slot)}. ${pqcSaved === 'saved' ? 'Its public key is in Key Chain' : `Its public key is kept on this ${DEVICE_WORD} and goes into Key Chain when the bucket is open again (after the restart)`}. Restart to finish.`);
       return true;
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
@@ -1131,7 +1132,7 @@ export function KeyChainScreen({
             <>
               <Text style={styles.body}>
                 Made in the App, in memory: for RSA (the key cannot make it) or a key you want to use elsewhere.
-                Store it on the key, keep an encrypted copy, or both - then it is wiped from the phone.
+                Store it on the key, keep an encrypted copy, or both - then it is wiped from this {DEVICE_WORD}.
               </Text>
               <View style={styles.chips}>
                 {(['rsa', 'ed25519', 'p256', 'secp256k1', 'x25519'] as HostType[]).map(t => (
@@ -1426,7 +1427,7 @@ export function KeyChainScreen({
           entries.map(e => (
             <View key={e.id}>
               <Pressable onPress={() => setOpen(o => (o === e.id ? null : e.id))} style={styles.row}>
-                <Text style={styles.rowSlot}>{e.kind === 'derived' ? e.scheme : 'phone'}</Text>
+                <Text style={styles.rowSlot}>{e.kind === 'derived' ? e.scheme : DEVICE_WORD}</Text>
                 <Text style={styles.rowName} numberOfLines={1}>{e.label || e.name}</Text>
                 <Text style={styles.rowType}>{e.type}</Text>
               </Pressable>

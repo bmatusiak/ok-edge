@@ -34,7 +34,8 @@ import {AgentsCard} from '../ui/AgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
 import type {EdgeRow, EdgeView, Verdict} from '../edgeStore';
 import type {EdgeBudget, EdgeCopyCheck, EdgeRequest} from '../edgeFake';
-import {DEVICE_WORD} from '../platform';
+import {DEVICE_WORD, shell} from '../platform';
+import {activeBackend} from '../hooks/KeyContext';
 
 const {OP, DECISION, END, FLAG} = codes;
 
@@ -49,7 +50,7 @@ function verdictLine(v: Verdict): {text: string; color: string} {
       /* say what IS checked, then what is not (spec, 2026-10-05) - not "Gap #0–#268 unverifiable" */
       const range = v.from === v.to ? `#${v.from}` : `#${v.from}–#${v.to}`;
       const checked = v.from === 0 ? `Checked from #${v.to + 1} on` : `Checked through #${v.from - 1} and from #${v.to + 1} on`;
-      return {text: `${checked}. ${range} can't be checked on this phone.`, color: theme.warn};
+      return {text: `${checked}. ${range} can't be checked on this ${DEVICE_WORD}.`, color: theme.warn};
     }
     case 'unsigned':
       return {text: "Not checked yet: the key's signature could not be checked - pull down to try again", color: theme.warn};
@@ -72,15 +73,15 @@ function copyProblem(c: EdgeCopyCheck | null): string | null {
   const at = c.seq !== undefined ? ` (#${c.seq})` : '';
   switch (c.reason) {
     case 'scope': return `A budget's spend does not match what its opening allows (R3)${at}.`;
-    case 'chain': return `This phone's copy does not weld to the key${at}.`;
-    case 'gap': return c.seq === undefined ? "Links are missing from this phone's copy." : `This phone's copy is missing #${c.seq}${c.to !== undefined && c.to !== c.seq ? `–#${c.to}` : ''}.`;
-    case 'checkpoint': return "The key's checkpoint does not verify against this phone's copy.";
-    case 'budget-opening-missing': return `A budget in the chain was opened on another device; this phone cannot check it${at}.`;
+    case 'chain': return `This ${DEVICE_WORD}'s copy does not weld to the key${at}.`;
+    case 'gap': return c.seq === undefined ? `Links are missing from this ${DEVICE_WORD}'s copy.` : `This ${DEVICE_WORD}'s copy is missing #${c.seq}${c.to !== undefined && c.to !== c.seq ? `–#${c.to}` : ''}.`;
+    case 'checkpoint': return `The key's checkpoint does not verify against this ${DEVICE_WORD}'s copy.`;
+    case 'budget-opening-missing': return `A budget in the chain was opened on another device; this ${DEVICE_WORD} cannot check it${at}.`;
     case 'budget-opening': return `A budget's opening does not verify${at}.`;
-    case 'reveal-missing': return `A self-press has no reveal on this phone${at}.`;
+    case 'reveal-missing': return `A self-press has no reveal on this ${DEVICE_WORD}${at}.`;
     case 'reveal': return `A self-press reveal does not belong to its budget${at}.`;
-    case 'debts': return "The receipts in this phone's copy do not match what the key says is owed.";
-    default: return `This phone's copy does not verify: ${c.reason}${at}.`;
+    case 'debts': return `The receipts in this ${DEVICE_WORD}'s copy do not match what the key says is owed.`;
+    default: return `This ${DEVICE_WORD}'s copy does not verify: ${c.reason}${at}.`;
   }
 }
 
@@ -332,10 +333,10 @@ function LinkRow({row, receiptVerified, budgetUses, agentOf, notesFrom, continue
             {!continued
               ? 'Continues another chain - not checked yet.'
               : continued.ok
-                ? `Continues #${continued.oldSeq} of chain ${(continued.fromDeviceId ?? '').slice(0, 8)}… - checked against this phone's copy${continued.debtsChecked ? ', debts included' : ''}. ${debtsLine(row.fields.grantId)}`
+                ? `Continues #${continued.oldSeq} of chain ${(continued.fromDeviceId ?? '').slice(0, 8)}… - checked against this ${DEVICE_WORD}'s copy${continued.debtsChecked ? ', debts included' : ''}. ${debtsLine(row.fields.grantId)}`
                 : continued.reason === 'no-match'
-                  ? `Says it continues #${continued.oldSeq}, but no copy on this phone has that head.`
-                  : `Continues #${continued.oldSeq} of a chain this phone cannot check (no full copy here). ${debtsLine(row.fields.grantId)}`}
+                  ? `Says it continues #${continued.oldSeq}, but no copy on this ${DEVICE_WORD} has that head.`
+                  : `Continues #${continued.oldSeq} of a chain this ${DEVICE_WORD} cannot check (no full copy here). ${debtsLine(row.fields.grantId)}`}
           </Text>
         </View>
       ) : null}
@@ -447,7 +448,8 @@ export function BudgetCard({b, busy, stopping = false, onOpen, onRevoke, held, o
           <Text style={[styles.op, {color: theme.warn}]}>Press the key to resume</Text>
           {consentRefusal() ? <Text style={[styles.op, {color: theme.error}]}>{consentRefusal()}</Text> : null}
           <View style={styles.row}>
-            <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) onPress?.(); }} />
+            {/* the soft key is pressed here; a hard key on the key itself */}
+            {activeBackend() === 'embedded' ? <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) onPress?.(); }} /> : <Text style={styles.dim}>Press the button on your OnlyKey.</Text>}
           </View>
         </>
       ) : onRevoke && complete ? (
@@ -510,12 +512,13 @@ function PendingCard({r, busy, waiting, blocked, onApprove, onPress, onDecline}:
       {waiting ? (
         <>
           <Text style={[styles.op, {color: theme.warn}]}>Press the key to confirm</Text>
-          <Text style={styles.dim}>
+          {activeBackend() === 'embedded' ? <Text style={styles.dim}>
             {`This ${DEVICE_WORD} is also the key, so its press proves less than a hard key's. The key stops waiting after 20 s.`}
-          </Text>
+          </Text> : null}
           <View style={styles.row}>
             {/* not disabled while busy: the request IS what is in flight, waiting for this */}
-            <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) onPress(); }} />
+            {/* the soft key is pressed here; a hard key on the key itself */}
+            {activeBackend() === 'embedded' ? <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) onPress(); }} /> : <Text style={styles.dim}>Press the button on your OnlyKey.</Text>}
           </View>
         </>
       ) : (
@@ -621,15 +624,14 @@ function BudgetView({b, edge, onBack, other}: {b: EdgeBudget; edge: ReturnType<t
       <Text style={[styles.verdict, {color: line.color}]}>{line.text}</Text>
       <Text style={styles.dim}>
         {v?.headSeq !== null && v?.headSeq !== undefined ? `Key's head: #${v.headSeq}` : 'Key not read yet'}
-        {v?.lastSync ? ` · last sync ${new Date(v.lastSync).toLocaleTimeString()} (phone clock)` : ''}
+        {v?.lastSync ? ` · last sync ${new Date(v.lastSync).toLocaleTimeString()} (this ${DEVICE_WORD}'s clock)` : ''}
       </Text>
       {edge.error ? <Text style={[styles.dim, {color: theme.error}]}>{edge.error}</Text> : null}
       {other ? <Text style={styles.dim}>{`On ${other.name}`}</Text> : null}
       {presses.map(it => <EdgeListEntry key={it.key} item={it} />)}
-      {other ? null : <Section title="This phone's copy (testing)">
+      {other ? null : <Section title={`This ${DEVICE_WORD}'s copy (testing)`}>
         <Text style={styles.dim}>
-          Edits change only this phone's copy of the chain, the way an attacker could. Verify shows what they break; Sync heals
-          what the key still holds.
+          {`Edits change only this ${DEVICE_WORD}'s copy of the chain, the way an attacker could. Verify shows what they break; Sync heals what the key still holds.`}
         </Text>
         <View style={styles.row}>
           <Btn title="Verify" onPress={edge.verify} disabled={edge.busy} />
@@ -666,7 +668,8 @@ function SettleControls({edge}: {edge: ReturnType<typeof useEdge>}) {
       <Text style={[styles.op, {color: theme.warn}]}>Press the key to settle</Text>
       {consentRefusal() ? <Text style={[styles.op, {color: theme.error}]}>{consentRefusal()}</Text> : null}
       <View style={styles.row}>
-        <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) edge.press(); }} />
+        {/* the soft key is pressed here; a hard key on the key itself */}
+        {activeBackend() === 'embedded' ? <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) edge.press(); }} /> : <Text style={styles.dim}>Press the button on your OnlyKey.</Text>}
       </View>
     </>
   ) : confirming ? (
@@ -826,7 +829,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
       <View style={styles.statusStack}>
           {broken ? (
             <View style={styles.mismatch}>
-              <Text style={[styles.receiptTitle, {color: theme.error}]}>This phone's copy of the chain does not match the key</Text>
+              <Text style={[styles.receiptTitle, {color: theme.error}]}>{`This ${DEVICE_WORD}'s copy of the chain does not match the key`}</Text>
               <Text style={[styles.op, {color: broken.color}]}>{broken.text}</Text>
               <Text style={styles.dim}>
                 {`Key's head: #${edge.view?.headSeq ?? '?'}. Until the copy verifies, no budget can be approved here.`}
@@ -840,7 +843,8 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
                 <>
                   <Text style={[styles.op, {color: theme.warn}]}>Press the key to accept the loss</Text>
                   <View style={styles.row}>
-                    <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) edge.press(); }} />
+                    {/* the soft key is pressed here; a hard key on the key itself */}
+                    {activeBackend() === 'embedded' ? <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) edge.press(); }} /> : <Text style={styles.dim}>Press the button on your OnlyKey.</Text>}
                   </View>
                 </>
               ) : gap && confirmLoss ? (
@@ -899,13 +903,13 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
     const lossRange = lossFrom !== undefined && lossTo !== undefined ? (lossFrom === lossTo ? `#${lossFrom}` : `#${lossFrom}–#${lossTo}`) : '';
     items.push({key: 'copyfail', kind: 'node', render: () => (
       <View style={styles.mismatch}>
-        <Text style={[styles.receiptTitle, {color: theme.error}]}>This phone's copy does not pass the budget rules</Text>
+        <Text style={[styles.receiptTitle, {color: theme.error}]}>{`This ${DEVICE_WORD}'s copy does not pass the budget rules`}</Text>
         <Text style={styles.op}>{`${copyProblem(cc) ?? cc.reason}${grant ? ` - budget ${grant}${lossRange ? ` (${lossRange})` : ''}` : ''}`}</Text>
         <Text style={styles.dim}>Until it passes, every agent request is refused (copy_unverified). Accepting the loss records, with a press, that these links are set aside; the copy is checked after them.</Text>
         {lossRange && edge.pressFor === 'loss' ? (
           <>
             <Text style={[styles.op, {color: theme.warn}]}>Press the key to accept the loss</Text>
-            <View style={styles.row}><Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) edge.press(); }} /></View>
+            <View style={styles.row}>{activeBackend() === 'embedded' ? <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) edge.press(); }} /> : <Text style={styles.dim}>Press the button on your OnlyKey.</Text>}</View>
           </>
         ) : lossRange && confirmLoss ? (
           <View style={styles.row}>
@@ -1131,7 +1135,8 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
         {!edge.available ? null : <AgentIdentityCard />}
         {!edge.available ? null : <YourDevicesCard headSeq={edge.view?.headSeq} />}
         {!edge.available ? null : <BlocksCard edge={edge} />}
-        {!testingMode || !edge.available ? null : (
+        {/* the web app has no soft key */}
+        {!testingMode || !edge.available || shell === 'webapp' ? null : (
           <Section title="Soft key (testing)">
             <Text style={styles.dim}>
               The soft key has Edge. Until an agent's MCP server can send requests, this makes one; agent signs come from the CLI or the e2e test.
@@ -1139,7 +1144,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
             <View style={styles.row}>
               <Btn
                 title="Agent: request a budget"
-                onPress={() => edge.request('testing on this phone', 'Sign three agent messages (P-256)', [{op: OP.SIGN, slot: 222, cap: 3, identity: TESTING_IDENTITY}])}
+                onPress={() => edge.request(`testing on this ${DEVICE_WORD}`, 'Sign three agent messages (P-256)', [{op: OP.SIGN, slot: 222, cap: 3, identity: TESTING_IDENTITY}])}
                 disabled={edge.busy}
               />
               <Btn title="Agent: one pressed sign" onPress={edge.agentSign} disabled={edge.busy} />

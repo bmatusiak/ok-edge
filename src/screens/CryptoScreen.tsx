@@ -12,7 +12,7 @@ import {useActiveKey, useKeyName} from '../hooks/KeyContext';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {useSecureScreen} from '../hooks/useSecureScreen';
 import type {EmuSession} from '../hooks/useOkEmu';
-import {SHOW_SCROLLBARS} from '../platform';
+import {DEVICE_WORD, SHOW_SCROLLBARS} from '../platform';
 
 /*
  * Secrets the key DERIVES rather than stores.
@@ -713,7 +713,7 @@ export function CryptoScreen({
         {vault ? null : <Text style={styles.note}>{missingNote('deviceVault')}</Text>}
         <Text style={styles.body}>
           Seal a note under a key the device derives for a service name. The key
-          is never stored anywhere — not on the phone and not on the key — so a
+          is never stored anywhere — not on this {DEVICE_WORD} and not on the key — so a
           sealed blob is safe to keep in a normal file, and useless without the
           OnlyKey that made it.
         </Text>
@@ -799,7 +799,7 @@ export function CryptoScreen({
         * stayed live beside a faded sealer would offer to open what it cannot
         * make. */}
       {has('stored') ? (
-      <Section title={`Stored on this phone — ${keyName}`} faded={!vault}>
+      <Section title={`Stored on this ${DEVICE_WORD} — ${keyName}`} faded={!vault}>
         <Text style={styles.body}>
           Credentials sealed by this key and kept here. The list costs no
           touch; copying a secret does, and the plaintext leaves only by the
