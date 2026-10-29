@@ -90,3 +90,40 @@ test('no proof, no room: another identity, another server, a frame before joinin
   assert.deepEqual(a.answer, { t: 'joined', you: phone.id, peers: [] });
   a.c.close();
 });
+
+test('the sealed copy: a device puts its rows, a fresh device of the identity catches up from them; the server keeps none for an identity it is not set to', async () => {
+  const path = require('path');
+  const lib = path.dirname(require.resolve('node-onlykey-lib/package.json'));
+  const bucketLib = require('node-onlykey-lib/bucket');
+  const { connectRoom } = require(path.join(lib, 'bucket/src/room-client.js'));
+  const me = await identity(`sealed ${Date.now()}`);
+  const randomBytes = (n) => new Uint8Array(require('crypto').randomBytes(n));
+  const open = (device) => connectRoom({ url: BASE, me, device, WebSocket, randomBytes });
+  const keys = bucketLib.sealedCopy.keysOf(me.bucketKey);
+  const phone = await open(dev('Pixel', 'android'));
+  const store = phone.sealedStore();
+  if (!(await store.on())) {
+    /* a server not set to keep this identity (a deploy with SEALED_IDENTITIES empty): nothing kept, the put refused */
+    await assert.rejects(store.put({ ['a'.repeat(32)]: { tag: 'b'.repeat(32), blob: 'x' } }), /did not keep/);
+    phone.close();
+    return;
+  }
+  const b = bucketLib.create({ owner: me.id });
+  bucketLib.kv(b, 'guestbook').setItem('myname', 'Pixel Tester');
+  const up = await bucketLib.sealedCopy.syncWith(b, keys, store, { randomBytes, heads: { aaaaaaaaaaaaaaaa: 7 } });
+  assert.equal(up.put, 2, 'one unit and the heads row');
+  phone.close();
+  /* a fresh web app of the same identity: empty, then the same bucket - and nothing more on a second sync */
+  const web = await open(dev('Chromium', 'webapp'));
+  const fresh = bucketLib.create({ owner: me.id });
+  const down = await bucketLib.sealedCopy.syncWith(fresh, keys, web.sealedStore(), { randomBytes });
+  assert.equal(down.got, 1);
+  assert.equal(bucketLib.kv(fresh, 'guestbook').getItem('myname'), 'Pixel Tester');
+  assert.deepEqual(bucketLib.sealedCopy.openHeads((await web.sealedStore().get([bucketLib.sealedCopy.headsId(keys)]))[bucketLib.sealedCopy.headsId(keys)], keys), { aaaaaaaaaaaaaaaa: 7 });
+  const again = await bucketLib.sealedCopy.syncWith(fresh, keys, web.sealedStore(), { randomBytes, heads: { aaaaaaaaaaaaaaaa: 7 } });
+  assert.deepEqual([again.got, again.put], [0, 0]);
+  /* what the server holds names nothing */
+  const table = JSON.stringify(await web.sealedStore().table());
+  assert.ok(!/guestbook|myname/.test(table));
+  web.close();
+});

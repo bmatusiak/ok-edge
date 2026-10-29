@@ -19,6 +19,8 @@
   "main": "mcp-server/src/index.js",
   "compatibility_date": "2026-10-23",
   "observability": { "enabled": true },
+  /* the identities whose sealed copy this server keeps (mcp-server/src/index.js sealedOp): their bucket identity ids, comma-separated, or * for all - none by default; local dev keeps all (--var) */
+  "vars": { "SEALED_IDENTITIES": "" },
   "build": { "command": "node mcp-server/build-webapp.js" },
   "assets": {
     "directory": "./docs",

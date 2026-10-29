@@ -30,7 +30,7 @@ start() {
     # the web app reaches a key only from a secure page on a site the key allows: serve as https://apps.crp.to:8787
     # with the box's dev certificate (devcert.sh; Chromium maps apps.crp.to to this box)
     C=~/project/onlykey/devcert
-    setsid npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787 --local-protocol https \
+    setsid npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787 --local-protocol https --var 'SEALED_IDENTITIES:*' \
       --https-key-path "$C/apps.crp.to.key" --https-cert-path "$C/apps.crp.to.crt" > "$LOG" 2>&1 < /dev/null &
   else
     setsid npm run server:dev > "$LOG" 2>&1 < /dev/null &

@@ -34,6 +34,9 @@ const AGENT_STATES = ['accepted', 'blocked', 'removed'];
 const MAX_FRAME = 4 * 1024 * 1024;
 /* a socket that has not joined by then is closed: an open connection with no proof holds nothing open for long */
 const JOIN_WITHIN_MS = 30_000;
+/* the sealed copy's bounds: rows a get or a put names, and one sealed unit (an Edge links block is ~25 KB) */
+const SEALED_MAX_IDS = 2000;
+const SEALED_MAX_BLOB = 1024 * 1024;
 
 export default {
   async fetch(request, env) {
@@ -124,9 +127,62 @@ export class IdentityRoom extends DurableObject {
         const r = await this.fromOwner(me.room, msg);
         return send(ws, msg.re !== undefined ? { ...r, re: msg.re } : r);
       }
+      case 'sealed':
+        return send(ws, { t: 'sealed', re: msg.re, ...this.sealedOp(me.room, msg) });
       default:
         return send(ws, { t: 'error', why: `unknown message ${JSON.stringify(msg && msg.t)}` });
     }
+  }
+
+  /* ------------------------------------------------------------------ the sealed copy (bucket/src/sealedcopy.js) */
+
+  /*
+   * THE IDENTITY'S SEALED COPY, IN THIS ROOM'S SQLITE (Phase 3; Brad, 2026-10-29: "the server's sealed copy will have a
+   * hash table for changes"; the room's own SQLite, one row per unit). Rows the server cannot read: a keyed id, a keyed
+   * change tag, a sealed unit - written and read only by the identity's own joined devices (this is past the join). Kept
+   * only for identities this server is set to keep (SEALED_IDENTITIES: their ids, comma-separated, or * for all): any
+   * other gets an empty table and a refused put.
+   */
+  sealedOn(identity) {
+    const list = String(this.env.SEALED_IDENTITIES || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    return list.includes('*') || list.includes(String(identity).toLowerCase());
+  }
+  sealedSql() {
+    const sql = this.ctx.storage.sql;
+    sql.exec('CREATE TABLE IF NOT EXISTS sealed (id TEXT PRIMARY KEY, tag TEXT NOT NULL, blob TEXT NOT NULL, at INTEGER NOT NULL)');
+    return sql;
+  }
+  sealedOp(identity, msg) {
+    if (!this.sealedOn(identity)) return msg.op === 'table' ? { on: false, rows: {} } : { ok: false, why: 'this server keeps no sealed copy for this identity' };
+    const sql = this.sealedSql();
+    const HEX = /^[0-9a-f]{32}$/;
+    if (msg.op === 'table') {
+      const rows = {};
+      for (const r of sql.exec('SELECT id, tag FROM sealed').toArray()) rows[r.id] = r.tag;
+      return { on: true, rows };
+    }
+    if (msg.op === 'get') {
+      const ids = Array.isArray(msg.ids) ? msg.ids.filter((id) => typeof id === 'string' && HEX.test(id)).slice(0, SEALED_MAX_IDS) : [];
+      const rows = {};
+      for (const id of ids) {
+        const r = sql.exec('SELECT blob FROM sealed WHERE id = ?', id).toArray()[0];
+        if (r) rows[id] = r.blob;
+      }
+      return { rows };
+    }
+    if (msg.op === 'put') {
+      const entries = Object.entries(msg.rows && typeof msg.rows === 'object' ? msg.rows : {});
+      if (entries.length > SEALED_MAX_IDS) return { ok: false, why: `at most ${SEALED_MAX_IDS} rows a put` };
+      for (const [id, r] of entries) {
+        if (!HEX.test(id) || !r || typeof r.tag !== 'string' || !HEX.test(r.tag) || typeof r.blob !== 'string' || r.blob.length > SEALED_MAX_BLOB) {
+          return { ok: false, why: `row ${String(id).slice(0, 12)}: an id and a tag of 32 hex, a blob up to ${SEALED_MAX_BLOB} characters` };
+        }
+      }
+      const now = Date.now();
+      for (const [id, r] of entries) sql.exec('INSERT INTO sealed (id, tag, blob, at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET tag = excluded.tag, blob = excluded.blob, at = excluded.at', id, r.tag, r.blob, now);
+      return { ok: true, n: entries.length };
+    }
+    return { ok: false, why: `no sealed ${JSON.stringify(msg.op)}` };
   }
 
   async webSocketClose(ws) {
