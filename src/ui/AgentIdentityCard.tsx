@@ -11,7 +11,7 @@ import {StyleSheet, Text, View} from 'react-native';
 import {identity as identityLib} from 'node-onlykey-lib/edge';
 import {loadKept, onIdentity, type KeptIdentity} from '../edgeIdentity';
 import {DrawerArea} from './BottomDrawer';
-import {DEVICE_WORD} from '../platform';
+import {DEVICE_WORD, shell} from '../platform';
 import {theme} from './theme';
 
 /* the device this app runs on: this phone, this computer or this browser */
@@ -38,7 +38,7 @@ export function AgentIdentityCard() {
             </View>
           ))}
           <Text style={styles.dim}>
-            {`Every computer paired with ${HERE} uses it${kept.setBy ? ` - set from ${kept.setBy.computer}` : ''}. Change it from a computer: onlykey-js edge setup.`}
+            {`${shell === 'android' ? `Every computer paired with ${HERE}` : `Every agent that asks ${HERE}`} uses it${kept.setBy ? ` - set from ${kept.setBy.computer}` : ''}. Change it from a computer: onlykey-js edge setup.`}
           </Text>
         </>
       ) : (
