@@ -56,7 +56,12 @@ export function useEdge() {
   const source = useCallback(async (): Promise<Source | null> => {
     if (!wantReal) return null;
     /* the key the app is using now: another one (unplugged, picked) is opened afresh */
-    if (!real || real.backend !== backend) real = await SoftKeyEdge.open();
+    if (!real || real.backend !== backend) {
+      const was = real ? real.backend : 'none';
+      real = await SoftKeyEdge.open();
+      /* once per key normally: more often means something re-opens it (and drops what the last one held) */
+      console.log(`[edge] key opened for ${backend} (was ${was}): ${real ? `edge on ${real.backend}` : 'no edge'}`);
+    }
     return real;
     /*
      * backend IS A DEPENDENCY (box, 2026-10-28): with [wantReal] alone this kept the backend of the hook's first
@@ -169,9 +174,11 @@ export function useEdge() {
   /** An agent asks for a budget (testing mode, on either key). */
   const request = useCallback(async (from: string, reason: string, scopes: EdgeRequest['scopes']) => {
     const s = await source();
-    if (!s) return;
+    if (!s) { console.log('[edge] request: no Edge key to ask'); return; }
     s.request(from, reason, scopes);
-    setRequests(await s.pending());
+    const waiting = await s.pending();
+    console.log(`[edge] request from ${from}: ${waiting.length} waiting`);
+    setRequests(waiting);
     setCopyCheck(await s.check());
   }, [source]);
   /*
