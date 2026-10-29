@@ -19,6 +19,8 @@ C() { timeout 20 node tools/box/page-click.js "$@" 2>&1 | tail -1; }
 labels() { timeout 10 node tools/box/page-click.js --labels 2>&1 | tail -1; }
 press() { (cd $P/node-onlykey-emulator/emulator && timeout 30 node bin/press.js --socket=/tmp/okemu-webapp.sock --quiet "$@" 2>&1 | tail -1); }
 L=
+# the identity check's bucket button: Decrypt Bucket (one kept here) or Create Bucket (none)
+BUCKET_BUTTON='\[Decrypt Bucket\]\|\[Create Bucket\]'
 waitfor() {
   for _ in $(seq 1 ${2:-60}); do L=$(labels); echo "$L" | grep -q "$1" && return 0; sleep 0.5; done
   echo "!! never saw: $1 - the screen: $(echo "$L" | cut -c1-240)"; return 1
@@ -53,7 +55,7 @@ else
   w=$(DISPLAY=:10 xdotool search --name "ok-edge - Chromium" | head -1)
   DISPLAY=:10 xdotool windowactivate --sync "$w" key ctrl+shift+r
 fi
-waitfor '\[Continue\]\|\[Decrypt Bucket\]\|Locked' || exit 1
+waitfor "\[Continue\]\|$BUCKET_BUTTON\|Locked" || exit 1
 # the testnet soft key's PIN (1234561), on its buttons, when it has locked itself
 # then back to the page: it asks its key again when its window comes back to the front (useWebKey), never on a timer
 echo "$L" | grep -q 'Locked' && {
@@ -65,14 +67,15 @@ echo "$L" | grep -q 'Locked' && {
   for _ in $(seq 1 12); do
     sleep 5
     timeout 10 node tools/box/page-click.js --eval 'window.dispatchEvent(new Event("focus")); 1' >/dev/null 2>&1
-    waitfor '\[Continue\]\|\[Decrypt Bucket\]' 8 >/dev/null && break
+    waitfor "\[Continue\]\|$BUCKET_BUTTON" 8 >/dev/null && break
   done
-  waitfor '\[Continue\]\|\[Decrypt Bucket\]' || exit 1
+  waitfor "\[Continue\]\|$BUCKET_BUTTON" || exit 1
 }
-say "the page shows $(echo "$L" | grep -o '\[Continue\]\|\[Decrypt Bucket\]' | head -1)"
-echo "$L" | grep -q '\[Continue\]' && { say "Continue"; C "Continue" >/dev/null; waitfor '\[Decrypt Bucket\]' || exit 1; say "the page shows [Decrypt Bucket]"; }
+say "the page shows $(echo "$L" | grep -o "\[Continue\]\|$BUCKET_BUTTON" | head -1)"
+echo "$L" | grep -q '\[Continue\]' && { say "Continue"; C "Continue" >/dev/null; waitfor "$BUCKET_BUTTON" || exit 1; say "the page shows $(echo "$L" | grep -o "$BUCKET_BUTTON" | head -1)"; }
+# a bucket this device keeps opens (Decrypt Bucket); with none kept the check offers Create Bucket - a first login here
 say "open the bucket"
-C "Decrypt Bucket" >/dev/null
+C "$(echo "$L" | grep -o 'Decrypt Bucket\|Create Bucket' | head -1)" >/dev/null
 # each code the page asks for, as a person reads it off the sheet (HostChallengeSheet: "Press the key | <what> | On your
 # OnlyKey, press these buttons in order: | 1 | 2 | 5"): the bucket's derive, and on a first login - no sealed bucket to
 # open - the identity's proof before it (lib plugins/identity verify), until the app is open
