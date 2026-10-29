@@ -24,10 +24,23 @@ import {readKeyIdentity} from '../keyIdentity';
 import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
+import {Linking} from 'react-native';
+
+/*
+ * THE KEY NAMES ANOTHER SITE (Brad, 2026-10-29: "if i go to apps.crp.to, it reads my key and sees i use a private mcp, it
+ * should tell the user and give a link for the user to redirect - never on its own redirect"; "if the key's rpid that is
+ * set does not match, it shows re-direct"). The key's Edge and its bucket are derived under its own site (no fallback):
+ * this page, on another one, derives other keys and reaches none of them. Said, with the key's site as a link the person
+ * follows - the page never moves by itself.
+ */
+function wrongSite(site: string | null): string | null {
+  if (shell !== 'webapp' || !site || typeof location === 'undefined') return null;
+  return location.hostname === site ? null : site;
+}
 
 type Read =
   | {kind: 'checking'}
-  | {kind: 'read'; identity: string; edgeIdentity: string | null; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'}
+  | {kind: 'read'; identity: string; edgeIdentity: string | null; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'; site: string | null}
   | {kind: 'none'; why: string};
 
 
@@ -39,7 +52,7 @@ type Open = {kind: 'idle'} | {kind: 'opening'} | {kind: 'press'} | {kind: 'faile
  * kept with its opening and listed in every device's budget history. The site is the page's own (a browser binds the
  * key's answers to it); the app and the browser are what this app says of itself; the time is the opening's.
  */
-declare const location: {host: string} | undefined;
+declare const location: {host: string; hostname: string} | undefined;
 declare const navigator: {userAgent?: string} | undefined;
 function loginReason(): string {
   if (shell === 'webapp') {
@@ -132,6 +145,13 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
       {read.kind === 'read' ? (
         <Text style={styles.hint}>Everything this app keeps for this key belongs to this bucket identity - every device restored from the same backup shares it.</Text>
       ) : null}
+      {read.kind === 'read' && wrongSite(read.site) ? (
+        <View style={styles.elsewhere}>
+          <Text style={[styles.hint, styles.press]}>{`This key belongs to ${read.site} - not this page (${location!.hostname}).`}</Text>
+          <Text style={styles.hint}>Its Edge history and its bucket are bound to that site: here they cannot open, and nothing this page makes reaches them.</Text>
+          <Btn title={`Go to ${read.site}`} tone="primary" onPress={() => { void Linking.openURL(`https://${read.site}/`); }} />
+        </View>
+      ) : null}
       <View style={styles.action}>
         {open.kind === 'opening' ? <Text style={styles.hint}>Opening this identity's bucket…</Text> : null}
         {open.kind === 'press' ? <Text style={[styles.hint, styles.press]}>Press the key to open this identity's bucket</Text> : null}
@@ -142,7 +162,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         {read.kind === 'none' ? <Btn title="Try again" onPress={() => setAttempt(n => n + 1)} /> : null}
         <Btn
           title={open.kind === 'failed' ? 'Try again' : action}
-          tone="primary"
+          /* on a page that is not the key's own site, the way to the key's site is the main action (apps.crp.to as the shorthand for a private MCP) */
+          tone={read.kind === 'read' && wrongSite(read.site) ? undefined : 'primary'}
           onPress={() => void continueAndOpen()}
           disabled={read.kind === 'checking' || open.kind === 'opening' || open.kind === 'press'}
         />
@@ -157,4 +178,5 @@ const styles = StyleSheet.create({
   press: {color: theme.warn, fontSize: 14, fontWeight: '600'},
   hint: {marginTop: 14, maxWidth: 320, color: theme.textDim, fontSize: 12, textAlign: 'center', lineHeight: 17},
   action: {marginTop: 28, width: '100%', maxWidth: 320, gap: 12},
+  elsewhere: {marginTop: 8, width: '100%', maxWidth: 320, gap: 8, alignItems: 'center'},
 });

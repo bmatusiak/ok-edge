@@ -17,7 +17,8 @@ import {getOnlyKey} from './onlykey';
 import {setKeySite} from './serverRoom';
 
 export type KeyIdentity =
-  | {kind: 'read'; identity: string; edgeIdentity: string | null; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'; at: number}
+  /* site: the key's own (ctap_bridge's) - its Edge and bucket are bound to it; null: it names none */
+  | {kind: 'read'; identity: string; edgeIdentity: string | null; nametag: string | null; bucket: 'kept' | 'sealed' | 'none'; site: string | null; at: number}
   | {kind: 'none'; why: string; at: number};
 
 let last: KeyIdentity | null = null;
@@ -80,7 +81,7 @@ export async function readKeyIdentity(alive: () => boolean = () => true): Promis
      */
     setKeySite(held.site ?? null);
     if (!alive()) return null;
-    return keep({kind: 'read', identity, edgeIdentity, nametag: statement?.nametag ?? null, bucket, at: Date.now()});
+    return keep({kind: 'read', identity, edgeIdentity, nametag: statement?.nametag ?? null, bucket, site: held.site ?? null, at: Date.now()});
   } catch (e: unknown) {
     return alive() ? keep({kind: 'none', why: `Could not read this key's bucket identity: ${String((e as Error)?.message ?? e)}`, at: Date.now()}) : null;
   }
