@@ -336,7 +336,7 @@ export default function CredProviderScreen() {
      * ITS OWN SafeAreaProvider.
      *
      * This root is mounted by CredProviderActivity, not by App, so it inherits
-     * nothing from the provider App.tsx sets up - and without one the header
+     * nothing from the provider MainApp.tsx sets up - and without one the header
      * drew straight over the status bar clock. A second provider is correct
      * rather than wasteful: these are two independent React roots that happen
      * to share a ReactHost.

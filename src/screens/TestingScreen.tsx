@@ -52,7 +52,7 @@ export function TestingScreen({
   /**
    * The app's config-mode flag, and the only way to change it.
    *
-   * Not a reading of the key and not pretending to be one - see App.tsx. It is
+   * Not a reading of the key and not pretending to be one - see MainApp.tsx. It is
    * here because this is a developer tab and the flag is being rebuilt from
    * nothing: a switch, so the banner and whatever gets attached to it later
    * can be seen working before any of it depends on a device.

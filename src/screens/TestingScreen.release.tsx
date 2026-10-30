@@ -20,7 +20,7 @@
  * fails the build if any of those strings come back.
  *
  * Nothing routes here: `useTestingMode` cannot be enabled outside `__DEV__`,
- * and App.tsx does not render the tab. This exists so the import resolves.
+ * and MainApp.tsx does not render the tab. This exists so the import resolves.
  */
 export function TestingScreen(): null {
   return null;

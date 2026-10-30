@@ -22,7 +22,7 @@ function files(dir: string): string[] {
 }
 
 test.each(PLUGINS)('nothing outside src/plugins/%s imports it but the plugin list', name => {
-  const scanned = [path.join(ROOT, 'App.tsx'), path.join(ROOT, 'index.js'), ...files(path.join(ROOT, 'src')), ...files(path.join(ROOT, '__e2e_tests__'))];
+  const scanned = [path.join(ROOT, 'MainApp.tsx'), path.join(ROOT, 'index.js'), ...files(path.join(ROOT, 'src')), ...files(path.join(ROOT, '__e2e_tests__'))];
   const inside = `src/plugins/${name}/`;
   const offenders = scanned
     .map(f => path.relative(ROOT, f).split(BACKSLASH).join('/'))

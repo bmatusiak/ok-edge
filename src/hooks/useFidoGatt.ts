@@ -146,7 +146,7 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
    *
    * Owned by the keyboard (useBtKeyboard's chosenHost - the Bluetooth tab's
    * target picker) and handed IN, because this hook is built above
-   * BtKeyboardProvider and cannot read its context; App.tsx's IoPolicySync
+   * BtKeyboardProvider and cannot read its context; MainApp.tsx's IoPolicySync
    * sits inside the provider and calls setTarget. Null is None: nothing in,
    * nothing out - and it is also what holds until storage has been read, so
    * the gate starts shut rather than open.

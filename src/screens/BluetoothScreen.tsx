@@ -105,7 +105,7 @@ export function BluetoothScreen({
     (next: boolean) => {
       /*
        * Off means off, for both - the keyboard withdrawn and the GATT server
-       * stopped. That teardown now follows the switch itself (App.tsx
+       * stopped. That teardown now follows the switch itself (MainApp.tsx
        * RadioStatus, "OFF MEANS THE NATIVE TEARDOWN"), so every path that turns
        * it off gets it, not only this screen.
        */

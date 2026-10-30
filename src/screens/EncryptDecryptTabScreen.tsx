@@ -8,7 +8,7 @@ import type {ConfigState} from '../ui/configModeNotes';
 /*
  * ONE TAB FOR ENCRYPT AND DECRYPT (Brad, 2026-10-11: "encrypt and decrypt ,, they need to be
  * merged into a single tab"; name "Encrypt/Decrypt", a switch at the top). The two old tabs
- * are hidden in App.tsx (HIDDEN_TABS), their code kept as it was; this tab picks the direction
+ * are hidden in MainApp.tsx (HIDDEN_TABS), their code kept as it was; this tab picks the direction
  * and shows the same screen underneath. Switching remounts it, so nothing typed on one side
  * leaks into the other.
  */

@@ -8,7 +8,7 @@ import {shell} from '../platform';
  * SETTINGS (Brad, 2026-10-11: "i need a new tab called Setting, that opens a view with buttons
  * that take you to a sub view to those tabs ... (that has a back button) like our edge budget
  * details view ... it uses the native action bar/gestures for back also"). PIN Setup,
- * Preferences and Advanced leave the drawer (App.tsx HIDDEN_TABS, their code kept) and open
+ * Preferences and Advanced leave the drawer (MainApp.tsx HIDDEN_TABS, their code kept) and open
  * from here instead. The page itself is App's: the same element its old tab drew (render).
  */
 export const SETTINGS_PAGES = ['PIN Setup', 'Preferences', 'Backup/Restore', 'Firmware', 'Advanced'] as const;

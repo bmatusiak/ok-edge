@@ -972,7 +972,7 @@ export function KeysScreen({
         decrypting with a loaded key changes nothing on the device, so it
         belongs beside the keys it uses rather than with the settings. It is
         CryptoScreen's panel, drawn alone; screenshots follow the build as
-        App.tsx's BLOCK_SCREENSHOTS does (a result can be a decrypted secret).
+        MainApp.tsx's BLOCK_SCREENSHOTS does (a result can be a decrypted secret).
       */}
       <CryptoScreen
         emu={emu}

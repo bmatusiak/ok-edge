@@ -18,7 +18,7 @@
  *
  * ## Why this app needed it
  *
- * The Log tab ships in every release - `App.tsx` puts 'Log' in the base TABS
+ * The Log tab ships in every release - `MainApp.tsx` puts 'Log' in the base TABS
  * and only gates the Testing tab on __DEV__ - and it was printing the unlock
  * PIN into it in cleartext, as `buttons 1 2 3 4 5 6 7`, seconds after the PIN
  * was entered, two taps from the unlock screen. The line that printed it whole

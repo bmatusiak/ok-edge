@@ -73,7 +73,7 @@ const IFACE_VENDOR = oktransport.IFACE.VENDOR;
  * `requires: ['emulated']` so its own hardware adapter can never send it.
  *
  * And this bridge CAN reach a physical key: it relays to whichever key is
- * active in the app (App.tsx passes getActiveKey), and a plugged-in hard key
+ * active in the app (MainApp.tsx passes getActiveKey), and a plugged-in hard key
  * takes priority. So without this a paired computer could send 0xf4 to real
  * hardware over the radio, unattended - the least supervised route there is to
  * an irreversible change.

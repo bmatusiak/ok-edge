@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *
  * Every in-app restart - "Log out", and the "Restart the app" a config-mode
  * change ends with - relaunches the process (the soft key's firmware only
- * re-reads its state at boot; see the Log out note in App.tsx). Without this
+ * re-reads its state at boot; see the Log out note in MainApp.tsx). Without this
  * the app came back on This Key, so finishing a PIN change or a Key Chain
  * write meant finding your way back every time.
  *

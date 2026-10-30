@@ -694,7 +694,7 @@ function SettleControls({edge}: {edge: ReturnType<typeof useEdge>}) {
  */
 /**
  * testingMode: App's testing mode. The whole tab is testing-mode only today
- * (App.tsx shows it only then), and the key's testing controls below check it
+ * (MainApp.tsx shows it only then), and the key's testing controls below check it
  * themselves too, so they stay hidden when the tab ships to everyone.
  */
 /*

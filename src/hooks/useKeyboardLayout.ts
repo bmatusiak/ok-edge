@@ -64,7 +64,7 @@ export function useKeyboardLayout(backendOverride?: Backend): {
   setLayout: (name: string) => Promise<void>;
 } {
   /*
-   * From the context unless handed in. App.tsx sits ABOVE the provider - it
+   * From the context unless handed in. MainApp.tsx sits ABOVE the provider - it
    * renders it - so a hook that must run at app scope (the capture pane has
    * to hear typing from any tab) is given the backend it is choosing.
    */

@@ -69,7 +69,7 @@ export function BackupScreen({
    * the firmware accepts that. They are never both available.
    */
   configMode: ConfigState;
-  /** Asks App to want config mode. The panel never sets it - see App.tsx. */
+  /** Asks App to want config mode. The panel never sets it - see MainApp.tsx. */
   onWantConfigMode: () => void;
 }) {
   /* The ACTIVE key, not whichever one this file used to assume. */

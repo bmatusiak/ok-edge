@@ -12,7 +12,7 @@ import type {AppTab, AppWatch} from './types';
  * THE APP PLUGINS, composed with Rectify as src/onlykey.ts composes the library's (Brad: Rectify
  * is the plugin system). A feature that is its own plugin lives in one folder under src/plugins/
  * and is named only here (PLUGINS, and E2E for its in-app suite). Removing it = deleting its
- * folder and its lines here; App.tsx never
+ * folder and its lines here; MainApp.tsx never
  * names it - it draws whatever tabs the plugins added (Brad, 2026-10-11, the Password Manager:
  * "i want the password manager to act as its own plugin, keeping it easy to remove and work on
  * seperatly").

@@ -3,7 +3,7 @@ import type {Backend} from '../hooks/keySession';
 
 /*
  * What an app plugin gets from the app, and what it gives back. The plugin never reaches into
- * App.tsx: everything it may know comes in through these.
+ * MainApp.tsx: everything it may know comes in through these.
  */
 
 /** Each key's capabilities reading, as useOkEmu/useHardKey hold it (null before one). */

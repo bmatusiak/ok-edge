@@ -13,7 +13,7 @@ import {theme} from '../ui/theme';
  *
  * The logo opens as "OK" and spreads into the full wordmark (AnimatedLogo:
  * one second of OK, one of spreading, one of ONLYKEY). onDone fires at the
- * end of that, and App.tsx leaves the splash only once it has AND the
+ * end of that, and MainApp.tsx leaves the splash only once it has AND the
  * firmware has settled - so the animation is never cut off half-way.
  */
 export function SplashScreen({message, onDone}: {message?: string; onDone?: () => void}) {

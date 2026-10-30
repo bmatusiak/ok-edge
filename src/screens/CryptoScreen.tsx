@@ -1042,7 +1042,7 @@ const styles = StyleSheet.create({
 
   body: {color: theme.textSecondary, fontSize: theme.fontSize, lineHeight: theme.lineHeight},
   note: {color: theme.textDim, fontSize: 12, lineHeight: 18},
-  /* The testing banner's colours (App.tsx styles.testing), so the panel
+  /* The testing banner's colours (MainApp.tsx styles.testing), so the panel
    * reads as part of the same mode. */
   testingTag: {
     paddingVertical: 2,

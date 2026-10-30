@@ -17,7 +17,7 @@ import {usePasswordWatch} from './usePasswordManager';
 /*
  * The Autofill sheet's root (android/autofill AutofillAuthActivity renders OkRNAutofill).
  * Registered here, at load, because Chrome can wake the app cold and the sheet must exist before
- * any tab is drawn; App.tsx loads src/plugins at once, so this runs at start.
+ * any tab is drawn; MainApp.tsx loads src/plugins at once, so this runs at start.
  */
 
 AppRegistry.registerComponent('OkRNAutofill', () => require('./autofill/AutofillSheet').default);
