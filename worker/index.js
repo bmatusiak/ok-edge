@@ -58,11 +58,11 @@ function abytes(value, length, title = "") {
     return value;
   if (length !== void 0)
     anumber(length, "length");
-  const bytes2 = isBytes(value);
+  const bytes3 = isBytes(value);
   const ofLen = length !== void 0 ? ` of length ${length}` : "";
-  const got = bytes2 ? `length=${value.length}` : `type=${typeof value}`;
+  const got = bytes3 ? `length=${value.length}` : `type=${typeof value}`;
   const message = atitle(title) + "expected Uint8Array" + ofLen + ", got " + got;
-  if (!bytes2)
+  if (!bytes3)
     throw new TypeError(message);
   throw new RangeError(message);
 }
@@ -98,41 +98,41 @@ function createView(arr) {
 function rotr(word, shift) {
   return word << 32 - shift | word >>> shift;
 }
-function bytesToHex(bytes2) {
-  abytes(bytes2);
+function bytesToHex(bytes3) {
+  abytes(bytes3);
   if (hasHexBuiltin)
-    return bytes2.toHex();
-  let hex = "";
-  for (let i = 0; i < bytes2.length; i++) {
-    hex += hexes[bytes2[i]];
+    return bytes3.toHex();
+  let hex2 = "";
+  for (let i = 0; i < bytes3.length; i++) {
+    hex2 += hexes[bytes3[i]];
   }
-  return hex;
+  return hex2;
 }
 function asciiToBase16(ch) {
   return ch >= 48 && ch <= 57 ? ch - 48 : ch >= 65 && ch <= 70 ? ch - (65 - 10) : ch >= 97 && ch <= 102 ? ch - (97 - 10) : void 0;
 }
-function hexToBytes(hex) {
-  if (typeof hex !== "string")
-    throw new TypeError("hex string expected, got " + typeof hex);
+function hexToBytes(hex2) {
+  if (typeof hex2 !== "string")
+    throw new TypeError("hex string expected, got " + typeof hex2);
   if (hasHexBuiltin) {
     try {
-      return Uint8Array.fromHex(hex);
+      return Uint8Array.fromHex(hex2);
     } catch (error) {
       if (error instanceof SyntaxError)
         throw new RangeError(error.message);
       throw error;
     }
   }
-  const hl = hex.length;
+  const hl = hex2.length;
   const al = hl / 2;
   if (hl % 2)
     throw new RangeError("hex string expected, got unpadded hex of length " + hl);
   const array = new Uint8Array(al);
   for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-    const n1 = asciiToBase16(hex.charCodeAt(hi));
-    const n2 = asciiToBase16(hex.charCodeAt(hi + 1));
+    const n1 = asciiToBase16(hex2.charCodeAt(hi));
+    const n2 = asciiToBase16(hex2.charCodeAt(hi + 1));
     if (n1 === void 0 || n2 === void 0) {
-      const char = hex[hi] + hex[hi + 1];
+      const char = hex2[hi] + hex2[hi + 1];
       throw new RangeError('hex string expected, got non-hex character "' + char + '" at index ' + hi);
     }
     array[ai] = n1 * 16 + n2;
@@ -240,6 +240,11 @@ var init_utils = __esm({
 });
 
 // node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/hashes/hmac.js
+var hmac_exports = {};
+__export(hmac_exports, {
+  _HMAC: () => _HMAC,
+  hmac: () => hmac
+});
 var _HMAC, hmac;
 var init_hmac = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/hashes/hmac.js"() {
@@ -1181,11 +1186,11 @@ function abytes2(value, length, title = "") {
     return value;
   if (length !== void 0)
     anumber2(length, "length");
-  const bytes2 = isBytes2(value);
+  const bytes3 = isBytes2(value);
   const ofLen = length !== void 0 ? ` of length ${length}` : "";
-  const got = bytes2 ? `length=${value.length}` : `type=${typeof value}`;
+  const got = bytes3 ? `length=${value.length}` : `type=${typeof value}`;
   const message = atitle2(title) + "expected Uint8Array" + ofLen + ", got " + got;
-  if (!bytes2)
+  if (!bytes3)
     throw new TypeError(message);
   throw new RangeError(message);
 }
@@ -1300,11 +1305,11 @@ function u64Lengths(dataLength, aadLength, isLE2) {
   view.setBigUint64(8, BigInt(dataLength), isLE2);
   return num;
 }
-function isAligned32(bytes2) {
-  return bytes2.byteOffset % 4 === 0;
+function isAligned32(bytes3) {
+  return bytes3.byteOffset % 4 === 0;
 }
-function copyBytes(bytes2) {
-  return Uint8Array.from(abytes2(bytes2));
+function copyBytes(bytes3) {
+  return Uint8Array.from(abytes2(bytes3));
 }
 function randomBytes2(bytesLength = 32) {
   anumber2(bytesLength, "bytesLength");
@@ -1437,10 +1442,10 @@ var init_polyval = __esm({
     swapLE = /* @__PURE__ */ __name((n) => (n >>> 0 & 255) << 24 | (n >>> 8 & 255) << 16 | (n >>> 16 & 255) << 8 | n >>> 24 & 255 | 0, "swapLE");
     swap8IfLE = /* @__PURE__ */ __name((n) => swap8IfBE(swapLE(n)), "swap8IfLE");
     __name(_toGHASHKey, "_toGHASHKey");
-    estimateWindow = /* @__PURE__ */ __name((bytes2) => {
-      if (bytes2 > 64 * 1024)
+    estimateWindow = /* @__PURE__ */ __name((bytes3) => {
+      if (bytes3 > 64 * 1024)
         return 8;
-      if (bytes2 > 1024)
+      if (bytes3 > 1024)
         return 4;
       return 2;
     }, "estimateWindow");
@@ -2793,17 +2798,17 @@ var require_bytes = __commonJS({
   "node_modules/node-onlykey-lib/src/bytes.js"(exports, module) {
     "use strict";
     var HEX = "0123456789abcdef";
-    function toHex(bytes2) {
+    function toHex(bytes3) {
       let out = "";
-      for (let i = 0; i < bytes2.length; i++) {
-        const v = bytes2[i] & 255;
+      for (let i = 0; i < bytes3.length; i++) {
+        const v = bytes3[i] & 255;
         out += HEX[v >>> 4] + HEX[v & 15];
       }
       return out;
     }
     __name(toHex, "toHex");
-    function fromHex(hex) {
-      const clean3 = String(hex).replace(/[\s:_-]/g, "");
+    function fromHex(hex2) {
+      const clean3 = String(hex2).replace(/[\s:_-]/g, "");
       if (clean3.length % 2 !== 0) {
         throw new Error(`fromHex: odd-length hex string (${clean3.length} chars)`);
       }
@@ -2826,27 +2831,27 @@ var require_bytes = __commonJS({
       return -1;
     }
     __name(digit, "digit");
-    function formatHex(bytes2) {
-      const hex = typeof bytes2 === "string" ? bytes2 : toHex(bytes2);
-      return (hex.match(/.{1,2}/g) || []).join(" ");
+    function formatHex(bytes3) {
+      const hex2 = typeof bytes3 === "string" ? bytes3 : toHex(bytes3);
+      return (hex2.match(/.{1,2}/g) || []).join(" ");
     }
     __name(formatHex, "formatHex");
-    function toLatin1(bytes2) {
+    function toLatin1(bytes3) {
       let out = "";
-      for (let i = 0; i < bytes2.length; i++) out += String.fromCharCode(bytes2[i] & 255);
+      for (let i = 0; i < bytes3.length; i++) out += String.fromCharCode(bytes3[i] & 255);
       return out;
     }
     __name(toLatin1, "toLatin1");
-    function fromLatin1(text) {
-      const out = new Uint8Array(text.length);
-      for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) & 255;
+    function fromLatin1(text2) {
+      const out = new Uint8Array(text2.length);
+      for (let i = 0; i < text2.length; i++) out[i] = text2.charCodeAt(i) & 255;
       return out;
     }
     __name(fromLatin1, "fromLatin1");
-    function toPrintable(bytes2) {
+    function toPrintable(bytes3) {
       let out = "";
-      for (let i = 0; i < bytes2.length; i++) {
-        const b = bytes2[i];
+      for (let i = 0; i < bytes3.length; i++) {
+        const b = bytes3[i];
         if (b >= 32 && b <= 126) out += String.fromCharCode(b);
       }
       return out;
@@ -2871,8 +2876,8 @@ var require_bytes = __commonJS({
       return diff === 0;
     }
     __name(equalConstantTime, "equalConstantTime");
-    function utf8ToBytes2(text) {
-      const str = String(text);
+    function utf8ToBytes2(text2) {
+      const str = String(text2);
       const out = [];
       for (let i = 0; i < str.length; i++) {
         let code = str.charCodeAt(i);
@@ -2901,10 +2906,10 @@ var require_bytes = __commonJS({
       return Uint8Array.from(out);
     }
     __name(utf8ToBytes2, "utf8ToBytes");
-    function bytesToUtf8(bytes2) {
+    function bytesToUtf8(bytes3) {
       let out = "";
-      for (let i = 0; i < bytes2.length; ) {
-        const b = bytes2[i];
+      for (let i = 0; i < bytes3.length; ) {
+        const b = bytes3[i];
         let code;
         let size;
         if (b < 128) {
@@ -2924,12 +2929,12 @@ var require_bytes = __commonJS({
           i += 1;
           continue;
         }
-        if (i + size > bytes2.length) {
+        if (i + size > bytes3.length) {
           out += "\uFFFD";
           break;
         }
         for (let k = 1; k < size; k++) {
-          const cont = bytes2[i + k];
+          const cont = bytes3[i + k];
           if ((cont & 192) !== 128) {
             code = -1;
             break;
@@ -2952,30 +2957,30 @@ var require_bytes = __commonJS({
     }
     __name(bytesToUtf8, "bytesToUtf8");
     var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    function toBase64(bytes2) {
+    function toBase64(bytes3) {
       let out = "";
-      for (let i = 0; i < bytes2.length; i += 3) {
-        const a = bytes2[i];
-        const b = i + 1 < bytes2.length ? bytes2[i + 1] : 0;
-        const c = i + 2 < bytes2.length ? bytes2[i + 2] : 0;
+      for (let i = 0; i < bytes3.length; i += 3) {
+        const a = bytes3[i];
+        const b = i + 1 < bytes3.length ? bytes3[i + 1] : 0;
+        const c = i + 2 < bytes3.length ? bytes3[i + 2] : 0;
         out += B64[a >> 2];
         out += B64[(a & 3) << 4 | b >> 4];
-        out += i + 1 < bytes2.length ? B64[(b & 15) << 2 | c >> 6] : "=";
-        out += i + 2 < bytes2.length ? B64[c & 63] : "=";
+        out += i + 1 < bytes3.length ? B64[(b & 15) << 2 | c >> 6] : "=";
+        out += i + 2 < bytes3.length ? B64[c & 63] : "=";
       }
       return out;
     }
     __name(toBase64, "toBase64");
-    function toBase64Url(bytes2) {
-      return toBase64(bytes2).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    function toBase64Url(bytes3) {
+      return toBase64(bytes3).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     }
     __name(toBase64Url, "toBase64Url");
-    function fromBase64Url(text) {
-      return fromBase64(String(text).replace(/-/g, "+").replace(/_/g, "/"));
+    function fromBase64Url(text2) {
+      return fromBase64(String(text2).replace(/-/g, "+").replace(/_/g, "/"));
     }
     __name(fromBase64Url, "fromBase64Url");
-    function fromBase64(text) {
-      const clean3 = String(text).replace(/[^A-Za-z0-9+/]/g, "");
+    function fromBase64(text2) {
+      const clean3 = String(text2).replace(/[^A-Za-z0-9+/]/g, "");
       const out = new Uint8Array(Math.floor(clean3.length * 3 / 4));
       let at = 0;
       let acc = 0;
@@ -3212,10 +3217,10 @@ var require_bucket = __commonJS({
           return live(rec) ? rec.v : null;
         },
         setItem(key, value) {
-          const text = String(value);
+          const text2 = String(value);
           const rec = store()[key];
-          if (live(rec) && rec.v === text) return;
-          store()[key] = { v: text, at: stamp(bucket, now) };
+          if (live(rec) && rec.v === text2) return;
+          store()[key] = { v: text2, at: stamp(bucket, now) };
         },
         /* never deleted: the value stays, archived and dated, until purgeArchived() */
         removeItem(key) {
@@ -3245,10 +3250,10 @@ var require_bucket = __commonJS({
       return canonical(bucket);
     }
     __name(serialize, "serialize");
-    function parse(text) {
+    function parse(text2) {
       let b;
       try {
-        b = JSON.parse(String(text));
+        b = JSON.parse(String(text2));
       } catch (e) {
         throw err("EBUCKET_FORMAT", `not a bucket: ${e.message}`);
       }
@@ -3265,10 +3270,19 @@ var require_bucket = __commonJS({
       return { format: FORMAT, v: VERSION, owner: b.owner ?? null, stores: b.stores, clock: typeof b.clock === "string" ? b.clock : null };
     }
     __name(parse, "parse");
-    function seal(bucket, key, randomBytes4) {
-      return canonical({ format: SEALED_FORMAT, v: VERSION, owner: bucket.owner ?? null, blob: vault.seal(key, serialize(bucket), randomBytes4) });
+    function seal(bucket, key, randomBytes4, { keyVersion } = {}) {
+      return canonical({ format: SEALED_FORMAT, v: VERSION, ...keyVersion ? { kv: keyVersion } : {}, owner: bucket.owner ?? null, blob: vault.seal(key, serialize(bucket), randomBytes4) });
     }
     __name(seal, "seal");
+    function sealedKeyVersion(text2) {
+      try {
+        const outer = JSON.parse(String(text2));
+        return outer && outer.format === SEALED_FORMAT ? Number.isInteger(outer.kv) ? outer.kv : 1 : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    __name(sealedKeyVersion, "sealedKeyVersion");
     var AGE_FORMAT = "onlykey-bucket-age";
     var AGE_LABEL = "onlykey-bucket";
     var { toBase64: toB64, fromBase64: fromB64 } = require_bytes();
@@ -3277,10 +3291,10 @@ var require_bucket = __commonJS({
       return canonical({ format: AGE_FORMAT, v: VERSION, owner: bucket.owner ?? null, label: AGE_LABEL, age: toB64(encrypt2(plain, recipient)) });
     }
     __name(sealToKey, "sealToKey");
-    async function openWithKey(text, { decrypt: decrypt2, owner = null }) {
+    async function openWithKey(text2, { decrypt: decrypt2, owner = null }) {
       let outer;
       try {
-        outer = JSON.parse(String(text));
+        outer = JSON.parse(String(text2));
       } catch (e) {
         throw err("EBUCKET_FORMAT", `not a bucket: ${e.message}`);
       }
@@ -3297,10 +3311,10 @@ var require_bucket = __commonJS({
       return { bucket, sealed: true };
     }
     __name(openWithKey, "openWithKey");
-    function open(text, { key = null, allowUnsealed = false } = {}) {
+    function open(text2, { key = null, allowUnsealed = false } = {}) {
       let outer;
       try {
-        outer = JSON.parse(String(text));
+        outer = JSON.parse(String(text2));
       } catch (e) {
         throw err("EBUCKET_FORMAT", `not a bucket: ${e.message}`);
       }
@@ -3318,7 +3332,7 @@ var require_bucket = __commonJS({
       }
       if (outer && outer.format === FORMAT) {
         if (!allowUnsealed) throw err("EBUCKET_UNSEALED", "an unsealed bucket opens only in a development build");
-        return { bucket: parse(text), sealed: false };
+        return { bucket: parse(text2), sealed: false };
       }
       throw err("EBUCKET_FORMAT", "not a bucket");
     }
@@ -3376,7 +3390,7 @@ var require_bucket = __commonJS({
       bucket.stores[conflict.store][conflict.key] = { ...conflict[side] };
     }
     __name(resolve, "resolve");
-    module.exports = { FORMAT, SEALED_FORMAT, AGE_FORMAT, AGE_LABEL, VERSION, create, kv, newer, purgeArchived, serialize, parse, seal, open, sealToKey, openWithKey, mergeKeys, merge, resolve };
+    module.exports = { FORMAT, SEALED_FORMAT, AGE_FORMAT, AGE_LABEL, VERSION, create, kv, newer, purgeArchived, serialize, parse, seal, sealedKeyVersion, open, sealToKey, openWithKey, mergeKeys, merge, resolve };
   }
 });
 
@@ -3553,6 +3567,36 @@ var require_rules = __commonJS({
       };
     }
     __name(edgeCopies, "edgeCopies");
+    function edgeLogs(logblocks) {
+      return (into = {}, from = {}) => {
+        const store = { ...into };
+        const conflicts = [];
+        let taken = 0;
+        for (const [key, rec] of Object.entries(from)) {
+          if (!live(rec)) continue;
+          const have = into[key];
+          if (!live(have)) {
+            store[key] = { ...rec };
+            taken += 1;
+            continue;
+          }
+          if (have.v === rec.v) continue;
+          const [lo, hi] = ordered(have, rec);
+          const r = logblocks.mergeEntry(key, have.v, lo.v, hi.v);
+          if (r.fork) {
+            conflicts.push({ key, reason: r.fork, into: { ...have }, from: { ...rec }, apply() {
+              throw new Error(`${r.fork}: a fork is reported, never repaired`);
+            } });
+            continue;
+          }
+          if (r.v === have.v) continue;
+          store[key] = { v: r.v, at: later(have.at, rec.at) };
+          taken += r.taken;
+        }
+        return { store, taken, conflicts };
+      };
+    }
+    __name(edgeLogs, "edgeLogs");
     function edgeBlocks(bucket, copyfile, { net, store = "edge.copies" }) {
       const { fromHex } = require_bytes();
       return Object.values(bucket.stores[store] || {}).filter(live).map((rec) => {
@@ -3603,7 +3647,7 @@ var require_rules = __commonJS({
       }), listParts(key, "messages"));
     }
     __name(cryptobox, "cryptobox");
-    module.exports = { settings, keychain, passwords, guestbook, edgeCopies, edgeBlocks, cryptobox };
+    module.exports = { settings, keychain, passwords, guestbook, edgeCopies, edgeLogs, edgeBlocks, cryptobox };
   }
 });
 
@@ -3614,7 +3658,7 @@ var require_replicate = __commonJS({
     var { sha256: sha2562 } = require_sha2();
     var { toHex } = require_bytes();
     var { mergeKeys } = require_bucket();
-    var h = /* @__PURE__ */ __name((text) => toHex(sha2562(new TextEncoder().encode(text))), "h");
+    var h = /* @__PURE__ */ __name((text2) => toHex(sha2562(new TextEncoder().encode(text2))), "h");
     var hashOf = /* @__PURE__ */ __name((rec) => h(`${rec.archived || rec.v === null ? "a" : "l"}${typeof rec.v === "string" ? rec.v : JSON.stringify(rec.v ?? "")}`), "hashOf");
     var SEP = "";
     var live = /* @__PURE__ */ __name((rec) => Boolean(rec) && !rec.archived && rec.v !== null, "live");
@@ -3629,7 +3673,7 @@ var require_replicate = __commonJS({
           } catch {
           }
           if (split2) {
-            for (const [p, text] of Object.entries(split2)) out[`${key}${SEP}${p}`] = { at: rec.at, h: h(`l${text}`), part: text };
+            for (const [p, text2] of Object.entries(split2)) out[`${key}${SEP}${p}`] = { at: rec.at, h: h(`l${text2}`), part: text2 };
             continue;
           }
         }
@@ -3771,16 +3815,16 @@ function asafenumber(value, title = "") {
     throw new RangeError(prefix + "expected safe integer, got " + value);
   }
 }
-function hexToNumber(hex) {
-  if (typeof hex !== "string")
-    throw new TypeError("hex string expected, got " + typeof hex);
-  return hex === "" ? _0n : BigInt("0x" + hex);
+function hexToNumber(hex2) {
+  if (typeof hex2 !== "string")
+    throw new TypeError("hex string expected, got " + typeof hex2);
+  return hex2 === "" ? _0n : BigInt("0x" + hex2);
 }
-function bytesToNumberBE(bytes2) {
-  return hexToNumber(bytesToHex(bytes2));
+function bytesToNumberBE(bytes3) {
+  return hexToNumber(bytesToHex(bytes3));
 }
-function bytesToNumberLE(bytes2) {
-  return hexToNumber(bytesToHex(copyBytes2(abytes(bytes2)).reverse()));
+function bytesToNumberLE(bytes3) {
+  return hexToNumber(bytesToHex(copyBytes2(abytes(bytes3)).reverse()));
 }
 function numberToBytesBE(n, len) {
   anumber(len);
@@ -3788,10 +3832,10 @@ function numberToBytesBE(n, len) {
     throw new Error("zero output length is invalid");
   n = abignumber(n);
   const expectedLen = len * 2;
-  const hex = n.toString(16);
-  if (hex.length > expectedLen)
+  const hex2 = n.toString(16);
+  if (hex2.length > expectedLen)
     throw new RangeError("number is too large");
-  return hexToBytes(hex.padStart(expectedLen, "0"));
+  return hexToBytes(hex2.padStart(expectedLen, "0"));
 }
 function numberToBytesLE(n, len) {
   return numberToBytesBE(n, len).reverse();
@@ -3806,8 +3850,8 @@ function equalBytes2(a, b) {
     diff |= a[i] ^ b[i];
   return diff === 0;
 }
-function copyBytes2(bytes2) {
-  return Uint8Array.from(abytes3(bytes2));
+function copyBytes2(bytes3) {
+  return Uint8Array.from(abytes3(bytes3));
 }
 function asciiToBytes(ascii) {
   if (typeof ascii !== "string")
@@ -3868,7 +3912,7 @@ var init_utils3 = __esm({
     __name(afunction, "afunction");
     bytesToHex2 = bytesToHex;
     concatBytes3 = /* @__PURE__ */ __name((...arrays) => concatBytes(...arrays), "concatBytes");
-    hexToBytes2 = /* @__PURE__ */ __name((hex) => hexToBytes(hex), "hexToBytes");
+    hexToBytes2 = /* @__PURE__ */ __name((hex2) => hexToBytes(hex2), "hexToBytes");
     isBytes3 = isBytes;
     randomBytes3 = /* @__PURE__ */ __name((bytesLength) => randomBytes(bytesLength), "randomBytes");
     _0n = /* @__PURE__ */ BigInt(0);
@@ -4360,20 +4404,20 @@ var init_modular = __esm({
       toBytes(num) {
         return this.isLE ? numberToBytesLE(num, this.BYTES) : numberToBytesBE(num, this.BYTES);
       }
-      fromBytes(bytes2, skipValidation = false) {
-        abytes3(bytes2);
+      fromBytes(bytes3, skipValidation = false) {
+        abytes3(bytes3);
         const { _lengths: allowedLengths, BYTES, isLE: isLE2, ORDER, _mod: modFromBytes } = this;
         if (allowedLengths) {
-          if (bytes2.length < 1 || !allowedLengths.includes(bytes2.length) || bytes2.length > BYTES) {
-            throw new Error("Field.fromBytes: expected " + allowedLengths + " bytes, got " + bytes2.length);
+          if (bytes3.length < 1 || !allowedLengths.includes(bytes3.length) || bytes3.length > BYTES) {
+            throw new Error("Field.fromBytes: expected " + allowedLengths + " bytes, got " + bytes3.length);
           }
           const padded = new Uint8Array(BYTES);
-          padded.set(bytes2, isLE2 ? 0 : padded.length - bytes2.length);
-          bytes2 = padded;
+          padded.set(bytes3, isLE2 ? 0 : padded.length - bytes3.length);
+          bytes3 = padded;
         }
-        if (bytes2.length !== BYTES)
-          throw new Error("Field.fromBytes: expected " + BYTES + " bytes, got " + bytes2.length);
-        let scalar = isLE2 ? bytesToNumberLE(bytes2) : bytesToNumberBE(bytes2);
+        if (bytes3.length !== BYTES)
+          throw new Error("Field.fromBytes: expected " + BYTES + " bytes, got " + bytes3.length);
+        let scalar = isLE2 ? bytesToNumberLE(bytes3) : bytesToNumberBE(bytes3);
         if (modFromBytes)
           scalar = mod(scalar, ORDER);
         if (!skipValidation) {
@@ -4425,9 +4469,9 @@ function validateW(W, bits, min = 1) {
     throw new Error("invalid window size, expected [" + min + ".." + bits + "], got W=" + W);
 }
 function validateTableBytes(numPoints, fpBytes) {
-  const bytes2 = numPoints * (4 * fpBytes + 128);
-  if (bytes2 > TABLE_BYTES_MAX)
-    throw new Error("invalid window size: table would need ~" + Math.ceil(bytes2 / 2 ** 20) + " MiB, max " + TABLE_BYTES_MAX / 2 ** 20 + " MiB");
+  const bytes3 = numPoints * (4 * fpBytes + 128);
+  if (bytes3 > TABLE_BYTES_MAX)
+    throw new Error("invalid window size: table would need ~" + Math.ceil(bytes3 / 2 ** 20) + " MiB, max " + TABLE_BYTES_MAX / 2 ** 20 + " MiB");
 }
 function probeRandomBytes(randomBytes4, length) {
   if (randomBytes4 === void 0)
@@ -4899,13 +4943,13 @@ function edwards(params, extraOpts = {}) {
       return new Point(x, y, Fp2.ONE, Fp2.mul(x, y));
     }
     // Uses algo from RFC8032 5.1.3.
-    static fromBytes(bytes2, zip215 = false) {
+    static fromBytes(bytes3, zip215 = false) {
       const len = Fp2.BYTES;
       const { a, d } = CURVE;
-      bytes2 = copyBytes2(abytes3(bytes2, len, "point"));
+      bytes3 = copyBytes2(abytes3(bytes3, len, "point"));
       abool2(zip215, "zip215");
-      const normed = copyBytes2(bytes2);
-      const lastByte = bytes2[len - 1];
+      const normed = copyBytes2(bytes3);
+      const lastByte = bytes3[len - 1];
       normed[len - 1] = lastByte & ~128;
       const y = bytesToNumberLE(normed);
       const max = zip215 ? MASK : Fp2.ORDER;
@@ -4924,8 +4968,8 @@ function edwards(params, extraOpts = {}) {
         x = Fp2.neg(x);
       return Point.fromAffine({ x, y });
     }
-    static fromHex(hex, zip215 = false) {
-      return Point.fromBytes(hexToBytes2(hex), zip215);
+    static fromHex(hex2, zip215 = false) {
+      return Point.fromBytes(hexToBytes2(hex2), zip215);
     }
     get x() {
       return this.toAffine().x;
@@ -5089,9 +5133,9 @@ function edwards(params, extraOpts = {}) {
     }
     toBytes() {
       const { x, y } = this.toAffine();
-      const bytes2 = Fp2.toBytes(y);
-      bytes2[bytes2.length - 1] |= isOdd(x) ? 128 : 0;
-      return bytes2;
+      const bytes3 = Fp2.toBytes(y);
+      bytes3[bytes3.length - 1] |= isOdd(x) ? 128 : 0;
+      return bytes3;
     }
     toHex() {
       return bytesToHex2(this.toBytes());
@@ -5136,7 +5180,7 @@ function eddsa(Point, cHash, eddsaOpts = {}) {
   const randomBytes4 = opts.randomBytes === void 0 ? randomBytes3 : opts.randomBytes;
   const toMontgomery2 = opts.toMontgomery;
   const toMontgomerySecret2 = opts.toMontgomerySecret;
-  const adjustScalarBytes2 = opts.adjustScalarBytes === void 0 ? (bytes2) => bytes2 : opts.adjustScalarBytes;
+  const adjustScalarBytes2 = opts.adjustScalarBytes === void 0 ? (bytes3) => bytes3 : opts.adjustScalarBytes;
   const domain = opts.domain === void 0 ? (data, ctx, phflag) => {
     abool2(phflag, "phflag");
     if (ctx.length || phflag)
@@ -5889,7 +5933,7 @@ function createFROST(opts) {
       validatePoint(p);
     return p;
   }, "validatePublicPoint");
-  const parsePoint = /* @__PURE__ */ __name((bytes2) => validatePublicPoint(Point.fromBytes(bytes2)), "parsePoint");
+  const parsePoint = /* @__PURE__ */ __name((bytes3) => validatePublicPoint(Point.fromBytes(bytes3)), "parsePoint");
   const nonceCommitments = /* @__PURE__ */ __name((identifier, nonces) => ({
     identifier,
     hiding: serializePoint(Point.BASE.multiply(Fn2.fromBytes(nonces.hiding))),
@@ -6797,13 +6841,13 @@ function createOPRF(opts) {
     return concatBytes3(...res2);
   }
   __name(encode, "encode");
-  const inputBytes = /* @__PURE__ */ __name((title, bytes2) => {
-    abytes3(bytes2, void 0, title);
-    if (bytes2.length > 65535)
-      throw new Error(`"${title}" expected Uint8Array of length <= 65535, got length=${bytes2.length}`);
-    return bytes2;
+  const inputBytes = /* @__PURE__ */ __name((title, bytes3) => {
+    abytes3(bytes3, void 0, title);
+    if (bytes3.length > 65535)
+      throw new Error(`"${title}" expected Uint8Array of length <= 65535, got length=${bytes3.length}`);
+    return bytes3;
   }, "inputBytes");
-  const hashInput = /* @__PURE__ */ __name((...bytes2) => hash(encode(...bytes2, "Finalize")), "hashInput");
+  const hashInput = /* @__PURE__ */ __name((...bytes3) => hash(encode(...bytes3, "Finalize")), "hashInput");
   function getTranscripts(B, C, D, ctx) {
     const Bm = B.toBytes();
     const seed = hash(encode(Bm, concatBytes3(asciiToBytes("Seed-"), ctx)));
@@ -6881,8 +6925,8 @@ function createOPRF(opts) {
     throw new Error("Cannot derive key");
   }
   __name(deriveKeyPair, "deriveKeyPair");
-  const wirePoint = /* @__PURE__ */ __name((label, bytes2) => {
-    const point = Point.fromBytes(bytes2);
+  const wirePoint = /* @__PURE__ */ __name((label, bytes3) => {
+    const point = Point.fromBytes(bytes3);
     if (point.equals(Point.ZERO))
       throw new Error(label + " point at infinity");
     return point;
@@ -7078,11 +7122,11 @@ function ed25519_pow_2_252_3(x) {
   const pow_p_5_8 = pow2(b250, _2n4, P) * x % P;
   return { pow_p_5_8, b2 };
 }
-function adjustScalarBytes(bytes2) {
-  bytes2[0] &= 248;
-  bytes2[31] &= 127;
-  bytes2[31] |= 64;
-  return bytes2;
+function adjustScalarBytes(bytes3) {
+  bytes3[0] &= 248;
+  bytes3[31] &= 127;
+  bytes3[31] |= 64;
+  return bytes3;
 }
 function uvRatio(u, v) {
   const P = ed25519_CURVE_p;
@@ -7302,7 +7346,7 @@ var init_ed25519 = __esm({
     D_MINUS_ONE_SQ = /* @__PURE__ */ BigInt("40440834346308536858101042469323190826248399146238708352240133220865137265952");
     invertSqrt = /* @__PURE__ */ __name((number) => uvRatio(_1n6, number), "invertSqrt");
     MAX_255B = /* @__PURE__ */ BigInt("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-    bytes255ToNumberLE = /* @__PURE__ */ __name((bytes2) => Fp.create(bytesToNumberLE(bytes2) & MAX_255B), "bytes255ToNumberLE");
+    bytes255ToNumberLE = /* @__PURE__ */ __name((bytes3) => Fp.create(bytesToNumberLE(bytes3) & MAX_255B), "bytes255ToNumberLE");
     __name(calcElligatorRistrettoMap, "calcElligatorRistrettoMap");
     _RistrettoPoint = class __RistrettoPoint extends PrimeEdwardsPoint {
       static {
@@ -7337,11 +7381,11 @@ var init_ed25519 = __esm({
       init(ep) {
         return new __RistrettoPoint(ep);
       }
-      static fromBytes(bytes2) {
-        abytes(bytes2, 32);
+      static fromBytes(bytes3) {
+        abytes(bytes3, 32);
         const { a, d } = ed25519_CURVE;
-        const s = bytes255ToNumberLE(bytes2);
-        if (!equalBytes2(Fp.toBytes(s), bytes2) || Fp.isOdd(s))
+        const s = bytes255ToNumberLE(bytes3);
+        if (!equalBytes2(Fp.toBytes(s), bytes3) || Fp.isOdd(s))
           throw new Error("invalid ristretto255 encoding 1");
         const s2 = Fp.sqr(s);
         const u1 = Fp.add(_1n6, Fp.mulN(a, s2));
@@ -7366,8 +7410,8 @@ var init_ed25519 = __esm({
        * Described in [RFC9496](https://www.rfc-editor.org/rfc/rfc9496#name-decode).
        * @param hex - Ristretto-encoded 32 bytes. Not every 32-byte string is valid ristretto encoding
        */
-      static fromHex(hex) {
-        return __RistrettoPoint.fromBytes(hexToBytes(hex));
+      static fromHex(hex2) {
+        return __RistrettoPoint.fromBytes(hexToBytes(hex2));
       }
       /**
        * Encodes ristretto point to Uint8Array.
@@ -7457,11 +7501,11 @@ var init_ed25519 = __esm({
        * It was later reused as a component in the newer
        * `hash_to_ristretto255` function defined in RFC 9380.
        */
-      deriveToCurve(bytes2) {
-        abytes(bytes2, 64);
-        const r1 = bytes255ToNumberLE(bytes2.subarray(0, 32));
+      deriveToCurve(bytes3) {
+        abytes(bytes3, 64);
+        const r1 = bytes255ToNumberLE(bytes3.subarray(0, 32));
         const R1 = calcElligatorRistrettoMap(r1);
-        const r2 = bytes255ToNumberLE(bytes2.subarray(32, 64));
+        const r2 = bytes255ToNumberLE(bytes3.subarray(32, 64));
         const R2 = calcElligatorRistrettoMap(r2);
         return new _RistrettoPoint(R1.add(R2));
       }
@@ -7510,10 +7554,8 @@ var require_bucket_identity = __commonJS({
     var { ed25519: ed255192 } = require_ed25519();
     var { toHex } = require_bytes();
     var IDENTITY_LABEL = "";
-    var KEY_LABEL = "onlykey-bucket/key";
     var AGENT = { version: 1 };
     var ED25519 = 1;
-    var CURVE25519 = 4;
     var utf8 = /* @__PURE__ */ __name((s) => new TextEncoder().encode(s), "utf8");
     var concat = /* @__PURE__ */ __name((...parts) => {
       const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
@@ -7536,17 +7578,21 @@ var require_bucket_identity = __commonJS({
       return { publicKey, id: identityIdOf(publicKey) };
     }
     __name(readIdentity, "readIdentity");
-    async function deriveBucketKey(okcrypto, identityPublicKey, opts = {}) {
-      const peer = await okcrypto.agent.publicKey(labelHash(KEY_LABEL), { ...AGENT, keyType: CURVE25519 });
-      const shared = Uint8Array.from(await okcrypto.agent.ecdh(labelHash(IDENTITY_LABEL), peer, { ...opts, ...AGENT, keyType: CURVE25519 }));
+    var BUCKET_KEY_VERSION = 2;
+    var bucketKeyLabel = /* @__PURE__ */ __name((identityPublicKey) => `okedge/bucket-key/v2/${identityIdOf(identityPublicKey)}`, "bucketKeyLabel");
+    async function deriveBucketKeyAt(okcrypto, identityPublicKey, site, opts = {}) {
+      if (typeof site !== "string" || !site) {
+        throw Object.assign(new Error("bucket key: this key names no site (ctap_bridge) - its bucket key is bound to that site, and there is no other"), { code: "NO_KEY_SITE" });
+      }
+      const secret = Uint8Array.from(await okcrypto.deriveSecret(bucketKeyLabel(identityPublicKey), { ...opts, rpId: site }));
       try {
-        const secretKey = hkdf2(sha2562, shared, utf8("OKBUCKET-KEY-v1"), Uint8Array.from(identityPublicKey), 32);
-        return { secretKey, publicKey: ed255192.getPublicKey(secretKey) };
+        const secretKey = hkdf2(sha2562, secret, utf8("OKBUCKET-KEY-v2"), Uint8Array.from(identityPublicKey), 32);
+        return { secretKey, publicKey: ed255192.getPublicKey(secretKey), version: BUCKET_KEY_VERSION };
       } finally {
-        shared.fill(0);
+        secret.fill(0);
       }
     }
-    __name(deriveBucketKey, "deriveBucketKey");
+    __name(deriveBucketKeyAt, "deriveBucketKeyAt");
     var certDigest = /* @__PURE__ */ __name((identityPublicKey, bucketPublicKey) => H("OKBUCKET-CERT-v1", identityPublicKey, bucketPublicKey), "certDigest");
     async function certify(okcrypto, identityPublicKey, bucketPublicKey, opts = {}) {
       const sig = await okcrypto.agent.sign(labelHash(IDENTITY_LABEL), certDigest(identityPublicKey, bucketPublicKey), { ...opts, ...AGENT, keyType: ED25519 });
@@ -7562,23 +7608,23 @@ var require_bucket_identity = __commonJS({
     }
     __name(verifyCertificate, "verifyCertificate");
     var PURPOSES = /* @__PURE__ */ new Set(["proof", "give", "accept", "revoke", "join"]);
-    var purposeDigest = /* @__PURE__ */ __name((purpose, bytes2) => {
+    var purposeDigest = /* @__PURE__ */ __name((purpose, bytes3) => {
       if (!PURPOSES.has(purpose)) throw new Error(`the bucket key signs ${[...PURPOSES].join(", ")} - not ${purpose}`);
-      return H(`OKBUCKET-${purpose.toUpperCase()}-v1`, bytes2);
+      return H(`OKBUCKET-${purpose.toUpperCase()}-v1`, bytes3);
     }, "purposeDigest");
-    function sign(bucketKey, purpose, bytes2) {
-      return ed255192.sign(purposeDigest(purpose, Uint8Array.from(bytes2)), bucketKey.secretKey);
+    function sign(bucketKey, purpose, bytes3) {
+      return ed255192.sign(purposeDigest(purpose, Uint8Array.from(bytes3)), bucketKey.secretKey);
     }
     __name(sign, "sign");
-    function verify({ identityPublicKey, bucketPublicKey, certificate, purpose, bytes: bytes2, signature }) {
+    function verify({ identityPublicKey, bucketPublicKey, certificate, purpose, bytes: bytes3, signature }) {
       try {
-        return verifyCertificate({ identityPublicKey, bucketPublicKey, certificate }) && ed255192.verify(Uint8Array.from(signature), purposeDigest(purpose, Uint8Array.from(bytes2)), Uint8Array.from(bucketPublicKey));
+        return verifyCertificate({ identityPublicKey, bucketPublicKey, certificate }) && ed255192.verify(Uint8Array.from(signature), purposeDigest(purpose, Uint8Array.from(bytes3)), Uint8Array.from(bucketPublicKey));
       } catch {
         return false;
       }
     }
     __name(verify, "verify");
-    module.exports = { IDENTITY_LABEL, KEY_LABEL, isBucketIdentityId, identityIdOf, readIdentity, deriveBucketKey, certify, verifyCertificate, sign, verify };
+    module.exports = { IDENTITY_LABEL, isBucketIdentityId, identityIdOf, readIdentity, deriveBucketKeyAt, BUCKET_KEY_VERSION, bucketKeyLabel, certify, verifyCertificate, sign, verify };
   }
 });
 
@@ -8463,10 +8509,10 @@ var require_room = __commonJS({
     var { hkdf: hkdf2 } = require_hkdf();
     var { xchacha20poly1305: xchacha20poly13052 } = require_chacha();
     var NONCE = 32;
-    var KINDS = /* @__PURE__ */ new Set(["webapp", "desktop", "android", "cli", "agent"]);
+    var KINDS2 = /* @__PURE__ */ new Set(["webapp", "desktop", "android", "cli", "agent"]);
     var REFUSED = { ok: false };
     var utf8 = /* @__PURE__ */ __name((s) => new TextEncoder().encode(s), "utf8");
-    var hex = /* @__PURE__ */ __name((s, n) => typeof s === "string" && (n ? s.length === n * 2 : s.length > 0) && /^[0-9a-f]+$/.test(s), "hex");
+    var hex2 = /* @__PURE__ */ __name((s, n) => typeof s === "string" && (n ? s.length === n * 2 : s.length > 0) && /^[0-9a-f]+$/.test(s), "hex");
     var joinBytes = /* @__PURE__ */ __name((host, nonce) => new Uint8Array([...utf8(`${String(host).toLowerCase()}|`), ...nonce]), "joinBytes");
     function challenge(randomBytes4) {
       const nonce = Uint8Array.from(randomBytes4(NONCE));
@@ -8485,15 +8531,15 @@ var require_room = __commonJS({
     }
     __name(join, "join");
     function deviceOf(d) {
-      if (!d || !hex(d.id) || d.id.length < 16 || d.id.length > 64) return null;
-      if (typeof d.name !== "string" || !d.name.trim() || d.name.length > 64 || !KINDS.has(d.kind)) return null;
+      if (!d || !hex2(d.id) || d.id.length < 16 || d.id.length > 64) return null;
+      if (typeof d.name !== "string" || !d.name.trim() || d.name.length > 64 || !KINDS2.has(d.kind)) return null;
       return { id: d.id, name: d.name.trim(), kind: d.kind };
     }
     __name(deviceOf, "deviceOf");
     function checkJoin(room2, msg, asked) {
       try {
-        if (!msg || msg.t !== "join" || !hex(msg.identityPublicKey, 32) || !hex(msg.bucketPublicKey, 32)) return REFUSED;
-        if (!hex(msg.certificate, 64) || !hex(msg.signature, 64)) return REFUSED;
+        if (!msg || msg.t !== "join" || !hex2(msg.identityPublicKey, 32) || !hex2(msg.bucketPublicKey, 32)) return REFUSED;
+        if (!hex2(msg.certificate, 64) || !hex2(msg.signature, 64)) return REFUSED;
         const device = deviceOf(msg.device);
         const identityPublicKey = fromHex(msg.identityPublicKey);
         if (!device || bid.identityIdOf(identityPublicKey) !== room2) return REFUSED;
@@ -8527,15 +8573,15 @@ var require_room = __commonJS({
     function openFrame(key, who, body) {
       try {
         if (typeof body !== "string" || !/^[0-9a-f]+$/.test(body) || body.length < (FRAME_NONCE + 16) * 2) return null;
-        const bytes2 = fromHex(body);
-        const pt = xchacha20poly13052(key, bytes2.subarray(0, FRAME_NONCE), frameAad(who.room, who.from, who.to)).decrypt(bytes2.subarray(FRAME_NONCE));
+        const bytes3 = fromHex(body);
+        const pt = xchacha20poly13052(key, bytes3.subarray(0, FRAME_NONCE), frameAad(who.room, who.from, who.to)).decrypt(bytes3.subarray(FRAME_NONCE));
         return JSON.parse(new TextDecoder().decode(pt));
       } catch {
         return null;
       }
     }
     __name(openFrame, "openFrame");
-    module.exports = { NONCE, KINDS, challenge, join, checkJoin, deviceOf, frameKey, sealFrame, openFrame };
+    module.exports = { NONCE, KINDS: KINDS2, challenge, join, checkJoin, deviceOf, frameKey, sealFrame, openFrame };
   }
 });
 
@@ -8559,9 +8605,11 @@ var require_room_client = __commonJS({
       }), "emit");
       const peers = /* @__PURE__ */ new Map();
       const pending = /* @__PURE__ */ new Map();
+      const mcpPending = /* @__PURE__ */ new Map();
       let handler = null;
       let you = null;
       let seq = 0;
+      let mcpSeq = 0;
       let ping = null;
       return new Promise((resolve, reject) => {
         const ws = new WS(wsUrl);
@@ -8569,6 +8617,8 @@ var require_room_client = __commonJS({
         const fail = /* @__PURE__ */ __name((why) => {
           for (const [, p] of pending) p.reject(new Error(why));
           pending.clear();
+          for (const [, p] of mcpPending) p.reject(new Error(why));
+          mcpPending.clear();
         }, "fail");
         const joinTimer = setTimeout(() => {
           reject(new Error(`${host}: no answer to the join within ${timeoutMs} ms`));
@@ -8584,7 +8634,19 @@ var require_room_client = __commonJS({
           } catch {
             return;
           }
+          if (m.re !== void 0 && mcpPending.has(m.re) && (m.t === "mcp" || m.t === "sealed" || m.t === "error")) {
+            const p = mcpPending.get(m.re);
+            mcpPending.delete(m.re);
+            if (m.t === "error") p.reject(new Error(`the room refused it: ${m.why}`));
+            else p.resolve(m);
+            return;
+          }
           switch (m.t) {
+            case "mcp": {
+              const { t, ...rest } = m;
+              emit("mcp", rest);
+              return;
+            }
             case "challenge":
               send2(room2.join(me, { nonce: m.nonce, host }, device));
               return;
@@ -8701,6 +8763,89 @@ var require_room_client = __commonJS({
               }
             });
           },
+          /* one answer to the agents' side of the room, and the room's reply ({ev: 'ok' | 'agents', ...}) */
+          mcp(op, fields = {}, { timeoutMs: t = 15e3 } = {}) {
+            return new Promise((res, rej) => {
+              const re = ++mcpSeq;
+              const timer = setTimeout(() => {
+                if (mcpPending.delete(re)) rej(new Error(`the room did not answer ${op} within ${t} ms`));
+              }, t);
+              mcpPending.set(re, {
+                resolve: /* @__PURE__ */ __name((v) => {
+                  clearTimeout(timer);
+                  res(v);
+                }, "resolve"),
+                reject: /* @__PURE__ */ __name((e) => {
+                  clearTimeout(timer);
+                  rej(e);
+                }, "reject")
+              });
+              try {
+                send2({ t: "mcp-re", op, re, ...fields });
+              } catch (e) {
+                mcpPending.delete(re);
+                clearTimeout(timer);
+                rej(e);
+              }
+            });
+          },
+          async agents() {
+            const r = await api.mcp("agents");
+            return { agents: r.agents || [], plans: r.plans || [] };
+          },
+          async setAgent(agent, state) {
+            await api.mcp("agent", { agent, state });
+          },
+          async planUpdate(plan, { state, results, receipts, why } = {}) {
+            await api.mcp("plan", { plan, ...state ? { state } : {}, ...results ? { results } : {}, ...receipts ? { receipts } : {}, ...why ? { why } : {} });
+          },
+          /*
+           * THE SERVER'S SEALED COPY OF THIS BUCKET (bucket/src/sealedcopy.js; Phase 3): the room's rows as a row store for
+           * sealedcopy.syncWith - ids and tags, sealed units the server cannot read. on: false when this server keeps no
+           * copy for the identity (its allowlist): the table is empty and a put is refused.
+           */
+          sealed(op, fields = {}, { timeoutMs: t = 3e4 } = {}) {
+            return new Promise((res, rej) => {
+              const re = ++mcpSeq;
+              const timer = setTimeout(() => {
+                if (mcpPending.delete(re)) rej(new Error(`the room did not answer sealed ${op} within ${t} ms`));
+              }, t);
+              mcpPending.set(re, {
+                resolve: /* @__PURE__ */ __name((v) => {
+                  clearTimeout(timer);
+                  res(v);
+                }, "resolve"),
+                reject: /* @__PURE__ */ __name((e) => {
+                  clearTimeout(timer);
+                  rej(e);
+                }, "reject")
+              });
+              try {
+                send2({ t: "sealed", op, re, ...fields });
+              } catch (e) {
+                mcpPending.delete(re);
+                clearTimeout(timer);
+                rej(e);
+              }
+            });
+          },
+          sealedStore() {
+            return {
+              async on() {
+                return Boolean((await api.sealed("table")).on);
+              },
+              async table() {
+                return (await api.sealed("table")).rows || {};
+              },
+              async get(ids) {
+                return ids.length ? (await api.sealed("get", { ids })).rows || {} : {};
+              },
+              async put(rows) {
+                const r = await api.sealed("put", { rows });
+                if (!r.ok) throw new Error(`the server did not keep the rows: ${r.why || "refused"}`);
+              }
+            };
+          },
           close() {
             try {
               ws.close();
@@ -8715,25 +8860,607 @@ var require_room_client = __commonJS({
   }
 });
 
+// node_modules/node-onlykey-lib/src/vendor/exports/@noble/hashes/hmac.js
+var require_hmac = __commonJS({
+  "node_modules/node-onlykey-lib/src/vendor/exports/@noble/hashes/hmac.js"(exports, module) {
+    module.exports = (init_hmac(), __toCommonJS(hmac_exports));
+  }
+});
+
+// node_modules/node-onlykey-lib/bucket/src/sealedcopy.js
+var require_sealedcopy = __commonJS({
+  "node_modules/node-onlykey-lib/bucket/src/sealedcopy.js"(exports, module) {
+    "use strict";
+    var { sha256: sha2562 } = require_sha2();
+    var { hkdf: hkdf2 } = require_hkdf();
+    var { hmac: hmac2 } = require_hmac();
+    var { toHex } = require_bytes();
+    var vault = require_vault();
+    var replicate = require_replicate();
+    var utf8 = /* @__PURE__ */ __name((s) => new TextEncoder().encode(s), "utf8");
+    var mac = /* @__PURE__ */ __name((key, text2) => toHex(hmac2(sha2562, key, utf8(text2))).slice(0, 32), "mac");
+    var HEADS = "\0heads";
+    function keysOf(bucketKey) {
+      const salt = utf8("OKBUCKET-SEALED-v1");
+      return {
+        tableKey: hkdf2(sha2562, bucketKey.secretKey, salt, utf8("table"), 32),
+        unitKey: hkdf2(sha2562, bucketKey.secretKey, salt, utf8("unit"), 32)
+      };
+    }
+    __name(keysOf, "keysOf");
+    var headsId = /* @__PURE__ */ __name((keys) => mac(keys.tableKey, HEADS), "headsId");
+    function table(bucket, keys, { rules = {} } = {}) {
+      const rows = {};
+      const where = {};
+      for (const [name, units] of Object.entries(replicate.summarize(bucket, { rules }))) {
+        for (const [k, u] of Object.entries(units)) {
+          const id = mac(keys.tableKey, `${name}\0${k}`);
+          rows[id] = mac(keys.tableKey, `${u.h}\0${u.at || ""}`);
+          where[id] = [name, k];
+        }
+      }
+      return { rows, where };
+    }
+    __name(table, "table");
+    function plan(mine, theirs, keys) {
+      const h = keys ? headsId(keys) : null;
+      const get = Object.keys(theirs).filter((id) => id !== h && mine[id] !== theirs[id]).sort();
+      const put = Object.keys(mine).filter((id) => theirs[id] !== mine[id]).sort();
+      return { get, put };
+    }
+    __name(plan, "plan");
+    function sealRows(bucket, keys, ids, { rules = {}, randomBytes: randomBytes4 }) {
+      const t = table(bucket, keys, { rules });
+      const mine = replicate.summarize(bucket, { rules });
+      const theirs = JSON.parse(JSON.stringify(mine));
+      for (const id of ids) {
+        const w = t.where[id];
+        if (!w) throw Object.assign(new Error("a row to put is not in this bucket now - plan again"), { code: "EBUCKET_CHANGED" });
+        delete theirs[w[0]][w[1]];
+      }
+      const given = replicate.give(bucket, mine, theirs, { rules });
+      const out = {};
+      for (const id of ids) {
+        const [name, k] = t.where[id];
+        out[id] = { tag: t.rows[id], blob: vault.seal(keys.unitKey, JSON.stringify({ id, s: name, k, r: given[name][k] }), randomBytes4) };
+      }
+      return out;
+    }
+    __name(sealRows, "sealRows");
+    function openRows(rows, keys) {
+      const given = {};
+      const refused = [];
+      for (const [id, blob] of Object.entries(rows)) {
+        let u;
+        try {
+          u = JSON.parse(vault.open(keys.unitKey, blob));
+        } catch (_) {
+          refused.push(`${id}: does not open with this bucket key`);
+          continue;
+        }
+        if (!u || u.id !== id || typeof u.s !== "string" || typeof u.k !== "string" || !u.r) {
+          refused.push(`${id}: not this row's unit`);
+          continue;
+        }
+        if (!given[u.s]) given[u.s] = {};
+        given[u.s][u.k] = u.r;
+      }
+      return { given, refused };
+    }
+    __name(openRows, "openRows");
+    function sealHeads(heads, keys, randomBytes4) {
+      const text2 = JSON.stringify(Object.fromEntries(Object.entries(heads).sort()));
+      const id = headsId(keys);
+      return { id, tag: mac(keys.tableKey, text2), blob: vault.seal(keys.unitKey, JSON.stringify({ id, heads: JSON.parse(text2) }), randomBytes4) };
+    }
+    __name(sealHeads, "sealHeads");
+    function openHeads(blob, keys) {
+      if (!blob) return {};
+      try {
+        const u = JSON.parse(vault.open(keys.unitKey, blob));
+        return u && u.id === headsId(keys) && u.heads && typeof u.heads === "object" ? u.heads : {};
+      } catch (_) {
+        return {};
+      }
+    }
+    __name(openHeads, "openHeads");
+    async function syncWith(bucket, keys, store, { rules = {}, randomBytes: randomBytes4, heads = null } = {}) {
+      const theirs = await store.table();
+      const p = plan(table(bucket, keys, { rules }).rows, theirs, keys);
+      let taken = {};
+      let conflicts = [];
+      let refused = [];
+      if (p.get.length) {
+        const opened = openRows(await store.get(p.get), keys);
+        refused = opened.refused;
+        const r = replicate.take(bucket, opened.given, { rules });
+        taken = r.taken;
+        conflicts = r.conflicts;
+      }
+      const put = plan(table(bucket, keys, { rules }).rows, theirs, keys).put;
+      const rows = put.length ? sealRows(bucket, keys, put, { rules, randomBytes: randomBytes4 }) : {};
+      if (heads) {
+        const h = sealHeads(heads, keys, randomBytes4);
+        if (theirs[h.id] !== h.tag) rows[h.id] = { tag: h.tag, blob: h.blob };
+      }
+      if (Object.keys(rows).length) await store.put(rows);
+      return { got: p.get.length, put: Object.keys(rows).length, taken, conflicts, refused };
+    }
+    __name(syncWith, "syncWith");
+    var OWNER = "\0owner";
+    var ownerId = /* @__PURE__ */ __name((keys) => mac(keys.tableKey, OWNER), "ownerId");
+    function sealOwner(owner, keys, randomBytes4) {
+      const id = ownerId(keys);
+      return { id, tag: mac(keys.tableKey, `${OWNER}\0${owner}`), blob: vault.seal(keys.unitKey, JSON.stringify({ id, owner }), randomBytes4) };
+    }
+    __name(sealOwner, "sealOwner");
+    function bucketFromRows(rows, keys, { owner, rules = {} }) {
+      const oid = ownerId(keys);
+      const hid = headsId(keys);
+      let who = null;
+      try {
+        const u = JSON.parse(vault.open(keys.unitKey, rows[oid]));
+        who = u && u.id === oid ? u.owner : null;
+      } catch (_) {
+        return null;
+      }
+      if (who !== owner) return null;
+      const units = Object.fromEntries(Object.entries(rows).filter(([id]) => id !== oid && id !== hid));
+      const { given, refused } = openRows(units, keys);
+      if (refused.length) return null;
+      const { create } = require_bucket();
+      const b = create({ owner });
+      replicate.take(b, given, { rules });
+      return b;
+    }
+    __name(bucketFromRows, "bucketFromRows");
+    module.exports = { keysOf, headsId, table, plan, sealRows, openRows, sealHeads, openHeads, syncWith, ownerId, sealOwner, bucketFromRows };
+  }
+});
+
 // node_modules/node-onlykey-lib/bucket/src/index.js
 var require_src = __commonJS({
   "node_modules/node-onlykey-lib/bucket/src/index.js"(exports, module) {
     "use strict";
-    module.exports = { ...require_bucket(), rules: require_rules(), replicate: require_replicate(), bucketIdentity: require_bucket_identity(), trade: require_trade(), room: require_room(), roomClient: require_room_client() };
+    module.exports = { ...require_bucket(), rules: require_rules(), replicate: require_replicate(), bucketIdentity: require_bucket_identity(), trade: require_trade(), room: require_room(), roomClient: require_room_client(), sealedCopy: require_sealedcopy() };
   }
 });
 
 // mcp-server/src/index.js
+var import_bucket2 = __toESM(require_src());
+var import_bytes2 = __toESM(require_bytes());
+import { DurableObject as DurableObject2 } from "cloudflare:workers";
+
+// mcp-server/src/mcp.js
 var import_bucket = __toESM(require_src());
 var import_bytes = __toESM(require_bytes());
 import { DurableObject } from "cloudflare:workers";
-var { room } = import_bucket.default;
+var PROTOCOL = "2025-06-18";
+var SUPPORTED = ["2025-06-18", "2025-03-26", "2024-11-05"];
+var SESSION_ID = /^[0-9a-f]{32}$/;
+var HEX64 = /^[0-9a-f]{64}$/;
+var MAX_ITEMS = 32;
+var MAX_DATA = 64 * 1024;
+var MAX_TEXT = 200;
+var WAIT_MAX_S = 60;
+var OPS = ["sign", "decrypt"];
+var KINDS = ["ssh", "gpg"];
+var hex = /* @__PURE__ */ __name((u82) => import_bytes.default.toHex(u82), "hex");
+var randomHex = /* @__PURE__ */ __name((n) => hex(crypto.getRandomValues(new Uint8Array(n))), "randomHex");
+var sha256Hex = /* @__PURE__ */ __name(async (h) => hex(new Uint8Array(await crypto.subtle.digest("SHA-256", import_bytes.default.fromHex(h)))), "sha256Hex");
+var roomOf = /* @__PURE__ */ __name((identityPublicKey) => import_bucket.default.bucketIdentity.identityIdOf(import_bytes.default.fromHex(identityPublicKey)), "roomOf");
+var Refused = class extends Error {
+  static {
+    __name(this, "Refused");
+  }
+};
+var need = /* @__PURE__ */ __name((ok, why) => {
+  if (!ok) throw new Refused(why);
+}, "need");
+var text = /* @__PURE__ */ __name((v, name, { max = MAX_TEXT, optional = false } = {}) => {
+  if (optional && (v === void 0 || v === null || v === "")) return null;
+  need(typeof v === "string" && v.trim().length > 0 && v.length <= max, `${name}: text, 1-${max} characters`);
+  return v.trim();
+}, "text");
+var identityArg = /* @__PURE__ */ __name((v) => {
+  const h = typeof v === "string" ? v.trim().toLowerCase() : "";
+  need(HEX64.test(h), "identity: the identity PUBLIC KEY, 64 hex characters (the owner gives it to you)");
+  return h;
+}, "identityArg");
+var KEY_SCHEMA = {
+  type: "object",
+  properties: {
+    kind: { type: "string", enum: KINDS, description: "ssh or gpg: the agent-derived key Edge uses" },
+    identity: { type: "string", description: `the key's label, e.g. "you@example.com" (gpg) or "ssh://user@host" (ssh)` }
+  },
+  required: ["kind", "identity"]
+};
+var ITEM_PROPS = {
+  plan_id: { type: "string" },
+  op: { type: "string", enum: OPS },
+  key: KEY_SCHEMA,
+  reason: { type: "string", description: "why, in a few words - the owner reads it before approving" }
+};
+var TOOLS = [
+  {
+    name: "hello",
+    description: "Start here. Name yourself; the first time you get an agent_key - keep it and send it in every later hello, so the owners who accepted you know you again.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, agent_key: { type: "string", description: "64 hex characters, from your first hello" } }, required: ["name"] }
+  },
+  {
+    name: "status",
+    description: "Your plans, and for an identity: whether its owner has accepted you, and whether the owner is online.",
+    inputSchema: { type: "object", properties: { identity: { type: "string", description: "an identity public key (64 hex)" } } }
+  },
+  {
+    name: "plan_new",
+    description: "A new plan for an identity (its public key, 64 hex). Its owner sees it in their web app at once, and every change after.",
+    inputSchema: { type: "object", properties: { identity: { type: "string" }, title: { type: "string" } }, required: ["identity", "title"] }
+  },
+  {
+    name: "plan_target",
+    description: "Move a draft plan to another identity: withdrawn from the old owner's web app, shown in the new one's.",
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" }, identity: { type: "string" } }, required: ["plan_id", "identity"] }
+  },
+  {
+    name: "plan_add",
+    description: 'Add one operation with its data (base64 when it is bytes, set encoding: "base64").',
+    inputSchema: { type: "object", properties: { ...ITEM_PROPS, data: { type: "string" }, encoding: { type: "string", enum: ["text", "base64"] } }, required: ["plan_id", "op", "key", "data", "reason"] }
+  },
+  {
+    name: "plan_hold",
+    description: "Add a PLACEHOLDER: an operation whose data comes later (plan_fill, while the plan runs), counted in the budget - so work that depends on an earlier signature needs no second approval.",
+    inputSchema: { type: "object", properties: ITEM_PROPS, required: ["plan_id", "op", "key", "reason"] }
+  },
+  {
+    name: "plan_remove",
+    description: "Remove one item from a draft plan.",
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" }, item: { type: "integer" } }, required: ["plan_id", "item"] }
+  },
+  {
+    name: "plan_show",
+    description: "The plan as it is now (read only).",
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" } }, required: ["plan_id"] }
+  },
+  {
+    name: "plan_submit",
+    description: "Ask the owner to approve the plan: one budget sized to it, one press. Refused until the owner has accepted you, or while no owner device is online.",
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" } }, required: ["plan_id"] }
+  },
+  {
+    name: "plan_fill",
+    description: "While the plan runs: a placeholder's data. It runs inside the open budget, no new press.",
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" }, item: { type: "integer" }, data: { type: "string" }, encoding: { type: "string", enum: ["text", "base64"] } }, required: ["plan_id", "item", "data"] }
+  },
+  {
+    name: "plan_wait",
+    description: "Wait (up to 60 s) for the plan to move on: its state, each item's result (signature, plaintext or refusal), the placeholders still waiting, the receipts.",
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" }, seconds: { type: "integer" } }, required: ["plan_id"] }
+  },
+  {
+    name: "plan_finish",
+    description: "End the plan's budget now: unfilled placeholders are dropped, receipts filed.",
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" } }, required: ["plan_id"] }
+  }
+];
+var INSTRUCTIONS = "OnlyKey Edge control. Your owner gives you this URL and their identity public key. Say hello (keep the agent_key you get the first time), build a plan for the identity (plan_new, plan_add, plan_hold for data that comes later), then plan_submit: the owner sees the plan live in their web app, accepts you once, approves the plan and presses their key once. plan_wait gives the results.";
+var json = /* @__PURE__ */ __name((body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } }), "json");
+var rpcError = /* @__PURE__ */ __name((id, code, message) => json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } }), "rpcError");
+async function handleMcp(request, env) {
+  const url = new URL(request.url);
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== url.origin) return new Response("another site", { status: 403 });
+  if (request.method === "GET") return new Response("no event stream: POST JSON-RPC", { status: 405, headers: { Allow: "POST, DELETE" } });
+  const sid = request.headers.get("Mcp-Session-Id");
+  if (request.method === "DELETE") {
+    if (sid && SESSION_ID.test(sid)) await env.MCP_SESSIONS.get(env.MCP_SESSIONS.idFromName(sid)).end();
+    return new Response(null, { status: 204 });
+  }
+  if (request.method !== "POST") return new Response("POST", { status: 405, headers: { Allow: "POST, DELETE" } });
+  let msg;
+  try {
+    msg = await request.json();
+  } catch {
+    return rpcError(null, -32700, "not JSON");
+  }
+  if (Array.isArray(msg)) return rpcError(null, -32600, "one message a request");
+  if (!msg || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") return rpcError(msg && msg.id, -32600, "not a JSON-RPC request");
+  const isNotification = msg.id === void 0;
+  if (msg.method === "initialize") {
+    const asked = msg.params && msg.params.protocolVersion;
+    const id = randomHex(16);
+    await env.MCP_SESSIONS.get(env.MCP_SESSIONS.idFromName(id)).open();
+    return json({ jsonrpc: "2.0", id: msg.id, result: {
+      protocolVersion: SUPPORTED.includes(asked) ? asked : PROTOCOL,
+      capabilities: { tools: { listChanged: false } },
+      serverInfo: { name: "ok-edge", version: "0.1.0" },
+      instructions: INSTRUCTIONS
+    } }, 200, { "Mcp-Session-Id": id });
+  }
+  if (!sid || !SESSION_ID.test(sid)) return rpcError(msg.id, -32600, "no session: initialize first (Mcp-Session-Id)");
+  const session = env.MCP_SESSIONS.get(env.MCP_SESSIONS.idFromName(sid));
+  if (isNotification) {
+    if (!await session.known()) return new Response("unknown session", { status: 404 });
+    return new Response(null, { status: 202 });
+  }
+  const r = await session.call(msg.method, msg.params || {});
+  if (r.unknownSession) return new Response("unknown session", { status: 404 });
+  if (r.error) return rpcError(msg.id, r.error.code, r.error.message);
+  return json({ jsonrpc: "2.0", id: msg.id, result: r.result });
+}
+__name(handleMcp, "handleMcp");
+var McpSession = class extends DurableObject {
+  static {
+    __name(this, "McpSession");
+  }
+  async open() {
+    await this.ctx.storage.put("created", Date.now());
+  }
+  async known() {
+    return await this.ctx.storage.get("created") !== void 0;
+  }
+  async end() {
+    await this.ctx.storage.deleteAll();
+  }
+  async call(method, params) {
+    if (!await this.known()) return { unknownSession: true };
+    try {
+      if (method === "ping") return { result: {} };
+      if (method === "tools/list") return { result: { tools: TOOLS } };
+      if (method !== "tools/call") return { error: { code: -32601, message: `no method ${method}` } };
+      const { name, arguments: args = {} } = params;
+      if (!TOOLS.some((t) => t.name === name)) return { error: { code: -32602, message: `no tool ${name}` } };
+      const out = name === "hello" ? await this.hello(args) : await this.forAgent(name, args);
+      return { result: { content: [{ type: "text", text: JSON.stringify(out, null, 2) }], structuredContent: out } };
+    } catch (e) {
+      if (e instanceof Refused || e && e.refused) return { result: { content: [{ type: "text", text: e.message }], isError: true } };
+      return { error: { code: -32603, message: String(e && e.message || e) } };
+    }
+  }
+  async hello(args) {
+    const name = text(args.name, "name", { max: 60 });
+    let key = args.agent_key;
+    const first = key === void 0 || key === null || key === "";
+    if (first) key = randomHex(32);
+    else need(typeof key === "string" && HEX64.test(key.toLowerCase()), "agent_key: the 64 hex characters your first hello gave you");
+    const id = await sha256Hex(key.toLowerCase());
+    await this.ctx.storage.put("agent", { id, name });
+    await this.env.AGENTS.get(this.env.AGENTS.idFromName(id)).hello(id, name);
+    return first ? { agent_id: id, agent_key: key, keep: "this agent_key is shown once: keep it, and send it in every later hello" } : { agent_id: id };
+  }
+  async forAgent(name, args) {
+    const agent = await this.ctx.storage.get("agent");
+    need(agent, "say hello first");
+    const r = await this.env.AGENTS.get(this.env.AGENTS.idFromName(agent.id)).tool(name, args);
+    if (r && r.refused) throw new Refused(r.refused);
+    return r;
+  }
+};
+var ROOM_STUB = /* @__PURE__ */ __name((env, roomId) => env.ROOMS.get(env.ROOMS.idFromName(roomId)), "ROOM_STUB");
+var AgentSession = class extends DurableObject {
+  static {
+    __name(this, "AgentSession");
+  }
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.waiters = [];
+  }
+  async hello(id, name) {
+    const me = await this.ctx.storage.get("me") || { id, first: Date.now() };
+    await this.ctx.storage.put("me", { ...me, name, last: Date.now() });
+  }
+  async me() {
+    return this.ctx.storage.get("me");
+  }
+  async plan(id) {
+    return this.ctx.storage.get(`plan:${id}`);
+  }
+  /*
+   * Every change bumps the plan's version. SEEN is the version the agent has been shown: its own changes are seen as it
+   * makes them; the owner's (fromRoom) are not until plan_wait or plan_show returns them - so an answer that lands just
+   * before a plan_wait starts is returned at once, not missed while the wait looks for a later one.
+   */
+  async save(p, { byAgent = true } = {}) {
+    p.updated = Date.now();
+    p.version = (p.version || 0) + 1;
+    if (byAgent) p.seen = p.version;
+    await this.ctx.storage.put(`plan:${p.id}`, p);
+    for (const w of this.waiters.splice(0)) w();
+  }
+  async shownToAgent(p) {
+    if (p.seen !== p.version) {
+      p.seen = p.version;
+      await this.ctx.storage.put(`plan:${p.id}`, p);
+    }
+    return this.view(p);
+  }
+  /* what the owner's web app is shown: everything but the agent's own bookkeeping */
+  shown(p, me) {
+    return { id: p.id, room: p.room, title: p.title, agent: { id: me.id, name: me.name }, state: p.state, items: p.items, results: p.results, receipts: p.receipts, why: p.why || null };
+  }
+  async mirror(p) {
+    const me = await this.me();
+    return ROOM_STUB(this.env, p.room).show(this.shown(p, me));
+  }
+  /* each call: one change to one plan, or a read; a refusal comes back as {refused} (an RPC throw loses its class) */
+  async tool(name, args) {
+    try {
+      return await this.run(name, args);
+    } catch (e) {
+      if (e instanceof Refused) return { refused: e.message };
+      throw e;
+    }
+  }
+  async run(name, args) {
+    const me = await this.me();
+    if (name === "status") {
+      const plans = (await this.ctx.storage.list({ prefix: "plan:" })).values();
+      const out = { agent_id: me.id, plans: [...plans].map((p2) => ({ plan_id: p2.id, title: p2.title, identity: p2.identity, state: p2.state, items: p2.items.length })) };
+      if (args.identity !== void 0) {
+        const identity = identityArg(args.identity);
+        out.identity = { identity_public_key: identity, ...await ROOM_STUB(this.env, roomOf(identity)).agentStatus(me) };
+      }
+      return out;
+    }
+    if (name === "plan_new") {
+      const identity = identityArg(args.identity);
+      const p2 = { id: randomHex(8), title: text(args.title, "title"), identity, room: roomOf(identity), state: "draft", items: [], results: {}, receipts: [], created: Date.now() };
+      await this.save(p2);
+      const seen = await this.mirror(p2);
+      return { plan_id: p2.id, identity, ...seen };
+    }
+    const p = await this.plan(String(args.plan_id || ""));
+    need(p, `no plan ${args.plan_id} - plan_new makes one`);
+    const draft = /* @__PURE__ */ __name(() => need(p.state === "draft", `the plan is ${p.state}: only a draft changes`), "draft");
+    const itemOf = /* @__PURE__ */ __name((n) => {
+      const it = p.items.find((x) => x.item === Number(n));
+      need(it, `no item ${n} in the plan`);
+      return it;
+    }, "itemOf");
+    const opArgs = /* @__PURE__ */ __name(() => {
+      need(OPS.includes(args.op), `op: ${OPS.join(" or ")}`);
+      const k = args.key || {};
+      need(KINDS.includes(k.kind), `key.kind: ${KINDS.join(" or ")}`);
+      return { op: args.op, key: { kind: k.kind, identity: text(k.identity, "key.identity") }, reason: text(args.reason, "reason") };
+    }, "opArgs");
+    const dataArg = /* @__PURE__ */ __name(() => {
+      const enc = args.encoding || "text";
+      need(enc === "text" || enc === "base64", "encoding: text or base64");
+      need(typeof args.data === "string" && args.data.length > 0 && args.data.length <= MAX_DATA, `data: 1 to ${MAX_DATA} characters`);
+      if (enc === "base64") need(/^[A-Za-z0-9+/]*={0,2}$/.test(args.data) && args.data.length % 4 === 0, "data: not base64");
+      return { data: args.data, encoding: enc };
+    }, "dataArg");
+    const nextItem = /* @__PURE__ */ __name(() => p.items.reduce((m, x) => Math.max(m, x.item), 0) + 1, "nextItem");
+    switch (name) {
+      case "plan_show":
+        return this.shownToAgent(p);
+      case "plan_target": {
+        draft();
+        const identity = identityArg(args.identity);
+        if (identity === p.identity) return this.view(p);
+        const old = p.room;
+        p.identity = identity;
+        p.room = roomOf(identity);
+        await this.save(p);
+        await ROOM_STUB(this.env, old).withdraw(p.id, "moved to another identity");
+        return { ...this.view(p), ...await this.mirror(p) };
+      }
+      case "plan_add":
+      case "plan_hold": {
+        draft();
+        need(p.items.length < MAX_ITEMS, `a plan holds up to ${MAX_ITEMS} items`);
+        const it = { item: nextItem(), ...opArgs(), ...name === "plan_add" ? dataArg() : { data: null, held: true } };
+        p.items.push(it);
+        await this.save(p);
+        await this.mirror(p);
+        return { item: it.item, ...this.view(p) };
+      }
+      case "plan_remove": {
+        draft();
+        const it = itemOf(args.item);
+        p.items = p.items.filter((x) => x !== it);
+        await this.save(p);
+        await this.mirror(p);
+        return this.view(p);
+      }
+      case "plan_submit": {
+        draft();
+        need(p.items.length > 0, "an empty plan: add an item first");
+        const r = await ROOM_STUB(this.env, p.room).submit(this.shown({ ...p, state: "submitted" }, me));
+        need(r.ok, r.why);
+        p.state = "submitted";
+        await this.save(p);
+        return this.view(p);
+      }
+      case "plan_fill": {
+        need(p.state === "running" || p.state === "paused", `the plan is ${p.state}: a placeholder is filled while it runs`);
+        const it = itemOf(args.item);
+        need(it.held && it.data === null, `item ${it.item} is not a placeholder waiting for its data`);
+        Object.assign(it, dataArg());
+        await this.save(p);
+        const r = await ROOM_STUB(this.env, p.room).fill(p.id, it.item, { data: it.data, encoding: it.encoding });
+        need(r.ok, r.why);
+        return this.view(p);
+      }
+      case "plan_finish": {
+        need(["submitted", "running", "paused"].includes(p.state), `the plan is ${p.state}: nothing to finish`);
+        const r = await ROOM_STUB(this.env, p.room).finish(p.id);
+        need(r.ok, r.why);
+        p.finishing = true;
+        await this.save(p);
+        return this.view(p);
+      }
+      case "plan_wait": {
+        const seconds = Math.max(0, Math.min(WAIT_MAX_S, Number(args.seconds) || 30));
+        const end = Date.now() + seconds * 1e3;
+        for (; ; ) {
+          const now = await this.plan(p.id);
+          if (now.version !== now.seen || ["done", "declined", "failed", "ended"].includes(now.state) || Date.now() >= end) return this.shownToAgent(now);
+          await new Promise((resolve) => {
+            const t = setTimeout(resolve, end - Date.now());
+            this.waiters.push(() => {
+              clearTimeout(t);
+              resolve();
+            });
+          });
+        }
+      }
+      default:
+        throw new Refused(`no tool ${name}`);
+    }
+  }
+  /* what the agent reads: the plan, its results, and the placeholders still waiting for data */
+  view(p) {
+    return {
+      plan_id: p.id,
+      title: p.title,
+      identity: p.identity,
+      state: p.state,
+      why: p.why || null,
+      items: p.items.map(({ item, op, key, reason, held, data }) => ({ item, op, key, reason, ...held ? { placeholder: true, filled: data !== null } : {} })),
+      results: p.results,
+      waiting: p.items.filter((x) => x.held && x.data === null).map((x) => x.item),
+      receipts: p.receipts
+    };
+  }
+  /**
+   * What the owner did, from their room (index.js, an owner device's mcp-re): the plan's state - declined, running,
+   * paused (waiting for a placeholder), done, failed, ended - with results by item and the receipts. The room has
+   * checked the plan is its own and the device joined; here the plan must be this agent's and past its draft.
+   */
+  async fromRoom(roomId, u) {
+    const p = await this.plan(String(u.plan || ""));
+    if (!p || p.room !== roomId || p.state === "draft") return { ok: false, why: "not a submitted plan of that identity" };
+    if (u.state) {
+      const STATES = ["declined", "running", "paused", "done", "failed", "ended"];
+      if (!STATES.includes(u.state)) return { ok: false, why: `state: ${STATES.join(" | ")}` };
+      p.state = u.state;
+    }
+    if (typeof u.why === "string") p.why = u.why.slice(0, MAX_TEXT);
+    for (const r of Array.isArray(u.results) ? u.results : []) {
+      if (!p.items.some((x) => x.item === r.item)) continue;
+      const kept = {};
+      for (const k of ["signature", "plaintext", "refusal", "encoding"]) if (typeof r[k] === "string") kept[k] = r[k].slice(0, MAX_DATA);
+      p.results[r.item] = kept;
+    }
+    if (Array.isArray(u.receipts)) p.receipts = u.receipts.slice(0, 256).map((x) => typeof x === "object" && x ? { seq: Number(x.seq), code: String(x.code || "").slice(0, 40) } : null).filter(Boolean);
+    await this.save(p, { byAgent: false });
+    return { ok: true };
+  }
+};
+
+// mcp-server/src/index.js
+var { room } = import_bucket2.default;
 var ROOM_PATH = /^\/ws\/([0-9a-f]{32})$/;
+var AGENT_STATES = ["accepted", "blocked", "removed"];
 var MAX_FRAME = 4 * 1024 * 1024;
 var JOIN_WITHIN_MS = 3e4;
+var SEALED_MAX_IDS = 2e3;
+var SEALED_MAX_BLOB = 1024 * 1024;
 var index_default = {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === "/mcp") return handleMcp(request, env);
     const m = ROOM_PATH.exec(url.pathname);
     if (!m) return env.ASSETS.fetch(request);
     if (request.headers.get("Upgrade") !== "websocket") return new Response("a websocket only", { status: 426 });
@@ -8746,7 +9473,7 @@ var send = /* @__PURE__ */ __name((ws, msg) => {
   } catch {
   }
 }, "send");
-var IdentityRoom = class extends DurableObject {
+var IdentityRoom = class extends DurableObject2 {
   static {
     __name(this, "IdentityRoom");
   }
@@ -8760,7 +9487,7 @@ var IdentityRoom = class extends DurableObject {
     const [client, server] = Object.values(new WebSocketPair());
     const { nonce, message } = room.challenge((n) => crypto.getRandomValues(new Uint8Array(n)));
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ room: ROOM_PATH.exec(url.pathname)[1], host: url.host, nonce: import_bytes.default.toHex(nonce), device: null, since: Date.now() });
+    server.serializeAttachment({ room: ROOM_PATH.exec(url.pathname)[1], host: url.host, nonce: import_bytes2.default.toHex(nonce), device: null, since: Date.now() });
     send(server, message);
     if (await this.ctx.storage.getAlarm() === null) await this.ctx.storage.setAlarm(Date.now() + JOIN_WITHIN_MS);
     return new Response(null, { status: 101, webSocket: client });
@@ -8790,7 +9517,7 @@ var IdentityRoom = class extends DurableObject {
     }
     const me = ws.deserializeAttachment();
     if (!me.device) {
-      const check = room.checkJoin(me.room, msg, { nonce: import_bytes.default.fromHex(me.nonce), host: me.host });
+      const check = room.checkJoin(me.room, msg, { nonce: import_bytes2.default.fromHex(me.nonce), host: me.host });
       if (!check.ok) {
         send(ws, { t: "refused" });
         return ws.close(4401, "refused");
@@ -8815,9 +9542,64 @@ var IdentityRoom = class extends DurableObject {
       }
       case "peers":
         return send(ws, { t: "peers", peers: this.joined().filter(([s]) => s !== ws).map(([, a]) => a.device) });
+      case "mcp-re": {
+        const r = await this.fromOwner(me.room, msg);
+        return send(ws, msg.re !== void 0 ? { ...r, re: msg.re } : r);
+      }
+      case "sealed":
+        return send(ws, { t: "sealed", re: msg.re, ...this.sealedOp(me.room, msg) });
       default:
         return send(ws, { t: "error", why: `unknown message ${JSON.stringify(msg && msg.t)}` });
     }
+  }
+  /* ------------------------------------------------------------------ the sealed copy (bucket/src/sealedcopy.js) */
+  /*
+   * THE IDENTITY'S SEALED COPY, IN THIS ROOM'S SQLITE (Phase 3; Brad, 2026-10-29: "the server's sealed copy will have a
+   * hash table for changes"; the room's own SQLite, one row per unit). Rows the server cannot read: a keyed id, a keyed
+   * change tag, a sealed unit - written and read only by the identity's own joined devices (this is past the join). Kept
+   * only for identities this server is set to keep (SEALED_IDENTITIES: their ids, comma-separated, or * for all): any
+   * other gets an empty table and a refused put.
+   */
+  sealedOn(identity) {
+    const list = String(this.env.SEALED_IDENTITIES || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    return list.includes("*") || list.includes(String(identity).toLowerCase());
+  }
+  sealedSql() {
+    const sql = this.ctx.storage.sql;
+    sql.exec("CREATE TABLE IF NOT EXISTS sealed (id TEXT PRIMARY KEY, tag TEXT NOT NULL, blob TEXT NOT NULL, at INTEGER NOT NULL)");
+    return sql;
+  }
+  sealedOp(identity, msg) {
+    if (!this.sealedOn(identity)) return msg.op === "table" ? { on: false, rows: {} } : { ok: false, why: "this server keeps no sealed copy for this identity" };
+    const sql = this.sealedSql();
+    const HEX = /^[0-9a-f]{32}$/;
+    if (msg.op === "table") {
+      const rows = {};
+      for (const r of sql.exec("SELECT id, tag FROM sealed").toArray()) rows[r.id] = r.tag;
+      return { on: true, rows };
+    }
+    if (msg.op === "get") {
+      const ids = Array.isArray(msg.ids) ? msg.ids.filter((id) => typeof id === "string" && HEX.test(id)).slice(0, SEALED_MAX_IDS) : [];
+      const rows = {};
+      for (const id of ids) {
+        const r = sql.exec("SELECT blob FROM sealed WHERE id = ?", id).toArray()[0];
+        if (r) rows[id] = r.blob;
+      }
+      return { rows };
+    }
+    if (msg.op === "put") {
+      const entries = Object.entries(msg.rows && typeof msg.rows === "object" ? msg.rows : {});
+      if (entries.length > SEALED_MAX_IDS) return { ok: false, why: `at most ${SEALED_MAX_IDS} rows a put` };
+      for (const [id, r] of entries) {
+        if (!HEX.test(id) || !r || typeof r.tag !== "string" || !HEX.test(r.tag) || typeof r.blob !== "string" || r.blob.length > SEALED_MAX_BLOB) {
+          return { ok: false, why: `row ${String(id).slice(0, 12)}: an id and a tag of 32 hex, a blob up to ${SEALED_MAX_BLOB} characters` };
+        }
+      }
+      const now = Date.now();
+      for (const [id, r] of entries) sql.exec("INSERT INTO sealed (id, tag, blob, at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET tag = excluded.tag, blob = excluded.blob, at = excluded.at", id, r.tag, r.blob, now);
+      return { ok: true, n: entries.length };
+    }
+    return { ok: false, why: `no sealed ${JSON.stringify(msg.op)}` };
   }
   async webSocketClose(ws) {
     this.left(ws);
@@ -8833,6 +9615,109 @@ var IdentityRoom = class extends DurableObject {
     if (others.some(([, b]) => b.device.id === a.device.id)) return;
     for (const [other] of others) send(other, { t: "peer", down: a.device.id });
   }
+  /* ------------------------------------------------------------------ the agents and their plans (mcp.js) */
+  /* to every joined device of this identity - the owner's web app, phone, desktop */
+  tell(msg) {
+    for (const [ws] of this.joined()) send(ws, { t: "mcp", ...msg });
+  }
+  async agentOf(id) {
+    return this.ctx.storage.get(`agent:${id}`);
+  }
+  async plans() {
+    return [...(await this.ctx.storage.list({ prefix: "plan:" })).values()];
+  }
+  /*
+   * An agent's plan, shown (new or changed): the agent is entered as pending the first time it targets this identity,
+   * so the owner sees who asks before anything can be submitted. A blocked agent's plans are not shown.
+   */
+  async show(plan) {
+    let a = await this.agentOf(plan.agent.id);
+    if (!a) {
+      a = { id: plan.agent.id, name: plan.agent.name, state: "pending", first: Date.now() };
+      await this.ctx.storage.put(`agent:${a.id}`, a);
+      this.tell({ ev: "agent", agent: a });
+    } else if (a.name !== plan.agent.name) {
+      a = { ...a, name: plan.agent.name };
+      await this.ctx.storage.put(`agent:${a.id}`, a);
+    }
+    a = { ...a, last: Date.now() };
+    await this.ctx.storage.put(`agent:${a.id}`, a);
+    if (a.state === "blocked") return { agent_state: a.state, owner_online: this.joined().length > 0, shown: false };
+    await this.ctx.storage.put(`plan:${plan.id}`, plan);
+    this.tell({ ev: "plan", plan });
+    return { agent_state: a.state, owner_online: this.joined().length > 0, shown: true };
+  }
+  async withdraw(planId, why) {
+    if (!await this.ctx.storage.get(`plan:${planId}`)) return;
+    await this.ctx.storage.delete(`plan:${planId}`);
+    this.tell({ ev: "plan-gone", plan: planId, why });
+  }
+  /* status, for the agent: its state here (unknown until it targets a plan here) and whether an owner is online */
+  async agentStatus(me) {
+    const a = await this.agentOf(me.id);
+    return { agent_state: a ? a.state : "unknown", owner_online: this.joined().length > 0 };
+  }
+  /* submit: only an accepted agent, only with an owner device online to approve it - the web app runs it from here */
+  async submit(plan) {
+    const a = await this.agentOf(plan.agent.id);
+    if (!a || a.state !== "accepted") {
+      return { ok: false, why: `the owner has not accepted you yet (${a ? a.state : "unknown"}): they see your plan in their web app and accept you there` };
+    }
+    if (!this.joined().length) return { ok: false, why: "no owner device is online to approve it - try again when the owner has the web app open" };
+    await this.ctx.storage.put(`plan:${plan.id}`, plan);
+    this.tell({ ev: "submit", plan });
+    return { ok: true };
+  }
+  async fill(planId, item, data) {
+    const plan = await this.ctx.storage.get(`plan:${planId}`);
+    if (!plan || !["running", "paused"].includes(plan.state)) return { ok: false, why: "the plan is not running here" };
+    if (!this.joined().length) return { ok: false, why: "no owner device is online" };
+    const it = plan.items.find((x) => x.item === item);
+    if (it) Object.assign(it, data);
+    await this.ctx.storage.put(`plan:${planId}`, plan);
+    this.tell({ ev: "fill", plan: planId, item, ...data });
+    return { ok: true };
+  }
+  async finish(planId) {
+    const plan = await this.ctx.storage.get(`plan:${planId}`);
+    if (!plan) return { ok: false, why: "the plan is not here" };
+    if (!this.joined().length) return { ok: false, why: "no owner device is online to end its budget" };
+    this.tell({ ev: "finish", plan: planId });
+    return { ok: true };
+  }
+  /*
+   * An owner device's answer ({t:'mcp-re', op}): the agents (list, accept, block, remove), or a plan's progress, which
+   * goes on to the agent. Only a joined device gets here (webSocketMessage) - the identity's own key proved it.
+   */
+  async fromOwner(roomId, msg) {
+    if (msg.op === "agents") return { t: "mcp", ev: "agents", agents: [...(await this.ctx.storage.list({ prefix: "agent:" })).values()], plans: await this.plans() };
+    if (msg.op === "agent") {
+      if (!AGENT_STATES.includes(msg.state)) return { t: "error", why: `an agent is ${AGENT_STATES.join(" | ")}` };
+      const a = await this.agentOf(String(msg.agent || ""));
+      if (!a) return { t: "error", why: "no such agent here" };
+      if (msg.state === "removed") await this.ctx.storage.delete(`agent:${a.id}`);
+      else await this.ctx.storage.put(`agent:${a.id}`, { ...a, state: msg.state });
+      if (msg.state !== "accepted") {
+        for (const p of await this.plans()) {
+          if (p.agent.id === a.id && !["running", "paused"].includes(p.state)) await this.withdraw(p.id, `agent ${msg.state}`);
+        }
+      }
+      this.tell({ ev: "agent", agent: { ...a, state: msg.state } });
+      return { t: "mcp", ev: "ok", op: "agent" };
+    }
+    if (msg.op === "plan") {
+      const plan = await this.ctx.storage.get(`plan:${String(msg.plan || "")}`);
+      if (!plan) return { t: "error", why: "no such plan here" };
+      const r = await this.env.AGENTS.get(this.env.AGENTS.idFromName(plan.agent.id)).fromRoom(roomId, msg);
+      if (!r.ok) return { t: "error", why: r.why };
+      if (msg.state) plan.state = msg.state;
+      for (const x of Array.isArray(msg.results) ? msg.results : []) plan.results = { ...plan.results, [x.item]: x };
+      await this.ctx.storage.put(`plan:${plan.id}`, plan);
+      this.tell({ ev: "plan", plan });
+      return { t: "mcp", ev: "ok", op: "plan" };
+    }
+    return { t: "error", why: `unknown mcp-re op ${JSON.stringify(msg.op)}` };
+  }
   /* close the sockets that never joined in time; come back while any are still waiting */
   async alarm() {
     const now = Date.now();
@@ -8847,7 +9732,9 @@ var IdentityRoom = class extends DurableObject {
   }
 };
 export {
+  AgentSession,
   IdentityRoom,
+  McpSession,
   index_default as default
 };
 /*! Bundled license information:

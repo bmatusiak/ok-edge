@@ -1,38 +1,42 @@
 {
   "version": "v3.1.0",
+  "release": "v3.1.01",
   "firmware": "80e3ba0",
   "libraries": "fe9e293",
   "fixes": [
     "0012",
     "0013",
-    "0015"
+    "0015",
+    "0016"
   ],
   "plugins": [
     "edge",
     "ctap_bridge",
-    "derive_secret"
+    "derive_secret",
+    "version_control"
   ],
-  "buildHash": "6bb49c136d244a0a",
+  "buildHash": "b73aa2df80b94b00",
   "sources": {
-    "emulator/scripts/versions/v3.1.0.js": "b3e957ee6b0c",
-    "emulator/scripts/versions/fixes-3.1.0.js": "dd8ddabae834",
-    "emulator/scripts/versions/patches-3.1.0": "e9189d7abaef",
+    "emulator/scripts/versions/v3.1.0.js": "8bbe16ad44fe",
+    "emulator/scripts/versions/fixes-3.1.0.js": "cdaa307dfad3",
+    "emulator/scripts/versions/patches-3.1.0": "749d26bf5ab5",
     "emulator/package.json": "024ae3bd0f50",
-    "emulator/plugins/edge": "93977e726f30",
+    "emulator/plugins/edge": "21ad825e6a13",
     "emulator/plugins/ctap_bridge": "35ae2f350c51",
-    "emulator/plugins/derive_secret": "fa685adaa9e5"
+    "emulator/plugins/derive_secret": "758ae9471390",
+    "emulator/plugins/version_control": "58b6a28df1d5"
   },
-  "sourcesFrom": "node-onlykey-emulator 18ded20",
-  "emulatorCommit": "18ded20810bcca4ada1996d7975c452b7cc0a7c4",
+  "sourcesFrom": "node-onlykey-emulator 53705bc",
+  "emulatorCommit": "53705bc17d89bed5811508d12a43ccfa5b3c3cd6",
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
-  "built": "2026-10-28",
-  "builtBy": "release workflow run 40751628444",
+  "built": "2026-10-30",
+  "builtBy": "release workflow run 41000413545",
   "builds": [
     {
       "flavor": "prod",
-      "file": "v3.1.0-prod-edge-ctap_bridge-derive_secret-fw80e3ba0-libfe9e293-fix0012-0013-0015-b6bb49c13.hex",
-      "sha256": "8b1479560a497d24f8df16e490eb1dac54a746f1c55284e327f91b1b81c533a0",
+      "file": "v3.1.0-prod-edge-ctap_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-bb73aa2df.hex",
+      "sha256": "beb0494bd01cb5f71f65906b9ef232d596d5154f61a25dcc22ed4fb9ab7e46ee",
       "debug": false,
       "tested": false
     }
