@@ -1,6 +1,6 @@
 /*
  * The user's server (`npm run server:dev` runs it locally; the release workflow, .github/workflows/release.yml, builds
- * and deploys it - Cloudflare's own builds are disabled). mcp-server/src/index.js: the Worker - the identity rooms on /ws/<identity id> (a Durable Object each) and
+ * it onto the cloudflare branch, and Cloudflare deploys that branch on each push). mcp-server/src/index.js: the Worker - the identity rooms on /ws/<identity id> (a Durable Object each) and
  * the web app, built into docs/ and served as one page, so a reload on any route loads the app.
  *
  * The workflow builds the RELEASE export (mcp-server/build-webapp.js, CI set): a public URL never carries the testing
@@ -19,8 +19,13 @@
   "main": "mcp-server/src/index.js",
   "compatibility_date": "2026-10-23",
   "observability": { "enabled": true },
-  /* the identities whose sealed copy this server keeps (mcp-server/src/index.js sealedOp): their bucket identity ids, comma-separated, or * for all - none by default; local dev keeps all (--var) */
-  "vars": { "SEALED_IDENTITIES": "" },
+  /*
+   * SEALED_IDENTITIES (mcp-server/src/index.js sealedOn) - the identities whose sealed copy this server keeps: their
+   * bucket identity ids, comma-separated, or * for all - is a Worker SECRET (`npx wrangler secret put SEALED_IDENTITIES`),
+   * not a var here. Cloudflare builds and deploys the cloudflare branch on every push, from the config written from this
+   * file, and a var here would replace the live value with this one on each deploy; a secret is never touched by a
+   * deploy, and no identity id is in git. Unset: none. Local dev keeps all (--var in server:dev).
+   */
   "build": { "command": "node mcp-server/build-webapp.js" },
   "assets": {
     "directory": "./docs",

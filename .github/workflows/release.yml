@@ -49,7 +49,8 @@
 # publish needs every job, so nothing is published from sources that fail the kit or a build that failed.
 #
 # NO BUILDS ON MAIN (Brad: "this will keep our main from having builds"): every build goes to the release and the
-# cloudflare branch. Cloudflare's own builds are disabled - nothing builds the site but this workflow.
+# cloudflare branch. Nothing builds the site but this workflow; Cloudflare deploys the cloudflare branch on each push to
+# it (its build is wrangler deploy of the branch as it is: the Worker already bundled, no build command).
 #
 # EVERY PUBLISHED RELEASE HAS ITS OWN VERSION (Brad, 2026-10-28: "we published under 0.0.8, so we need to bump before
 # releasing again"): with publish=true the plan step stops the run when a release of app.json's version is already
@@ -743,23 +744,17 @@ jobs:
           git push --quiet origin cloudflare
           echo "cloudflare branch: $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
 
-      # Cloudflare's own builds are disabled: with a token the workflow deploys the site itself; without one the
-      # branch waits to be deployed by hand (npx wrangler deploy in a checkout of it)
+      # Cloudflare deploys the cloudflare branch on its own when it is pushed (above). With a CLOUDFLARE_API_TOKEN
+      # secret the workflow would deploy it too; the repo holds none, so this step only says so.
       - name: Deploy (with a CLOUDFLARE_API_TOKEN secret)
         working-directory: branch
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # the identities whose sealed copy the server keeps (mcp-server/src/index.js sealedOn): a secret, so no
-          # identity id is in git; wrangler.jsonc's "" stands when the secret is not set
-          SEALED_IDENTITIES: ${{ secrets.SEALED_IDENTITIES }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "no CLOUDFLARE_API_TOKEN secret - not deployed; the cloudflare branch holds the site" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          vars=()
-          if [ -n "$SEALED_IDENTITIES" ]; then vars=(--var "SEALED_IDENTITIES:$SEALED_IDENTITIES"); fi
-          npx --yes "wrangler@$(node -p "require('./package.json').devDependencies.wrangler")" deploy "${vars[@]}"
-          if [ -n "$SEALED_IDENTITIES" ]; then echo "sealed copies kept for the SEALED_IDENTITIES secret's identities" >> "$GITHUB_STEP_SUMMARY"; fi
+          npx --yes "wrangler@$(node -p "require('./package.json').devDependencies.wrangler")" deploy
           echo "deployed to Cloudflare" >> "$GITHUB_STEP_SUMMARY"
