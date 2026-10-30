@@ -1,6 +1,6 @@
 /*
  * THE WEB APP OPEN IN MORE THAN ONE TAB (Brad, 2026-10-29: "need to WARN the user with a banner about the multiple
- * chrome tab windows open"). Two tabs of this app ask one key and write one bucket (its rows, bucket/rows.web.ts.ts) and one Edge
+ * chrome tab windows open"). Two tabs of this app ask one key and write one bucket (its rows, bucket/rows.webapp.ts) and one Edge
  * copy each on their own - their requests interleave on the key, and each writes over what the other just wrote. Said in
  * a banner in every tab while another is open.
  *

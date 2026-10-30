@@ -6,7 +6,7 @@ import {setStarted} from './registry';
 import passwords from './passwords/plugin';
 import guestbook from './guestbook/plugin';
 import cryptobox from './cryptobox/plugin';
-/* the core tabs (src/features/core.tsx), this platform's list (list.android.ts / list.web.ts / list.desktop.ts) */
+/* the core tabs (src/features/core.tsx), this platform's list (list.android.ts / list.webapp.ts / list.desktop.ts) */
 import {coreFeatures} from '../features/list';
 
 /*

@@ -32,7 +32,7 @@ export async function clearTestnet(): Promise<{removed: number}> {
   await OkEmu.deleteTestSlot();
   const keys = (await AsyncStorage.getAllKeys()).filter(TEST_KEYS);
   for (const k of keys) await AsyncStorage.removeItem(k);
-  /* the web app keeps its buckets' rows in IndexedDB (bucket/rows.web.ts): the testnet's go too */
+  /* the web app keeps its buckets' rows in IndexedDB (bucket/rows.webapp.ts): the testnet's go too */
   await require('./bucket/rows').clearTestRows();
   return {removed: keys.length};
 }

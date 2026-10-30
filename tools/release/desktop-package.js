@@ -10,7 +10,7 @@
  * One package per system - a .zip for Windows, a .tar.gz for Linux, x64 - unpacked and run from where it lands (no
  * installer: nothing is written outside its folder but the app's own data). What is in it:
  *
- *   resources/app/                    electron/ and the RELEASE web export (dist/web, built before this runs), with a
+ *   resources/app/                    electron/ and the RELEASE web export (dist/desktop, built before this runs), with a
  *                                     package.json of ITS OWN: only what the main process loads - node-onlykey-lib at
  *                                     ok-edge's pin, node-hid (a USB key), the noble fork and dbus-next (Bluetooth),
  *                                     every one prebuilt. Not ok-edge's package.json: that carries Expo and React
@@ -60,15 +60,15 @@ if (!['win', 'linux'].includes(PLATFORM) || !EMU || !OUT || !REPO || !TAG || !VE
 const OS_NAME = PLATFORM === 'win' ? 'windows' : 'linux';
 const EXT = PLATFORM === 'win' ? 'zip' : 'tar.gz';
 const FILE = `onlykey-edge-desktop-${VERSION}-${CODE}-${OS_NAME}-x64.${EXT}`;
-const WEB = path.join(ROOT, 'dist', 'web');
+const WEB = path.join(ROOT, 'dist', 'desktop');
 
 /* ---------------------------------------------------------------- what a release must not carry */
-if (!fs.existsSync(path.join(WEB, 'index.html'))) fail(`no web export at ${WEB} - npm run build:web first`);
+if (!fs.existsSync(path.join(WEB, 'index.html'))) fail(`no web export at ${WEB} - npm run build:desktop first`);
 const bundles = fs.readdirSync(path.join(WEB, '_expo', 'static', 'js', 'web')).filter((f) => f.endsWith('.js'));
 /* a development export (__DEV__ on: testing mode, Login Bypass) names its bundle by the md5 of nothing */
-if (bundles.some((f) => f.includes('d41d8cd98f00b204e9800998ecf8427e'))) fail('the web export is a development export - npm run build:web makes the release one');
+if (bundles.some((f) => f.includes('d41d8cd98f00b204e9800998ecf8427e'))) fail('the web export is a development export - npm run build:desktop makes the release one');
 if (bundles.some((f) => fs.readFileSync(path.join(WEB, '_expo', 'static', 'js', 'web', f), 'utf8').includes('Soft Key firmware'))) {
-  fail('the testing screen is in the web export - a release export (npm run build:web) leaves it out');
+  fail('the testing screen is in the web export - a release export (npm run build:desktop) leaves it out');
 }
 const ADDON = path.join(EMU, 'build', 'Release', 'onlykey_emulator.node');
 if (!fs.existsSync(ADDON)) fail(`the soft key is not built: no ${ADDON}`);
@@ -88,7 +88,7 @@ if (staged.debugLock === false) fail('the debugging lock is off in src/generated
 if (JSON.stringify(staged.plugins || []) !== JSON.stringify(built.plugins || [])) {
   fail(`the web export's soft key record (${staged.plugins}) is not the soft key packaged (${built.plugins})`);
 }
-if (fs.statSync(record).mtimeMs > fs.statSync(path.join(WEB, 'index.html')).mtimeMs) fail('the web export is older than the soft key record - npm run build:web again');
+if (fs.statSync(record).mtimeMs > fs.statSync(path.join(WEB, 'index.html')).mtimeMs) fail('the web export is older than the soft key record - npm run build:desktop again');
 
 /* ---------------------------------------------------------------- the app folder */
 const WORK = path.join(ROOT, 'dist', `desktop-${OS_NAME}`);
@@ -97,7 +97,7 @@ const EXTRA = path.join(WORK, 'extra');
 fs.rmSync(WORK, { recursive: true, force: true });
 fs.mkdirSync(APP, { recursive: true });
 fs.cpSync(path.join(ROOT, 'electron'), path.join(APP, 'electron'), { recursive: true });
-fs.cpSync(WEB, path.join(APP, 'dist', 'web'), { recursive: true });
+fs.cpSync(WEB, path.join(APP, 'dist', 'desktop'), { recursive: true });
 
 const okEdge = require(path.join(ROOT, 'package.json'));
 const lib = require(path.join(ROOT, 'node_modules', 'node-onlykey-lib', 'package.json'));

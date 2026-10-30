@@ -1,6 +1,6 @@
 /*
- * THE BUCKET KEPT AS SEALED ROWS - the phone's and the web app's storage (storage.android.ts, storage.web.ts): the rows
- * themselves are this platform's (rows.android.ts: AsyncStorage, rows.web.ts: IndexedDB). Opened with the key's secret;
+ * THE BUCKET KEPT AS SEALED ROWS - the phone's and the web app's storage (storage.android.ts, storage.webapp.ts): the rows
+ * themselves are this platform's (rows.android.ts: AsyncStorage, rows.webapp.ts: IndexedDB). Opened with the key's secret;
  * every write puts only the units that changed, each sealed under keys from that secret, and the owner row once - a
  * write of one record is one row, and needs no key and no press.
  */

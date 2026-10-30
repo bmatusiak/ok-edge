@@ -5,8 +5,13 @@ const path = require('path');
 const fs = require('fs');
 const { getDefaultConfig } = require('expo/metro-config');
 
-/* the desktop window's build (PLATFORM FILES, below): x.desktop.ts before x.web.ts, in this app's own files only */
-const DESKTOP_BUILD = process.env.OKEDGE_SHELL === 'desktop';
+/*
+ * WHICH OF OUR PLATFORMS A WEB BUNDLE IS FOR (PLATFORM FILES, below). Expo bundles both the web app and the desktop
+ * window as Metro's 'web' - that is what turns react-native into react-native-web - so the build names which one:
+ * OKEDGE_SHELL=webapp or desktop (package.json's scripts, tools/web-build.js). A web bundle without it is refused.
+ */
+const WEB_TARGETS = ['webapp', 'desktop'];
+const WEB_TARGET = process.env.OKEDGE_SHELL;
 const OWN = path.join(__dirname, 'src') + path.sep;
 
 const config = getDefaultConfig(__dirname);
@@ -50,23 +55,26 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
    * each spec's desktop version, src/desktop/specs/<Native…>.ts - what that module really has on
    * this shell (module.ts). The app code that imports the spec is the phone's, unchanged.
    */
+  if (platform === 'web' && !WEB_TARGETS.includes(WEB_TARGET)) {
+    throw new Error(`ok-edge: a web bundle names its platform - OKEDGE_SHELL=webapp or desktop (got ${WEB_TARGET || 'none'}); use the npm scripts`);
+  }
   const spec = platform === 'web' && /^okedge-native\/specs\/(Native[A-Za-z]+)$/.exec(moduleName);
   if (spec) {
     return { type: 'sourceFile', filePath: path.join(__dirname, 'src', 'desktop', 'specs', `${spec[1]}.ts`) };
   }
   const resolved = (resolveRequest || context.resolveRequest)(context, moduleName, platform);
   /*
-   * PLATFORM FILES FOR THE DESKTOP (Brad, 2026-10-30: "each platform gets their own .platform.js for platform specific
-   * replacement - this can apply to a rectify service"; PROPOSAL-rectify-ok-edge.md rule 2). Metro picks x.android.ts
-   * and x.web.ts by itself; the desktop window is a web build too, so its build says so (OKEDGE_SHELL=desktop:
-   * build:web, build:web:test, web:desktop) and a project file with an x.desktop.ts beside it resolves to that one.
+   * OUR PLATFORM NAMES (Brad, 2026-10-30: "each platform gets their own .platform.js"; "change 'web' to 'webapp', add
+   * 'desktop', so it can auto pick like we expect for the names we use"). This app's own files are x.android.ts,
+   * x.webapp.ts and x.desktop.ts beside the contract x.ts. Metro picks x.android.ts by itself; for a web bundle it finds
+   * the contract x.ts, and this swaps in the named target's file. No x.web.ts in src: 'web' is Metro's word, not ours.
    * Only this app's own files - never a package's.
    */
-  if (DESKTOP_BUILD && platform === 'web' && resolved && resolved.type === 'sourceFile' && resolved.filePath.startsWith(OWN)) {
-    const m = /^(.*?)(?:\.web)?\.(tsx?|jsx?)$/.exec(resolved.filePath);
+  if (platform === 'web' && resolved && resolved.type === 'sourceFile' && resolved.filePath.startsWith(OWN)) {
+    const m = /^(.*)\.(tsx?|jsx?)$/.exec(resolved.filePath);
     if (m) {
       for (const ext of ['ts', 'tsx', 'js']) {
-        const alt = `${m[1]}.desktop.${ext}`;
+        const alt = `${m[1]}.${WEB_TARGET}.${ext}`;
         if (fs.existsSync(alt)) return { type: 'sourceFile', filePath: alt };
       }
     }

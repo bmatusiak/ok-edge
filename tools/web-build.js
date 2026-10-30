@@ -24,7 +24,7 @@ try { commit = commit || execSync('git rev-parse HEAD', { cwd: root }).toString(
 const version = `${(commit || 'local').slice(0, 7)}-${Date.now().toString(36)}`;
 
 execSync(`npx expo export --platform web ${dev ? '--dev ' : ''}--output-dir docs`, {
-  cwd: root, stdio: 'inherit', env: { ...process.env, EXPO_PUBLIC_WEB_BUILD: version, EXPO_PUBLIC_APP_COMMIT: commit },
+  cwd: root, stdio: 'inherit', env: { ...process.env, OKEDGE_SHELL: 'webapp', EXPO_PUBLIC_WEB_BUILD: version, EXPO_PUBLIC_APP_COMMIT: commit },
 });
 
 /* every file the export made, as the page asks for it - not the firmware (published after, large) or the maps */

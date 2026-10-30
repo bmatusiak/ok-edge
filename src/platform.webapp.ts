@@ -1,5 +1,8 @@
-/* THE WEB APP (the web build in a browser) - platform.ts says what each value means; Metro picks this file for web */
+/* THE WEB APP (the web build in a browser) - platform.ts says what each value means; metro.config.js picks this file for OKEDGE_SHELL=webapp */
 import type {DesktopBridge, Shell} from './platform.types';
+
+/* the desktop window's preload is here: this is the web app's build in the desktop - the wrong one (npm run build:desktop) */
+if ((globalThis as any).okedge) throw new Error('ok-edge: the web app build was loaded in the desktop window - build it with npm run build:desktop');
 
 export type {DesktopBridge, Shell} from './platform.types';
 export const shell: Shell = 'webapp';

@@ -7,7 +7,7 @@
  *   desktop   the desktop app: the web build in an Electron      platform.desktop.ts  (the desktop build,
  *             window, whose preload (electron/preload.js) puts                          OKEDGE_SHELL=desktop -
  *             `window.okedge` in place before the page runs                             metro.config.js)
- *   webapp    the web build in a browser (GitHub Pages, a        platform.web.ts      (Metro, web)
+ *   webapp    the web build in a browser (GitHub Pages, a        platform.webapp.ts      (Metro, web)
  *             fork's site, or served locally)
  *
  * It used to be guessed at run time (Platform.OS, then whether the preload's bridge was there), one build for the
@@ -25,10 +25,10 @@
  * desktop: the preload's bridge, on the desktop shell only.
  */
 import type * as Android from './platform.android';
-import type * as Web from './platform.web';
+import type * as Web from './platform.webapp';
 import type * as Desktop from './platform.desktop';
 
-export * from './platform.web';
+export * from './platform.webapp';
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 /* every platform file exports exactly the web file's names and types */

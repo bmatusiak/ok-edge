@@ -1,5 +1,5 @@
 /*
- * THE WEB APP: the bucket kept as sealed rows in IndexedDB (storage.rows.ts, rows.web.ts) - it never holds an opened
+ * THE WEB APP: the bucket kept as sealed rows in IndexedDB (storage.rows.ts, rows.webapp.ts) - it never holds an opened
  * bucket at rest (Brad, 2026-10-24: "webapp always has an encrypted bucket"). storage.ts says what storage is.
  */
 export type {BucketStorage, Bucket, Opened} from './storage.types';

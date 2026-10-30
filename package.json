@@ -6,18 +6,18 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "web": "expo start --web --port 8090",
-    "web:desktop": "cross-env OKEDGE_SHELL=desktop expo start --web --port 8090",
-    "build:web": "cross-env OKEDGE_SHELL=desktop expo export --platform web --output-dir dist/web",
-    "build:web:test": "cross-env OKEDGE_SHELL=desktop expo export --platform web --dev --output-dir dist/web-test",
+    "webapp": "cross-env OKEDGE_SHELL=webapp expo start --web --port 8090",
+    "desktop:dev-server": "cross-env OKEDGE_SHELL=desktop expo start --web --port 8091",
+    "build:desktop": "cross-env OKEDGE_SHELL=desktop expo export --platform web --output-dir dist/desktop",
+    "build:desktop:test": "cross-env OKEDGE_SHELL=desktop expo export --platform web --dev --output-dir dist/desktop-test",
     "build:webapp": "node tools/web-build.js --dev",
     "build:webapp:release": "node tools/web-build.js",
     "server:dev": "npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787 --var SEALED_IDENTITIES:*",
     "server:test": "node --test mcp-server/test/rooms.test.js mcp-server/test/mcp.test.js",
     "electron": "node electron/start.js",
-    "electron:dev": "cross-env OKEDGE_WEB_URL=http://localhost:8090 node electron/start.js",
+    "electron:dev": "cross-env OKEDGE_WEB_URL=http://localhost:8091 node electron/start.js",
     "electron:test": "cross-env OKEDGE_FLAVOR=test node electron/start.js",
-    "build:electron": "npm run build:web && electron-builder --dir",
+    "build:electron": "npm run build:desktop && electron-builder --dir",
     "build:android": "expo prebuild --platform android --no-install && cd android && gradlew assembleRelease",
     "cli": "node node_modules/node-onlykey-lib/cli/index.js",
     "typecheck": "tsc --noEmit -p ."
@@ -55,7 +55,7 @@
     "productName": "ok-edge",
     "files": [
       "electron/**",
-      "dist/web/**",
+      "dist/desktop/**",
       "package.json",
       "!node_modules/**"
     ],

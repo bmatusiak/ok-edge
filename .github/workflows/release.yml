@@ -537,7 +537,7 @@ jobs:
 
       - name: Build the web export (release)
         working-directory: ok-edge
-        run: npm run build:web
+        run: npm run build:desktop
 
       # unsigned (no code-signing certificate yet): Windows says "unknown publisher" the first time it runs
       - name: Package, check and describe it

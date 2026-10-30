@@ -1,6 +1,6 @@
 /*
  * THE DESKTOP APP (the web build in an Electron window) - platform.ts says what each value means; the desktop build
- * (OKEDGE_SHELL=desktop, metro.config.js) picks this file before platform.web.ts.
+ * (OKEDGE_SHELL=desktop, metro.config.js) picks this file before platform.webapp.ts.
  */
 import type {DesktopBridge, Shell} from './platform.types';
 

@@ -2,7 +2,7 @@
 /*
  * `npm run electron`: Electron on electron/main.js.
  *
- * WITHOUT OKEDGE_WEB_URL the window loads the web export in dist/web, so that export must be the
+ * WITHOUT OKEDGE_WEB_URL the window loads the web export in dist/desktop, so that export must be the
  * code as it is NOW. It is rebuilt here, before the window opens, whenever any source it is built
  * from is newer than it: a plain launch once showed a days-old export (the hard key's USB module
  * still a stub, "no hard key attached") while the same code passed its tests on Metro's live page.
@@ -12,7 +12,7 @@
  *
  * THE TEST BUILD (OKEDGE_FLAVOR=test, `npm run electron:test`; Brad, 2026-10-25: "test build and testing mode and
  * test net works on the desktop app, so desktop app can run its on device suite e2e, matching how the phone works"):
- * the same page as a DEVELOPMENT export in dist/web-test (`npm run build:web:test`) - the phone's debug build, with
+ * the same page as a DEVELOPMENT export in dist/desktop-test (`npm run build:desktop:test`) - the phone's debug build, with
  * no server to run: testing mode, the Testing tab and its on-device suite, Login Bypass, the testnet. Rebuilt the same
  * way when stale.
  */
@@ -23,8 +23,8 @@ const electron = require('electron');
 
 const ROOT = path.join(__dirname, '..');
 const TEST = process.env.OKEDGE_FLAVOR === 'test';
-const EXPORT = path.join(ROOT, 'dist', TEST ? 'web-test' : 'web', 'index.html');
-const BUILD = TEST ? 'build:web:test' : 'build:web';
+const EXPORT = path.join(ROOT, 'dist', TEST ? 'desktop-test' : 'desktop', 'index.html');
+const BUILD = TEST ? 'build:desktop:test' : 'build:desktop';
 
 /* what the web export is built from: the app's JavaScript and assets, and the lockfile (a lib re-pin) */
 const SOURCE_FILES = ['MainApp.tsx', 'index.ts', 'app.json', 'metro.config.js', 'tsconfig.json',

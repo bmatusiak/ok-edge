@@ -8,8 +8,8 @@
  * on. The page reaches this process only through electron/preload.js, which exposes one function
  * and only for the channels listed there.
  *
- * The page: in development the Expo web server (OKEDGE_WEB_URL, `npm run web:desktop` - the desktop build's platform files); otherwise the web
- * export in dist/web, served by THIS process as https://apps.crp.to/ (the export's paths start at
+ * The page: in development the Expo web server (OKEDGE_WEB_URL, `npm run desktop:dev-server` - the desktop build's platform files); otherwise the web
+ * export in dist/desktop, served by THIS process as https://apps.crp.to/ (the export's paths start at
  * "/_expo/...", which a file:// load cannot resolve). Why that address: the key's CTAP tunnel - the
  * Passwords tab's derives, the vault - answers only the admitted origins (node-onlykey-lib
  * src/protocol/ctap.js RP_IDS), and on Windows an app cannot open the key's FIDO interface: it goes
@@ -35,12 +35,12 @@ if (app.isPackaged) {
 }
 
 /*
- * THE TEST BUILD (OKEDGE_FLAVOR=test, electron/start.js): the development export in dist/web-test, the phone's debug
+ * THE TEST BUILD (OKEDGE_FLAVOR=test, electron/start.js): the development export in dist/desktop-test, the phone's debug
  * build - and its OWN page storage (a separate profile), so a test run never reads or writes what the prod build kept.
  * The origin stays https://apps.crp.to, so WebAuthn works the same.
  */
 const TEST = process.env.OKEDGE_FLAVOR === 'test';
-const WEB_ROOT = path.join(__dirname, '..', 'dist', TEST ? 'web-test' : 'web');
+const WEB_ROOT = path.join(__dirname, '..', 'dist', TEST ? 'desktop-test' : 'desktop');
 if (TEST) app.setPath('userData', `${app.getPath('userData')}-test`);
 
 /*
@@ -57,7 +57,7 @@ if (process.env.OKEDGE_DEVTOOLS_PORT) app.commandLine.appendSwitch('remote-debug
  * a page use only its own origin as the rpId. Served as https://apps.crp.to the page could not derive under the key's
  * site ("the browser will not assert rpId ok-edge.bmatusiak.workers.dev from this page"), so the desktop never joined
  * its server. So the page, after its identity check, tells this process the key's site (okedge:keySite); it is kept in
- * key-site.json and the window opens there - this process answers that host from dist/web as it answers apps.crp.to,
+ * key-site.json and the window opens there - this process answers that host from dist/desktop as it answers apps.crp.to,
  * and every path that is not one of those files goes to the real server (its room's /ws, /mcp). Until a key has named
  * its site: apps.crp.to, as before.
  */
@@ -179,7 +179,7 @@ app.whenReady().then(() => {
     const url = new URL(request.url);
     const site = keySite && url.hostname === keySite && keySite !== 'apps.crp.to';
     if (url.hostname !== 'apps.crp.to' && !site) return net.fetch(request, { bypassCustomProtocolHandlers: true });
-    /* inside dist/web only, whatever the path says */
+    /* inside dist/desktop only, whatever the path says */
     const file = path.normalize(path.join(WEB_ROOT, decodeURIComponent(url.pathname)));
     const isFile = file.startsWith(WEB_ROOT) && fs.existsSync(file) && !fs.statSync(file).isDirectory();
     if (isFile) return net.fetch(pathToFileURL(file).toString());

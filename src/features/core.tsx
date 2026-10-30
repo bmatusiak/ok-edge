@@ -4,7 +4,7 @@
  * five filter lists (hidden, debug-only, Android-only, not-web, testing) and a render branch per tab, all inside one
  * 1900-line function. Each tab now registers with the app's `tabs` registry (src/plugins/tabs.ts) as Passwords and Guest
  * Book always did: its place in the drawer, when it shows, and how it draws from the TabContext. Which tabs a platform
- * has at all is its feature list, a platform file (list.android.ts / list.web.ts / list.desktop.ts) - no shell checks.
+ * has at all is its feature list, a platform file (list.android.ts / list.webapp.ts / list.desktop.ts) - no shell checks.
  *
  * The renders are the ones MainApp had, moved, not rewritten: the screens take what they took. Navigation that belongs
  * to a feature (a tapped Edge alarm, the request sheet's budget card, "Set up in Key Chain") is that feature's watch now.
@@ -115,7 +115,7 @@ function settingsPage(ctx: TabContext, page: SettingsPage) {
 
 /*
  * THIS KEY, with its slots (a panel under Buttons; a slot opens its editor here). `slots: false` where slots cannot be
- * read - they are vendor messages, which a web page cannot send (list.web.ts).
+ * read - they are vendor messages, which a web page cannot send (list.webapp.ts).
  */
 type OpenSlot = {id: string; index: number; label: string | null};
 function ThisKeyTab({ctx, slots}: {ctx: TabContext; slots: boolean}) {
@@ -202,7 +202,7 @@ const oneWay = (direction: 'encrypt' | 'decrypt') => (ctx: TabContext) => (
 export const encrypt = tabPlugin({name: 'Encrypt', order: ORDER.Encrypt, hidden: true, render: oneWay('encrypt')});
 export const decrypt = tabPlugin({name: 'Decrypt', order: ORDER.Decrypt, hidden: true, render: oneWay('decrypt')});
 
-/* PASSKEYS: CTAPHID's credential management - not on the web app, which reaches a key over WebAuthn only (list.web.ts) */
+/* PASSKEYS: CTAPHID's credential management - not on the web app, which reaches a key over WebAuthn only (list.webapp.ts) */
 export const passkeys = tabPlugin({name: 'Passkeys', order: ORDER.Passkeys, render: ctx => <PasskeysScreen emu={ctx.keys.key} configMode={ctx.configMode} />});
 
 /* BLUETOOTH: the phone's only - it is the Bluetooth keyboard and authenticator (list.android.ts) */
@@ -224,7 +224,7 @@ export const activity = tabPlugin({
 
 /*
  * SETTINGS, last in the drawer: PIN Setup, Preferences, Backup/Restore, Firmware and Advanced are its sub views (each
- * also kept as its own hidden tab). Not on the web app - each is vendor messages (list.web.ts).
+ * also kept as its own hidden tab). Not on the web app - each is vendor messages (list.webapp.ts).
  */
 export const settings = tabPlugin({
   name: 'Settings', order: ORDER.Settings,
@@ -295,5 +295,5 @@ export function prompts() {
   return setup;
 }
 
-/* every platform's tabs; its list file adds its own (list.android.ts / list.web.ts / list.desktop.ts) */
+/* every platform's tabs; its list file adds its own (list.android.ts / list.webapp.ts / list.desktop.ts) */
 export const common = [prompts(), slots, keyChain, keys, encryptDecrypt, encrypt, decrypt, sync, activity, inDevelopment, log, testing];
