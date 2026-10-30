@@ -5,7 +5,7 @@ import {NOT_IN_CONFIG_MODE, ON, type ConfigState} from '../ui/configModeNotes';
 import {ListPicker, type PickItem} from '../ui/ListPicker';
 import {missingNote, supports} from '../firmwareFeatures';
 import {theme} from '../ui/theme';
-import {pluginRecipientSources} from '../plugins';
+import {pluginRecipientSources} from '../plugins/registry';
 import {armDeviceKey, readDeviceKeys, type DeviceKey} from '../pgpOps';
 import {openKeyChainWizard, QUANTUM_SAFE_PGP} from '../keyChainNav';
 import type {RecipientContact, RecipientSource} from '../plugins/recipients';

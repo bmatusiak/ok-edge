@@ -1,14 +1,13 @@
-import {useEffect, useState} from 'react';
 import Rectify from '@bmatusiak/rectify';
 
 import tabs, {type TabsService} from './tabs';
-import recipients, {type RecipientSource, type RecipientsService} from './recipients';
+import recipients, {type RecipientsService} from './recipients';
+import {setStarted} from './registry';
 import passwords from './passwords/plugin';
 import guestbook from './guestbook/plugin';
 import cryptobox from './cryptobox/plugin';
 /* the core tabs (src/features/core.tsx), this platform's list (list.android.ts / list.web.ts / list.desktop.ts) */
 import {coreFeatures} from '../features/list';
-import type {AppTab, AppWatch, TabState} from './types';
 
 /*
  * THE APP PLUGINS, composed with Rectify as src/onlykey.ts composes the library's (Brad: Rectify
@@ -21,54 +20,17 @@ import type {AppTab, AppWatch, TabState} from './types';
  */
 const PLUGINS: any[] = [tabs, recipients, ...coreFeatures, passwords, guestbook, cryptobox];
 
-let started: TabsService | null = null;
-let recipientsService: RecipientsService | null = null;
-const waiting = new Set<() => void>();
-
 const app = Rectify.build(PLUGINS, (err: Error | null, ready: any) => {
   if (err) {
     console.warn('[plugins] did not start:', err.message);
     return;
   }
-  started = ready.services.tabs as TabsService;
-  recipientsService = ready.services.recipients as RecipientsService;
-  for (const w of waiting) w();
-  waiting.clear();
+  setStarted(ready.services.tabs as TabsService, ready.services.recipients as RecipientsService);
 });
 app.start();
 
-/** The plugins' tabs; empty until they have started (a moment after launch, before login). */
-/** The drawer's tabs now, in order (tabs.ts shown). */
-export function shownTabs(state: TabState): readonly AppTab[] {
-  return started ? started.shown(state) : [];
-}
-
-/** Every tab, shown or kept (a hidden one opens by its name). */
-export function pluginTabs(): readonly AppTab[] {
-  return started ? started.list() : [];
-}
-
-/** The plugins that offer people's public keys to core screens (src/plugins/recipients.ts). */
-export function pluginRecipientSources(): readonly RecipientSource[] {
-  return recipientsService ? recipientsService.list() : [];
-}
-
-export function pluginWatches(): readonly AppWatch[] {
-  return started ? started.watches() : [];
-}
-
-/** Re-renders once when the plugins have started. */
-export function usePluginsStarted(): boolean {
-  const [ok, setOk] = useState(started !== null);
-  useEffect(() => {
-    if (ok) return;
-    const w = () => setOk(true);
-    if (started) w();
-    else waiting.add(w);
-    return () => void waiting.delete(w);
-  }, [ok]);
-  return ok;
-}
+/* read from registry.ts by anyone; re-exported here for MainApp, which also starts the app by importing this file */
+export {shownTabs, pluginTabs, pluginRecipientSources, pluginWatches, usePluginsStarted} from './registry';
 
 /*
  * Each plugin's in-app e2e suite, by plugin name (__e2e_tests__/13b-passwords.e2e.js asks for it):

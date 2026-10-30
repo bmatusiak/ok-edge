@@ -3,7 +3,7 @@ import {StyleSheet, Text, View} from 'react-native';
 import {ListPicker, type PickItem} from '../../ui/ListPicker';
 import {theme} from '../../ui/theme';
 import {openpgpFork} from '../../pgpOps';
-import {pluginRecipientSources} from '../../plugins';
+import {pluginRecipientSources} from '../../plugins/registry';
 import {updateKeyChainList} from '../../keyChainRecorder';
 
 const keychain = require('node-onlykey-lib/keychain');
