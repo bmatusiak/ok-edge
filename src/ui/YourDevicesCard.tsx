@@ -11,7 +11,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, View} from 'react-native';
 import {grants} from 'node-onlykey-lib/edge';
-import {deviceName, ownNames, refreshNametag, nametagOr, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
+import {currentDeviceId, deviceName, ownNames, refreshNametag, nametagOr, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {useYourDevices} from '../hooks/useYourDevices';
 import {Btn, Section} from './components';
@@ -29,6 +29,8 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
   const devices = useYourDevices(headSeq);
   const [devName, setDevName] = useState('');
   const [names, setNames] = useState<string[]>([]);
+  /* this device's key, named or not (Brad, 2026-10-30: "This computer needs to display its device key") */
+  const [devId, setDevId] = useState<string | null>(null);
   /* the probed device name is only offered in the dialog: the person keeps it or types their own (Brad, 2026-10-30) */
   const load = useCallback(async () => {
     setOwn(await ownStatement());
@@ -36,6 +38,7 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
     setNames(await ownNames());
     const s = await refreshNametag(await SoftKeyEdge.open().catch(() => null));
     if (s) setOwn(s);
+    setDevId(currentDeviceId());
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => onDevicesChanged(() => { void load(); }), [load]);
@@ -61,7 +64,7 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
       <Section title={`This ${DEVICE_WORD}`}>
         <Text style={styles.op}>{nametagOr(own?.nametag)}</Text>
         {names.length > 1 ? <Text style={styles.dim}>{`Earlier: ${names.slice(1).join(', ')}`}</Text> : null}
-        {own ? <Text style={styles.dim}>{`Device ${short(own.deviceId)}`}</Text> : null}
+        {devId ? <Text style={styles.dim}>{`Device ${short(devId)}`}</Text> : null}
         <Text style={styles.dim}>{`Your other devices see this ${DEVICE_WORD} by its nametag. The key signs it; no press.`}</Text>
         {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
         <View style={styles.row}>

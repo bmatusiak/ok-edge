@@ -67,6 +67,10 @@ export function setCurrentDevice(deviceIdHex: string, backend?: string): void {
   currentDevice = deviceIdHex.toLowerCase();
   currentIsHard = backend === 'usb';
 }
+/** The device id (16 bytes, hex) of the key the app is using now, named or not - null before Edge opened it. */
+export function currentDeviceId(): string | null {
+  return currentDevice;
+}
 const HELD = (): string => edgeKey('held');
 
 /*
