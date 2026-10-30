@@ -18,6 +18,8 @@ export type KeyBusy = {
   steps: number;
   /* operations in this run of them, this one included */
   ops: number;
+  /* operations of this run already answered (the queue bar: done of done + this one + waiting) */
+  opsDone: number;
   /* operations queued behind this one */
   waiting: number;
   /* the key waits for its press (an Edge budget opened, resumed or settled; a loss accepted) */
@@ -29,7 +31,13 @@ export type KeyBusy = {
 type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'};
 
 const SHOW_AFTER_MS = 250;
-const HIDE_AFTER_MS = 300;
+/*
+ * THE RUN, NOT EACH REQUEST (Brad, 2026-10-29: "it shows and hides each op real quick, when it should also be tracking the
+ * queue"): a sync asks its requests one after another, with gaps longer than 0.3 s between them over WebAuthn - a sheet
+ * that went away 0.3 s after each one flickered. It stays up while the queue keeps working and goes 1 s after the last
+ * answer; a click in that second lands on the sheet, not the page.
+ */
+const HIDE_AFTER_MS = 1000;
 const OKEDGE = 0xf8;
 /* the Edge requests by their sub-op (lib edge/plugin SUB), as a person would say them */
 const EDGE_WHAT: Record<number, string> = {
@@ -53,6 +61,7 @@ let current: KeyBusy | null = null;
 let latest: KeyBusy | null = null;
 let inFlight = false;
 let ops = 0;
+let opsDone = 0;
 let showTimer: ReturnType<typeof setTimeout> | null = null;
 let hideTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<(b: KeyBusy | null) => void>();
@@ -88,10 +97,10 @@ export function noteSettle(e: {ms: number; why?: string}) {
  * Edge requests on one key run one at a time (the plugin's lane), so one counter names them.
  */
 let edgeOp = 0;
-export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: boolean}) {
+export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: boolean; waiting?: number}) {
   if (EDGE_PRESSED.has(e.sub)) return;
   if (e.phase === 'begin') edgeOp += 1;
-  noteTunnel({phase: e.phase, id: edgeOp, msg: OKEDGE, slot: e.sub, step: e.phase === 'end' ? 1 : 0, steps: 1, ok: e.ok, via: 'direct'});
+  noteTunnel({phase: e.phase, id: edgeOp, msg: OKEDGE, slot: e.sub, step: e.phase === 'end' ? 1 : 0, steps: 1, ok: e.ok, waiting: e.waiting, via: 'direct'});
 }
 
 export function noteTunnel(e: TunnelEvent) {
@@ -106,16 +115,18 @@ export function noteTunnel(e: TunnelEvent) {
   }
   const steps = Math.max(e.steps || 1, e.step, 1);
   const b: KeyBusy = {
-    what: whatOf(e.msg, e.slot), step: e.step, steps, ops, waiting: e.waiting ?? 0,
+    what: whatOf(e.msg, e.slot), step: e.step, steps, ops, opsDone, waiting: e.waiting ?? 0,
     press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), done: false, via: e.via ?? 'tunnel',
   };
   if (e.phase === 'end') {
     inFlight = false;
-    if (current) set({...b, step: steps, done: true});
+    opsDone += 1;
+    if (current) set({...b, step: steps, opsDone, done: true});
     hideTimer = setTimeout(() => {
       hideTimer = null;
       if (inFlight) return;
       ops = 0;
+      opsDone = 0;
       latest = null;
       set(null);
     }, HIDE_AFTER_MS);

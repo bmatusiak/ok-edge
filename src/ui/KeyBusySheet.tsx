@@ -18,18 +18,30 @@ export function KeyBusySheet() {
   useEffect(() => onKeyBusy(setB), []);
   useEffect(() => onHostChallenge(setC), []);
   if (!b || c) return null;
+  /*
+   * TWO BARS (Brad, 2026-10-29: "tracking the queue and the individual in 2 progress bars"): the queue - this run's
+   * requests answered, of those answered, the one in progress and those waiting behind it (a run asks one after another,
+   * so the total grows as it goes) - and the request in progress, by its steps.
+   */
+  const inProgress = b.done ? 0 : 1;
+  const total = Math.max(1, b.opsDone + inProgress + b.waiting);
+  const queuePct = Math.min(100, Math.round((100 * b.opsDone) / total));
+  const queue = [`${b.opsDone} of ${total} request${total === 1 ? '' : 's'} done`];
+  if (b.waiting) queue.push(`${b.waiting} waiting`);
   const pct = Math.min(100, Math.round((100 * b.step) / b.steps));
   /* the step in progress, counted from 1 (the bar fills by the steps done) */
-  const counts = [`Step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`];
-  if (b.ops > 1) counts.push(`request ${b.ops}`);
-  if (b.waiting) counts.push(`${b.waiting} more waiting`);
+  const step = `This request: step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`;
   return (
     <Sheet title={b.press && !b.done ? 'Press your OnlyKey' : 'Working with your key'}>
-      <Text style={styles.what}>{b.done ? `${b.what} - done` : b.what}</Text>
+      <Text style={styles.counts}>{queue.join(' · ')}</Text>
       <View style={styles.track}>
-        <View style={[styles.fill, {width: `${pct}%`}]} />
+        <View style={[styles.fill, {width: `${queuePct}%`}]} />
       </View>
-      <Text style={styles.counts}>{counts.join(' · ')}</Text>
+      <Text style={[styles.what, styles.gap]}>{b.done ? `${b.what} - done` : b.what}</Text>
+      <View style={styles.track}>
+        <View style={[styles.fill, styles.fillStep, {width: `${pct}%`}]} />
+      </View>
+      <Text style={styles.counts}>{step}</Text>
       <Text style={styles.note}>
         {b.press && !b.done
           ? 'The key is waiting for you: press it to go on. The browser window that asks for your security key is part of this step.'
@@ -46,5 +58,7 @@ const styles = StyleSheet.create({
   track: {height: 8, borderRadius: 4, backgroundColor: theme.border, overflow: 'hidden'},
   fill: {height: 8, borderRadius: 4, backgroundColor: theme.accent},
   counts: {color: theme.textDim, fontSize: 13, marginTop: 8},
+  gap: {marginTop: 16},
+  fillStep: {backgroundColor: theme.ok},
   note: {color: theme.textDim, fontSize: 13, marginTop: 12, lineHeight: 18},
 });
