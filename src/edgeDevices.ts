@@ -129,7 +129,7 @@ export async function ownStatement(deviceIdHex: string | null = currentDevice): 
  * twin (1952 bytes) - null before a nametag is set, or when the statement lacks either (both
  * are needed to check any statement).
  */
-export async function ownerKey(): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
+export async function ownerKey(soft?: {statement(nametag: string): Promise<any>} | null): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
   const s = await ownStatement();
   if (!(s?.ownerKey && s.ownerKeyPq)) return null;
   /*
@@ -142,8 +142,12 @@ export async function ownerKey(): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uin
   const id = `${s.ownerKey}.${s.ownerKeyPq}`.toLowerCase();
   if (!ownerConfirmed.has(id)) {
     try {
-      const soft = await require('./edgeSoftKey').SoftKeyEdge.open();
-      const fresh = soft ? store(await soft.statement(s.nametag)) : null;
+      /*
+       * the Edge source already open when the caller has one (SoftKeyEdge.takeShared, Pixel 2026-10-29): opening another
+       * runs takeShared again, which asks this again - a loop that never returned and asked the key on every turn
+       */
+      const src = soft ?? await require('./edgeSoftKey').SoftKeyEdge.open();
+      const fresh = src ? store(await src.statement(s.nametag)) : null;
       if (!fresh || `${fresh.ownerKey}.${fresh.ownerKeyPq}`.toLowerCase() !== id) {
         console.log("[edge] the stored owner key is not this key's - not used");
         return null;

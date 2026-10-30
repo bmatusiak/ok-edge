@@ -40,13 +40,13 @@ const saidShared = new Map<string, string>();
  * checkpoint. No key request; a log that does not check is kept apart with its warning. Once per log per change.
  */
 const takenOther = new Set<string>();
-async function takeOtherLogs(ownIdHex: string): Promise<void> {
+async function takeOtherLogs(ownIdHex: string, soft: SoftKeyEdge): Promise<void> {
   const {tradeBucket} = require('./bucketStore');
   const {logblocks, copyfile} = require('node-onlykey-lib/edge');
   const open = tradeBucket();
   if (!open) return;
   /* judged only under this device's owner key (its own nametag statement): none yet - nothing marked, asked again later */
-  if (!(await require('./edgeDevices').ownerKey())) {
+  if (!(await require('./edgeDevices').ownerKey(soft))) {
     if (saidShared.get('others') !== 'no owner key') { saidShared.set('others', 'no owner key'); console.log("[edge] other devices' logs: waiting - name this device first (its nametag gives the owner key they are judged by)"); }
     return;
   }
@@ -76,6 +76,7 @@ async function takeOtherLogs(ownIdHex: string): Promise<void> {
   }
 }
 let bucketSharedWhy = '';
+const takingShared = new Set<string>();
 
 /*
  * THIS APP'S OWN LOG INTO THE BUCKET (PROPOSAL-sync-and-identity.md Phase 5; Brad, 2026-10-29: "after login, it gets added
@@ -307,7 +308,18 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * log for this key changed (a later trade brought more): the newest write and the key count say so.
    */
   async takeShared(): Promise<void> {
+    /* one take at a time for a key: a take that started another (through any path back here) waits on nothing */
     const id = toHex(this.deviceId);
+    if (takingShared.has(id)) return;
+    takingShared.add(id);
+    try {
+      await this.takeSharedNow(id);
+    } finally {
+      takingShared.delete(id);
+    }
+  }
+
+  private async takeSharedNow(id: string): Promise<void> {
     let shared: {links: [string, string, string | null][]; openings: unknown[]; notes: any} | null;
     if (shell === 'desktop') {
       if (takenShared.has(id)) return;
@@ -315,7 +327,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       const {desktop} = require('./platform');
       shared = (await desktop.invoke('okedge:sharedLinks', id)) as typeof shared;
     } else {
-      await takeOtherLogs(id).catch((e: any) => console.log(`[edge] other devices' logs: not read - ${String(e?.message ?? e)}`));
+      await takeOtherLogs(id, this).catch((e: any) => console.log(`[edge] other devices' logs: not read - ${String(e?.message ?? e)}`));
       const fromBucket = bucketShared(id);
       /* why nothing was taken, said once each time it changes (every refresh asks; a quiet one says nothing) */
       const why = !fromBucket ? bucketSharedWhy : takenShared.has(`${id}:${fromBucket.mark}`) ? `already taken (${fromBucket.mark})` : null;
