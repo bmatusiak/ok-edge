@@ -22,6 +22,17 @@ runs:
         ref: ${{ inputs.emulator_ref }}
         path: node-onlykey-emulator
 
+    # FIRST, before anything reads the emulator's scripts: scripts/versions/v3.1.0.js requires node-onlykey-lib
+    # (cli/firmware-plugins, since the version_control release recipe) - the pins read below failed with MODULE_NOT_FOUND
+    # and cancelled the release run (2026-10-29)
+    # --ignore-scripts: the emulator is a gypfile package, built later only where it is needed (the firmware job's test
+    # gate runs `npm run rebuild`); here only node-onlykey-lib
+    # (the plugins' applier) resolved from emulator/. The Android build compiles the firmware with the NDK itself.
+    - name: Install the emulator's packages (node-onlykey-lib at its pin)
+      shell: bash
+      working-directory: node-onlykey-emulator/emulator
+      run: npm ci --ignore-scripts --no-audit --no-fund
+
     - name: Checkout the Arduino tree (the compiler and the toolchain Dockerfile)
       uses: actions/checkout@v4
       with:
@@ -44,11 +55,3 @@ runs:
         git -C libraries cat-file -e "${pins% *}^{commit}" || { echo "::error::libraries pin ${pins% *} is not in trustcrypto/libraries"; exit 1; }
         git -C OnlyKey-Firmware cat-file -e "${pins#* }^{commit}" || { echo "::error::OnlyKey-Firmware pin ${pins#* } is not in trustcrypto/OnlyKey-Firmware"; exit 1; }
         echo "pins: libraries ${pins% *}, OnlyKey-Firmware ${pins#* }"
-
-    # --ignore-scripts: the emulator is a gypfile package, built later only where it is needed (the firmware job's test
-    # gate runs `npm run rebuild`); here only node-onlykey-lib
-    # (the plugins' applier) resolved from emulator/. The Android build compiles the firmware with the NDK itself.
-    - name: Install the emulator's packages (node-onlykey-lib at its pin)
-      shell: bash
-      working-directory: node-onlykey-emulator/emulator
-      run: npm ci --ignore-scripts --no-audit --no-fund
