@@ -50,6 +50,16 @@ class FidoGattService : Service() {
 
   override fun onBind(intent: Intent?): IBinder? = null
 
+  /*
+   * The app swiped away from Recents while this runs (Brad, 2026-10-29: the swipe is the app ending, "as if it was a
+   * force stop"; NativeOkEmuModule.endOnSwipeAway ends the process for the main activity). Here too, should the
+   * activity's callback not come: no security key without the app, and nothing restarts it (not sticky, below).
+   */
+  override fun onTaskRemoved(rootIntent: Intent?) {
+    stopSelf()
+    android.os.Process.killProcess(android.os.Process.myPid())
+  }
+
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     ensureChannel()
     val notification = build()

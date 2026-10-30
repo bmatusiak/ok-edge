@@ -25,6 +25,10 @@ class NativeOkEmuModule(
   private val reactContext: ReactApplicationContext,
 ) : NativeOkEmuSpec(reactContext), OkEmuNative.Listener {
 
+  init {
+    endOnSwipeAway(reactContext.applicationContext as android.app.Application)
+  }
+
   /**
    * start/stop and every write are serialised here. nativeStart() spawns the
    * firmware thread and nativeStop() tears down its HAL; interleaving those
@@ -536,6 +540,36 @@ class NativeOkEmuModule(
   }
 
   companion object {
+    /*
+     * SWIPED AWAY FROM RECENTS = THE APP IS OVER (Brad, 2026-10-29: "the swipe away should be the same as logout, killing
+     * all background and foreground service, so it acts as if it was a force stop"; "the swipe away should not start the
+     * process back up"; "if the app is in recents and not swiped away, then the app can run in background as a security
+     * key"). Left in Recents, the main activity is only stopped: the process, the soft key and the security-key service
+     * go on. Swiped away, it is FINISHING: the process ends here - the soft key's firmware thread, the services and the
+     * unlocked key with it - and nothing restarts it (the service is not sticky); the next open is a fresh process at
+     * the login screen. Not on a rotation (changing configurations) or when Android reclaims a stopped activity (not
+     * finishing), and only for the main activity: the QR scanner or a passkey screen finishing is not the app ending.
+     * Registered once per process (a JS reload makes a new module, not a new process).
+     */
+    @Volatile @JvmStatic private var swipeWatch = false
+    @JvmStatic fun endOnSwipeAway(app: android.app.Application) {
+      if (swipeWatch) return
+      swipeWatch = true
+      app.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+        override fun onActivityDestroyed(activity: android.app.Activity) {
+          if (activity.javaClass.simpleName != "MainActivity" || !activity.isFinishing || activity.isChangingConfigurations) return
+          android.util.Log.i("okemu", "the app was swiped away: ending the process (the soft key, the services) - no restart")
+          try { app.stopService(Intent(app, com.okrn.fido.FidoGattService::class.java)) } catch (_: Throwable) {}
+          android.os.Process.killProcess(android.os.Process.myPid())
+        }
+        override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {}
+        override fun onActivityStarted(activity: android.app.Activity) {}
+        override fun onActivityResumed(activity: android.app.Activity) {}
+        override fun onActivityPaused(activity: android.app.Activity) {}
+        override fun onActivityStopped(activity: android.app.Activity) {}
+        override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
+      })
+    }
     /** the splash has played in this process (a JS reload keeps native memory) */
     @Volatile @JvmStatic private var splashDone = false
     /** the folder the firmware runs on, kept across a JS reload (net.ts reads it back) */
