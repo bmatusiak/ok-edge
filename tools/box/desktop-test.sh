@@ -3,8 +3,10 @@
 # Stops a running one first (by its PIDs, never a pattern that is also in this script's caller).
 source ~/.nvm/nvm.sh >/dev/null
 cd ~/project/onlykey/ok-edge || exit 1
-for p in $(pgrep -x electron) $(pgrep -f '^node electron/start.js'); do kill "$p" 2>/dev/null; done
-sleep 2
+old="$(pgrep -x electron) $(pgrep -f '^node electron/start.js')"
+for p in $old; do kill "$p" 2>/dev/null; done
+# gone before the new one starts: a closing one still holds the DevTools port and the window singleton (a fixed 2 s was not enough)
+for _ in $(seq 1 30); do alive=""; for p in $old; do kill -0 "$p" 2>/dev/null && alive=1; done; [ -z "$alive" ] && break; sleep 0.5; done
 export OKEDGE_NODE="$(which node)"
 export OKEDGE_CLI="$HOME/project/onlykey/node-onlykey-lib/cli/index.js"
 export DISPLAY=:10
