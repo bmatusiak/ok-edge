@@ -104,10 +104,17 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         const held = await (identity as any).load();
         const derives = [...(await bucketLabelsOf(read.identity)), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
         /* filed as this app's own budget: the Edge tab's history lists the login, its copy checks the login's links */
-        await (identity as any).login(async () => {
+        const logged = await (identity as any).login(async () => {
           await open();
           if (!keyKept) await proofMaterial();
         }, {reason: loginReason(), derives, signs, onPress: () => setOpen({kind: 'press'}), ...SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`)});
+        /*
+         * NO LOGIN BUDGET, SAID (Brad, 2026-10-30, key 3 in the web app: "it made me press 3 different things for login
+         * (not using edge to login)"): with no Edge on the key, or a firmware without the login budget (it refuses a
+         * derive scope), the lib logs in as before - each derive and signature asks on its own. Said here, so the
+         * presses are not a mystery.
+         */
+        if (!logged?.budget && derives.length + signs > 1) console.log(`[identity] ${read.identity.slice(0, 12)}: no login budget on this key (no Edge, or its firmware has none) - ${derives.length + signs} requests asked one by one`);
       }
       /* chosen: this login kept for the tab's next load (the bucket's secret, encrypted - webSession.ts) */
       if (stay && read.kind === 'read') {

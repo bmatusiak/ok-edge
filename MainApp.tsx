@@ -27,6 +27,7 @@ import {useFidoGatt, type FidoSession} from './src/hooks/useFidoGatt';
 import {getOnlyKey} from './src/onlykey';
 import type {Backend} from './src/hooks/keySession';
 import {useTestingMode} from './src/hooks/useTestingMode';
+import {useKeyIdentity} from './src/keyIdentity';
 import NativeShare from 'okedge-native/specs/NativeShare';
 import {setTestingMode} from './src/debugGuard';
 import {useWipeOnLock} from './src/hooks/useWipeOnLock';
@@ -260,6 +261,9 @@ function Shell() {
 
   const hid = useUsbHid({log: usbLog.log});
   const testing = useTestingMode();
+  /* the key in use answered as an Edge key at the identity check: its Edge tab shows on every platform (src/features/core.tsx edge) */
+  const keyId = useKeyIdentity();
+  const keyHasEdge = keyId?.kind === 'read' && !!keyId.edgeIdentity;
   /* testing mode: the soft key's firmware console also goes to logcat (useOkEmu) */
   useEffect(() => {
     setFirmwareConsoleToLogcat(testing.enabled);
@@ -515,7 +519,7 @@ function Shell() {
      * must not come back through here - the render's last branch IS the
      * Testing screen, and this would walk round its gate.
      */
-    const valid: readonly string[] = shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed}).map(x => x.name);
+    const valid: readonly string[] = shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed, keyHasEdge}).map(x => x.name);
     void takeResumeTab(valid).then(remembered => {
       if (remembered) setTab(remembered as Tab);
     });
@@ -706,7 +710,7 @@ function Shell() {
 
   /* testing mode before the identity check: only This Key and Testing are shown - any other tab goes to Testing */
   useEffect(() => {
-    if (testing.enabled && !passed && phase === 'main' && !shownTabs({testing: true, testingLocked: true}).some(x => x.name === tab)) setTab('Testing');
+    if (testing.enabled && !passed && phase === 'main' && !shownTabs({testing: true, testingLocked: true, keyHasEdge}).some(x => x.name === tab)) setTab('Testing');
   }, [testing.enabled, passed, phase, tab]);
 
   const ready = phase === 'main';
@@ -1034,7 +1038,7 @@ function Shell() {
 
         <Drawer
           open={drawer && ready}
-          tabs={shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed}).map(x => x.name)}
+          tabs={shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed, keyHasEdge}).map(x => x.name)}
           value={tab}
           onChange={setTab}
           onClose={() => setDrawer(false)}

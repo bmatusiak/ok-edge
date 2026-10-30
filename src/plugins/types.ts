@@ -66,6 +66,8 @@ export type TabState = {
   testing: boolean;
   /** testing mode with the key still locked: only the tabs marked inLockedTesting */
   testingLocked: boolean;
+  /** the key in use answered as an Edge key at the identity check (its Edge identity read) - hard or soft, on any platform */
+  keyHasEdge: boolean;
 };
 
 /** Given to a plugin's watch, mounted once with the app whether its tab is shown or not. */

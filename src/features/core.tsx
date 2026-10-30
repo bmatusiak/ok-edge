@@ -138,8 +138,9 @@ function SlotsTab({ctx}: {ctx: TabContext}) {
 export const slots = tabPlugin({name: 'Slots', order: ORDER.Slots, hidden: true, render: ctx => <SlotsTab ctx={ctx} />});
 
 /*
- * EDGE. On the phone and the web app: whenever the soft key carries the Edge firmware plugin (OKEMU_PLUGINS=edge), else
- * in testing mode (the FAKE key). On the desktop always - it hosts the hard key's Edge (useEdge), whatever its bundled
+ * EDGE. On the phone and the web app: whenever THE KEY IN USE is an Edge key - it answered with its Edge identity at the
+ * identity check (Brad, 2026-10-30: key 3 in the web app showed no Edge tab - the rule asked only whether the SOFT key
+ * carries the Edge firmware plugin, and a browser has no soft key) - or the soft key carries the plugin, or testing mode. On the desktop always - it hosts the hard key's Edge (useEdge), whatever its bundled
  * soft key has (list.desktop.ts: `always`).
  *
  * Its navigation is its own: a tapped Edge alarm opens it on that link (on launch and on every return to the app), a
@@ -173,7 +174,7 @@ const edgeWatch = (always: boolean): AppWatch => function EdgeWatch({openTab}) {
 };
 export const edge = ({always}: {always: boolean}) => tabPlugin({
   name: 'Edge', order: ORDER.Edge,
-  when: always ? undefined : s => s.testing || hasSoftKeyPlugin('edge'),
+  when: always ? undefined : s => s.testing || s.keyHasEdge || hasSoftKeyPlugin('edge'),
   render: ctx => <EdgeTab ctx={ctx} />,
 }, edgeWatch(always));
 
