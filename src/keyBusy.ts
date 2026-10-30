@@ -132,7 +132,11 @@ export function noteTunnel(e: TunnelEvent) {
   if (!showTimer) {
     showTimer = setTimeout(() => {
       showTimer = null;
-      if (inFlight && latest) set(latest);
+      /*
+       * a RUN of requests that lasts, not only one: straight to the key each request is quick (well under SHOW_AFTER_MS on
+       * the phone's soft key), but a sync is dozens back to back - still in one (inFlight) or between two (hideTimer)
+       */
+      if (latest && (inFlight || hideTimer)) set(latest);
     }, SHOW_AFTER_MS);
   }
 }
