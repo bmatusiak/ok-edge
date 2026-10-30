@@ -188,8 +188,13 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       ...(backend === 'usb' && shell === 'webapp'
         ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname]}}
         : {}),
+      /*
+       * the Windows desktop, as the web app: the page's own host for both rpIds. It runs at the key's site once the key
+       * named one (electron/main.js) - apps.crp.to before that - and a tunnel naming apps.crp.to from the key's site was
+       * refused by WebAuthn ("will not assert rpId apps.crp.to from this page's origin", 2026-10-30).
+       */
       ...(backend === 'usb' && shell === 'desktop' && /Windows/.test(navigator.userAgent)
-        ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials})}}
+        ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname]}}
         : {}),
     };
 
