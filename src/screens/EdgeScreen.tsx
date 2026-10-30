@@ -28,7 +28,7 @@ import {consentRefusal} from '../debugGuard';
 import {YourDevicesCard} from '../ui/YourDevicesCard';
 import {ReviewSheet} from '../ui/ReviewSheet';
 import {useYourDevices, type DeviceLink, type YourDevice} from '../hooks/useYourDevices';
-import {bannerLine, onDevicesChanged, waitingCount} from '../edgeDevices';
+import {bannerLine, nametagOr, onDevicesChanged, waitingCount} from '../edgeDevices';
 import {EdgeAgentsCard} from '../ui/EdgeAgentsCard';
 import {AgentsCard} from '../ui/AgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
@@ -201,7 +201,7 @@ function WaitingReceipt({seq, since, edge}: {seq: number; since?: number; edge?:
 /* R28: how many debts a continue link carried, in words */
 const debtsLine = (n: number) => (n === 0 ? 'No debts carried over.' : `${n} debt${n === 1 ? '' : 's'} carried over - still owed here.`);
 
-const deviceName = (d: YourDevice) => d.nametag ?? `Device ${d.deviceId.slice(0, 8)}…`;
+const deviceName = (d: YourDevice) => nametagOr(d.nametag);
 
 /* one link of another device of yours, as this phone holds it - its own ring colour, its nametag, when this phone got it (2026-10-08) */
 function DeviceRow({device: c, link: l}: {device: YourDevice; link: DeviceLink}) {
@@ -1013,7 +1013,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
     items.push({key: 's-past', kind: 'section', title: 'Past budgets', right: `${history.length}`});
     for (const b of history) {
       items.push({key: b.deviceId ? `o${b.deviceId}-${b.grantId}` : `p${b.grantId}`, kind: 'node', bare: true, render: () => (
-        <BudgetBlock b={b} status={budgetStatus(b, false, b.deviceId ? edge.deviceViews[b.deviceId] ?? null : edge.view)} device={b.deviceId ? b.device : edge.ownName} onPress={() => setOpen(b)} />
+        <BudgetBlock b={b} status={budgetStatus(b, false, b.deviceId ? edge.deviceViews[b.deviceId] ?? null : edge.view)} device={b.deviceId ? b.device : nametagOr(edge.ownName)} onPress={() => setOpen(b)} />
       )});
     }
   }

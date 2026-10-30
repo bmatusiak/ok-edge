@@ -11,7 +11,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, View} from 'react-native';
 import {grants} from 'node-onlykey-lib/edge';
-import {deviceName, ensureNametag, forgetDevice, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
+import {deviceName, refreshNametag, forgetDevice, nametagOr, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {useYourDevices} from '../hooks/useYourDevices';
 import {Btn, Section} from './components';
@@ -29,11 +29,11 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
   const [confirming, setConfirming] = useState<string | null>(null);
   const devices = useYourDevices(headSeq);
   const [devName, setDevName] = useState('');
-  /* the device name is the nametag until one is set by hand (Brad, 2026-10-08) */
+  /* the probed device name is only offered in the dialog: the person keeps it or types their own (Brad, 2026-10-30) */
   const load = useCallback(async () => {
     setOwn(await ownStatement());
     setDevName(await deviceName());
-    const s = await ensureNametag(await SoftKeyEdge.open().catch(() => null));
+    const s = await refreshNametag(await SoftKeyEdge.open().catch(() => null));
     if (s) setOwn(s);
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -58,8 +58,7 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
   return (
     <>
       <Section title={`This ${DEVICE_WORD}`}>
-        {/* while the default is being signed, the device name it will be - never a bare 'No nametag yet' to tap at (2026-10-08) */}
-        <Text style={styles.op}>{own ? own.nametag : devName ? `${devName} (signing…)` : 'No nametag yet'}</Text>
+        <Text style={styles.op}>{nametagOr(own?.nametag)}</Text>
         {own ? <Text style={styles.dim}>{`Device ${short(own.deviceId)}`}</Text> : null}
         <Text style={styles.dim}>{`Your other devices see this ${DEVICE_WORD} by its nametag. The key signs it; no press.`}</Text>
         {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
@@ -71,7 +70,7 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
         {!devices.length ? <Text style={styles.dim}>None yet. A computer's sync brings your other devices' logs; you approve each from the banner at the top of this tab.</Text> : null}
         {devices.map(d => (
           <View key={d.deviceId} style={styles.item}>
-            <Text style={styles.op}>{d.nametag ?? `Device ${short(d.deviceId)}`}</Text>
+            <Text style={styles.op}>{nametagOr(d.nametag)}</Text>
             {d.previously.length ? <Text style={styles.dim}>{`Previously: ${d.previously.join(', ')}`}</Text> : null}
             <Text style={styles.dim}>{`Device ${short(d.deviceId)}${d.mergedUpTo !== null ? ` · merged up to #${d.mergedUpTo}` : ''}${d.mergedAt ? ` · ${new Date(d.mergedAt).toLocaleString()}` : ''}`}</Text>
             {confirming === d.deviceId ? (
@@ -91,6 +90,8 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
           <View style={styles.dialog}>
             <Text style={styles.op}>{`This ${DEVICE_WORD}'s nametag`}</Text>
             <Text style={styles.dim}>{`A name or a tag your other devices will see for this ${DEVICE_WORD}.`}</Text>
+            {/* the offer: what this device calls itself, filled in - Save keeps it, or type your own */}
+            {!own && devName ? <Text style={styles.dim}>{`This ${DEVICE_WORD} calls itself "${devName}" - keep it or type your own.`}</Text> : null}
             <TextInput style={styles.input} value={draft} onChangeText={setDraft} placeholder={devName || 'a name or a tag'} placeholderTextColor={theme.textDim} maxLength={64} autoFocus />
             {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
             <View style={styles.row}>

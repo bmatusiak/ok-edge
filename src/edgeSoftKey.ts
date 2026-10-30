@@ -296,24 +296,14 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     soft.backend = backend;
     /* "this device" for the statements (edgeDevices: one per device id) is the key the app opened just now */
     require('./edgeDevices').setCurrentDevice(toHex(deviceId), backend);
-    /*
-     * THE DEFAULT NAMETAG, MADE EARLY (Brad, 2026-10-08: "i still had to click change name tag"):
-     * the first time the app reaches the key after login (the background sync does, within
-     * seconds), a phone with no nametag signs its device name - so it is there before anyone
-     * opens Edge Management. Once per phone; a nametag set by hand is never replaced.
-     */
-    void require('./edgeDevices').ensureNametag(soft).catch(() => undefined);
+    /* a nametag the person set, signed again for this chain when it went stale (edgeDevices refreshNametag; none is made here) */
+    void require('./edgeDevices').refreshNametag(soft).catch(() => undefined);
     await soft.takeShared().catch((e: any) => console.log(`[edge] shared records: not read - ${String(e?.message ?? e)}`));
     return soft;
   }
 
   /*
-   * ON THE DESKTOP, THE KEY'S OLDER LINKS COME FROM THIS COMPUTER'S SHARED RECORDS (~/.onlykey-js):
-   * a hard key holds only its newest links, and what the CLI picked up before is there. Offered
-   * the way a computer offers links to a phone, under the same rules (edgeStore.takeOwnLinks).
-   * Once per key per app run: later links the tab reads from the key itself.
-   *
-   * EVERYWHERE ELSE, FROM THE IDENTITY BUCKET (PROPOSAL-sync-and-identity.md Phase 2; Brad, 2026-10-29: "plugin my live
+   * THE KEY'S OLDER LINKS, FROM THE IDENTITY BUCKET ON EVERY PLATFORM (PROPOSAL-sync-and-identity.md Phase 2; Brad, 2026-10-29: "plugin my live
    * key, and see budget history over in the webapp from the cli"): the CLI files each device's log in the bucket's
    * `edge-logs` store as blocks (lib edge/src/logblocks.js), a trade brings them here, and this key's own log is taken
    * the same way - nothing is asked of the key for them that the take does not ask anyway. Again only when the bucket's

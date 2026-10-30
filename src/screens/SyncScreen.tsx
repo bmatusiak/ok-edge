@@ -87,7 +87,7 @@ function IdentityPanel() {
     {label: 'chain', value: netTag() ? 'testnet' : 'live'},
     {label: 'bucket identity', value: read?.kind === 'read' ? read.identity : read ? 'could not read' : 'not read yet'},
     {label: 'open bucket', value: open ? `${open.identity} (${open.kind === 'kept' ? 'kept on this computer' : 'sealed'})` : 'none open', warn: !!differs},
-    ...(read?.kind === 'read' && read.edgeIdentity ? [{label: 'this device', value: read.nametag ? `"${read.nametag}"` : 'no nametag yet'}] : []),
+    ...(read?.kind === 'read' && read.edgeIdentity ? [{label: 'this device', value: read.nametag ? `"${read.nametag}"` : 'UNNAMED - set its nametag in Edge Management'}] : []),
     ...(read ? [{label: 'read', value: when(read.at)}] : []),
   ];
   return (

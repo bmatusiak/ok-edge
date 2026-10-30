@@ -165,7 +165,17 @@ export async function setNametag(soft: {statement(nametag: string): Promise<any>
   return s;
 }
 
-/** The phone's own device name (its Bluetooth name, e.g. "Bradley's A13"), or '' when it cannot be read. */
+/*
+ * WHAT A DEVICE WITHOUT A NAMETAG IS CALLED, everywhere Edge names a device (Brad, 2026-10-30: "edge should only use
+ * NAMETAGS, it should show up as UNNAMED if not") - never a device id, a platform word or a probed name in its place.
+ */
+export const UNNAMED = 'UNNAMED';
+export const nametagOr = (nametag: string | null | undefined) => nametag || UNNAMED;
+
+/**
+ * The phone's own device name (its Bluetooth name, e.g. "Bradley's A13"), or '' when it cannot be read. Only ever
+ * OFFERED: the nametag dialog fills it in for the person to keep or change (YourDevicesCard) - never signed by itself.
+ */
 export async function deviceName(): Promise<string> {
   try {
     const NativeBtKeyboard = require('okedge-native/specs/NativeBtKeyboard').default;
@@ -176,12 +186,15 @@ export async function deviceName(): Promise<string> {
 }
 
 /**
- * THE DEFAULT NAMETAG (Brad, 2026-10-08: "use device name as default unless explicitly
- * changed there in nametag input"): a phone with no nametag yet signs one with its device
- * name the first time one is needed - the drawer opening, or a computer asking for its log.
- * A nametag set by hand is never replaced. -> this phone's statement, or null (no key, no name)
+ * THE NAMETAG THE PERSON SET, KEPT CURRENT -> this device's statement, or null (none set, or no key).
+ *
+ * THE PERSON SETS IT, NOTHING ELSE DOES (Brad, 2026-10-30: "if a nametag is unset for the edge key, dont set the
+ * device name based on probing, the user set the nametag"): a device with no nametag stays without one - UNNAMED -
+ * until the person sets it in Edge Management, where the probed device name is offered to keep or replace. (Until
+ * then the phone signed its Bluetooth name as a default the first time one was needed - 2026-10-08 - and a hard key
+ * was left unnamed; now every key is the same.) Only an existing nametag is signed again here, below.
  */
-export async function ensureNametag(soft: {statement(nametag: string): Promise<any>; deviceId?: Uint8Array; backend?: string} | null): Promise<StoredStatement | null> {
+export async function refreshNametag(soft: {statement(nametag: string): Promise<any>; deviceId?: Uint8Array; backend?: string} | null): Promise<StoredStatement | null> {
   const have = await ownStatement(soft?.deviceId ? toHex(soft.deviceId) : currentDevice);
   /*
    * A STATEMENT FOR ANOTHER CHAIN IS SIGNED AGAIN (2026-10-08, walking the setup flow): after the
@@ -202,16 +215,7 @@ export async function ensureNametag(soft: {statement(nametag: string): Promise<a
       return null;
     }
   }
-  if (have || !soft) return have;
-  /* only the phone's own soft key takes the phone's name: a hard key is another device, named by the person */
-  if (soft.backend === 'usb') return null;
-  const name = await deviceName();
-  if (!name) return null;
-  try {
-    return await setNametag(soft, name);
-  } catch {
-    return null;
-  }
+  return have;
 }
 
 /* ------------------------------------------------ your devices */
