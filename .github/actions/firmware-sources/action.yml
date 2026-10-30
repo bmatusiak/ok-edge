@@ -16,7 +16,7 @@ runs:
   using: composite
   steps:
     - name: Checkout the emulator at the recorded commit
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: bm-ok/node-onlykey-emulator
         ref: ${{ inputs.emulator_ref }}
@@ -34,7 +34,7 @@ runs:
       run: npm ci --ignore-scripts --no-audit --no-fund
 
     - name: Checkout the Arduino tree (the compiler and the toolchain Dockerfile)
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: bm-ok/arduino-1.6.5-r5-teensy_127
         path: arduino-1.6.5-r5-teensy_127

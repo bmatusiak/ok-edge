@@ -107,7 +107,7 @@ jobs:
       ref: ${{ steps.v.outputs.ref }}
     steps:
       - name: Checkout ok-edge
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ok-edge
           fetch-depth: 0
@@ -173,14 +173,14 @@ jobs:
     steps:
       # fetch-depth 0: the APK's versionCode is 1000 + main's commit count (modules/okedge-native/app.plugin.js)
       - name: Checkout ok-edge
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ok-edge
           # the release commit (the version bump), not the push's latest
           ref: ${{ needs.trigger.outputs.ref }}
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -215,7 +215,7 @@ jobs:
 
       # build-hardkey.sh reads Intel HEX with its lib/flash.js (no packages needed for that)
       - name: Checkout the test kit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: bm-ok/onlykey-testing
           path: onlykey-testing
@@ -231,7 +231,7 @@ jobs:
         run: node ok-edge/tools/firmware.js ci-build --out out --src "$GITHUB_WORKSPACE" --kit onlykey-testing
 
       - name: Upload the firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: firmware
           path: out/firmware/
@@ -259,11 +259,11 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout ok-edge
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ok-edge
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -282,7 +282,7 @@ jobs:
           emulator_ref: ${{ steps.rec.outputs.emulator }}
 
       - name: Checkout the test kit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: bm-ok/onlykey-testing
           path: onlykey-testing
@@ -339,7 +339,7 @@ jobs:
 
       - name: Upload the test gate's logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: okt-gate-${{ github.run_id }}
           path: |
@@ -362,7 +362,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout ok-edge
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ok-edge
           # the release commit (the version bump), not the push's latest
@@ -371,16 +371,16 @@ jobs:
 
       # package.json: "test-moniker": "file:../test-moniker"
       - name: Checkout test-moniker
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: bmatusiak/test-moniker
           path: test-moniker
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -393,7 +393,7 @@ jobs:
 
       # the hex just built, into firmware/ - the Gradle task stageDeveloperFirmware puts it in the APK's assets
       - name: The hexes into firmware/
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: firmware
           path: ok-edge/firmware
@@ -460,7 +460,7 @@ jobs:
             --tag "$TAG" --version "$VERSION" --version-code "$CODE" --commit "${{ needs.firmware.outputs.ref }}" --out out/manifest.json
 
       - name: Upload the APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: android
           path: out/
@@ -492,20 +492,20 @@ jobs:
         shell: bash
     steps:
       - name: Checkout ok-edge
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ok-edge
           # the release commit (the version bump), not the push's latest
           ref: ${{ needs.firmware.outputs.ref }}
 
       - name: Checkout test-moniker
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: bmatusiak/test-moniker
           path: test-moniker
 
       # this Node is packaged too: the soft key's native module is built for it (tools/release/desktop-package.js)
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -551,7 +551,7 @@ jobs:
           echo "desktop (${{ matrix.name }}): $(ls out | grep -v json)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: desktop-${{ matrix.name }}
           path: out/
@@ -559,7 +559,7 @@ jobs:
 
       # its manifest alone as well: the web app takes only that, not the package
       - name: Upload its manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: desktop-manifest-${{ matrix.name }}
           path: out/desktop-${{ matrix.name }}.json
@@ -580,24 +580,24 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout ok-edge
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ok-edge
           # the release commit (the version bump), not the push's latest
           ref: ${{ needs.firmware.outputs.ref }}
 
       - name: Checkout test-moniker
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: bmatusiak/test-moniker
           path: test-moniker
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: The hexes into firmware/
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: firmware
           path: ok-edge/firmware
@@ -608,13 +608,13 @@ jobs:
         run: node tools/firmware.js prod-only firmware
 
       - name: The APK's manifest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: android
           path: android-out
 
       - name: The desktop packages' manifests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: desktop-manifest-*
           path: desktop-out
@@ -657,7 +657,7 @@ jobs:
         run: node tools/release/cloudflare-site.js --docs docs --worker worker-out --out ../site --commit "${{ needs.firmware.outputs.ref }}" --tag "${{ needs.firmware.outputs.tag }}"
 
       - name: Upload the site
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: site
           path: site/
@@ -686,11 +686,11 @@ jobs:
       # the commit released: the one the trigger named (the pushed commit)
       RELEASE_SHA: ${{ needs.trigger.outputs.ref }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: artifacts
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
