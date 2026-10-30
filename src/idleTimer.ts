@@ -24,6 +24,8 @@ declare const sessionStorage: any;
 const devIdle = (() => { try { return __DEV__ && typeof sessionStorage !== 'undefined' ? Number(sessionStorage.getItem('okedge-idle-ms')) || 0 : 0; } catch { return 0; } })();
 export const IDLE_MS = devIdle > 0 ? devIdle : 15 * 60 * 1000;
 export const ENABLED = shell === 'webapp';
+/* how long the idle check waits for the key's answer before it counts as no answer */
+const CHECK_MS = 15000;
 
 let running = false;
 let lastActive = Date.now();
@@ -73,7 +75,20 @@ async function expire(): Promise<void> {
   let answered = false;
   try {
     const {okcrypto} = await getOnlyKey(activeBackend());
-    await (okcrypto as any).keySite({timeoutMs: 15000});
+    /*
+     * ITS OWN DEADLINE (box, 2026-10-29: a locked key over WebAuthn never failed the request - the browser kept waiting,
+     * the bar said "checking the key" for minutes and nobody was logged out). No answer in CHECK_MS is the key not
+     * answering; the log-out's reload ends the request still waiting in the browser.
+     */
+    let late: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        (okcrypto as any).keySite({timeoutMs: CHECK_MS}),
+        new Promise((_, reject) => { late = setTimeout(() => reject(new Error(`no answer in ${CHECK_MS / 1000} s`)), CHECK_MS + 5000); }),
+      ]);
+    } finally {
+      if (late) clearTimeout(late);
+    }
     answered = true;
   } catch (e) {
     console.log(`[idle] ${Math.round(IDLE_MS / 60000)} minute(s) with nothing done, and the key did not answer (${String((e as Error)?.message ?? e)}) - logging out`);
