@@ -5,6 +5,7 @@ import {theme} from './theme';
 import {DEVICE_WORD} from '../platform';
 import {useActiveKey} from '../hooks/KeyContext';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
+import {CLIPBOARD_TTL_MS} from './sensitive';
 
 /**
  * What is in the vault, and what can be done to it without opening anything.
@@ -33,8 +34,6 @@ const POLICIES = ['always', 'session:30m', 'session:8h', 'startup'] as const;
 
 type Policy = (typeof POLICIES)[number];
 
-/** How long a copied secret stays on the clipboard. CryptoScreen's figure. */
-const CLIPBOARD_TTL_MS = 45000;
 
 type Row = {
   serviceId: string;

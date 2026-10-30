@@ -23,6 +23,7 @@ import {
 import {KeyChainWizard, WIZARD_SAVE_KEY} from './keychain/KeyChainWizard';
 import {KeyChainRemove} from './keychain/KeyChainRemove';
 import {AdoptComposite} from './keychain/AdoptComposite';
+import {CLIPBOARD_TTL_MS} from '../ui/sensitive';
 
 /*
  * KEY CHAIN - generate, keep track of, derive and export keys (owner,
@@ -78,7 +79,6 @@ const COPIES_KEY = 'okrn.keychain.copies';
 const PGP_TODO_KEY = 'okrn.keychain.pgpTodo';
 type PgpTodo = {userId: string; signSlot: number; ecdhSlot: number; tag: string | null};
 type Copy = {id: string; title: string; file: string; mime: string; text: string; made: string; where: string};
-const CLIPBOARD_TTL_MS = 45000;
 
 /* Which ways of adding each panel offers. */
 type AddPath = 'In the Key' | 'In the App' | 'Derive' | 'Import PGP key';

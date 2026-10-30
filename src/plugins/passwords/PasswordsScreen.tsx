@@ -25,6 +25,7 @@ import type {Manager} from './stores';
 import type {DeriveOkcrypto} from './innerKeys';
 import type {PhraseOkcrypto} from './usePasswordManager';
 import {SHOW_SCROLLBARS, shell} from '../../platform';
+import {CLIPBOARD_TTL_MS} from '../../ui/sensitive';
 
 /*
  * THE PASSWORDS TAB. The list opens with the store key (stores.ts: the key's touchless derive) - by
@@ -36,7 +37,6 @@ import {SHOW_SCROLLBARS, shell} from '../../platform';
  * phone's own Back goes back too, as Settings and Edge's budget view do.
  */
 
-const CLIPBOARD_TTL_MS = 45000;
 /* the kind filter's labels, and the entry kind each picks */
 const KIND_FILTERS = ['All', 'Logins', 'Notes', 'Cards', 'Codes', 'Phrases'] as const;
 type KindFilter = (typeof KIND_FILTERS)[number];

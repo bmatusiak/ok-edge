@@ -15,6 +15,7 @@ import {ListEditor, type ListRow} from '../../ui/ListEditor';
 import {ExchangeSheet, type SwapStart} from './ExchangeSheet';
 import {isInvite, onInvite, takeInvite} from './swapNative';
 import {readMyName, readOffered, saveMyName, setOffered} from './service';
+import {CLIPBOARD_TTL_MS} from '../../ui/sensitive';
 
 /*
  * GUEST BOOK (onlykey-edge/features/GUEST-BOOK-SPEC.md): other people's PUBLIC keys, laid out like
@@ -26,7 +27,6 @@ import {readMyName, readOffered, saveMyName, setOffered} from './service';
  * public output") - the lib refuses one at every way in, and says so.
  */
 
-const CLIPBOARD_TTL_MS = 45000;
 /* the QR is drawn at the screen's real width in pixels, so it stays sharp shown full width */
 const qrPixels = () => Math.min(2048, Math.round(Dimensions.get('window').width * PixelRatio.get()));
 

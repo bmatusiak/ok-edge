@@ -13,6 +13,7 @@ import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {useSecureScreen} from '../hooks/useSecureScreen';
 import type {EmuSession} from '../hooks/useOkEmu';
 import {DEVICE_WORD, SHOW_SCROLLBARS} from '../platform';
+import {CLIPBOARD_TTL_MS, REVEAL_MS} from '../ui/sensitive';
 
 /*
  * Secrets the key DERIVES rather than stores.
@@ -60,14 +61,9 @@ const KEY_TYPES = [
   {name: 'Curve25519', type: 3},
 ];
 
-/** How long a copied secret stays on the clipboard. */
-const CLIPBOARD_TTL_MS = 45000;
-
 /** How often expired vault sessions are swept. The web app's figure. */
 const REAP_MS = 30000;
 
-/** Long enough to notice, short enough not to be left on screen. */
-const REVEAL_MS = 15000;
 
 /*
  * The library's own encoders, not the platform's. Hermes has neither
