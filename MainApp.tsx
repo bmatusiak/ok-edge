@@ -785,7 +785,17 @@ function Shell() {
    * as the keypad does, 200 ms apart (his keypad timing). Only in the testing bar,
    * which is __DEV__ - Metro folds it out of a release bundle, passcode and all.
    */
+  /*
+   * LOG IN, IN THIS RUN (Brad, 2026-10-29, the Pixel: "the login screen never re-appears, it auto tries to login" - on a
+   * fresh process "i see splash, then login"). The app swiped away from Recents leaves its process alive with the soft
+   * key still unlocked, and the next open started a new run of the app straight at the identity check - and the login
+   * it began there could not be pressed. Every run of the app now waits at the login screen until the person logs in
+   * in it (Log in, Login Bypass, Enter testing mode), whatever state the key is in; a run that only went to the
+   * background and came back keeps its login.
+   */
+  const [loggedInThisRun, setLoggedInThisRun] = useState(false);
   const devLogin = useCallback(async () => {
+    setLoggedInThisRun(true);
     for (const button of [1, 2, 3, 4, 5, 6, 1]) {
       keys.soft.press(button);
       await new Promise<void>(r => setTimeout(r, 200));
@@ -1051,6 +1061,7 @@ function Shell() {
     keptGoneOn.current = true;
     console.log('[session] this tab kept its login - going on past the login screen');
     armWebKey();
+    setLoggedInThisRun(true);
     setPhase('pin');
   }, [phase]);
   /* the web app open in other tabs too: warned in each (src/webTabs.ts) */
@@ -1183,7 +1194,7 @@ function Shell() {
      * the PIN but not which identity the key is; then every tab.
      */
     if (testing.enabled) {
-      if (emu.device === 'unlocked' && !awaitingUnlock.current && configMode !== PRE) {
+      if (emu.device === 'unlocked' && !awaitingUnlock.current && configMode !== PRE && loggedInThisRun) {
         setPhase(prev => (prev === 'identity' || (prev === 'main' && passed) ? prev : 'identity'));
       } else {
         if (passed) { setPassed(false); void endSession('the key locked'); }
@@ -1205,7 +1216,7 @@ function Shell() {
      * The fallthrough below returns `prev` for 'pin', so the PIN view simply
      * stays. Pressing the check sets ON and the next run opens the door.
      */
-    if (emu.device === 'unlocked' && configMode !== PRE) {
+    if (emu.device === 'unlocked' && configMode !== PRE && loggedInThisRun) {
       /* a fresh unlock goes through the identity check first; an open app stays open */
       setPhase(prev => (prev === 'main' || prev === 'identity' ? prev : 'identity'));
       return;
@@ -1248,7 +1259,7 @@ function Shell() {
      * 'unlocked' since the PIN landed - so without it the door would never
      * reopen and the check button would look dead.
      */
-  }, [testing.enabled, emu.device, emu.state, configMode, splashDone, webReady, doorKey, passed]);
+  }, [testing.enabled, emu.device, emu.state, configMode, splashDone, webReady, doorKey, passed, loggedInThisRun]);
 
   /* testing mode before the identity check: only This Key and Testing are shown - any other tab goes to Testing */
   useEffect(() => {
@@ -1549,6 +1560,7 @@ function Shell() {
                 if (keys.backend === 'embedded') void keys.soft.ensureStarted('test').then(warnNet('test'));
                 /* on, never toggled: testing mode lasts until the app restarts (Brad, 2026-10-25) */
                 testing.setEnabled(true);
+                setLoggedInThisRun(true);
                 setTab(TESTING_TAB);
               }}
               onContinue={() => {
@@ -1560,6 +1572,7 @@ function Shell() {
                 }
                 /* the web app asks its key nothing until now (useWebKey armWebKey); an unlocked key then goes on to the identity check */
                 if (shell === 'webapp') armWebKey();
+                setLoggedInThisRun(true);
                 // A blank key has no PIN to enter; it needs one chosen.
                 setPhase(emu.device === 'uninitialized' ? 'setup' : 'pin');
               }}
