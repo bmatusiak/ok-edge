@@ -108,6 +108,7 @@ import {appSignature} from './src/appSignature';
 import {pluginTabs, pluginWatches, usePluginsStarted} from './src/plugins';
 import {setFirmwareConsoleToLogcat} from './src/hooks/useOkEmu';
 import {startKeyChainRecorder} from './src/keyChainRecorder';
+import {startLinkStash} from './src/linkStash';
 
 /*
  * 'This Key', not 'Key' and no longer 'Soft Key'.
@@ -708,6 +709,8 @@ function KeyboardState() {
 export default function App() {
   /* every derive the soft key answers goes into the Key Chain list (plugins/key_chain) */
   useEffect(() => startKeyChainRecorder(), []);
+  /* every Edge link the soft key writes, kept as it is written (linkStash: a swipe right after a login lost them) */
+  useEffect(() => startLinkStash(), []);
   return (
     <SafeAreaProvider>
       <Shell />

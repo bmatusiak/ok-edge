@@ -27,6 +27,7 @@ import {activeBackend} from './hooks/KeyContext';
 import {shell} from './platform';
 import OkEmu from './transport/OkEmu';
 import {chainState, evaluate, loadMirror, takeOwnLinks, type EdgeView} from './edgeStore';
+import {keptRun} from './linkStash';
 /* keys whose shared records this app run has offered already (desktop) */
 const takenShared = new Set<string>();
 const saidShared = new Map<string, string>();
@@ -403,6 +404,23 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     for (let s = from; s <= last; s += PICKUP_MAX) {
       const got = await this.edge.pickup(s, Math.min(PICKUP_MAX, last - s + 1));
       for (const l of got) out.push({link: l.link, head: l.head, reveal: l.reveal});
+    }
+    /*
+     * THE LINKS THE KEY NO LONGER HOLDS, from the ones this app kept as the key wrote them (linkStash) - only when the
+     * kept run welds onto the oldest link the key still has: a stash from another chain is never this one's.
+     */
+    if (fromSeq < h.oldest) {
+      const kept = await keptRun(fromSeq, h.oldest - 1);
+      if (kept.length) {
+        const [tie] = from <= last ? [out[0]] : await this.edge.pickup(h.oldest, 1);
+        let ok = kept.every((k, i) => i === 0 || toHex(chain.weld(kept[i - 1].record.head, k.record.link)) === toHex(k.record.head));
+        ok = ok && !!tie && toHex(chain.weld(kept[kept.length - 1].record.head, tie.link)) === toHex(tie.head);
+        if (ok) {
+          console.log(`[edge] read: #${kept[0].seq}-#${kept[kept.length - 1].seq} from the links kept as the key wrote them`);
+          return [...kept.map(k => k.record), ...out];
+        }
+        console.log(`[edge] read: the kept links #${kept[0].seq}-#${kept[kept.length - 1].seq} do not weld onto the key's #${h.oldest} - not used`);
+      }
     }
     return out;
   }
