@@ -47,7 +47,7 @@ async function takeOtherLogs(ownIdHex: string, soft: SoftKeyEdge): Promise<void>
   const open = tradeBucket();
   if (!open) return;
   /* judged only under this device's owner key (its own nametag statement): none yet - nothing marked, asked again later */
-  if (!(await require('./edgeDevices').ownerKey(soft))) {
+  if (!(await require('./edgeDevices').ownerKey())) {
     if (saidShared.get('others') !== 'no owner key') { saidShared.set('others', 'no owner key'); console.log("[edge] other devices' logs: waiting - name this device first (its nametag gives the owner key they are judged by)"); }
     return;
   }
@@ -296,8 +296,6 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     soft.backend = backend;
     /* "this device" for the statements (edgeDevices: one per device id) is the key the app opened just now */
     require('./edgeDevices').setCurrentDevice(toHex(deviceId), backend);
-    /* a nametag the person set, signed again for this chain when it went stale (edgeDevices refreshNametag; none is made here) */
-    void require('./edgeDevices').refreshNametag(soft).catch(() => undefined);
     await soft.takeShared().catch((e: any) => console.log(`[edge] shared records: not read - ${String(e?.message ?? e)}`));
     return soft;
   }

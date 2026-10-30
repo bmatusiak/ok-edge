@@ -10,7 +10,7 @@
  */
 import {useEffect, useState} from 'react';
 import {bucketState} from './bucketStore';
-import {refreshNametag} from './edgeDevices';
+import {ownStatement} from './edgeDevices';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {activeBackend} from './hooks/KeyContext';
 import {getOnlyKey} from './onlykey';
@@ -73,7 +73,7 @@ export async function readKeyIdentity(alive: () => boolean = () => true): Promis
     /* Edge, when the key has it: this device's nametag, and its Edge identity - the identity check shows "this device" only with one */
     const soft = await SoftKeyEdge.open().catch(() => null);
     const edgeIdentity = soft ? (await soft.identityId().catch(() => null))?.toLowerCase() ?? null : null;
-    const statement = soft ? await refreshNametag(soft).catch(() => null) : null;
+    const statement = soft ? await ownStatement().catch(() => null) : null;
     /* asked here so the check's button says what it will do; unknown is treated as the press it may need */
     const bucket = await bucketState(identity).catch(() => 'sealed' as const);
     /*

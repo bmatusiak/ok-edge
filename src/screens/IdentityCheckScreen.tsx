@@ -5,7 +5,7 @@
  * IDENTITY - the key's agent key of the empty label "" (lib bucket-identity; Brad, 2026-10-25: "\"\" is the identity
  * of the key, not tied to edge"), the same on every device restored from one backup, on any OnlyKey since 2.1.0.
  * Everything the app then keeps belongs to it. A key with Edge also shows this device's nametag - Edge's own
- * statement (edgeDevices.refreshNametag), signed by Edge's owner key, a different thing.
+ * statement (edgeDevices.setNametag), signed by Edge's owner key, a different thing.
  *
  * It is also the place to ask the person things before the app opens - pairing a remote, opening a
  * bucket the web app was handed (plan S5/S6). Nothing asked yet: it shows what it read, then Continue.

@@ -20,7 +20,7 @@ import {approve as approveLib, chain, identity as identityLib, note as noteLib, 
 import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {addNote, loadMirror, sync as syncCopy, takeOwnLinks} from './edgeStore';
-import {refreshNametag, receiveLog, loadHeld} from './edgeDevices';
+import {ownStatement, receiveLog, loadHeld} from './edgeDevices';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import {btTransit} from './btTransit';
@@ -314,7 +314,7 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
      * offer this phone's log to your other devices.
      */
     /* this device's nametag, when the person set one (none: no statement, and the computer shows it UNNAMED) */
-    const own = next === null ? await refreshNametag(soft) : null;
+    const own = next === null ? await ownStatement() : null;
     const blocks = next === null ? {
       /* [seq, head, sig, sigPq?]: only the newest seal carries its ML-DSA-65 half (one hybrid anchor per copy, 2026-10-10) */
       seals: (mirror.seals ?? []).map(s => (s.signaturePq ? [s.seq, hex(s.head), hex(s.signature), hex(s.signaturePq)] : [s.seq, hex(s.head), hex(s.signature)])),

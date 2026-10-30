@@ -143,39 +143,17 @@ export async function ownStatement(deviceIdHex: string | null = currentDevice): 
 }
 
 /**
- * This key's owner public keys: the P-256 one (X||Y) and its ML-DSA-65 twin (1952 bytes), as the key gives them when
- * it signs a statement - asked once a session per device (no press, no link), held in memory only.
+ * This key's owner public keys: the P-256 one (X||Y) and its ML-DSA-65 twin (1952 bytes) - from a statement the PERSON
+ * had the key sign this session (setNametag), held in memory only; null until then.
  *
- * THE OWNER KEY IS THE KEY'S, NOT STORAGE'S (Brad, 2026-10-11: "checking every field in a token means nothing if we
- * never check the signature"): every other device's nametag and log is judged against it, so it comes from the key.
- * It does not need a nametag of this device's own (until 2026-10-30 it was read from this device's stored statement,
- * and an UNNAMED device could judge nothing - "name this device first"): the statement asked for here is over the
- * nametag this device has, or the word UNNAMED, and is never kept - only the owner keys it carries are.
+ * NOTHING SIGNS BY ITSELF (Brad, 2026-10-30: "i dont want nametag to auto sign themselves"; "i think you did that as a
+ * fallback"): the statement this asked the key for once a session - over this device's nametag, or the word UNNAMED -
+ * is gone, and with it the automatic re-sign of a stale nametag. The key gives its owner P-256 key only inside a
+ * signed statement, so without one this session there is no owner key, and other devices' logs and nametags wait.
  */
 const owners = new Map<string, {ownerKey: Uint8Array; ownerKeyPq: Uint8Array}>();
-export async function ownerKey(soft?: {statement(nametag: string): Promise<any>} | null): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
-  const dev = currentDevice;
-  if (!dev) return null;
-  const held = owners.get(dev);
-  if (held) return held;
-  try {
-    /*
-     * the Edge source already open when the caller has one (SoftKeyEdge.takeShared, Pixel 2026-10-29): opening another
-     * runs takeShared again, which asks this again - a loop that never returned and asked the key on every turn
-     */
-    const src = soft ?? await require('./edgeSoftKey').SoftKeyEdge.open();
-    if (!src) return null;
-    const st = await src.statement((await ownStatement(dev))?.nametag ?? UNNAMED);
-    if (!(st?.ownerKey?.length && st.ownerKeyPq?.length) || !grantsLib.verifyStatement(st, st.ownerKey, st.ownerKeyPq)) {
-      console.log("[edge] the key's statement does not verify with the owner keys it names - none used");
-      return null;
-    }
-    const o = {ownerKey: st.ownerKey as Uint8Array, ownerKeyPq: st.ownerKeyPq as Uint8Array};
-    owners.set(dev, o);
-    return o;
-  } catch {
-    return null;
-  }
+export async function ownerKey(): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
+  return currentDevice ? owners.get(currentDevice) ?? null : null;
 }
 
 /**
@@ -218,39 +196,6 @@ export async function deviceName(): Promise<string> {
   } catch {
     return '';
   }
-}
-
-/**
- * THE NAMETAG THE PERSON SET, KEPT CURRENT -> this device's statement, or null (none set, or no key).
- *
- * THE PERSON SETS IT, NOTHING ELSE DOES (Brad, 2026-10-30: "if a nametag is unset for the edge key, dont set the
- * device name based on probing, the user set the nametag"): a device with no nametag stays without one - UNNAMED -
- * until the person sets it in Edge Management, where the probed device name is offered to keep or replace. (Until
- * then the phone signed its Bluetooth name as a default the first time one was needed - 2026-10-08 - and a hard key
- * was left unnamed; now every key is the same.) Only an existing nametag is signed again here, below.
- */
-export async function refreshNametag(soft: {statement(nametag: string): Promise<any>; deviceId?: Uint8Array; backend?: string} | null): Promise<StoredStatement | null> {
-  const have = await ownStatement(soft?.deviceId ? toHex(soft.deviceId) : currentDevice);
-  /*
-   * A STATEMENT FOR ANOTHER CHAIN IS SIGNED AGAIN (2026-10-08, walking the setup flow): after the
-   * key's Edge region was reset (or restored - a new device id), the phone kept giving the old
-   * chain's statement, and every computer refused it ("the statement does not name this device"),
-   * so this phone's log was never offered to your other devices. Same nametag, this chain.
-   */
-  /*
-   * A STATEMENT WITHOUT ITS ML-DSA HALF IS SIGNED AGAIN too (2026-10-10, the hybrid signatures): one
-   * signed before the key made hybrid statements has no publicKeyPq / signaturePq, so a computer
-   * refuses it the same way and this phone's log is not offered. Same nametag, both halves.
-   */
-  const stale = have && (!have.publicKeyPq || !have.signaturePq);
-  if (have && soft && (stale || (soft.deviceId && have.deviceId.toLowerCase() !== toHex(soft.deviceId).toLowerCase()))) {
-    try {
-      return await setNametag(soft, have.nametag);
-    } catch {
-      return null;
-    }
-  }
-  return have;
 }
 
 /* ------------------------------------------------ your devices */

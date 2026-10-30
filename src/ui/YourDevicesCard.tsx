@@ -11,7 +11,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, View} from 'react-native';
 import {grants} from 'node-onlykey-lib/edge';
-import {currentDeviceId, deviceName, ownNames, refreshNametag, nametagOr, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
+import {currentDeviceId, deviceName, ownNames, nametagOr, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {useYourDevices} from '../hooks/useYourDevices';
 import {Btn, Section} from './components';
@@ -33,11 +33,11 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
   const [devId, setDevId] = useState<string | null>(null);
   /* the probed device name is only offered in the dialog: the person keeps it or types their own (Brad, 2026-10-30) */
   const load = useCallback(async () => {
+    /* opened first: it names the key in use (its device id); nothing is signed here */
+    await SoftKeyEdge.open().catch(() => null);
     setOwn(await ownStatement());
     setDevName(await deviceName());
     setNames(await ownNames());
-    const s = await refreshNametag(await SoftKeyEdge.open().catch(() => null));
-    if (s) setOwn(s);
     setDevId(currentDeviceId());
   }, []);
   useEffect(() => { void load(); }, [load]);
