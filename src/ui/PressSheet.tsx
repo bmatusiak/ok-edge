@@ -161,7 +161,21 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
   const send = (button: string) => {
     tapLog(`${button}: sent to the firmware`);
     OkEmu.pressQueue(button).then(
-      n => tapLog(`${button}: queued (${n} waiting)`),
+      n => {
+        tapLog(`${button}: queued (${n} waiting)`);
+        /*
+         * WAS IT TAKEN? (the Pixel, 2026-10-30: a login's press "queued (1 waiting)", then 30 s of nothing and "no answer
+         * to request 16" - the press reached the queue and was lost after it). Once, 3 s on: presses still in the queue
+         * (the firmware never took it) and what the firmware says it waits for (packed: auth 1-3 waiting, 4 running;
+         * bit 27 the window open). Local reads of the emulator - the key is not asked.
+         */
+        setTimeout(() => {
+          void Promise.all([OkEmu.pressPending(), NativeOkEmu.confirmState()]).then(([left, packed]) => {
+            const p = Number(packed);
+            tapLog(`${button}: 3 s on - ${left} still queued; firmware ${p < 0 ? 'not running' : `auth ${p & 0xff}, op 0x${((p >>> 8) & 0xff).toString(16)}, window ${(p >>> 27) & 1 ? 'open' : 'shut'}`}`);
+          }, () => {});
+        }, 3000);
+      },
       (e: any) => tapLog(`${button}: refused - ${e?.message ?? e}`),
     );
   };
