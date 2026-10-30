@@ -30,8 +30,8 @@ Expo SDK 58 (React Native 0.88), Rectify 2.0, Electron 45. `npm install` first.
 
 | Shell | Run | Build |
 |---|---|---|
-| Web | `npm run web` (port 8090) | `npm run build:web`: `dist/web` |
-| Desktop | `npm run electron` (loads `dist/web`), or `npm run electron:dev` with `npm run web` running | `npm run build:electron`: `dist/electron/win-unpacked` |
+| Web | `npm run web` (port 8090) | `npm run build:webapp`: `docs/` |
+| Desktop | `npm run electron` (loads `dist/web`), or `npm run electron:dev` with `npm run web:desktop` running (`build:web` and `web:desktop` set OKEDGE_SHELL=desktop: the desktop's platform files, src/platform.ts) | `npm run build:electron`: `dist/electron/win-unpacked` |
 | Android | install the APK (`com.okedge`; it installs beside ok-rn's `com.okrn`) | `npm run build:android`, with `ANDROID_HOME` set to the SDK |
 | CLI | `npm run cli -- help` (the library's `onlykey-js`) | |
 

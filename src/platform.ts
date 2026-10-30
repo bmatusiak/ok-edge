@@ -1,42 +1,35 @@
 /**
- * WHICH SHELL THIS IS - decided here and nowhere else (PROPOSAL-one-gui.md, lessons from guncelium:
- * there the same check was copy-pasted into about eight files).
+ * WHICH SHELL THIS IS - decided by the BUILD, in one file per platform (PROPOSAL-one-gui.md, lessons from guncelium:
+ * there the same check was copy-pasted into about eight files; PROPOSAL-rectify-ok-edge.md rule 2, Brad, 2026-10-30:
+ * "each platform gets their own .platform.js for platform specific replacement").
  *
- *   android   the phone app (React Native)
- *   desktop   the desktop app: the web build in an Electron window, whose preload
- *             (electron/preload.js) puts `window.okedge` in place before the page runs
- *   webapp    the same web build in a browser (GitHub Pages, a fork's site, or served locally)
+ *   android   the phone app (React Native)                      platform.android.ts  (Metro, Android)
+ *   desktop   the desktop app: the web build in an Electron      platform.desktop.ts  (the desktop build,
+ *             window, whose preload (electron/preload.js) puts                          OKEDGE_SHELL=desktop -
+ *             `window.okedge` in place before the page runs                             metro.config.js)
+ *   webapp    the web build in a browser (GitHub Pages, a        platform.web.ts      (Metro, web)
+ *             fork's site, or served locally)
+ *
+ * It used to be guessed at run time (Platform.OS, then whether the preload's bridge was there), one build for the
+ * desktop window and the browser. Now each build carries its own answer, and nothing anywhere asks at run time.
+ *
+ * THIS FILE is the contract: what TypeScript and Jest see (the web app's values), and the check that every platform
+ * file exports the same names with the same types - a value added to one and not the others does not compile.
  *
  * NAMED FOR WHAT THE USER RUNS (Brad, 2026-10-26: "desktop is better than electron", and "web may be confusing"):
  * Electron stays the tool's name (the electron/ folder, the npm scripts); the shell is the desktop app.
  *
- * Everything else asks for SERVICES (src/app.ts), never for the platform: a capability a shell
- * lacks is a service that is absent, not a check scattered through the screens.
+ * DEVICE_WORD: what this device is called in the app's sentences ("this phone is also the key").
+ * SHOW_SCROLLBARS (Brad, 2025-10-25: "this scroll view on desktop has no scroll bars, it's not touch screen ready"):
+ *   with a mouse a hidden bar means nothing says there is more below; every ScrollView's indicator props take it.
+ * desktop: the preload's bridge, on the desktop shell only.
  */
-import { Platform } from 'react-native';
+import type * as Android from './platform.android';
+import type * as Web from './platform.web';
+import type * as Desktop from './platform.desktop';
 
-export type Shell = 'android' | 'desktop' | 'webapp';
+export * from './platform.web';
 
-/** The desktop bridge the preload exposes - only `invoke` on an allowlisted channel. */
-export type DesktopBridge = { invoke: (channel: string, ...args: unknown[]) => Promise<unknown> };
-
-const bridge: DesktopBridge | null = (globalThis as { okedge?: DesktopBridge }).okedge ?? null;
-
-export const shell: Shell = Platform.OS === 'android' ? 'android' : bridge ? 'desktop' : 'webapp';
-
-/**
- * What this device is called in the app's sentences ("this phone is also the key"): the desktop is a computer; the
- * web app is a browser - what it keeps lives in this browser's profile, not on the computer.
- */
-export const DEVICE_WORD = shell === 'android' ? 'phone' : shell === 'desktop' ? 'computer' : 'browser';
-
-/*
- * SCROLLBARS ON THE DESKTOP AND THE WEB (Brad, 2026-10-25: "this scroll view on desktop has no scroll bars, it's not
- * touch screen ready"): a phone hides them - a finger swipes, and the page shows it moves - but with a mouse a hidden
- * bar means nothing says there is more below, and nothing to drag. Every ScrollView's indicator props take this one
- * value, so the choice is made here once.
- */
-export const SHOW_SCROLLBARS = shell !== 'android';
-
-/** The desktop bridge, on the desktop shell only. */
-export const desktop: DesktopBridge | null = shell === 'desktop' ? bridge : null;
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+/* every platform file exports exactly the web file's names and types */
+export const PLATFORM_FILES_AGREE: [Same<typeof Android, typeof Web>, Same<typeof Desktop, typeof Web>] = [true, true];

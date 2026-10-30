@@ -2,7 +2,12 @@
  * Metro: Expo's defaults plus ok-rn's three additions (ok-rn/metro.config.js has the full notes).
  */
 const path = require('path');
+const fs = require('fs');
 const { getDefaultConfig } = require('expo/metro-config');
+
+/* the desktop window's build (PLATFORM FILES, below): x.desktop.ts before x.web.ts, in this app's own files only */
+const DESKTOP_BUILD = process.env.OKEDGE_SHELL === 'desktop';
+const OWN = path.join(__dirname, 'src') + path.sep;
 
 const config = getDefaultConfig(__dirname);
 const workspace = path.resolve(__dirname, '..');
@@ -49,7 +54,24 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (spec) {
     return { type: 'sourceFile', filePath: path.join(__dirname, 'src', 'desktop', 'specs', `${spec[1]}.ts`) };
   }
-  return (resolveRequest || context.resolveRequest)(context, moduleName, platform);
+  const resolved = (resolveRequest || context.resolveRequest)(context, moduleName, platform);
+  /*
+   * PLATFORM FILES FOR THE DESKTOP (Brad, 2026-10-30: "each platform gets their own .platform.js for platform specific
+   * replacement - this can apply to a rectify service"; PROPOSAL-rectify-ok-edge.md rule 2). Metro picks x.android.ts
+   * and x.web.ts by itself; the desktop window is a web build too, so its build says so (OKEDGE_SHELL=desktop:
+   * build:web, build:web:test, web:desktop) and a project file with an x.desktop.ts beside it resolves to that one.
+   * Only this app's own files - never a package's.
+   */
+  if (DESKTOP_BUILD && platform === 'web' && resolved && resolved.type === 'sourceFile' && resolved.filePath.startsWith(OWN)) {
+    const m = /^(.*?)(?:\.web)?\.(tsx?|jsx?)$/.exec(resolved.filePath);
+    if (m) {
+      for (const ext of ['ts', 'tsx', 'js']) {
+        const alt = `${m[1]}.desktop.${ext}`;
+        if (fs.existsSync(alt)) return { type: 'sourceFile', filePath: alt };
+      }
+    }
+  }
+  return resolved;
 };
 
 module.exports = config;

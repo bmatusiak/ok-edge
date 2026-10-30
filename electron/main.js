@@ -8,7 +8,7 @@
  * on. The page reaches this process only through electron/preload.js, which exposes one function
  * and only for the channels listed there.
  *
- * The page: in development the Expo web server (OKEDGE_WEB_URL, `npm run web`); otherwise the web
+ * The page: in development the Expo web server (OKEDGE_WEB_URL, `npm run web:desktop` - the desktop build's platform files); otherwise the web
  * export in dist/web, served by THIS process as https://apps.crp.to/ (the export's paths start at
  * "/_expo/...", which a file:// load cannot resolve). Why that address: the key's CTAP tunnel - the
  * Passwords tab's derives, the vault - answers only the admitted origins (node-onlykey-lib
