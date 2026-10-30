@@ -105,10 +105,12 @@ export type HeldLog = {
   records: [string, string, string | null][];
   /* that log's newest checkpoint: both halves (its one hybrid anchor) */
   checkpoint: {seq: number; head: string; signature: string; signaturePq: string};
-  statement: StoredStatement;
+  /* its nametag statement, when it has one; its certified login card (lib certify record), when it has one */
+  statement: StoredStatement | null;
+  card?: any;
 };
 /** One log a computer brought, judged: whose it is, whether its chain checks, what words are missing. */
-export type HeldView = {complete: boolean; missing: string[]; deviceId: string; nametag: string | null; claimed: string; class: 'mine-known' | 'mine-new' | 'forged'; count: number; from: string; at: number; checkOk: boolean; alarm: string | null};
+export type HeldView = {complete: boolean; missing: string[]; deviceId: string; nametag: string | null; claimed: string; class: 'mine-known' | 'mine-new' | 'unproven' | 'forged'; count: number; from: string; at: number; checkOk: boolean; alarm: string | null};
 
 /* a missing half reads as empty bytes: it fails every check (no fallback) */
 const bytesOf = (h: string | undefined | null) => fromHex(h ?? '');
@@ -338,8 +340,10 @@ export async function markSeen(deviceId?: string): Promise<void> {
  * merged: kept apart and listed as a warning - a finding, not a question. -> {held, count}
  * (`held`: whether anything new came, the reply the computer prints).
  */
-export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array; publicKeyPq: Uint8Array; records: EdgeLinkRecord[]; checkpoint: {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq: Uint8Array}; statement: Statement; from: string; openings?: unknown[]; notes?: HeldLog['notes']}, now = Date.now()): Promise<{held: boolean; count: number}> {
+export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array; publicKeyPq: Uint8Array; records: EdgeLinkRecord[]; checkpoint: {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq: Uint8Array}; statement: Statement | null; card?: any; from: string; openings?: unknown[]; notes?: HeldLog['notes']}, now = Date.now()): Promise<{held: boolean; count: number}> {
   const id = toHex(o.deviceId);
+  /* the name this log goes by: its nametag, or UNNAMED - a device with a card and no nametag is still yours */
+  const name = o.statement?.nametag ?? UNNAMED;
   /* nothing new: a checkpoint this phone has merged already (a computer gives every log it holds, every time) */
   const head = toHex(o.checkpoint.head).toLowerCase();
   const mirror = await loadMirror(o.deviceId);
@@ -348,46 +352,56 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
     deviceId: id, publicKey: toHex(o.publicKey), publicKeyPq: hexOf(o.publicKeyPq), from: o.from, at: now,
     records: o.records.map(r => [toHex(r.link), toHex(r.head), r.reveal ? toHex(r.reveal) : null]),
     checkpoint: {seq: o.checkpoint.seq, head: toHex(o.checkpoint.head), signature: toHex(o.checkpoint.signature), signaturePq: hexOf(o.checkpoint.signaturePq)},
-    statement: store(o.statement),
+    statement: o.statement ? store(o.statement) : null,
+    ...(o.card ? {card: o.card} : {}),
     ...(o.openings && o.openings.length ? {openings: o.openings.slice(0, 500)} : {}),
     ...(o.notes ? {notes: o.notes} : {}),
   };
   /*
-   * NOT JUDGED BEFORE THIS DEVICE KNOWS ITS OWNER KEY (desktop, 2026-10-24: the A13's log came before
-   * the hard key had a nametag, and was kept apart as "not made with your OnlyKey" - a false alarm).
-   * Without its own signed statement this device cannot tell yours from not yours: nothing is kept,
-   * and the computer gives the log again at the next sync.
+   * NOT JUDGED WITHOUT THE OWNER KEYS (they are read from the key - a locked key, or firmware before certify, gives none):
+   * nothing is kept, and the log comes again at the next sync.
    */
   if (!(await ownerKey())) {
-    console.log(`[edge] log of "${o.statement.nametag}" (${id.slice(0, 8)}): not judged yet - this device has no nametag, so no owner key`);
+    console.log(`[edge] log of "${name}" (${id.slice(0, 8)}): not judged yet - the key gave no owner keys`);
     return {held: false, count: 0};
   }
   const v = await judge(entry);
   const list = await loadHeld();
+  /*
+   * UNPROVEN (Brad, 2026-10-30: unnamed devices' logs accepted - a device is yours by its certified card or its nametag):
+   * a log that carries neither is not yours and not an attack either - kept apart quietly, no alarm, no warning banner,
+   * looked at again when its card or nametag arrives.
+   */
+  if (v.class === 'unproven') {
+    const was = list.find(h => h.deviceId === id);
+    if (!(was && was.checkpoint.seq === o.checkpoint.seq && was.checkpoint.head.toLowerCase() === head)) await saveHeld([...list.filter(h => h.deviceId !== id), entry]);
+    console.log(`[edge] log of ${id.slice(0, 8)}: unproven - no login card or nametag of yours yet; kept apart, not merged`);
+    return {held: true, count: 0};
+  }
   if (v.class === 'forged' || !v.checkOk) {
     /* the same failing log again: listed once */
     const was = list.find(h => h.deviceId === id);
     if (was && was.checkpoint.seq === o.checkpoint.seq && was.checkpoint.head.toLowerCase() === head) return {held: false, count: 0};
     await saveHeld([...list.filter(h => h.deviceId !== id), entry]);
     const warning = v.class === 'forged' ? `is not made with your OnlyKey - ${o.from} sent it; never merged` : `does not check (${v.alarm}); never merged`;
-    await addNew({deviceId: id, nametag: o.statement.nametag, links: entry.records.length, from: o.from, at: now, newDevice: false, missing: [], warning});
-    console.log(`[edge] log of "${o.statement.nametag}" (${id.slice(0, 8)}): kept apart - it ${warning}`);
+    await addNew({deviceId: id, nametag: name, links: entry.records.length, from: o.from, at: now, newDevice: false, missing: [], warning});
+    console.log(`[edge] log of "${name}" (${id.slice(0, 8)}): kept apart - it ${warning}`);
     /* a finding about your key: the phone says so out loud too */
     NativeEdgeAlert?.post(parseInt(id.slice(0, 6), 16), netTag() + 'Edge: a log that does not check',
-      `A log from "${o.statement.nametag}" (${id.slice(0, 8)}…, brought by ${o.from}) ${warning}.`, 'Edge alarm', false);
+      `A log from "${name}" (${id.slice(0, 8)}…, brought by ${o.from}) ${warning}.`, 'Edge alarm', false);
     return {held: true, count: entry.records.length};
   }
   const log = logOf(entry);
   const had = mirror.links.length;
   /* the merge point is that log's newest checkpoint: kept with both halves - the copy's hybrid anchor */
   await keepMerged(log.deviceId, log.publicKey, log.publicKeyPq, log.records, {seq: entry.checkpoint.seq, head: log.checkpoint.head, signature: log.checkpoint.signature, signaturePq: log.checkpoint.signaturePq, at: now});
-  await AsyncStorage.setItem(DEVICES(), JSON.stringify(devicesLib.remember(await loadDevices(), log.statement)));
+  if (log.statement) await AsyncStorage.setItem(DEVICES(), JSON.stringify(devicesLib.remember(await loadDevices(), log.statement)));
   await keepOpenings(id, log.publicKey, entry.openings ?? []);
   await keepNotes(log.deviceId, entry.notes ?? null);
   /* an earlier copy of it that failed a check is answered by this one */
   if (list.some(h => h.deviceId === id)) await saveHeld(list.filter(h => h.deviceId !== id));
   const came = Math.max(0, (await loadMirror(o.deviceId)).links.length - had);
-  console.log(`[edge] log of "${v.nametag ?? o.statement.nametag}" (${id.slice(0, 8)}): merged, ${came} new link(s)${v.complete ? "" : `, ${v.missing.length} use(s) without their words`}`);
+  console.log(`[edge] log of "${v.nametag ?? name}" (${id.slice(0, 8)}): merged, ${came} new link(s)${v.complete ? "" : `, ${v.missing.length} use(s) without their words`}`);
   return {held: true, count: came};
 }
 
@@ -395,7 +409,8 @@ const recordsOf = (h: HeldLog): EdgeLinkRecord[] => h.records.map(([l, hd, r]) =
 const logOf = (h: HeldLog) => ({
   deviceId: fromHex(h.deviceId), publicKey: fromHex(h.publicKey), publicKeyPq: bytesOf(h.publicKeyPq), records: recordsOf(h),
   checkpoint: {seq: h.checkpoint.seq, head: fromHex(h.checkpoint.head), signature: fromHex(h.checkpoint.signature), signaturePq: bytesOf(h.checkpoint.signaturePq)},
-  statement: toStatement(h.statement),
+  statement: h.statement ? toStatement(h.statement) : null,
+  card: h.card ?? null,
 });
 
 /* one log a computer brought: sorted by the lib with THIS key's owner key, and checked complete */
@@ -403,9 +418,9 @@ async function judge(h: HeldLog, owner?: Awaited<ReturnType<typeof ownerKey>>, k
   if (owner === undefined) owner = await ownerKey();
   if (known === undefined) known = await loadDevices();
   const merged = ((await loadMirror(fromHex(h.deviceId))).merged ?? []).map(m => ({seq: m.seq, head: m.head}));
-  const c = owner ? devicesLib.classify({log: logOf(h), ownerKey: owner.ownerKey, ownerKeyPq: owner.ownerKeyPq, known, merged}) : {class: 'forged', nametag: null, check: {ok: false, alarm: 'no-nametag'}};
+  const c = owner ? devicesLib.classify({log: logOf(h), ownerKey: owner.ownerKey, ownerKeyPq: owner.ownerKeyPq, known, merged}) : {class: 'unproven', nametag: null, check: {ok: false, alarm: 'no-owner-keys'}};
   return {
-    deviceId: h.deviceId, nametag: c.nametag, claimed: h.statement.nametag, class: c.class as HeldView['class'], count: h.records.length, from: h.from, at: h.at,
+    deviceId: h.deviceId, nametag: c.nametag, claimed: h.statement?.nametag ?? UNNAMED, class: c.class as HeldView['class'], count: h.records.length, from: h.from, at: h.at,
     checkOk: !!c.check.ok, alarm: c.check.ok ? null : c.check.alarm ?? 'bad',
     ...(await completenessOf(h)),
   };

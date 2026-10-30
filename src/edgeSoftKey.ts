@@ -63,16 +63,21 @@ async function takeOtherLogs(ownIdHex: string, soft: SoftKeyEdge): Promise<void>
       takenOther.add(mark);
       const j = logblocks.join(Object.fromEntries(mine.map(([k, r]) => [k, r.v as string])), JSON.parse(recs[`${dev}.meta`].v as string).deviceId);
       if (!j || !j.links.length || !j.checkpoint || !j.statement || !j.publicKey) {
-        console.log(`[edge] other devices' logs: ${dev.slice(0, 8)} has no checkpoint or statement - not judged`);
+        console.log(`[edge] other devices' logs: ${dev.slice(0, 8)} has no checkpoint - not judged`);
         continue;
       }
       const c = copyfile.fromJSON(j, fromHex(j.deviceId));
+      /* its login card, when the bucket holds one (src/loginCard.ts edge-cards): the proof for a device with no nametag */
+      const cards = (open.bucket.stores[currentNet() === 'test' ? 'edge-cards-test' : 'edge-cards'] ?? {}) as Record<string, {v: string | null; archived?: boolean}>;
+      const cardRow = cards[String(j.deviceId).toLowerCase()];
+      let card = null;
+      try { card = cardRow && !cardRow.archived && cardRow.v ? JSON.parse(cardRow.v) : null; } catch { card = null; }
       const {receiveLog} = require('./edgeDevices');
       const r = await receiveLog({
         deviceId: c.deviceId, publicKey: c.publicKey, publicKeyPq: c.publicKeyPq, records: c.links, checkpoint: c.checkpoint,
-        statement: c.statement, from: 'the identity bucket', openings: j.openings ?? [], notes: j.notes,
+        statement: c.statement ?? null, card, from: 'the identity bucket', openings: j.openings ?? [], notes: j.notes,
       });
-      console.log(`[edge] other devices' logs: "${c.statement.nametag}" (${dev.slice(0, 8)}) - ${r.held ? `${r.count} link(s) judged` : 'nothing new'}`);
+      console.log(`[edge] other devices' logs: "${c.statement?.nametag ?? 'UNNAMED'}" (${dev.slice(0, 8)}) - ${r.held ? `${r.count} link(s) judged` : 'nothing new'}`);
     }
   }
 }
