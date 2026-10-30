@@ -7,5 +7,6 @@
 import {common, edge, thisKey} from './core';
 import {syncChannel} from './channels/sync';
 import {mcpChannel} from './channels/mcp';
+import {commonBanners, otherTabsBanner} from './banners';
 
-export const coreFeatures = [thisKey({slots: false}), edge({always: false}), ...common, syncChannel, mcpChannel];
+export const coreFeatures = [thisKey({slots: false}), edge({always: false}), ...common, syncChannel, mcpChannel, otherTabsBanner, ...commonBanners];

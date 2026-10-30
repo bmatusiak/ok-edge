@@ -112,6 +112,20 @@ export type ChannelContext = {
   /** the phone's Bluetooth (TabContext.bt): null where there is none */
   bt: TabContext['bt'];
 };
+/* A BANNER under the status bar (src/features/banners.tsx): drawn in order, each deciding from this whether it shows. */
+export type BannerContext = {
+  /** testing mode on (debug builds only) */
+  testing: boolean;
+  /** Login Bypass, while the soft key is running and locked (testing mode) - null otherwise */
+  devLogin: (() => void) | null;
+  configMode: ConfigState;
+  /** the soft key in use has halted (its firmware thread is gone) */
+  halted: boolean;
+  /** at the login screen: the halted banner counts down to a restart there */
+  atLogin: boolean;
+};
+export type AppBanner = {name: string; order: number; render: (ctx: BannerContext) => ReactNode};
+
 export type AppChannel = {
   name: string;
   /** its place among the icons and the cards */

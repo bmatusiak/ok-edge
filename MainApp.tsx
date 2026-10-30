@@ -62,9 +62,8 @@ import {endSession, keptSession} from './src/webSession';
 import {logOut} from './src/logOut';
 import {setIdleRunning} from './src/idleTimer';
 import {IdleBar} from './src/ui/IdleBar';
-import {BLUETOOTH_HERE, KEY_WAITS_FOR_LOGIN, SOFT_KEY_HERE, TEST_BUILD_BANNER, WEB_SESSION} from './src/platform';
+import {BLUETOOTH_HERE, KEY_WAITS_FOR_LOGIN, SOFT_KEY_HERE, WEB_SESSION} from './src/platform';
 import {registerWebCache, setLoggedIn, updateAtSplash} from './src/webUpdate';
-import {onOtherTabs} from './src/webTabs';
 
 /*
  * THE WEB APP'S UPDATE CHECK, ONCE A PAGE LOAD (src/webUpdate.ts): a newer build on the server reloads the page fresh
@@ -74,8 +73,7 @@ const webChecked: Promise<void> = updateAtSplash().catch(() => undefined).then((
 import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom, onRoomState, roomState, type RoomState} from './src/serverRoom';
 import {buildInfo} from './src/buildInfo';
-import {appSignature} from './src/appSignature';
-import {pluginChannels, pluginTabs, pluginWatches, shownTabs, usePluginsStarted} from './src/plugins';
+import {pluginBanners, pluginChannels, pluginTabs, pluginWatches, shownTabs, usePluginsStarted} from './src/plugins';
 import type {TabContext} from './src/plugins/types';
 import {setFirmwareConsoleToLogcat} from './src/hooks/useOkEmu';
 import {startKeyChainRecorder} from './src/keyChainRecorder';
@@ -504,9 +502,6 @@ function Shell() {
     setLoggedInThisRun(true);
     setPhase('pin');
   }, [phase]);
-  /* the web app open in other tabs too: warned in each (src/webTabs.ts) */
-  const [otherTabs, setOtherTabs] = useState(0);
-  useEffect(() => onOtherTabs(setOtherTabs), []);
   /* The first time inside after this process started: take the remembered tab, if any. */
   useEffect(() => {
     if (phase !== 'main' || resumeChecked.current) return;
@@ -837,99 +832,18 @@ function Shell() {
           </View>
         ) : null}
 
-        {/*
-          OPEN IN ANOTHER TAB TOO (Brad, 2026-10-29: "WARN the user with a banner about the multiple chrome tab windows
-          open"): the tabs ask one key and write one bucket on their own - said in every one while another is open.
-        */}
-        {otherTabs > 0 ? (
-          <View style={[styles.testing, {borderColor: theme.error}]}>
-            <Text style={[styles.testingText, {color: theme.error}]}>
-              {`This app is open in ${otherTabs} other tab${otherTabs === 1 ? '' : 's'} - close ${otherTabs === 1 ? 'it' : 'them'}: tabs share one key and one bucket, and get in each other's way`}
-            </Text>
-          </View>
-        ) : null}
-
-        {/*
-          A TEST build made with OKRN_DEBUG_LOCK=off (Brad, 2026-10-05): the debugging
-          lock is off, so a computer with adb could approve and press. Said in red on
-          every screen, so this build can never pass for a pre-release - release.js
-          will not package one from it anyway.
-        */}
-        {!buildInfo.debugLock ? (
-          <View style={[styles.testing, {borderColor: theme.error}]}>
-            <Text style={[styles.testingText, {color: theme.error}]}>
-              {/* adb is the phone's alone: elsewhere the lock means nothing, and only the build's kind is said (Brad, 2026-10-29) */}
-              {TEST_BUILD_BANNER}
-            </Text>
-          </View>
-        ) : null}
-
-        {/*
-          NOT SIGNED BY THE OFFICIAL RELEASE KEY (Brad, 2026-10-13: "if the app is not signed by the
-          official release key, it shows a banner like test build ... the banner will be called
-          unofficial release"). A repackaged APK runs under someone else's certificate; said in
-          red on every screen, like the TEST BUILD banner (src/appSignature.ts).
-        */}
-        {appSignature.unofficial ? (
-          <View style={[styles.testing, {borderColor: theme.error}]}>
-            <Text style={[styles.testingText, {color: theme.error}]}>
-              UNOFFICIAL RELEASE - this app is not signed with the OnlyKey release key
-            </Text>
-          </View>
-        ) : null}
-
-        {/*
-          THE TESTNET (BLOCKS.md §5; Brad, 2026-10-07): the soft key runs on its own
-          storage slot - a throwaway key with its own Edge chain. Said on every screen,
-          so a testnet budget or block is never taken for a live one.
-        */}
-        {net === 'test' ? (
-          <View style={[styles.testing, {borderColor: theme.io}]}>
-            <Text style={[styles.testingText, {color: theme.io}]}>
-              TESTNET - a throwaway soft key with its own Edge chain; nothing here is live
-            </Text>
-          </View>
-        ) : null}
-
-        {/* `__DEV__` inline so Metro folds the branch out of a release bundle. */}
-        {__DEV__ && testing.enabled ? (
-          <View style={[styles.testing, devLoginShown && styles.testingRow]}>
-            <Text style={[styles.testingText, devLoginShown && {flex: 1}]}>
-              Testing mode — PIN bypassed, developer tools shown
-            </Text>
-            {devLoginShown ? <Btn title="Login Bypass" tone="primary" onPress={() => void devLogin()} /> : null}
-          </View>
-        ) : null}
-
-        {/*
-          TWO WORDS, and that is the point.
-
-          The banner this replaces said the key would not sign or type and that
-          only a restart would end it. Neither is something an app flag knows,
-          and saying it anyway is how the old one came to describe a key nobody
-          had touched. Consequences get added to this line as features are
-          actually put behind the flag - never in advance of them.
-        */}
-        {configMode >= PRE ? (
-          <View style={styles.configBanner}>
-            <Text style={styles.configBannerText}>Config mode</Text>
-          </View>
-        ) : null}
-
-        {/*
-          THE SOFT KEY HALTING IS SAID ON EVERY TAB, not only on This Key.
-
-          A two-second hold on button 3 is the firmware's lock gesture, and on
-          a real key it restarts the device; the emulator's thread only exits
-          through the reset trap and cannot be replaced in this process
-          (FINDING-lock-gesture-ends-the-soft-key.md). Every other tab kept
-          drawing its keypad over a firmware that was gone, and a tap there
-          did nothing with nothing said. The way back is an app restart, so
-          that is offered wherever the halt is seen.
-        */}
-        {keys.backend === 'embedded' && keys.soft.state === 'halted' ? (
-          <HaltedBanner countdown={phase === 'login'} />
-        ) : null}
+        {/* the banners (src/features/banners.tsx): whichever this platform's list registered, in order */}
+        {pluginBanners().map(b => (
+          <Fragment key={b.name}>
+            {b.render({
+              testing: testing.enabled,
+              devLogin: devLoginShown ? () => void devLogin() : null,
+              configMode,
+              halted: keys.backend === 'embedded' && keys.soft.state === 'halted',
+              atLogin: phase === 'login',
+            })}
+          </Fragment>
+        ))}
 
 
         {/*
@@ -1091,49 +1005,9 @@ function Shell() {
  * wants to read the screen first. Elsewhere a restart would throw away what
  * is on screen, so it waits to be asked, as before.
  */
-const HALT_RESTART_SECONDS = 60;
-
-function HaltedBanner({countdown}: {countdown: boolean}) {
-  const [left, setLeft] = useState(HALT_RESTART_SECONDS);
-  const [cancelled, setCancelled] = useState(false);
-  const running = countdown && !cancelled;
-  useEffect(() => {
-    if (!running) return;
-    const timer = setInterval(() => setLeft(s => s - 1), 1000);
-    return () => clearInterval(timer);
-  }, [running]);
-  useEffect(() => {
-    if (running && left <= 0) void OkEmu.restartApp();
-  }, [running, left]);
-  return (
-    <View style={styles.testing}>
-      <Text style={styles.testingText}>
-        The soft key has stopped — its firmware thread cannot be replaced
-        in this process. Nothing is lost.
-        {running ? ` Restarting the app in ${Math.max(left, 0)} s.` : ''}
-      </Text>
-      {countdown ? (
-        <View style={styles.haltButtons}>
-          <View style={styles.haltButton}>
-            <Btn title="Restart now" tone="primary" onPress={() => OkEmu.restartApp()} />
-          </View>
-          {running ? (
-            <View style={styles.haltButton}>
-              <Btn title="Cancel" onPress={() => setCancelled(true)} />
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <Btn title="Restart the app" tone="primary" onPress={() => OkEmu.restartApp()} />
-      )}
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
-  haltButtons: {flexDirection: 'row', gap: 8},
   /* Each button an equal share of the row; alone (after Cancel), the whole row. */
-  haltButton: {flex: 1},
   safe: {flex: 1, backgroundColor: theme.bg},
   /*
    * No manual bottom padding. SafeAreaView already insets the bottom edge, and
@@ -1163,29 +1037,6 @@ const styles = StyleSheet.create({
   pressed: {opacity: 0.6},
 
 
-  testing: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: theme.radius,
-    borderWidth: 1,
-    borderColor: theme.warn,
-    backgroundColor: 'rgba(252, 211, 77, 0.10)',
-  },
-  testingText: {color: theme.warn, fontSize: 11, fontWeight: '600'},
-  testingRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  /* The testing banner's shape in the error colour, as it was before. */
-  configBanner: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: theme.radius,
-    borderWidth: 1,
-    borderColor: theme.error,
-  },
-  configBannerText: {color: theme.error, fontSize: 12, fontWeight: '600'},
 
   prompt: {
     flexDirection: 'row',

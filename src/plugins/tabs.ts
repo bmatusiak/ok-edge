@@ -10,7 +10,7 @@
  *   - testing mode with the key still locked: only the tabs marked inLockedTesting (This Key, Testing), nothing else -
  *     no bucket is open (Brad, 2026-10-25).
  */
-import type {AppChannel, AppTab, AppWatch, TabState} from './types';
+import type {AppBanner, AppChannel, AppTab, AppWatch, TabState} from './types';
 
 export type TabsService = {
   add(tab: AppTab, watch?: AppWatch): void;
@@ -22,6 +22,9 @@ export type TabsService = {
   /** a channel: its status icon and its Activity card (types.ts AppChannel) */
   channel(channel: AppChannel): void;
   channels(): readonly AppChannel[];
+  /** a banner under the status bar (types.ts AppBanner) */
+  banner(banner: AppBanner): void;
+  banners(): readonly AppBanner[];
 };
 
 export function shownOf(tabs: readonly AppTab[], state: TabState, dev: boolean): AppTab[] {
@@ -39,6 +42,7 @@ export default function setup(_imports: unknown, register: (err: Error | null, s
   const tabs: AppTab[] = [];
   const watches: AppWatch[] = [];
   const channels: AppChannel[] = [];
+  const banners: AppBanner[] = [];
   register(null, {
     tabs: {
       add(tab, watch) {
@@ -52,6 +56,8 @@ export default function setup(_imports: unknown, register: (err: Error | null, s
       watch: w => { watches.push(w); },
       channel: c => { channels.push(c); channels.sort((a, b) => a.order - b.order); },
       channels: () => channels.slice(),
+      banner: b => { banners.push(b); banners.sort((a, c) => a.order - c.order); },
+      banners: () => banners.slice(),
     },
   });
 }

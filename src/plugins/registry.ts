@@ -7,7 +7,7 @@
 import {useEffect, useState} from 'react';
 import type {TabsService} from './tabs';
 import type {RecipientSource, RecipientsService} from './recipients';
-import type {AppChannel, AppTab, AppWatch, TabState} from './types';
+import type {AppBanner, AppChannel, AppTab, AppWatch, TabState} from './types';
 
 let started: TabsService | null = null;
 let recipientsService: RecipientsService | null = null;
@@ -39,6 +39,11 @@ export function pluginRecipientSources(): readonly RecipientSource[] {
 /** The channels this platform has, in order: each one's status icon and Activity card. */
 export function pluginChannels(): readonly AppChannel[] {
   return started ? started.channels() : [];
+}
+
+/** The banners this platform has, in order. */
+export function pluginBanners(): readonly AppBanner[] {
+  return started ? started.banners() : [];
 }
 
 export function pluginWatches(): readonly AppWatch[] {

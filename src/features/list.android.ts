@@ -3,5 +3,6 @@ import {bluetooth, common, edge, passkeys, settings, settingsPages, thisKey} fro
 import {bluetoothChannel} from './channels/bluetooth';
 import {syncChannel} from './channels/sync';
 import {mcpChannel} from './channels/mcp';
+import {commonBanners} from './banners';
 
-export const coreFeatures = [thisKey({slots: true}), edge({always: false}), passkeys, bluetooth, settings, ...settingsPages, ...common, bluetoothChannel, syncChannel, mcpChannel];
+export const coreFeatures = [thisKey({slots: true}), edge({always: false}), passkeys, bluetooth, settings, ...settingsPages, ...common, bluetoothChannel, syncChannel, mcpChannel, ...commonBanners];
