@@ -41,6 +41,12 @@ import {AdvancedScreen} from '../screens/AdvancedScreen';
 import {TestingScreen} from '../screens/TestingScreen';
 import {EdgeScreen} from '../screens/EdgeScreen';
 import {ActivityScreen} from '../screens/ActivityScreen';
+import {EdgeRequestSheet} from '../ui/EdgeRequestSheet';
+import {HostChallengeSheet} from '../ui/HostChallengeSheet';
+import {KeyBusySheet} from '../ui/KeyBusySheet';
+import {PressSheet} from '../ui/PressSheet';
+import {SilentUseSheet} from '../ui/SilentUseSheet';
+import {UpdateSheet} from '../ui/UpdateSheet';
 
 type Register = (err: Error | null, services: Record<string, unknown>) => void;
 
@@ -151,7 +157,8 @@ function EdgeTab({ctx}: {ctx: TabContext}) {
       openGrantId={edgeNav.budget} onBudgetOpened={() => setEdgeNav({budget: null})} />
   );
 }
-const EdgeWatch: AppWatch = ({openTab}) => {
+/* an agent's budget request (Edge step 2), over whatever tab is open - where this device hosts an Edge */
+const edgeWatch = (always: boolean): AppWatch => function EdgeWatch({openTab}) {
   useEffect(() => onOpenBudget(id => { openTab('Edge'); setEdgeNav({budget: id}); }), [openTab]);
   useEffect(() => {
     const look = () => {
@@ -163,13 +170,13 @@ const EdgeWatch: AppWatch = ({openTab}) => {
     const sub = AppState.addEventListener('change', st => { if (st === 'active') look(); });
     return () => sub.remove();
   }, [openTab]);
-  return null;
+  return always || hasSoftKeyPlugin('edge') ? <EdgeRequestSheet /> : null;
 };
 export const edge = ({always}: {always: boolean}) => tabPlugin({
   name: 'Edge', order: ORDER.Edge,
   when: always ? undefined : s => s.testing || hasSoftKeyPlugin('edge'),
   render: ctx => <EdgeTab ctx={ctx} />,
-}, EdgeWatch);
+}, edgeWatch(always));
 
 /* KEY CHAIN, and another screen's "Set up in Key Chain": this tab, its Wizard already started (keyChainNav.ts) */
 const KeyChainWatch: AppWatch = ({openTab}) => {
@@ -265,5 +272,32 @@ export const testing = tabPlugin({
   ) : null,
 });
 
+/*
+ * THE KEY'S PROMPTS - no tab, over whatever tab is open. EVERY PRESS IS ASKED ON THE SHEET (Brad, 2026-10-10: "the
+ * confirm button ... needs to be removed, so the sheet is the notifier with press button"; "blind presses is a
+ * blocker"): a request that came over the API waits on the soft key, and PressSheet says what it is for and holds the
+ * press; a passkey's presence is asked on the same sheet, with the site it names. Beside it: the code this app asks a
+ * hard key for (hostChallenge.ts), the key working over WebAuthn with its progress (keyBusy.ts), a derive the soft key
+ * answered unasked (SilentUseSheet), and a newer web app build pushed while logged in (webUpdate.ts).
+ */
+export function prompts() {
+  const Prompts: AppWatch = ({keyWaiting, presence}) => (
+    <>
+      <HostChallengeSheet />
+      <KeyBusySheet />
+      <PressSheet waiting={keyWaiting} fido={presence} />
+      <SilentUseSheet />
+      <UpdateSheet />
+    </>
+  );
+  const setup = (imports: {tabs: TabsService}, register: Register) => {
+    imports.tabs.watch(Prompts);
+    register(null, {prompts: {}});
+  };
+  setup.consumes = ['tabs'];
+  setup.provides = ['prompts'];
+  return setup;
+}
+
 /* every platform's tabs; its list file adds its own (list.android.ts / list.web.ts / list.desktop.ts) */
-export const common = [slots, keyChain, keys, encryptDecrypt, encrypt, decrypt, sync, activity, inDevelopment, log, testing];
+export const common = [prompts(), slots, keyChain, keys, encryptDecrypt, encrypt, decrypt, sync, activity, inDevelopment, log, testing];

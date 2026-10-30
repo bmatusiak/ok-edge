@@ -7,6 +7,7 @@ import type {useUsbHid} from '../hooks/useUsbHid';
 import type {ConfigState} from '../ui/configModeNotes';
 import type {LogEntry} from '../hooks/useLog';
 import type {LogBuffers} from '../screens/LogScreen';
+import type {KeyWaiting} from '../transport/OkEmu';
 
 /*
  * What an app plugin gets from the app, and what it gives back. The plugin never reaches into
@@ -73,6 +74,10 @@ export type WatchContext = {
   unlocked: Record<Backend, boolean>;
   /** bring a tab forward by its name (a link that belongs to a plugin's tab arrived) */
   openTab: (name: string) => void;
+  /** what the active key waits for now - a press, a code (the press sheet asks for it) */
+  keyWaiting: KeyWaiting | null;
+  /** a site asking for a security key's presence (a passkey): the press sheet asks with the site it names */
+  presence: {needed: boolean; canPress: boolean; confirm: () => void};
 };
 
 export type AppTab = {

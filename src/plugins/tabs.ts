@@ -17,6 +17,8 @@ export type TabsService = {
   list(): readonly AppTab[];
   watches(): readonly AppWatch[];
   shown(state: TabState): readonly AppTab[];
+  /** a watch with no tab (the key's prompts: the press sheet, the busy sheet, ...) */
+  watch(watch: AppWatch): void;
 };
 
 export function shownOf(tabs: readonly AppTab[], state: TabState, dev: boolean): AppTab[] {
@@ -43,6 +45,7 @@ export default function setup(_imports: unknown, register: (err: Error | null, s
       list: () => tabs.slice(),
       watches: () => watches.slice(),
       shown: state => shownOf(tabs, state, __DEV__),
+      watch: w => { watches.push(w); },
     },
   });
 }

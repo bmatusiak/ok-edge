@@ -55,7 +55,6 @@ import {SetupScreen} from './src/screens/SetupScreen';
 import {sync, useSync} from './src/sync';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import {btTransit} from './src/btTransit';
-import {EdgeRequestSheet} from './src/ui/EdgeRequestSheet';
 import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
@@ -63,9 +62,8 @@ import {endSession, keptSession} from './src/webSession';
 import {logOut} from './src/logOut';
 import {setIdleRunning} from './src/idleTimer';
 import {IdleBar} from './src/ui/IdleBar';
-import {BLUETOOTH_HERE, shell} from './src/platform';
+import {BLUETOOTH_HERE, KEY_WAITS_FOR_LOGIN, SOFT_KEY_HERE, TEST_BUILD_BANNER, WEB_SESSION} from './src/platform';
 import {registerWebCache, setLoggedIn, updateAtSplash} from './src/webUpdate';
-import {UpdateSheet} from './src/ui/UpdateSheet';
 import {onOtherTabs} from './src/webTabs';
 
 /*
@@ -75,11 +73,7 @@ import {onOtherTabs} from './src/webTabs';
 const webChecked: Promise<void> = updateAtSplash().catch(() => undefined).then(() => registerWebCache());
 import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom, onRoomState, roomState, type RoomState} from './src/serverRoom';
-import {HostChallengeSheet} from './src/ui/HostChallengeSheet';
-import {KeyBusySheet} from './src/ui/KeyBusySheet';
-import {PressSheet} from './src/ui/PressSheet';
-import {SilentUseSheet} from './src/ui/SilentUseSheet';
-import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
+import {buildInfo} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
 import {pluginTabs, pluginWatches, shownTabs, usePluginsStarted} from './src/plugins';
 import type {TabContext} from './src/plugins/types';
@@ -913,7 +907,7 @@ function Shell() {
    */
   const keptGoneOn = useRef(false);
   useEffect(() => {
-    if (shell !== 'webapp' || phase !== 'login' || keptGoneOn.current || !keptSession()) return;
+    if (!WEB_SESSION || phase !== 'login' || keptGoneOn.current || !keptSession()) return;
     keptGoneOn.current = true;
     console.log('[session] this tab kept its login - going on past the login screen');
     armWebKey();
@@ -945,7 +939,7 @@ function Shell() {
    */
   const [splashDone, setSplashDone] = useState(SPLASH_SEEN);
   /* the splash also waits for the web app's update check (a newer build reloads the page from there) */
-  const [webReady, setWebReady] = useState(shell !== 'webapp');
+  const [webReady, setWebReady] = useState(!WEB_SESSION);
   useEffect(() => { void webChecked.then(() => setWebReady(true)); }, []);
 
   /*
@@ -1168,12 +1162,7 @@ function Shell() {
       <BtKeyboardProvider>
       <IoPolicySync setTarget={fido.setTarget} />
       <StatusBar barStyle="light-content" />
-      {/* an agent's budget request (Edge step 2): over whatever tab is open */}
-      {hasSoftKeyPlugin('edge') || shell === 'desktop' ? <EdgeRequestSheet /> : null}
-      {/* the code this app asks a hard key for (src/hostChallenge.ts): over whatever tab is open */}
-      <HostChallengeSheet />
-      {/* the key working over WebAuthn (src/keyBusy.ts): wait, with its progress - over whatever tab is open */}
-      <KeyBusySheet />
+      {/* the sheets (the Edge request, the key's prompts) are features' watches: src/features/core.tsx */}
 
       {/* app plugins' watches run whatever tab is open (the Password Manager closes a key's store when it locks) */}
       {pluginWatches().map((Watch, i) => (
@@ -1184,6 +1173,8 @@ function Shell() {
             usb: keys.hard.state === 'running' && keys.hard.device === 'unlocked',
           }}
           openTab={name => setTab(name as Tab)}
+          keyWaiting={keyWaiting}
+          presence={{needed: fido.presenceNeeded, canPress: emu.canPress === true, confirm: fido.confirm}}
         />
       ))}
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
@@ -1238,7 +1229,7 @@ function Shell() {
               every platform. Any of them opens the Activity tab, which leads on to each one's own tab.
             */}
             <View style={styles.barMid}>
-              {shell === 'android' ? (
+              {BLUETOOTH_HERE ? (
                 <RadioStatus
                   on={btOn}
                   setOn={setBtOn}
@@ -1288,7 +1279,7 @@ function Shell() {
           <View style={[styles.testing, {borderColor: theme.error}]}>
             <Text style={[styles.testingText, {color: theme.error}]}>
               {/* adb is the phone's alone: elsewhere the lock means nothing, and only the build's kind is said (Brad, 2026-10-29) */}
-              {shell === 'android' ? 'TEST BUILD - debugging lock OFF: with adb on, a computer could approve and press' : 'TEST BUILD - not a release'}
+              {TEST_BUILD_BANNER}
             </Text>
           </View>
         ) : null}
@@ -1360,19 +1351,6 @@ function Shell() {
           <HaltedBanner countdown={phase === 'login'} />
         ) : null}
 
-        {/*
-          EVERY PRESS IS ASKED ON THE SHEET (Brad, 2026-10-10: "the confirm button ... needs to be
-          removed, so the sheet is the notifier with press button"; "blind presses is a blocker").
-          A request that came over the API - an ssh login, a gpg sign, an Edge approval - waits on
-          the soft key, and ui/PressSheet says what it is for and holds the press. A
-          passkey's presence (a site asking for a security key) is asked on the same sheet, with
-          the site it names; a key the app cannot press (no debug console) says to press the key.
-        */}
-        <PressSheet waiting={keyWaiting} fido={{needed: fido.presenceNeeded, canPress: emu.canPress === true, confirm: fido.confirm}} />
-        {/* a derive the soft key answered unasked (field 30 = none): said, sound once, closes itself (SilentUseSheet) */}
-        <SilentUseSheet />
-        {/* a newer build of the web app pushed while this tab was open, someone logged in: the sheet asks (src/webUpdate.ts) */}
-        <UpdateSheet />
 
         {/*
           THE KEYBOARD MUST NOT COVER THE FIELD BEING TYPED IN.
@@ -1418,7 +1396,7 @@ function Shell() {
                   return;
                 }
                 /* the web app asks its key nothing until now (useWebKey armWebKey); an unlocked key then goes on to the identity check */
-                if (shell === 'webapp') armWebKey();
+                if (KEY_WAITS_FOR_LOGIN) armWebKey();
                 // A blank key has no PIN to enter; it needs one chosen.
                 setPhase(emu.device === 'uninitialized' ? 'setup' : 'pin');
               }}
@@ -1452,8 +1430,8 @@ function Shell() {
                * right now, for this login.
                */
               keyPick={
-                /* the web app has no soft key to pick (MainApp NOT_WEB_TABS): the hard key is the only key there */
-                keys.attached === true && shell !== 'webapp'
+                /* where there is no soft key (the web app), the hard key is the only key: nothing to pick */
+                keys.attached === true && SOFT_KEY_HERE
                   ? {
                       value: keys.backend === 'usb' ? 'Hard key' : 'Soft Key',
                       onChange: next =>
