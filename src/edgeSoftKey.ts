@@ -92,6 +92,7 @@ const takingShared = new Set<string>();
  * lands during one files once more after it.
  */
 let filing: Promise<void> | null = null;
+let fileWhy = '';
 let fileAgain: (() => Promise<void>) | null = null;
 export function fileOwnLog(source: SoftKeyEdge, mirror: any, checkpoint: EdgeCopyKey['checkpoint']): Promise<void> {
   const run = () => fileOwnLogNow(source, mirror, checkpoint).catch((e: unknown) => console.log(`[edge] this key's log: not filed in the bucket - ${String((e as Error)?.message ?? e)}`));
@@ -106,7 +107,13 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
   const {logblocks} = require('node-onlykey-lib/edge');
   const store = currentNet() === 'test' ? 'edge-logs-test' : 'edge-logs';
   const have: Record<string, string> | null = await storeEntries(store);
-  if (!have || !mirror.links.length) return;
+  /* why nothing was filed, said once each time it changes (a sync that files nothing says nothing else) */
+  const why = !have ? 'no bucket is open here' : !mirror.links.length ? 'this copy holds no links' : '';
+  if (why) {
+    if (fileWhy !== why) { fileWhy = why; console.log(`[edge] this key's log: not filed - ${why}`); }
+    return;
+  }
+  fileWhy = '';
   const hex = (b: Uint8Array | null | undefined) => (b ? toHex(b) : '');
   const seals = (mirror.seals ?? []) as {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array}[];
   const anchor = checkpoint?.signaturePq?.length ? checkpoint : [...seals].reverse().find(s => s.signaturePq?.length) ?? null;
@@ -127,7 +134,11 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
   const {changed, forks} = logblocks.fileInto(have, j);
   for (const f of forks) console.log(`[edge] this key's log: NOT filed - ${f}`);
   const n = Object.keys(changed).length;
-  if (!n) return;
+  if (!n) {
+    const same = `already in the bucket (${mirror.links.length} link(s) held here)`;
+    if (fileWhy !== same) { fileWhy = same; console.log(`[edge] this key's log: ${same}`); }
+    return;
+  }
   await writeEntries(store, changed);
   console.log(`[edge] this key's log: filed in the bucket (${store}) - ${n} key(s) changed, ${mirror.links.length} link(s) held here`);
   /* the bucket changed: a trade with the devices in the room now, not at the next join */
