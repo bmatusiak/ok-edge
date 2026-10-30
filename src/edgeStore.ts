@@ -637,8 +637,14 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
   if (live && view.verdict.kind === 'verified' && ownKey?.checkpoint) takeSeal(mirror, head, ownKey.checkpoint, live);
   await saveMirror(mirror);
   lap('save');
-  /* Phase 5: a copy that verified goes into the identity bucket too (edgeSoftKey fileOwnLog) - not waited for here */
-  if (view.verdict.kind === 'verified' && typeof (source as any).openingWords === 'function') void require('./edgeSoftKey').fileOwnLog(source, mirror, ownKey?.checkpoint ?? null);
+  /*
+   * Phase 5: this key's log goes into the identity bucket too (edgeSoftKey fileOwnLog) - not waited for here. A copy
+   * with a GAP is filed as well (Brad, 2026-10-29: "replicate the bucket, it holds the edge log, that's the real gold"):
+   * every link it holds is the key's own, and the bucket is how the missing ones come back from the devices that have
+   * them - filing only a verified copy stopped the Pixel's log from spreading at its first old gap. A tampered copy
+   * never is, and the bucket's merge refuses a fork by itself (logblocks.fileInto).
+   */
+  if ((view.verdict.kind === 'verified' || view.verdict.kind === 'gap') && typeof (source as any).openingWords === 'function') void require('./edgeSoftKey').fileOwnLog(source, mirror, ownKey?.checkpoint ?? null);
   /* B7: new alarms become phone notifications - every sync, the tab's and the background copy's */
   await raiseAlarms(mirror, view, live ?? []).catch(() => {});
   lap('alarms');
