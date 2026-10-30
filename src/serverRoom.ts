@@ -104,7 +104,21 @@ export async function setServerUrl(url: string | null): Promise<void> {
     if (u.protocol !== 'https:' && !/^(localhost|127\.0\.0\.1)$/.test(u.hostname)) throw new Error('a server address is https:// (http only for this computer itself)');
     await AsyncStorage.setItem(SERVER_KEY, u.origin);
   } else {
+    const typed = await AsyncStorage.getItem(SERVER_KEY);
     await AsyncStorage.removeItem(SERVER_KEY);
+    /*
+     * A TYPED SERVER LEFT GOES BACK TO THE KEY'S (Brad, 2026-10-30: the firmware says which server - "directly from
+     * the firmware, instead of a flag"). Leaving a testing override (the Pixel on the box's server) left the phone
+     * with no server at all; the key's own server is the one it belongs in. Leaving the key's server itself, with no
+     * override, is still no server for this run.
+     */
+    if (typed) {
+      leaveServerRoom();
+      const back = await serverUrl();
+      set({url: back});
+      if (back) void joinServerRoom();
+      return;
+    }
   }
   leaveServerRoom();
   set({url: url ? new URL(url).origin : null});
