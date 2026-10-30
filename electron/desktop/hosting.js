@@ -54,33 +54,6 @@ function hostFor() {
 }
 
 /*
- * THE KEY'S OWN LINKS FROM THE SHARED RECORDS (Brad, 2026-10-24: "i need this to be a 1 to 1"): the
- * desktop runs the phone's Edge tab on the hard key, and the key holds only its newest links. What
- * the CLI picked up before is in ~/.onlykey-js - this computer's copy - and is offered to the tab's
- * copy the way a computer offers links to a phone (edgeStore.mergeOffered: checked against the key,
- * kept only if it verifies). Records only, never the key. -> {links: [[link, head, reveal|null]] hex, openings, notes}
- */
-/* the CLI's Edge home for a net (edge/cli/control.js edgeHome(): ~/.onlykey-js/edge, or edge-test) */
-const homeFor = (net) => path.join(os.homedir(), '.onlykey-js', net === 'test' ? 'edge-test' : 'edge');
-
-async function sharedLinks(deviceIdHex) {
-  /* the identity home that holds this device's copy - found in the records, so the tab stays the key's only reader */
-  const fs = require('fs');
-  const bucket = require('node-onlykey-lib/bucket/cli/home');
-  const id = String(deviceIdHex).toLowerCase();
-  const homes = ['live', 'test'].flatMap((net) => {
-    const base = homeFor(net);
-    try { return fs.readdirSync(base).filter((d) => /^[0-9a-f]{32}$/.test(d)).map((d) => path.join(base, d)); } catch (_) { return []; }
-  });
-  const home = homes.find((h) => bucket.kv(bucket.edgeAt(h, 'copies')).getItem(id.slice(0, 16)));
-  if (!home) return { links: [], openings: [], notes: null };
-  const c = require('node-onlykey-lib/edge/cli/copy').load(home, Buffer.from(id, 'hex'));
-  const hex = (b) => Buffer.from(b).toString('hex');
-  /* with its budgets' opening words and its notes (intents, receipt messages): a use is checked against its opening */
-  return { links: (c.links || []).map((r) => [hex(r.link), hex(r.head), r.reveal ? hex(r.reveal) : null]), openings: c.openings || [], notes: c.notes || null };
-}
-
-/*
  * THE CLI'S KEY WRITES WAIT FOR THE PAGE TO STAND ASIDE (desktop, 2026-10-24: the Edge tab's own reads
  * landed in the middle of a CLI command and the CLI misread the key). On the phone every byte goes
  * through the app's bridge, which holds the key for a computer's conversation (vendorBridge
@@ -148,7 +121,6 @@ module.exports = {
     'okedge:activeKey': (backend) => { activeKey = backend === 'embedded' ? 'embedded' : 'usb'; return activeKey; },
     'okedge:edgeAnswer': (id, answer) => { const done = answers.get(id); if (done) done(answer); return true; },
     'okedge:computerHeld': (id) => { const done = holdAcks.get(id); if (done) done(); return true; },
-    'okedge:sharedLinks': (deviceIdHex) => sharedLinks(deviceIdHex).catch(() => ({ links: [], openings: [], notes: null })),
     /*
      * THE IDENTITY'S BUCKET IN THE CLI'S FOLDER (Brad, 2026-10-24: "cli and desktop decrypt once, share same bucket
      * stored in filesystem"): the page's identity check opens it once with the key and keeps it here; after that the

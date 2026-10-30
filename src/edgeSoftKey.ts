@@ -332,22 +332,20 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   }
 
   private async takeSharedNow(id: string): Promise<void> {
-    let shared: {links: [string, string, string | null][]; openings: unknown[]; notes: any} | null;
-    if (shell === 'desktop') {
-      if (takenShared.has(id)) return;
-      takenShared.add(id);
-      const {desktop} = require('./platform');
-      shared = (await desktop.invoke('okedge:sharedLinks', id)) as typeof shared;
-    } else {
-      await takeOtherLogs(id, this).catch((e: any) => console.log(`[edge] other devices' logs: not read - ${String(e?.message ?? e)}`));
-      const fromBucket = bucketShared(id);
-      /* why nothing was taken, said once each time it changes (every refresh asks; a quiet one says nothing) */
-      const why = !fromBucket ? bucketSharedWhy : takenShared.has(`${id}:${fromBucket.mark}`) ? `already taken (${fromBucket.mark})` : null;
-      if (why && saidShared.get(id) !== why) { saidShared.set(id, why); console.log(`[edge] shared records: ${why}`); }
-      if (why || !fromBucket) return;
-      takenShared.add(`${id}:${fromBucket.mark}`);
-      shared = fromBucket;
-    }
+    /*
+     * THE BUCKET ON EVERY PLATFORM (2026-10-30, the desktop on key 3: "0 of 9 used", "validated unused", no device names).
+     * The desktop used to ask the main process for the CLI's old copy file instead (okedge:sharedLinks) - it had no bucket
+     * in memory - and skipped the other devices' logs. Since R1 it holds the bucket like the others, and the CLI files its
+     * log there (with each budget's opening words: which device, why), so it reads it here, the same way.
+     */
+    await takeOtherLogs(id, this).catch((e: any) => console.log(`[edge] other devices' logs: not read - ${String(e?.message ?? e)}`));
+    const fromBucket = bucketShared(id);
+    /* why nothing was taken, said once each time it changes (every refresh asks; a quiet one says nothing) */
+    const why = !fromBucket ? bucketSharedWhy : takenShared.has(`${id}:${fromBucket.mark}`) ? `already taken (${fromBucket.mark})` : null;
+    if (why && saidShared.get(id) !== why) { saidShared.set(id, why); console.log(`[edge] shared records: ${why}`); }
+    if (why || !fromBucket) return;
+    takenShared.add(`${id}:${fromBucket.mark}`);
+    const shared: {links: [string, string, string | null][]; openings: unknown[]; notes: any} = fromBucket;
     if (!shared || !shared.links.length) return;
     const offered = shared.links.map(([l, h, r]) => ({link: fromHex(l), head: fromHex(h), reveal: r ? fromHex(r) : null}));
     /*

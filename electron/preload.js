@@ -22,7 +22,6 @@ const CHANNELS = new Set([
   /* the page's answer to one Edge message from the CLI (electron/desktop/hosting.js, src/hooks/useDesktopHost.ts) */
   'okedge:edgeAnswer', 'okedge:computerHeld',
   /* the hard key's older links, openings and notes from the shared records (electron/desktop/hosting.js) */
-  'okedge:sharedLinks',
   /* this identity's bucket, opened once and kept with the CLI's in ~/.onlykey-js (node-onlykey-lib bucket/cli/home.js) */
   'okedge:bucketHas', 'okedge:bucketKeep', 'okedge:bucketRead', 'okedge:bucketMergeIn',
   /* the key's site: the window opens there (electron/main.js THE PAGE RUNS AT THE KEY'S SITE) */
