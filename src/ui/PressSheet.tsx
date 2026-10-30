@@ -158,7 +158,15 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
    * builds as Locate's line.
    */
   const tapLog = (line: string) => { if (__DEV__ || !buildInfo.debugLock) console.log(`[press] tap ${line}`); };
+  const state = (p: number) => (p < 0 ? 'not running' : `auth ${p & 0xff}, op 0x${((p >>> 8) & 0xff).toString(16)}, mode ${(p >>> 24) & 7}, window ${(p >>> 27) & 1 ? 'open' : 'shut'}`);
   const send = (button: string) => {
+    /*
+     * THE FIRMWARE AT THE TAP, AND ITS SENSE LOOP (the Pixel, 2026-10-30: a login's press was taken from the queue and the
+     * wait stayed at auth 3, window open): what it waited for when the tap went in, and how many button rounds it ran
+     * by 3 s on - none means its loop was busy elsewhere and never saw the press; some means it saw it and did not count it.
+     */
+    let at: {packed: number; rounds: number} | null = null;
+    void Promise.all([NativeOkEmu.confirmState(), OkEmu.rounds()]).then(([packed, rounds]) => { at = {packed: Number(packed), rounds: Number(rounds)}; tapLog(`${button}: at the tap - ${state(Number(packed))}, round ${rounds}`); }, () => {});
     tapLog(`${button}: sent to the firmware`);
     OkEmu.pressQueue(button).then(
       n => {
@@ -170,9 +178,9 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
          * bit 27 the window open). Local reads of the emulator - the key is not asked.
          */
         setTimeout(() => {
-          void Promise.all([OkEmu.pressPending(), NativeOkEmu.confirmState()]).then(([left, packed]) => {
-            const p = Number(packed);
-            tapLog(`${button}: 3 s on - ${left} still queued; firmware ${p < 0 ? 'not running' : `auth ${p & 0xff}, op 0x${((p >>> 8) & 0xff).toString(16)}, window ${(p >>> 27) & 1 ? 'open' : 'shut'}`}`);
+          void Promise.all([OkEmu.pressPending(), NativeOkEmu.confirmState(), OkEmu.rounds()]).then(([left, packed, rounds]) => {
+            const ran = at ? ` - ${Number(rounds) - at.rounds} button round(s) since the tap` : '';
+            tapLog(`${button}: 3 s on - ${left} still queued; firmware ${state(Number(packed))}${ran}`);
           }, () => {});
         }, 3000);
       },
