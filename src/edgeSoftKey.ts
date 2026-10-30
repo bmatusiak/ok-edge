@@ -47,8 +47,8 @@ async function takeOtherLogs(ownIdHex: string, soft: SoftKeyEdge): Promise<void>
   const open = tradeBucket();
   if (!open) return;
   /* judged only under this device's owner key (its own nametag statement): none yet - nothing marked, asked again later */
-  if (!(await require('./edgeDevices').ownerKey())) {
-    if (saidShared.get('others') !== 'no owner key') { saidShared.set('others', 'no owner key'); console.log("[edge] other devices' logs: waiting - name this device first (its nametag gives the owner key they are judged by)"); }
+  if (!(await require('./edgeDevices').ownerKey(soft))) {
+    if (saidShared.get('others') !== 'no owner key') { saidShared.set('others', 'no owner key'); console.log("[edge] other devices' logs: waiting - the key did not give its owner keys (locked, or an older firmware)"); }
     return;
   }
   const own = logblocks.devOf(ownIdHex);
@@ -678,6 +678,14 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    */
   async statement(nametag: string) {
     return this.edge.statement(nametag);
+  }
+
+  /*
+   * THE OWNER KEYS, READ (lib edge.ownerPublicKey / publicKeyPq('owner')): both halves every certification is checked
+   * against, with nothing signed - two reads, no press, no link.
+   */
+  async ownerKeys(): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array}> {
+    return {ownerKey: await this.edge.ownerPublicKey(), ownerKeyPq: await this.edge.publicKeyPq('owner')};
   }
 
   /*

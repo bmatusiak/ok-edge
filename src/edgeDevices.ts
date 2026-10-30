@@ -143,27 +143,43 @@ export async function ownStatement(deviceIdHex: string | null = currentDevice): 
 }
 
 /**
- * This key's owner public keys: the P-256 one (X||Y) and its ML-DSA-65 twin (1952 bytes) - from a statement the PERSON
- * had the key sign this session (setNametag), held in memory only; null until then.
+ * This key's owner public keys: the P-256 one (X||Y) and its ML-DSA-65 twin (1952 bytes) - READ from the key, nothing
+ * signed (SoftKeyEdge.ownerKeys: the firmware's PUBKEY and PUBKEY_PQ with "owner"), once a session per device, held in
+ * memory only. Every certification - a nametag, an agent identity - is checked against them.
  *
- * NOTHING SIGNS BY ITSELF (Brad, 2026-10-30: "i dont want nametag to auto sign themselves"; "i think you did that as a
- * fallback"): the statement this asked the key for once a session - over this device's nametag, or the word UNNAMED -
- * is gone, and with it the automatic re-sign of a stale nametag. The key gives its owner P-256 key only inside a
- * signed statement, so without one this session there is no owner key, and other devices' logs and nametags wait.
+ * NOTHING SIGNS BY ITSELF (Brad, 2026-10-30: "i dont want nametag to auto sign themselves"): the owner keys were learned
+ * from a statement the app asked for once a session, over this device's nametag or the word UNNAMED - a fallback, gone.
  */
 const owners = new Map<string, {ownerKey: Uint8Array; ownerKeyPq: Uint8Array}>();
-export async function ownerKey(): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
-  return currentDevice ? owners.get(currentDevice) ?? null : null;
+export async function ownerKey(soft?: {ownerKeys(): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array}>} | null): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
+  const dev = currentDevice;
+  if (!dev) return null;
+  const held = owners.get(dev);
+  if (held) return held;
+  try {
+    /*
+     * the Edge source already open when the caller has one (SoftKeyEdge.takeShared, Pixel 2026-10-29): opening another
+     * runs takeShared again, which asks this again - a loop that never returned and asked the key on every turn
+     */
+    const src = soft ?? await require('./edgeSoftKey').SoftKeyEdge.open();
+    if (!src) return null;
+    const o = await src.ownerKeys();
+    if (o.ownerKey?.length !== 64 || !o.ownerKeyPq?.length) return null;
+    owners.set(dev, o);
+    return o;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Set this device's nametag: the key signs it with its owner key (no press, no link) and the statement goes into the
- * identity bucket under this device - from there every trade carries it to your other devices and the CLI.
+ * Set this device's nametag: the key CERTIFIES it at a press (Brad, 2026-10-30: "change nametag to certify") - one link
+ * on the chain, then its owner key signs it naming that link - and the statement goes into the identity bucket under
+ * this device: from there every trade carries it to your other devices and the CLI.
  */
 export async function setNametag(soft: {statement(nametag: string): Promise<any>}, nametag: string): Promise<StoredStatement> {
   const st = await soft.statement(nametag);
   const s = store(st);
-  if (st.ownerKey?.length && st.ownerKeyPq?.length) owners.set(s.deviceId.toLowerCase(), {ownerKey: st.ownerKey, ownerKeyPq: st.ownerKeyPq});
   const entries = await logEntries();
   if (!entries) throw new Error('no bucket is open here - log in first');
   /* the shape lib logblocks files a device's statement in (its split of a copy) */

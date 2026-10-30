@@ -3,7 +3,7 @@
  * is set "in the Edge Management drawer"; a device gives "its own name for its device
  * fingerprint in the block"; "find a way to fix multi names for the same device").
  *
- * This device: its nametag, signed by its key's owner key (no press, no link) and kept in the
+ * This device: its nametag, certified by its key at a press (a link on the chain) and kept in the
  * identity bucket, which carries it to your other devices. Your devices: one row per key whose
  * signed nametag the bucket holds - every name it signed, newest first, its fingerprint, how far
  * its log is merged here. Nothing to remove: the list is what Edge holds (Brad, 2026-10-30).
@@ -65,7 +65,7 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
         <Text style={styles.op}>{nametagOr(own?.nametag)}</Text>
         {names.length > 1 ? <Text style={styles.dim}>{`Earlier: ${names.slice(1).join(', ')}`}</Text> : null}
         {devId ? <Text style={styles.dim}>{`Device ${short(devId)}`}</Text> : null}
-        <Text style={styles.dim}>{`Your other devices see this ${DEVICE_WORD} by its nametag. The key signs it; no press.`}</Text>
+        <Text style={styles.dim}>{`Your other devices see this ${DEVICE_WORD} by its nametag. The key certifies it: press the key when it asks.`}</Text>
         {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
         <View style={styles.row}>
           <Btn title={own ? 'Change nametag…' : 'Set nametag…'} onPress={() => { setDraft(own?.nametag ?? devName); setEditing(true); }} disabled={busy} />
