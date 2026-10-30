@@ -7,20 +7,17 @@
  * shells it is off on).
  *
  * MOTION: a smooth, continuous shrink - except in testing mode, where nothing moves continuously (quiet: drawn in steps
- * every 15 seconds). A development build can show the production motion in testing mode too (sessionStorage
- * okedge-idle-smooth = 1, read at load) - Brad: "debug is special and i want to see it shrink as it would in production".
+ * every 15 seconds).
  */
 import React, {useEffect, useRef, useState} from 'react';
 import {Animated, Easing, StyleSheet, View} from 'react-native';
 import {theme} from './theme';
 import {IDLE_MS, onIdle} from '../idleTimer';
 
-declare const sessionStorage: any;
 const STEP_MS = 15000;
-const forceSmooth = (() => { try { return __DEV__ && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('okedge-idle-smooth') === '1'; } catch { return false; } })();
 
 export function IdleBar({quiet}: {quiet: boolean}) {
-  const smooth = !quiet || forceSmooth;
+  const smooth = !quiet;
   const [s, setS] = useState<{running: boolean; lastActive: number; checking: boolean}>({running: false, lastActive: Date.now(), checking: false});
   const [now, setNow] = useState(Date.now());
   const scale = useRef(new Animated.Value(1)).current;
