@@ -43,7 +43,7 @@
 #        webapp - after android and desktop: the release web app with the hex (docs/firmware), the APK's manifest
 #                 (docs/android) and the desktop packages' (docs/desktop), the Worker bundled - the Downloads page
 #                 offers them all
-#   2. publish  - only with publish=true, after all of them: a GitHub prerelease (APK, desktop packages, hex) and the built site
+#   2. publish  - on a version-bump push, or by hand with publish=true; after all of them: a GitHub prerelease (APK, desktop packages, hex) and the built site
 #                 committed to the cloudflare branch; deployed by `wrangler deploy` when the repo has CLOUDFLARE_API_TOKEN
 # Any fail = stop: a failed job cancels the whole run, so nothing after it starts and nothing beside it goes on - and
 # publish needs every job, so nothing is published from sources that fail the kit or a build that failed.
@@ -60,6 +60,12 @@
 name: release
 
 on:
+  # EVERY PUSH TO MAIN IS TESTED; THE VERSION-BUMP COMMIT IS RELEASED (Brad, 2026-10-29: "auto trigger on the version
+  # bump commit" - that run builds and publishes; "if no version bump, run only the testing gate" - "so github will
+  # tell us if there is an issue"). The gate job runs on every push; the build line waits for the trigger job, which
+  # lets it go on only when app.json's version changed in the push.
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish:
@@ -80,7 +86,51 @@ env:
   APP_ID: com.okrn
 
 jobs:
+  # WHETHER THE BUILD LINE RUNS: started by hand, yes, with its publish choice; started by a push, only when app.json's
+  # version is not the one before the push (the version-bump commit) - and then it publishes. Any other push builds
+  # nothing: the firmware job needs this one, and every build after it needs the firmware job. The test gate does not
+  # wait for it - it runs on every push.
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.v.outputs.go }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - name: Checkout ok-edge
+        uses: actions/checkout@v4
+        with:
+          path: ok-edge
+          fetch-depth: 0
+      - name: A version bump?
+        id: v
+        working-directory: ok-edge
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo "started by hand: publish=${PUBLISH_INPUT:-false}"
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "publish=${PUBLISH_INPUT:-false}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          now=$(node -p "require('./app.json').expo.version")
+          was=$(git show "$BEFORE:app.json" 2>/dev/null | node -e "let s='';process.stdin.on('data',(d)=>{s+=d}).on('end',()=>{try{console.log(JSON.parse(s).expo.version)}catch{console.log('')}})")
+          if [ -n "$was" ] && [ "$was" != "$now" ]; then
+            echo "version $was -> $now: the release builds and publishes"
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no version bump (${was:-unknown} -> $now): the test gate only - nothing is built"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
   firmware:
+    needs: trigger
+    if: needs.trigger.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
@@ -105,7 +155,7 @@ jobs:
         working-directory: ok-edge
         env:
           GH_TOKEN: ${{ github.token }}
-          PUBLISH: ${{ inputs.publish }}
+          PUBLISH: ${{ needs.trigger.outputs.publish }}
         run: |
           emulator=$(node -p "require('./firmware/manifest.json').emulatorCommit || ''")
           [ -n "$emulator" ] || { echo "::error::firmware/manifest.json has no emulatorCommit - run tools/firmware.js build"; exit 1; }
@@ -582,8 +632,8 @@ jobs:
         run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   publish:
-    if: inputs.publish
-    needs: [firmware, gate, android, desktop, webapp]
+    if: needs.trigger.outputs.publish == 'true'
+    needs: [trigger, firmware, gate, android, desktop, webapp]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
