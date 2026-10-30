@@ -5,6 +5,8 @@
  * PIN - a test hex set up by the kit only (a production build has no console: only a person replugs it).
  *
  *   node tools/box/hardkey-restart.js            restart, unlock, print its status line
+ *   node tools/box/hardkey-restart.js --locked   restart and leave it LOCKED (a key that no longer answers: the idle
+ *                                                timer's log-out, src/idleTimer.ts) - unlock it again with no flag
  *   KIT=<onlykey-testing> node ...               the kit's checkout (default ~/project/onlykey/onlykey-testing)
  *
  * Why (box, 2026-10-29): after a derive_secret request timed out waiting for its 3-button code, key 2 kept answering
@@ -33,7 +35,7 @@ process.on('unhandledRejection', (e) => say(`(a stray probe: ${e && e.message})`
   say(`before: ${(await device.status()).raw}`);
   await device.restart();
   say('restarted');
-  await device.ensureUnlocked(PINS.primary);
+  if (!process.argv.includes('--locked')) await device.ensureUnlocked(PINS.primary);
   say(`after: ${(await device.status()).raw}`);
   await transport.stop();
   process.exit(0);
