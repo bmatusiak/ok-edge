@@ -86,7 +86,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
     setOpen({kind: 'opening'});
     try {
       const {okcrypto, identity, edge} = await getOnlyKey(activeBackend());
-      const open = () => openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}), read.edgeIdentity);
+      const open = () => openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}));
       if (read.bucket === 'kept' || typeof (identity as any)?.login !== 'function') {
         /* the desktop's shared file: opened with no press - nothing for a login budget to pay */
         await open();
@@ -102,7 +102,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         const signs = (read.bucket === 'none' ? 1 : 0) + (keyKept ? 0 : 1);
         /* the identity plugin's read, held (no key request): the bucket key's label names its public key */
         const held = await (identity as any).load();
-        const derives = [...(await bucketLabelsOf(read.identity, read.edgeIdentity)), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
+        const derives = [...(await bucketLabelsOf(read.identity)), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
         /* filed as this app's own budget: the Edge tab's history lists the login, its copy checks the login's links */
         await (identity as any).login(async () => {
           await open();

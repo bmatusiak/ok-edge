@@ -156,34 +156,30 @@ module.exports = {
      * never drop each other's change. The lib names the file from the identity id and refuses any other name.
      */
     'okedge:bucketHas': (identity, net) => bucketHome().hasIdentityBucket(identity, net),
-    /* the owner moved once, from the key's Edge identity id to its bucket identity id (lib home.moveIdentityBucket) */
-    'okedge:bucketMove': (fromId, toId, net) => bucketHome().moveIdentityBucket(fromId, toId, net),
     'okedge:bucketKeep': (identity, net, text) =>
       bucketHome().keepIdentityBucket(identity, net, require('node-onlykey-lib/bucket').open(text, { allowUnsealed: true }).bucket),
-    /* each feature's items in the kept bucket, by the lib's own store rules (the Sync tab's Features list) */
-    'okedge:bucketSummary': (identity, net) => {
+    /*
+     * THE PAGE HOLDS THE BUCKET IN MEMORY, AS EVERY PLATFORM DOES (ok-edge src/bucket/storage.desktop.ts; PROPOSAL-rectify-
+     * ok-edge.md R1). It reads the file once, and writes by handing its whole bucket back to be MERGED into the file inside
+     * its lock - the lib's merge with the store rules, newer wins - so a write the CLI made meanwhile is never lost. (It
+     * used to send every read and write here key by key: bucketGet/Set/Entries/SetMany/Summary/Move, gone.)
+     */
+    'okedge:bucketRead': (identity, net) => {
       const home = bucketHome();
-      const bucket = home.read(home.identityFile(identity, net));
+      if (!home.hasIdentityBucket(identity, net)) return null;
+      return require('node-onlykey-lib/bucket').serialize(home.read(home.identityFile(identity, net)));
+    },
+    'okedge:bucketMergeIn': (identity, net, text) => {
+      const lib = require('node-onlykey-lib/bucket');
       const rules = require('node-onlykey-lib/bucket/cli/trade').storeRules();
-      const out = {};
-      for (const [name, units] of Object.entries(require('node-onlykey-lib/bucket').replicate.summarize(bucket, { rules }))) {
-        const items = Object.keys(units).filter((k) => !k.endsWith('\u0001')).length;
-        if (items) out[name] = items;
-      }
-      return out;
-    },
-    'okedge:bucketGet': (identity, net, store, key) => bucketHome().kv(bucketHome().identityAt(identity, net, store)).getItem(key),
-    'okedge:bucketSet': (identity, net, store, key, value) => {
-      const kv = bucketHome().kv(bucketHome().identityAt(identity, net, store));
-      if (value === null) kv.removeItem(key);
-      else kv.setItem(key, String(value));
-      return true;
-    },
-    /* a whole store, and many keys in one locked write (the Edge log's blocks; src/bucketStore.ts storeEntries / writeEntries) */
-    'okedge:bucketEntries': (identity, net, store) => bucketHome().kv(bucketHome().identityAt(identity, net, store)).entries(),
-    'okedge:bucketSetMany': (identity, net, store, entries) => {
-      bucketHome().kv(bucketHome().identityAt(identity, net, store)).setMany(Object.fromEntries(Object.entries(entries || {}).map(([k, v]) => [k, String(v)])));
-      return true;
+      const home = bucketHome();
+      const report = home.update(home.identityFile(identity, net), (b) => {
+        const { bucket, report: r } = lib.merge(b, lib.parse(text), { rules });
+        b.stores = bucket.stores;
+        b.clock = bucket.clock;
+        return r;
+      });
+      return report.taken;
     },
   },
 };

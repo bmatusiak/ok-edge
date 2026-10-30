@@ -69,12 +69,12 @@ export async function readKeyIdentity(alive: () => boolean = () => true): Promis
     if (!alive()) return null;
     if (!held) return keep({kind: 'none', why: `Could not read this key's bucket identity: ${why}`, at: Date.now()});
     const identity = held.id;
-    /* Edge, when the key has it: this device's nametag, and its Edge identity - only to move a bucket kept under it */
+    /* Edge, when the key has it: this device's nametag, and its Edge identity - the identity check shows "this device" only with one */
     const soft = await SoftKeyEdge.open().catch(() => null);
     const edgeIdentity = soft ? (await soft.identityId().catch(() => null))?.toLowerCase() ?? null : null;
     const statement = soft ? await ensureNametag(soft).catch(() => null) : null;
     /* asked here so the check's button says what it will do; unknown is treated as the press it may need */
-    const bucket = await bucketState(identity, edgeIdentity).catch(() => 'sealed' as const);
+    const bucket = await bucketState(identity).catch(() => 'sealed' as const);
     /*
      * THE KEY'S SITE - where its bucket sync lives (src/serverRoom.ts setKeySite): ctap_bridge's site, as the identity
      * plugin read it from the key. A key without ctap_bridge, or with it off, has none: no server, Bluetooth only.
