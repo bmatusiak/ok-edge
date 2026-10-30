@@ -88,7 +88,15 @@ function result() {
 }
 
 async function connect() {
-  if (pipe && pipe.isRunning()) return result();
+  /*
+   * ALREADY OPEN: said again (Windows desktop, 2026-10-30): a page that reloaded - the window reopening at the key's site
+   * - asks to connect over a pipe this process kept open, and its key session waits for 'connected'; returned without it,
+   * the page sat on "Locked - enter your PIN" over an unlocked key.
+   */
+  if (pipe && pipe.isRunning()) {
+    status('connected', pipe.device.path);
+    return result();
+  }
   const HID = loadNodeHid();
   const p = createHidPipe({ loadHid: () => HID, path: hardKeyPath(HID) });
   try {
