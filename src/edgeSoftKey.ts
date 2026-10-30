@@ -296,6 +296,16 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     soft.backend = backend;
     /* "this device" for the statements (edgeDevices: one per device id) is the key the app opened just now */
     require('./edgeDevices').setCurrentDevice(toHex(deviceId), backend);
+    /*
+     * WHERE THIS HOST'S COPY ENDS (the head proof, 2026-10-30): a key that never reveals its head is followed by welding
+     * its newer links onto the last head this app's mirror holds - told to the lib's tracker before anything names the
+     * head (the login budget, a TX start). No key request. A host whose mirror is empty has no head until it syncs.
+     */
+    const mirror = await loadMirror(deviceId).catch(() => null);
+    const last = mirror?.links[mirror.links.length - 1];
+    if (last?.head && typeof (app.edge as any).knownHead === 'function') {
+      (app.edge as any).knownHead(require('node-onlykey-lib/edge').chain.decodeLink(last.link).seq, last.head, deviceId);
+    }
     await soft.takeShared().catch((e: any) => console.log(`[edge] shared records: not read - ${String(e?.message ?? e)}`));
     return soft;
   }

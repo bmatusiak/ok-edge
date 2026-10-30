@@ -17,18 +17,18 @@ import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
 import {netTag} from '../net';
-import {bucketLabelsOf, doorSecret, openIdentityBucket, openIdentityBucketWithSecret, openLegacyStorage} from '../bucketStore';
+import {doorSecret, openIdentityBucket, openIdentityBucketWithSecret, openLegacyStorage} from '../bucketStore';
 import {canKeepSession, keepSession, keptSession, takeSession} from '../webSession';
 import {currentNet} from '../net';
 import {proofKept, proofMaterial} from '../bucketTrade';
 import {DEVICE_WORD, shell} from '../platform';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {readKeyIdentity} from '../keyIdentity';
+import {afterLogin, localCard} from '../loginCard';
 import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 import {Linking} from 'react-native';
-import * as bucketLib from 'node-onlykey-lib/bucket';
 
 /*
  * THE KEY NAMES ANOTHER SITE (Brad, 2026-10-29: "if i go to apps.crp.to, it reads my key and sees i use a private mcp, it
@@ -87,8 +87,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
     try {
       const {okcrypto, identity, edge} = await getOnlyKey(activeBackend());
       const open = () => openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}));
-      if (read.bucket === 'kept' || typeof (identity as any)?.login !== 'function') {
-        /* the desktop's shared file: opened with no press - nothing for a login budget to pay */
+      if (typeof (identity as any)?.login !== 'function') {
         await open();
       } else {
         /*
@@ -99,22 +98,22 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
          * budget logs in as before.
          */
         const keyKept = await proofKept(read.identity);
-        const signs = (read.bucket === 'none' ? 1 : 0) + (keyKept ? 0 : 1);
-        /* the identity plugin's read, held (no key request): the bucket key's label names its public key */
-        const held = await (identity as any).load();
-        const derives = [...(await bucketLabelsOf(read.identity)), ...(keyKept ? [] : [bucketLib.bucketIdentity.bucketKeyLabel(held.publicKey)])];
-        /* filed as this app's own budget: the Edge tab's history lists the login, its copy checks the login's links */
+        /*
+         * THIS DEVICE'S LOGIN CARD (src/loginCard.ts; Brad, 2026-10-30): with the card this host keeps, ONE Edge budget
+         * inside it pays the login's requests - one press, each a link with its receipt. Without it (a first login, a
+         * new host, a restored device) the login is manual - each request asks on its own - and afterwards the card is
+         * taken from the bucket, or offered to be made. The desktop too: its shared bucket opens inside the card's login.
+         */
+        const card = await (identity as any).loginCard();
+        const kept = card ? await localCard(read.identity, card.device) : null;
         const logged = await (identity as any).login(async () => {
           await open();
           if (!keyKept) await proofMaterial();
-        }, {reason: loginReason(), derives, signs, onPress: () => setOpen({kind: 'press'}), ...SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`)});
-        /*
-         * NO LOGIN BUDGET, SAID (Brad, 2026-10-30, key 3 in the web app: "it made me press 3 different things for login
-         * (not using edge to login)"): with no Edge on the key, or a firmware without the login budget (it refuses a
-         * derive scope), the lib logs in as before - each derive and signature asks on its own. Said here, so the
-         * presses are not a mystery.
-         */
-        if (!logged?.budget && derives.length + signs > 1) console.log(`[identity] ${read.identity.slice(0, 12)}: no login budget on this key (no Edge, or its firmware has none) - ${derives.length + signs} requests asked one by one`);
+        }, {card: kept, reason: loginReason(), onPress: () => setOpen({kind: 'press'}), ...SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`)});
+        if (!logged?.budget) {
+          console.log(`[identity] ${read.identity.slice(0, 12)}: a manual login - ${logged?.manual ?? 'no budget'}`);
+          if (card) void afterLogin(read.identity, card.device).catch((e: unknown) => console.log(`[card] ${String((e as Error)?.message ?? e)}`));
+        }
       }
       /* chosen: this login kept for the tab's next load (the bucket's secret, encrypted - webSession.ts) */
       if (stay && read.kind === 'read') {

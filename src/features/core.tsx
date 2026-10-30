@@ -45,6 +45,7 @@ import {HostChallengeSheet} from '../ui/HostChallengeSheet';
 import {KeyBusySheet} from '../ui/KeyBusySheet';
 import {PressSheet} from '../ui/PressSheet';
 import {SilentUseSheet} from '../ui/SilentUseSheet';
+import {LoginCardSheet} from '../ui/LoginCardSheet';
 import {UpdateSheet} from '../ui/UpdateSheet';
 
 type Register = (err: Error | null, services: Record<string, unknown>) => void;
@@ -283,6 +284,7 @@ export function prompts() {
       <KeyBusySheet />
       <PressSheet waiting={keyWaiting} fido={presence} />
       <SilentUseSheet />
+      <LoginCardSheet />
       <UpdateSheet />
     </>
   );

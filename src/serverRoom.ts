@@ -145,11 +145,31 @@ let joining = false;
 let joinedFor: string | null = null;
 let tradeChain: Promise<void> = Promise.resolve();
 
+/*
+ * THE FIRST SYNC OF THIS LOGIN (the login card, 2026-10-30): a new host opens an empty bucket that fills from the server's
+ * sealed copy after the join - this device's login card among it. A step that looks for something the bucket may hold
+ * waits for that first sync (or for none: no server, the server keeps no copy) instead of reading an empty bucket.
+ */
+let firstSynced = false;
+const syncWaiters = new Set<() => void>();
+function markFirstSync(): void {
+  if (firstSynced) return;
+  firstSynced = true;
+  for (const w of [...syncWaiters]) w();
+  syncWaiters.clear();
+}
+/** Resolves once this login's first sealed-copy sync is done - at once when there is no server to sync with. */
+export function afterFirstSync(): Promise<void> {
+  if (firstSynced || !state.url) return Promise.resolve();
+  return new Promise(resolve => { syncWaiters.add(resolve); });
+}
+
 /** Leave the room (the address changed, or the bucket closed). */
 export function leaveServerRoom(): void {
   const r = room;
   room = null;
   joinedFor = null;
+  firstSynced = false;
   if (r) r.close();
   detachAgents();
   set({status: 'off', why: null, you: null, peers: []});
@@ -265,6 +285,7 @@ async function sealedSync(why: string): Promise<void> {
   const store = r.sealedStore();
   if (!(await store.on())) {
     if (sealedSaid !== 'off') { sealedSaid = 'off'; console.log('[room] the sealed copy: this server keeps none for this identity'); }
+    markFirstSync();
     return;
   }
   const {logblocks} = require('node-onlykey-lib/edge');
@@ -279,6 +300,7 @@ async function sealedSync(why: string): Promise<void> {
   }
   sealedSaid = 'on';
   console.log(`[room] the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
+  markFirstSync();
 }
 
 /** The Server panel's Try again: one more join, which asks the key again when it has to. */

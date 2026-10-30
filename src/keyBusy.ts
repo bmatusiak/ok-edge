@@ -43,13 +43,13 @@ const OKEDGE = 0xf8;
 const EDGE_WHAT: Record<number, string> = {
   0x01: 'reading the chain head', 0x02: 'reading chain links', 0x03: "reading the key's checkpoint",
   0x04: "reading the key's Edge public key", 0x05: "reading the key's post-quantum public key",
-  0x06: "signing this device's nametag", 0x07: 'reading the post-quantum signature',
+  0x07: 'reading the post-quantum signature', 0x08: 'certifying (press the key)', 0x09: 'proving the chain head',
   0x10: 'opening a budget', 0x11: "naming a budget's identity", 0x12: 'ending a budget', 0x13: 'holding a budget',
   0x14: 'resuming a budget', 0x20: 'filing a receipt', 0x21: 'settling what is owed', 0x22: 'starting a budget use',
   0x34: 'recording a loss',
 };
 /* the Edge requests the key answers only after a press (lib edge/plugin pressed()) */
-const EDGE_PRESSED = new Set([0x10, 0x14, 0x21, 0x34]);
+const EDGE_PRESSED = new Set([0x08, 0x10, 0x14, 0x21, 0x34]);
 const MSG_WHAT: Record<number, string> = {
   0xe4: 'connecting to the key', 0xec: 'reading a public key', 0xed: 'signing', 0xf0: 'decrypting',
   0xf3: 'collecting an answer', 0xfb: "reading the key's allowed site", 0xfc: 'deriving a secret',
