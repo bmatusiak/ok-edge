@@ -42,6 +42,14 @@ const {OP, DECISION, END, FLAG} = codes;
 function verdictLine(v: Verdict): {text: string; color: string} {
   switch (v.kind) {
     case 'verified':
+      /* history this device never held, beneath the key's signed checkpoint: amber, not red (edgeStore notHere) */
+      if (v.notHere?.length) {
+        const ranges = v.notHere.map(l => (l.from === l.to ? `#${l.from}` : `#${l.from}–#${l.to}`)).join(', ');
+        return {
+          text: `Verified through #${v.through} by the key's checkpoint. ${ranges} ${v.notHere.length === 1 && v.notHere[0].from === v.notHere[0].to ? 'is' : 'are'} not on this ${DEVICE_WORD} - another device of this key may still hold ${v.notHere.length === 1 && v.notHere[0].from === v.notHere[0].to ? 'it' : 'them'}.`,
+          color: theme.warn,
+        };
+      }
       return {
         text: v.through < 0 ? 'Verified: nothing recorded yet' : `Verified through #${v.through}${v.lost?.length ? ` (${v.lost.map(l => (l.from === l.to ? `#${l.from}` : `#${l.from}–#${l.to}`)).join(', ')} accepted as lost)` : ''}`,
         color: theme.ok,

@@ -143,7 +143,12 @@ export type Verdict =
   | {kind: 'locked'}
   | {kind: 'not-synced'}
   /* lost: ranges the person accepted as gone (LOSS links, R24) - verified around them */
-  | {kind: 'verified'; through: number; lost?: {from: number; to: number}[]}
+  /*
+   * notHere: links this device never held, beneath a checkpoint the key signed (both halves) - the key vouches for the
+   * chain they belong to, so they are history to fetch from another device, not a failure (Brad, 2026-10-30: "verification
+   * is fine as long as the key confirms the checkpoint"; PROPOSAL-edge-chain-gold.md)
+   */
+  | {kind: 'verified'; through: number; lost?: {from: number; to: number}[]; notHere?: {from: number; to: number}[]}
   /*
    * NO SIGNATURE CHECKED (Brad, 2026-10-11: "checking every field in a token means nothing if we
    * never check the signature"): every link welds up to the head the key reported, but no
@@ -1006,7 +1011,8 @@ function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ring
     );
     if (a.chain.ok && !a.chain.gaps.length && !a.open.length && !a.missing.length) {
       const lost = was.verdict.kind === 'verified' ? was.verdict.lost : undefined;
-      const verdict: Verdict = lost ? {kind: 'verified', through: head.seq, lost} : {kind: 'verified', through: head.seq};
+      const notHere = was.verdict.kind === 'verified' ? was.verdict.notHere : undefined;
+      const verdict: Verdict = {kind: 'verified', through: head.seq, ...(lost ? {lost} : {}), ...(notHere ? {notHere} : {})};
       remember(verdict, was.unverified);
       lastCheck = 'new-links';
       console.log(`[edge] verify ${id.slice(0, 8)}: new links #${was.lastSeq + 1}..#${head.seq} only`);
@@ -1100,6 +1106,15 @@ function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ring
   const open: {from: number; to: number}[] = a.open;
   const lost: {from: number; to: number}[] = a.missing;
   if (result.failure) verdict = {kind: 'tampered', seq: result.failure.seq, reason: result.failure.reason};
+  /*
+   * A GAP BENEATH A CONFIRMED CHECKPOINT (the Pixel's live chain, 2026-10-30: #157-#160 never reached this device - swiped
+   * away before the copy kept them - and the red "does not match the key" stood there for good, every sync a full check):
+   * the key signed its head with both halves (hybridOk, above), the links after the gap weld up to it, and the ones
+   * before it are checked as always. The missing links are history this device does not hold - kept as notHere, drawn as
+   * such, fetched from another device when one has them - and the copy counts as verified, so the next sync checks only
+   * new links. Without that signature a gap is still a gap.
+   */
+  else if (open.length && hybridOk) verdict = {kind: 'verified', through: head.seq, notHere: open, ...(lost.length ? {lost} : {})};
   else if (open.length) verdict = {kind: 'gap', through: result.verifiedThrough, from: open[0].from, to: open[0].to};
   else if (lost.length) verdict = {kind: 'verified', through: head.seq, lost};
   else verdict = {kind: 'verified', through: result.verifiedThrough};
