@@ -23,8 +23,10 @@ export type KeyBusy = {
   /* the key waits for its press (an Edge budget opened, resumed or settled; a loss accepted) */
   press: boolean;
   done: boolean;
+  /* how the request went: through the WebAuthn tunnel (a browser window a step), or straight to the key (the phone's soft key, a USB key) */
+  via: 'tunnel' | 'direct';
 };
-type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean};
+type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'};
 
 const SHOW_AFTER_MS = 250;
 const HIDE_AFTER_MS = 300;
@@ -78,6 +80,20 @@ export function noteSettle(e: {ms: number; why?: string}) {
 }
 
 /** okcrypto.on('tunnel', noteTunnel) - one operation's progress */
+/*
+ * AN EDGE REQUEST STRAIGHT TO THE KEY (lib edge.onRequest; Brad, 2026-10-29: the phone shows what the key is doing, as
+ * the web app does - "a refresh is just a trigger for the operation, the sheet shows what's happening"): the phone's
+ * soft key and a key on USB answer Edge without the tunnel, so its own begin and end feed the same sheet. A request
+ * that waits for a press is left to the press sheet this host already shows for it (the soft key's Press button).
+ * Edge requests on one key run one at a time (the plugin's lane), so one counter names them.
+ */
+let edgeOp = 0;
+export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: boolean}) {
+  if (EDGE_PRESSED.has(e.sub)) return;
+  if (e.phase === 'begin') edgeOp += 1;
+  noteTunnel({phase: e.phase, id: edgeOp, msg: OKEDGE, slot: e.sub, step: e.phase === 'end' ? 1 : 0, steps: 1, ok: e.ok, via: 'direct'});
+}
+
 export function noteTunnel(e: TunnelEvent) {
   if (e.phase === 'begin') timeline(`begin #${e.id} ${whatOf(e.msg, e.slot)}`);
   if (e.phase === 'end') timeline(`end #${e.id} ${whatOf(e.msg, e.slot)} steps=${e.step} ${e.ok ? 'ok' : 'failed'}`);
@@ -91,7 +107,7 @@ export function noteTunnel(e: TunnelEvent) {
   const steps = Math.max(e.steps || 1, e.step, 1);
   const b: KeyBusy = {
     what: whatOf(e.msg, e.slot), step: e.step, steps, ops, waiting: e.waiting ?? 0,
-    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), done: false,
+    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), done: false, via: e.via ?? 'tunnel',
   };
   if (e.phase === 'end') {
     inFlight = false;

@@ -1,6 +1,7 @@
 /*
- * WAIT FOR THE KEY (src/keyBusy.ts): over whatever tab is open while the key works through the WebAuthn tunnel - what
- * it is doing, a bar over the operation's steps, and why the browser keeps showing its security-key window. Nothing to
+ * WAIT FOR THE KEY (src/keyBusy.ts): over whatever tab is open while the key works - through the WebAuthn tunnel (the
+ * web app) or straight to it (the phone's soft key, a USB key) - what it is doing, a bar over the operation's steps, and,
+ * over the tunnel, why the browser keeps showing its security-key window. Nothing to
  * tap: it goes away when the key is done. The shared Sheet, so the system bars and the backdrop are its business. The
  * code to enter has its own sheet (HostChallengeSheet), which this one steps aside for.
  */
@@ -32,7 +33,9 @@ export function KeyBusySheet() {
       <Text style={styles.note}>
         {b.press && !b.done
           ? 'The key is waiting for you: press it to go on. The browser window that asks for your security key is part of this step.'
-          : 'Each step is one security-key window from your browser - that is this app talking to your OnlyKey. Wait here until it is done.'}
+          : b.via === 'direct'
+            ? 'This app is talking to your OnlyKey. Wait here until it is done.'
+            : 'Each step is one security-key window from your browser - that is this app talking to your OnlyKey. Wait here until it is done.'}
       </Text>
     </Sheet>
   );
