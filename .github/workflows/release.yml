@@ -43,7 +43,8 @@
 #        webapp - after android and desktop: the release web app with the hex (docs/firmware), the APK's manifest
 #                 (docs/android) and the desktop packages' (docs/desktop), the Worker bundled - the Downloads page
 #                 offers them all
-#   2. publish  - on a version-bump push, or by hand with publish=true; after all of them: a GitHub prerelease (APK, desktop packages, hex) and the built site
+#   2. publish  - on a push while main's version is not the one the cloudflare branch holds, or by hand with
+#                 publish=true; after all of them: a GitHub prerelease (APK, desktop packages, hex) and the built site
 #                 committed to the cloudflare branch; deployed by `wrangler deploy` when the repo has CLOUDFLARE_API_TOKEN
 # Any fail = stop: a failed job cancels the whole run, so nothing after it starts and nothing beside it goes on - and
 # publish needs every job, so nothing is published from sources that fail the kit or a build that failed.
@@ -53,20 +54,21 @@
 # it (its build is wrangler deploy of the branch as it is: the Worker already bundled, no build command).
 #
 # EVERY PUBLISHED RELEASE HAS ITS OWN VERSION (Brad, 2026-10-28: "we published under 0.0.8, so we need to bump before
-# releasing again"): with publish=true the plan step stops the run when a release of app.json's version is already
-# published - bump app.json and package.json first.
+# releasing again"): with publish=true the plan step stops the run when the cloudflare branch already holds app.json's
+# version - bump app.json and package.json first. The branch is the record of what is published: each of its commits
+# starts with the release tag, v<version>-<code>.
 #
 # The first run should be publish=false: it uploads the builds as artifacts and changes nothing.
 
 name: release
 
 on:
-  # EVERY PUSH TO MAIN IS TESTED; THE VERSION-BUMP COMMIT IS RELEASED (Brad, 2026-10-29: "auto trigger on the version
-  # bump commit" - that run builds and publishes; "if no version bump, run only the testing gate" - "so github will
-  # tell us if there is an issue"; "the version build is commit directed, but normal checking is only the latest from
-  # push"). The gate job tests the push's latest commit; the build line waits for the trigger job, which finds the
-  # commit in the push that changed app.json's version and has the build line build and publish THAT commit - newer
-  # commits after it in the same push are tested, not released.
+  # EVERY PUSH TO MAIN IS TESTED; AN UNPUBLISHED VERSION IS RELEASED UNTIL IT IS (Brad, 2026-10-30: "the cloudflare
+  # should hold the version that's built, if it don't match then it should trigger ... that way if it fails and we push,
+  # it tries to get the build published until the gate and builds pass"). The trigger job compares app.json's version
+  # on the pushed commit with the one the cloudflare branch holds: different, and the build line builds and publishes
+  # the push's latest commit; the same, and the push is tested only. A failed build publishes nothing, so the next push
+  # tries again.
   push:
     branches: [main]
   workflow_dispatch:
@@ -92,7 +94,7 @@ env:
 
 jobs:
   # WHETHER THE BUILD LINE RUNS: started by hand, yes, with its publish choice; started by a push, only when app.json's
-  # version is not the one before the push (the version-bump commit) - and then it publishes. Any other push builds
+  # version is not the one the cloudflare branch holds - and then it publishes the pushed commit. Any other push builds
   # nothing: the firmware job needs this one, and every build after it needs the firmware job. The test gate does not
   # wait for it - it runs on every push.
   trigger:
@@ -101,7 +103,7 @@ jobs:
     outputs:
       go: ${{ steps.v.outputs.go }}
       publish: ${{ steps.v.outputs.publish }}
-      # the commit the build line builds and publishes: the version-bump commit (or, by hand, the one started on)
+      # the commit the build line builds and publishes: the pushed one (or, by hand, the one started on)
       ref: ${{ steps.v.outputs.ref }}
     steps:
       - name: Checkout ok-edge
@@ -109,13 +111,13 @@ jobs:
         with:
           path: ok-edge
           fetch-depth: 0
-      - name: A version bump?
+      - name: Is main's version published?
         id: v
         working-directory: ok-edge
         env:
           EVENT: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
           PUBLISH_INPUT: ${{ inputs.publish }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then
             echo "started by hand on ${GITHUB_SHA:0:7}: publish=${PUBLISH_INPUT:-false}"
@@ -124,41 +126,35 @@ jobs:
             echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # app.json's version at a commit ('' when it has none there)
-          version() { git show "$1:app.json" 2>/dev/null | node -e "let s='';process.stdin.on('data',(d)=>{s+=d}).on('end',()=>{try{console.log(JSON.parse(s).expo.version)}catch{console.log('')}})"; }
-          # the push's commits, oldest first (a new branch has no before: its newest commit alone)
-          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then commits=$(git rev-list --reverse "$BEFORE..$GITHUB_SHA"); else commits=$GITHUB_SHA; fi
-          bump=""; from=""; to=""
-          for c in $commits; do
-            was=$(version "$c^"); now=$(version "$c")
-            if [ -n "$was" ] && [ -n "$now" ] && [ "$was" != "$now" ]; then bump=$c; from=$was; to=$now; fi
-          done
-          if [ -n "$bump" ]; then
-            echo "version $from -> $to in ${bump:0:7}: the build line builds and publishes ${bump:0:7}; the test gate tests ${GITHUB_SHA:0:7}"
+          now=$(node -p "require('./app.json').expo.version")
+          # the version the cloudflare branch holds: its newest commit starts with the tag, v<version>-<code> ('' when
+          # the branch has no release commit on top)
+          held=$(gh api "repos/$GITHUB_REPOSITORY/commits/cloudflare" --jq '.commit.message' 2>/dev/null | head -1 | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)-[0-9]+: .*/\1/p')
+          if [ "$now" != "$held" ]; then
+            echo "main is $now, the cloudflare branch holds ${held:-no release}: the build line builds and publishes ${GITHUB_SHA:0:7}"
             echo "go=true" >> "$GITHUB_OUTPUT"
             echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "ref=$bump" >> "$GITHUB_OUTPUT"
+            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           else
-            echo "no version bump in this push: the test gate only, on ${GITHUB_SHA:0:7} - nothing is built"
+            echo "$now is published (the cloudflare branch holds it): the test gate only, on ${GITHUB_SHA:0:7} - nothing is built"
             echo "go=false" >> "$GITHUB_OUTPUT"
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           fi
-      # NEWER WINS FOR TESTING (Brad, 2026-10-30: "can the workflow cancel the other runs automatically"): an older run
-      # on this branch that only tests - its firmware job skipped - gives way to this one, which tests a newer commit or
-      # builds and publishes. A run that builds or publishes is never cancelled; one whose trigger has not decided yet
-      # is left alone.
-      - name: Older test-only runs give way
+      # NEWER WINS (Brad, 2026-10-30: "can the workflow cancel the other runs automatically"): an older run on this
+      # branch gives way to this one, which tests - and, while the version is unpublished, builds - a newer commit. The
+      # one exception is a run whose publish job has started: it finishes (its tag and the cloudflare branch), and this
+      # run's plan step then sees the version published.
+      - name: Older runs give way
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           for status in queued in_progress; do
             for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch "$GITHUB_REF_NAME" --status "$status" --json databaseId --jq '.[].databaseId'); do
               [ "$id" -lt "$GITHUB_RUN_ID" ] || continue
-              fw=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --jq '.jobs[] | select(.name=="firmware") | .conclusion')
-              if [ "$fw" = skipped ]; then
-                gh run cancel "$id" --repo "$GITHUB_REPOSITORY" && echo "older test-only run $id cancelled: run $GITHUB_RUN_ID tests newer" >> "$GITHUB_STEP_SUMMARY"
-              fi
+              pub=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --jq '.jobs[] | select(.name=="publish") | .status')
+              if [ "$pub" = in_progress ] || [ "$pub" = completed ]; then continue; fi
+              gh run cancel "$id" --repo "$GITHUB_REPOSITORY" && echo "older run $id cancelled: run $GITHUB_RUN_ID tests ${GITHUB_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY"
             done
           done
 
@@ -199,10 +195,11 @@ jobs:
           [ -n "$emulator" ] || { echo "::error::firmware/manifest.json has no emulatorCommit - run tools/firmware.js build"; exit 1; }
           version=$(node -p "require('./app.json').expo.version")
           [ "$version" = "$(node -p "require('./package.json').version")" ] || { echo "::error::app.json's version $version is not package.json's"; exit 1; }
-          # a published version is never published again: the tags are v<version>-<code>
+          # a published version is never published again: published = the cloudflare branch holds it (its newest commit
+          # starts with the tag, v<version>-<code>) - a run that failed before that tries again on the next push
           if [ "$PUBLISH" = true ]; then
-            taken=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 500 --json tagName --jq '.[].tagName' | grep -E "^v${version//./\\.}-[0-9]+$" | head -1 || true)
-            [ -z "$taken" ] || { echo "::error::version $version is already published ($taken) - bump app.json and package.json first"; exit 1; }
+            held=$(gh api "repos/$GITHUB_REPOSITORY/commits/cloudflare" --jq '.commit.message' 2>/dev/null | head -1 | sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)-[0-9]+: .*/\1/p')
+            [ "$held" != "$version" ] || { echo "::error::version $version is already published (the cloudflare branch holds it) - bump app.json and package.json first"; exit 1; }
           fi
           code=$((1000 + $(git rev-list --count HEAD)))
           echo "emulator=$emulator" >> "$GITHUB_OUTPUT"
@@ -686,7 +683,7 @@ jobs:
     timeout-minutes: 20
     env:
       TAG: ${{ needs.firmware.outputs.tag }}
-      # the commit released: the version bump, not the push's latest
+      # the commit released: the one the trigger named (the pushed commit)
       RELEASE_SHA: ${{ needs.trigger.outputs.ref }}
     steps:
       - uses: actions/download-artifact@v4
