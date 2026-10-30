@@ -1136,10 +1136,15 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
         {!edge.available ? null : <YourDevicesCard headSeq={edge.view?.headSeq} />}
         {!edge.available ? null : <BlocksCard edge={edge} />}
         {/* the web app has no soft key */}
-        {!testingMode || !edge.available || shell === 'webapp' ? null : (
-          <Section title="Soft key (testing)">
+        {/*
+          TESTING, ON EVERY SHELL: the budget buttons work with any key that has Edge - the web app's box runs on a hard
+          key use them (tools/box/webapp-edge-budget.sh). Hidden from the web app once, with the soft-key-only panels
+          (2026-10-29), which stopped those runs; only the watchdog and alarm row below is the phone's.
+        */}
+        {!testingMode || !edge.available ? null : (
+          <Section title="Testing">
             <Text style={styles.dim}>
-              The soft key has Edge. Until an agent's MCP server can send requests, this makes one; agent signs come from the CLI or the e2e test.
+              This key has Edge. These make the requests an agent would: a budget, a pressed sign, a sign the budget pays; agent signs also come from the CLI or the e2e test.
             </Text>
             <View style={styles.row}>
               <Btn
@@ -1155,13 +1160,15 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
               * the way a dead JS side would look - no beats, no cleanup. The native
               * watchdog must post "Edge watching stopped" within ~30 s. Restart the app after.
               */}
-            <View style={styles.row}>
-              <Btn title="Freeze JS (test)" tone="danger" onPress={() => { for (;;) { /* never returns */ } }} />
-              <Btn
-                title="Post a test Edge alarm"
-                onPress={() => NativeEdgeAlert?.post(edge.view?.headSeq ?? 0, 'Edge: test alarm', 'A test alarm from the testing panel.', `budget ${edge.budgets.map(b => b.grantId).join(', ') || '-'}`, false)}
-              />
-            </View>
+            {shell !== 'android' ? null : (
+              <View style={styles.row}>
+                <Btn title="Freeze JS (test)" tone="danger" onPress={() => { for (;;) { /* never returns */ } }} />
+                <Btn
+                  title="Post a test Edge alarm"
+                  onPress={() => NativeEdgeAlert?.post(edge.view?.headSeq ?? 0, 'Edge: test alarm', 'A test alarm from the testing panel.', `budget ${edge.budgets.map(b => b.grantId).join(', ') || '-'}`, false)}
+                />
+              </View>
+            )}
           </Section>
         )}
       </BottomDrawer>
