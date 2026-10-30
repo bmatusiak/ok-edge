@@ -75,8 +75,10 @@ on:
         type: boolean
         default: false
 
-# one at a time: two runs would race for the tag and the cloudflare branch
-concurrency: release
+# NOT ONE RUN AT A TIME: only the publish job is (its own concurrency, below - two publishes would race for the tag and
+# the cloudflare branch). A whole-workflow queue kept a newer run waiting behind an older test-only one (Brad,
+# 2026-10-30: "the test gate is 17m 24s, can we cancel the old run and start the one that publishes") - the trigger
+# job now cancels older test-only runs itself.
 
 permissions:
   contents: write
@@ -141,6 +143,23 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           fi
+      # NEWER WINS FOR TESTING (Brad, 2026-10-30: "can the workflow cancel the other runs automatically"): an older run
+      # on this branch that only tests - its firmware job skipped - gives way to this one, which tests a newer commit or
+      # builds and publishes. A run that builds or publishes is never cancelled; one whose trigger has not decided yet
+      # is left alone.
+      - name: Older test-only runs give way
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for status in queued in_progress; do
+            for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --branch "$GITHUB_REF_NAME" --status "$status" --json databaseId --jq '.[].databaseId'); do
+              [ "$id" -lt "$GITHUB_RUN_ID" ] || continue
+              fw=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --jq '.jobs[] | select(.name=="firmware") | .conclusion')
+              if [ "$fw" = skipped ]; then
+                gh run cancel "$id" --repo "$GITHUB_REPOSITORY" && echo "older test-only run $id cancelled: run $GITHUB_RUN_ID tests newer" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            done
+          done
 
   firmware:
     needs: trigger
@@ -658,6 +677,10 @@ jobs:
   publish:
     if: needs.trigger.outputs.publish == 'true'
     needs: [trigger, firmware, gate, android, desktop, webapp]
+    # one publish at a time: two would race for the tag and the cloudflare branch (never cancelled - it waits)
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
