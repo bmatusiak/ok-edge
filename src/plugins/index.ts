@@ -6,7 +6,9 @@ import recipients, {type RecipientSource, type RecipientsService} from './recipi
 import passwords from './passwords/plugin';
 import guestbook from './guestbook/plugin';
 import cryptobox from './cryptobox/plugin';
-import type {AppTab, AppWatch} from './types';
+/* the core tabs (src/features/core.tsx), this platform's list (list.android.ts / list.web.ts / list.desktop.ts) */
+import {coreFeatures} from '../features/list';
+import type {AppTab, AppWatch, TabState} from './types';
 
 /*
  * THE APP PLUGINS, composed with Rectify as src/onlykey.ts composes the library's (Brad: Rectify
@@ -17,7 +19,7 @@ import type {AppTab, AppWatch} from './types';
  * "i want the password manager to act as its own plugin, keeping it easy to remove and work on
  * seperatly").
  */
-const PLUGINS: any[] = [tabs, recipients, passwords, guestbook, cryptobox];
+const PLUGINS: any[] = [tabs, recipients, ...coreFeatures, passwords, guestbook, cryptobox];
 
 let started: TabsService | null = null;
 let recipientsService: RecipientsService | null = null;
@@ -36,6 +38,12 @@ const app = Rectify.build(PLUGINS, (err: Error | null, ready: any) => {
 app.start();
 
 /** The plugins' tabs; empty until they have started (a moment after launch, before login). */
+/** The drawer's tabs now, in order (tabs.ts shown). */
+export function shownTabs(state: TabState): readonly AppTab[] {
+  return started ? started.shown(state) : [];
+}
+
+/** Every tab, shown or kept (a hidden one opens by its name). */
 export function pluginTabs(): readonly AppTab[] {
   return started ? started.list() : [];
 }

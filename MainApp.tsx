@@ -16,8 +16,6 @@ import {Drawer} from './src/ui/Drawer';
 import {Logo} from './src/ui/Logo';
 import {ledColor, stateColor, theme} from './src/ui/theme';
 import {IO_STEP_MS, ioPurple, nextShow, onIo, type IoChannel, type IoShow} from './src/btActivity';
-import {onOpenBudget} from './src/edgeNav';
-import {onOpenKeyChainWizard} from './src/keyChainNav';
 
 import {useLog} from './src/hooks/useLog';
 import {useKey} from './src/hooks/useKey';
@@ -54,30 +52,9 @@ const SPLASH_SEEN: boolean = (() => {
 import {LoginScreen} from './src/screens/LoginScreen';
 import {PinScreen} from './src/screens/PinScreen';
 import {SetupScreen} from './src/screens/SetupScreen';
-import {KeyScreen} from './src/screens/KeyScreen';
-import {SlotsScreen} from './src/screens/SlotsScreen';
-import {SlotEditorScreen} from './src/screens/SlotEditorScreen';
-import {KeysScreen} from './src/screens/KeysScreen';
-import {KeyChainScreen} from './src/screens/KeyChainScreen';
-import {BackupScreen} from './src/screens/BackupScreen';
-import {BluetoothScreen} from './src/screens/BluetoothScreen';
-import {SyncScreen} from './src/screens/SyncScreen';
 import {sync, useSync} from './src/sync';
-import {CryptoScreen} from './src/screens/CryptoScreen';
-import {EncryptDecryptScreen} from './src/screens/EncryptDecryptScreen';
-import {EncryptDecryptTabScreen} from './src/screens/EncryptDecryptTabScreen';
-import {SettingsScreen, type SettingsPage} from './src/screens/SettingsScreen';
-import {SetupTabScreen} from './src/screens/SetupTabScreen';
-import {FirmwareTabScreen} from './src/screens/FirmwareTabScreen';
-import {PreferencesScreen} from './src/screens/PreferencesScreen';
-import {PasskeysScreen} from './src/screens/PasskeysScreen';
-import {LogScreen} from './src/screens/LogScreen';
-import {AdvancedScreen} from './src/screens/AdvancedScreen';
-import {TestingScreen} from './src/screens/TestingScreen';
-import {BT_SEQ_BASE, takeOpenedAlarm} from './src/edgeAlerts';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import {btTransit} from './src/btTransit';
-import {EdgeScreen} from './src/screens/EdgeScreen';
 import {EdgeRequestSheet} from './src/ui/EdgeRequestSheet';
 import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
@@ -86,7 +63,7 @@ import {endSession, keptSession} from './src/webSession';
 import {logOut} from './src/logOut';
 import {setIdleRunning} from './src/idleTimer';
 import {IdleBar} from './src/ui/IdleBar';
-import {shell} from './src/platform';
+import {BLUETOOTH_HERE, shell} from './src/platform';
 import {registerWebCache, setLoggedIn, updateAtSplash} from './src/webUpdate';
 import {UpdateSheet} from './src/ui/UpdateSheet';
 import {onOtherTabs} from './src/webTabs';
@@ -98,72 +75,18 @@ import {onOtherTabs} from './src/webTabs';
 const webChecked: Promise<void> = updateAtSplash().catch(() => undefined).then(() => registerWebCache());
 import {armWebKey} from './src/hooks/useWebKey';
 import {joinServerRoom, leaveServerRoom, onRoomState, roomState, type RoomState} from './src/serverRoom';
-import {ActivityScreen} from './src/screens/ActivityScreen';
 import {HostChallengeSheet} from './src/ui/HostChallengeSheet';
 import {KeyBusySheet} from './src/ui/KeyBusySheet';
 import {PressSheet} from './src/ui/PressSheet';
 import {SilentUseSheet} from './src/ui/SilentUseSheet';
 import {buildInfo, hasSoftKeyPlugin} from './src/buildInfo';
 import {appSignature} from './src/appSignature';
-import {pluginTabs, pluginWatches, usePluginsStarted} from './src/plugins';
+import {pluginTabs, pluginWatches, shownTabs, usePluginsStarted} from './src/plugins';
+import type {TabContext} from './src/plugins/types';
 import {setFirmwareConsoleToLogcat} from './src/hooks/useOkEmu';
 import {startKeyChainRecorder} from './src/keyChainRecorder';
 import {startLinkStash} from './src/linkStash';
 
-/*
- * 'This Key', not 'Key' and no longer 'Soft Key'.
- *
- * Two things a tab could mean by "key": the DEVICE, and the private keys
- * loaded into it. One letter between 'Key' and 'Keys' is not a distinction
- * anyone can hold onto, which is why this tab has never just been called
- * 'Key'.
- *
- * It was 'Soft Key' while that was the only device there was. It can now be
- * either - the same screen reads whichever key is selected - so naming it for
- * one of them would be wrong half the time. The screen itself says which.
- */
-/*
- * THE ORDER FOLLOWS THE ORIGINAL APPS (owner, 2026-09-29: "follow the user
- * feel of the original apps, starting with the tab layout and where things
- * are").
- *
- * - This Key stays first: the landing page, ok-rn's own.
- * - Then the desktop App's menu in its order - Setup (here "PIN Setup":
- *   it holds only the PIN changes; the backup passphrase sits on
- *   Backup/Restore beside the restore that uses it), Slots, Keys,
- *   Backup/Restore, Firmware, Preferences, Advanced (OnlyKey-App
- *   app/app.html:36-43) - with the web app's two, Encrypt and Decrypt
- *   (apps.onlykey.io mode-tabs.js), after Setup. The desktop's Tools tab
- *   is left out: it only links to the web app's encrypt/decrypt pages,
- *   which ok-rn has as tabs of its own.
- * - ok-rn's own tabs where the owner placed them: Key Chain right before
- *   Keys (key management: generate, derive, export - the Keys tab stays as
- *   it is for now), Passkeys after Keys, Bluetooth above Advanced, Log last.
- * - Preferences holds what can be changed back, Advanced what cannot (the
- *   library's `oneWay` flag decides). The desktop keeps both in its
- *   Preferences; this is the one deliberate difference.
- */
-const TABS = [
-  'This Key',
-  'Settings',
-  'PIN Setup',
-  'Encrypt/Decrypt',
-  'Encrypt',
-  'Decrypt',
-  'Slots',
-  'Key Chain',
-  'Keys',
-  'Passkeys',
-  'Backup/Restore',
-  'Firmware',
-  'Preferences',
-  'Bluetooth',
-  'Sync',
-  /* the status icons' one tab (Brad, 2026-10-29): reached by pressing any of them, so not in the menu */
-  'Activity',
-  'Advanced',
-  'Log',
-] as const;
 /**
  * Whether the screens that show secrets refuse to be captured.
  *
@@ -180,87 +103,8 @@ const TABS = [
  */
 const BLOCK_SCREENSHOTS = !__DEV__;
 
-const TESTING_TAB = 'Testing' as const;
-/*
- * What the maintainer has not released - the vault, what it stored on this
- * phone, derived secrets / the password generator. His web app ships them
- * only in its development build (plugins-devel.js), so here they are shown
- * only in testing mode, which is __DEV__-only: a release build never has
- * this tab.
- */
-const IN_DEV_TAB = 'In-Development' as const;
-/*
- * Edge (onlykey-edge). Shown whenever this build's soft key carries the Edge
- * firmware plugin (OKEMU_PLUGINS=edge) - the owner is trying it out on the
- * real soft key without testing mode (2026-10-03). Without the plugin it is
- * testing mode only, where it runs on the FAKE key. The screen hides its own
- * testing controls when testing mode is off.
- */
-const EDGE_TAB = 'Edge' as const;
-/* a tab an app plugin added (src/plugins): App draws it without naming it */
-type PluginTab = string & {readonly __pluginTab: true};
-type Tab = (typeof TABS)[number] | typeof IN_DEV_TAB | typeof EDGE_TAB | typeof TESTING_TAB | PluginTab;
-
-/*
- * TABS KEPT BUT NOT SHOWN (Brad, 2026-10-11): a tab replaced by a newer one leaves the
- * drawer, and its screen and render branch stay as they were - "just incase i need to bring
- * them back as they where". Bringing one back is taking it off this list.
- *   PIN Setup, Preferences, Backup/Restore, Firmware, Advanced - opened from Settings (a sub view with a back button).
- *   Slots - a panel on This Key, under Buttons; a slot opens its editor there.
- *   Encrypt, Decrypt - merged into Encrypt/Decrypt (one tab, a switch at the top).
- *   Keys - replaced by Key Chain.
- */
-const HIDDEN_TABS: readonly Tab[] = ['Activity', 'PIN Setup', 'Preferences', 'Backup/Restore', 'Firmware', 'Advanced', 'Slots', 'Encrypt', 'Decrypt', 'Keys'];
-
-/*
- * DEBUG BUILDS ONLY (Brad, 2026-10-11: "Log tab,, is for testing debugging so it should not be
- * included in production"): out of a release build's drawer, and its render branch is gated on
- * __DEV__ too, so the release bundle does not carry it.
- */
-const DEV_ONLY_TABS: readonly Tab[] = ['Log'];
-
-/*
- * THE PHONE'S ONLY (Brad, 2026-10-24: "desktop app has no need for bluetooth status menu at top, or
- * bluetooth menu tab, and webapp doesnt need it also"): the desktop app has no Bluetooth, and the web
- * app reaches keys through WebAuthn - only the Android app is a Bluetooth keyboard and authenticator.
- */
-const ANDROID_ONLY_TABS: readonly Tab[] = ['Bluetooth'];
-/*
- * Every tab is on the web app now: Sync shows the web app its server (the cli pair and the sync service stay the phone's
- * and the desktop's - SyncScreen shows the web app only Identity, Server and Features).
- */
-/*
- * NOT IN THE WEB APP (Brad, 2026-10-29: "webapp has no softkey, and no vendor interface, so panels and elements that rely on
- * them can be hidden for webapp"): a page reaches a hard key over WebAuthn only (the lib's tunnel - derives, the vault,
- * composite sign/decrypt, Edge), so a tab built on vendor messages or raw CTAPHID can only fail there. Settings: PIN,
- * preferences, backup/restore, firmware, advanced are vendor messages; Passkeys: CTAPHID's credential management.
- */
-const NOT_WEB_TABS: readonly Tab[] = ['Settings', 'Passkeys'];
-
-/*
- * The drawer's tabs: testing mode adds its own; Edge also comes with a soft key that has it.
- * EDGE SECOND, SETTINGS LAST (Brad, 2026-10-11: "Settings Tab,, should be at the Bottom, in the
- * list of tabs,, and Edge should be 2nd").
- */
-const LOCKED_TESTING_TABS: readonly Tab[] = ['This Key' as Tab, TESTING_TAB];
-function shownTabs(testingOn: boolean, testingLocked = false): readonly Tab[] {
-  const testingTabs = __DEV__ && testingOn;
-  /*
-   * testing mode with the key still locked (Brad, 2026-10-25): This Key - "Check config mode" is there - and Testing,
-   * nothing else: no bucket is open
-   */
-  if (testingTabs && testingLocked) return [LOCKED_TESTING_TABS[0], LOCKED_TESTING_TABS[1]];
-  /* the desktop hosts the hard key's Edge (useEdge: the key is the hard key there), whatever its bundled soft key has */
-  const edge = testingTabs || hasSoftKeyPlugin('edge') || shell === 'desktop';
-  const [first, ...rest] = TABS.filter(t => t !== 'Settings');
-  const all: Tab[] = [first, ...(edge ? [EDGE_TAB] : []), ...rest, ...(testingTabs ? [IN_DEV_TAB, TESTING_TAB] : []), 'Settings'];
-  /* each plugin tab after the tab it names, else just before Settings */
-  for (const p of pluginTabs()) {
-    const at = p.after ? all.indexOf(p.after as Tab) : -1;
-    all.splice(at >= 0 ? at + 1 : all.length - 1, 0, p.name as PluginTab);
-  }
-  return all.filter(t => !HIDDEN_TABS.includes(t) && (__DEV__ || !DEV_ONLY_TABS.includes(t)) && (shell === 'android' || !ANDROID_ONLY_TABS.includes(t)) && (shell !== 'webapp' || !NOT_WEB_TABS.includes(t)));
-}
+/* a tab's name: every tab is a plugin's (src/plugins/tabs.ts, src/features/core.tsx) */
+type Tab = string;
 
 /** Splash until the device can answer, then a door, then the app. */
 /* identity: after the unlock, before the app - which identity the key is (IdentityCheckScreen, Brad 2026-10-24) */
@@ -701,11 +545,6 @@ function RadioStatus({
   );
 }
 
-/* the keyboard's state in words, for the Activity tab - read inside the phone's keyboard provider, as the bar's ⌨ is */
-function KeyboardState() {
-  return <Text style={{color: theme.text, fontSize: 13}}>{useSharedBtKeyboard().state}</Text>;
-}
-
 export default function App() {
   /* every derive the soft key answers goes into the Key Chain list (plugins/key_chain) */
   useEffect(() => startKeyChainRecorder(), []);
@@ -993,24 +832,38 @@ function Shell() {
   const [tab, setTab] = useState<Tab>('This Key');
   /* the app plugins start a moment after launch; their tabs appear then */
   usePluginsStarted();
-  const pluginTab = pluginTabs().find(t => t.name === tab);
-  /* B7: a tapped Edge alarm opens the Edge tab on its link (on launch and on every return to the app) */
-  const [edgeFocus, setEdgeFocus] = useState<number | null>(null);
-  /* the request sheet's budget card, tapped: the Edge tab, on that budget's details (edgeNav.ts) */
-  const [edgeBudget, setEdgeBudget] = useState<number | null>(null);
-  useEffect(() => onOpenBudget(id => { setTab(EDGE_TAB); setEdgeBudget(id); }), []);
-  /* another screen's 'Set up in Key Chain': the Key Chain tab, its Wizard already started (keyChainNav.ts) */
-  useEffect(() => onOpenKeyChainWizard(() => setTab('Key Chain')), []);
-  useEffect(() => {
-    const look = () => {
-      const s = takeOpenedAlarm();
-      if (s !== null && s >= BT_SEQ_BASE) setTab('Sync'); /* Part T: a cli pair alarm - the paired devices are on Sync */
-      else if (s !== null) { setTab(EDGE_TAB); setEdgeFocus(s); }
-    };
-    look();
-    const sub = AppState.addEventListener('change', st => { if (st === 'active') look(); });
-    return () => sub.remove();
-  }, []);
+  const currentTab = pluginTabs().find(t => t.name === tab);
+  /* everything a tab may draw from (src/plugins/types.ts TabContext) - no tab reaches into this function */
+  const tabContext: TabContext = {
+    backend: keys.backend,
+    unlocked: emu.state === 'running' && emu.device === 'unlocked',
+    caps: emu.capabilities,
+    blockScreenshots: BLOCK_SCREENSHOTS,
+    keys,
+    emu,
+    configMode,
+    wantConfigMode: () => setConfigMode(WANTED),
+    checkConfig: () => void checkConfig(),
+    checking,
+    testing: testing.enabled,
+    openTab: name => setTab(name),
+    bt: BLUETOOTH_HERE ? {on: btOn, setOn: setBtOn, fido, auto} : null,
+    dev: __DEV__
+      ? {
+          /* named for the device, not for the layer: both keys run firmware; "USB bytes" is the byte-level USB panel */
+          buffers: {
+            'Soft Key': {entries: emuLog.entries, clear: emuLog.clear},
+            'Hard Key': {entries: hardLog.entries, clear: hardLog.clear},
+            CTAP: {entries: fidoLog.entries, clear: fidoLog.clear},
+            'USB bytes': {entries: usbLog.entries, clear: usbLog.clear},
+          },
+          hid,
+          usb: {entries: usbLog.entries, clear: usbLog.clear},
+          setConfigMode,
+          beforeE2E: () => setBtOn(false),
+        }
+      : null,
+  };
 
   /*
    * NOTHING STAGED FOR A SHARE OUTLIVES IT (Brad, 2026-10-04): a decrypted message,
@@ -1080,7 +933,7 @@ function Shell() {
      * must not come back through here - the render's last branch IS the
      * Testing screen, and this would walk round its gate.
      */
-    const valid: readonly string[] = shownTabs(testing.enabled, testing.enabled && !passed);
+    const valid: readonly string[] = shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed}).map(x => x.name);
     void takeResumeTab(valid).then(remembered => {
       if (remembered) setTab(remembered as Tab);
     });
@@ -1271,26 +1124,10 @@ function Shell() {
 
   /* testing mode before the identity check: only This Key and Testing are shown - any other tab goes to Testing */
   useEffect(() => {
-    if (testing.enabled && !passed && phase === 'main' && !LOCKED_TESTING_TABS.includes(tab)) setTab(TESTING_TAB);
+    if (testing.enabled && !passed && phase === 'main' && !shownTabs({testing: true, testingLocked: true}).some(x => x.name === tab)) setTab('Testing');
   }, [testing.enabled, passed, phase, tab]);
 
   const ready = phase === 'main';
-
-  /* PIN Setup, Preferences, Advanced: one element each, drawn by Settings' sub views and by their own (hidden) tabs */
-  const settingsPage = (page: SettingsPage) =>
-    page === 'PIN Setup' ? (
-      <SetupTabScreen emu={emu} blockScreenshots={BLOCK_SCREENSHOTS} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} />
-    ) : page === 'Preferences' ? (
-      /* The PIN changes are on PIN Setup. */
-      <PreferencesScreen emu={emu} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} show={['prefs']} />
-    ) : page === 'Backup/Restore' ? (
-      /* The backup key is here, beside the restore that needs it. */
-      <BackupScreen emu={emu} blockScreenshots={BLOCK_SCREENSHOTS} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} show={['capture', 'backupKey', 'restore']} />
-    ) : page === 'Firmware' ? (
-      <FirmwareTabScreen emu={keys.key} hardRunning={keys.hard.state === 'running'} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} />
-    ) : (
-      <AdvancedScreen emu={keys.key} hard={keys.hard} keys={keys} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} />
-    );
 
   /*
    * Locking forgets everything learned while unlocked. The epoch is a remount
@@ -1569,7 +1406,7 @@ function Shell() {
                 /* on, never toggled: testing mode lasts until the app restarts (Brad, 2026-10-25) */
                 testing.setEnabled(true);
                 setLoggedInThisRun(true);
-                setTab(TESTING_TAB);
+                setTab('Testing');
               }}
               onContinue={() => {
                 /* first: the branch below returns before the PIN, and that PIN's unlock must find this run logged in */
@@ -1634,134 +1471,14 @@ function Shell() {
               onCheckConfig={() => void checkConfig()}
               checking={checking}
             />
-          ) : pluginTab ? (
-            pluginTab.render({
-              backend: keys.backend,
-              unlocked: emu.state === 'running' && emu.device === 'unlocked',
-              caps: emu.capabilities,
-              blockScreenshots: BLOCK_SCREENSHOTS,
-            })
-          ) : tab === 'This Key' ? (
-            openSlot ? (
-              <SlotEditorScreen slot={openSlot} emu={emu} onBack={() => setOpenSlot(null)} blockScreenshots={BLOCK_SCREENSHOTS} />
-            ) : (
-              <KeyScreen emu={emu} keys={keys} configMode={configMode === PRE} onCheckConfig={() => void checkConfig()} checking={checking}
-                /* slots are read and written with vendor messages, which a page cannot send */
-                slots={shell === 'webapp' ? undefined : <SlotsScreen panel onOpen={slot => setOpenSlot(slot)} />} />
-            )
-          ) : tab === 'Slots' ? (
-            openSlot ? (
-              <SlotEditorScreen
-                slot={openSlot}
-                emu={emu}
-                onBack={() => setOpenSlot(null)}
-                /*
-                 * FLAG_SECURE blanks adb screenshots as well as a bystander
-                 * photo, so testing mode - which exists to make the app
-                 * inspectable - turns it off.
-                 */
-                blockScreenshots={BLOCK_SCREENSHOTS}
-              />
-            ) : (
-              <SlotsScreen onOpen={slot => setOpenSlot(slot)} />
-            )
-          ) : tab === 'Key Chain' ? (
-            <KeyChainScreen emu={emu} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} blockScreenshots={BLOCK_SCREENSHOTS} />
-          ) : tab === 'Keys' ? (
-            <KeysScreen emu={emu} configMode={configMode} onWantConfigMode={() => setConfigMode(WANTED)} />
-          ) : tab === 'Bluetooth' ? (
-            <BluetoothScreen fido={fido} on={btOn} setOn={setBtOn} auto={auto} canPress={emu.canPress === true} testing={testing.enabled} onOpenSync={() => setTab('Sync')} />
-          ) : tab === 'Activity' ? (
-            <ActivityScreen bt={shell === 'android' ? {on: btOn, fido: fido.state, keyboard: <KeyboardState />} : null} onOpen={t => setTab(t as Tab)} />
-          ) : tab === 'Sync' ? (
-            <SyncScreen testing={testing.enabled} />
-          ) : tab === 'Settings' ? (
-            <SettingsScreen render={settingsPage} hidden={keys.hard.state === 'running' ? [] : ['Firmware']} />
-          ) : tab === 'PIN Setup' ? (
-            settingsPage('PIN Setup')
-          ) : tab === 'Encrypt/Decrypt' ? (
-            <EncryptDecryptTabScreen
-              emu={emu}
-              blockScreenshots={BLOCK_SCREENSHOTS}
-              configMode={configMode}
-              onWantConfigMode={() => setConfigMode(WANTED)}
-              testing={testing.enabled}
-            />
-          ) : tab === 'Encrypt' || tab === 'Decrypt' ? (
-            <EncryptDecryptScreen
-              key={tab}
-              direction={tab === 'Encrypt' ? 'encrypt' : 'decrypt'}
-              emu={emu}
-              blockScreenshots={BLOCK_SCREENSHOTS}
-              configMode={configMode}
-              onWantConfigMode={() => setConfigMode(WANTED)}
-              testing={testing.enabled}
-            />
-          ) : tab === 'Backup/Restore' ? (
-            settingsPage('Backup/Restore')
-          ) : tab === 'Firmware' ? (
-            settingsPage('Firmware')
-          ) : tab === 'Preferences' ? (
-            settingsPage('Preferences')
-          ) : tab === EDGE_TAB ? (
-            <EdgeScreen testingMode={testing.enabled} focusSeq={edgeFocus} onFocused={() => setEdgeFocus(null)} openGrantId={edgeBudget} onBudgetOpened={() => setEdgeBudget(null)} />
-          ) : tab === IN_DEV_TAB ? (
-            <CryptoScreen emu={emu} blockScreenshots={BLOCK_SCREENSHOTS} configMode={configMode} testing={testing.enabled} show={['derive', 'vault', 'stored']} />
-          ) : tab === 'Passkeys' ? (
-            <PasskeysScreen emu={keys.key} configMode={configMode} />
-          ) : tab === 'Advanced' ? (
-            settingsPage('Advanced')
-          ) : __DEV__ && tab === 'Log' ? (
-            <LogScreen
-              blockScreenshots={BLOCK_SCREENSHOTS}
-              /*
-                NAMED FOR THE DEVICE, not for the layer.
-
-                "Firmware" was unambiguous while one key existed. It is not
-                now: both keys run firmware and both talk. And the buffer
-                that used to be called "Hard Key" was never the hard key's
-                firmware at all - it is the byte-level USB panel, which is a
-                different thing from a device session.
-              */
-              buffers={{
-                'Soft Key': {entries: emuLog.entries, clear: emuLog.clear},
-                'Hard Key': {entries: hardLog.entries, clear: hardLog.clear},
-                CTAP: {entries: fidoLog.entries, clear: fidoLog.clear},
-                'USB bytes': {entries: usbLog.entries, clear: usbLog.clear},
-              }}
-            />
-          ) : (
-            /*
-              THE SOFT KEY, explicitly - not whichever is active.
-
-              This tab starts and stops firmware, shows the storage files and
-              factory-resets. Those are the emulator's controls; a hard key
-              has none of them, and following the active key would put a
-              Start button over a device that cannot be started.
-            */
-            <TestingScreen
-              configMode={configMode}
-              setConfigMode={setConfigMode}
-              emu={keys.soft}
-              hard={keys.hard}
-              active={keys.key}
-              backend={keys.backend}
-              hid={hid}
-              usbEntries={usbLog.entries}
-              clearUsb={usbLog.clear}
-              /*
-               * The suite types a whole backup out on purpose, and a phone
-               * paired as a BLE keyboard would deliver it to the paired
-               * computer rather than to the suite. Off before anything runs.
-               */
-              onE2EStart={() => setBtOn(false)}
-            />
-          )}
+          ) : currentTab ? (
+            currentTab.render(tabContext)
+          ) : null}
         </KeyboardAvoidingView>
 
         <Drawer
           open={drawer && ready}
-          tabs={shownTabs(testing.enabled, testing.enabled && !passed)}
+          tabs={shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed}).map(x => x.name)}
           value={tab}
           onChange={setTab}
           onClose={() => setDrawer(false)}

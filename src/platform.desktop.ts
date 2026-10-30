@@ -17,3 +17,5 @@ export const shell: Shell = 'desktop';
 export const DEVICE_WORD: string = 'computer';
 export const SHOW_SCROLLBARS: boolean = true;
 export const desktop: DesktopBridge | null = bridge;
+/* the phone's Bluetooth (keyboard, security key, automations) is on this platform */
+export const BLUETOOTH_HERE: boolean = false;

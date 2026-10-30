@@ -7,3 +7,5 @@ export const shell: Shell = 'webapp';
 export const DEVICE_WORD: string = 'browser';
 export const SHOW_SCROLLBARS: boolean = true;
 export const desktop: DesktopBridge | null = null;
+/* the phone's Bluetooth (keyboard, security key, automations) is on this platform */
+export const BLUETOOTH_HERE: boolean = false;

@@ -1,13 +1,29 @@
 import type {ReactNode} from 'react';
 import type {Backend} from '../hooks/keySession';
+import type {useKey} from '../hooks/useKey';
+import type {FidoSession} from '../hooks/useFidoGatt';
+import type {BtAuto} from '../hooks/useBtAuto';
+import type {useUsbHid} from '../hooks/useUsbHid';
+import type {ConfigState} from '../ui/configModeNotes';
+import type {LogEntry} from '../hooks/useLog';
+import type {LogBuffers} from '../screens/LogScreen';
 
 /*
  * What an app plugin gets from the app, and what it gives back. The plugin never reaches into
  * MainApp.tsx: everything it may know comes in through these.
+ *
+ * EVERY TAB IS A PLUGIN'S (PROPOSAL-rectify-ok-edge.md R0, Brad, 2026-10-30: "consolidate logic into proper areas"):
+ * the core tabs (This Key, Edge, Key Chain, Settings, ...) register here like Passwords and Guest Book, from
+ * src/features; MainApp draws whatever the registry lists and names no tab itself.
  */
 
 /** Each key's capabilities reading, as useOkEmu/useHardKey hold it (null before one). */
 export type KeyCaps = {deviceVault?: boolean; touchFreeDerive?: string; [k: string]: unknown} | null | undefined;
+
+export type Keys = ReturnType<typeof useKey>;
+
+/** A log buffer the Log tab shows (useLog). */
+export type LogBuffer = {entries: LogEntry[]; clear: () => void};
 
 /** Given to a tab's render, each time the app draws it. */
 export type TabContext = {
@@ -18,6 +34,37 @@ export type TabContext = {
   caps: KeyCaps;
   /** FLAG_SECURE wanted (release builds): a screen showing secrets turns it on */
   blockScreenshots: boolean;
+  /** both keys and the choice between them (useKey) */
+  keys: Keys;
+  /** the active key's session (keys.key) */
+  emu: Keys['key'];
+  /** config mode, as the app holds it (ui/configModeNotes) - a screen asks for it, the app runs the check */
+  configMode: ConfigState;
+  wantConfigMode: () => void;
+  checkConfig: () => void;
+  checking: boolean;
+  /** testing mode on (debug builds only) */
+  testing: boolean;
+  /** bring a tab forward by its name */
+  openTab: (name: string) => void;
+  /** the phone's Bluetooth (the keyboard, the security key, its automations): null where there is none */
+  bt: {on: boolean; setOn: (on: boolean) => void; fido: FidoSession; auto: BtAuto} | null;
+  /** debug builds only: the log buffers, the raw USB session, config mode set directly (the Log and Testing tabs) */
+  dev: {
+    buffers: LogBuffers;
+    hid: ReturnType<typeof useUsbHid>;
+    usb: LogBuffer;
+    setConfigMode: (s: ConfigState) => void;
+    beforeE2E: () => void;
+  } | null;
+};
+
+/** What decides whether a tab is in the drawer now. */
+export type TabState = {
+  /** testing mode on (debug builds only) */
+  testing: boolean;
+  /** testing mode with the key still locked: only the tabs marked inLockedTesting */
+  testingLocked: boolean;
 };
 
 /** Given to a plugin's watch, mounted once with the app whether its tab is shown or not. */
@@ -31,8 +78,18 @@ export type WatchContext = {
 export type AppTab = {
   /** the drawer's label, unique among tabs */
   name: string;
-  /** shown after this tab of the app's (its place in the drawer); at the end when absent */
+  /** its place in the drawer (the core tabs number theirs); a plugin tab may name `after` instead */
+  order?: number;
+  /** shown after this tab of the app's (its place in the drawer); before Settings when neither is given */
   after?: string;
+  /** kept but not in the drawer - reached from another tab (Settings' sub views) or by openTab */
+  hidden?: boolean;
+  /** debug builds only */
+  devOnly?: boolean;
+  /** in the drawer only while this holds (testing mode, a firmware plugin present) */
+  when?: (s: TabState) => boolean;
+  /** one of the tabs shown in testing mode while the key is still locked */
+  inLockedTesting?: boolean;
   render: (ctx: TabContext) => ReactNode;
 };
 
