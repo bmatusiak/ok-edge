@@ -151,6 +151,20 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
   const exact = Math.max(0, Math.ceil((since + (showDerive ? DERIVE_WAIT_MS : WAIT_MS) - now) / 1000));
   const left = quiet ? Math.ceil(exact / 5) * 5 : exact;
   const hush = () => { try { NativeOkEmu.hushPress(); } catch { /* no native side (jest, an old build) */ } };
+  /*
+   * A TAP SAYS WHAT BECAME OF IT (Brad, 2026-10-29, the Pixel: "it asked me to press, i pressed it, then the sheet timed
+   * out" - and between the sheet and its timeout the log held nothing, so the tap could have been lost anywhere: not
+   * reaching here, turned away below, refused by the native side, or queued and never taken by the firmware). Same
+   * builds as Locate's line.
+   */
+  const tapLog = (line: string) => { if (__DEV__ || !buildInfo.debugLock) console.log(`[press] tap ${line}`); };
+  const send = (button: string) => {
+    tapLog(`${button}: sent to the firmware`);
+    OkEmu.pressQueue(button).then(
+      n => tapLog(`${button}: queued (${n} waiting)`),
+      (e: any) => tapLog(`${button}: refused - ${e?.message ?? e}`),
+    );
+  };
 
   return (
     /* not dismissable: it goes when the key stops waiting. extraBottom: in debug builds React Native's warning toasts sit along the bottom and catch taps */
@@ -175,10 +189,10 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
             {showDerive ? (
               /* a derive is not an Edge approval: no consent check (that one is the vendor branch's, below) */
               <DeriveButtons d={derive!} ready={ready} pressed={pressed} onPress={(key: string) => {
-                if (!ready || (derive!.mode === 'press' && pressed)) return;
+                if (!ready || (derive!.mode === 'press' && pressed)) { tapLog(`${key}: not sent (${!ready ? 'not ready yet' : 'already pressed'})`); return; }
                 hush();
                 if (derive!.mode === 'press') setPressed(true);
-                void OkEmu.pressQueue(key);
+                send(key);
               }} />
             ) : showFido ? (
               fido.canPress ? (
@@ -195,10 +209,13 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
             ) : (
               <VendorButtons w={wait!.w} what={vendorWhat(wait!.w, fw, fw?.label && named?.label === fw.label ? named : undefined)} ready={ready} pressed={pressed} onPress={(button: string) => {
                 const w = wait!.w;
-                if (!ready || (w.mode === 'press' && pressed) || (w.what === 'edge' && consentRefusal())) return;
+                if (!ready || (w.mode === 'press' && pressed) || (w.what === 'edge' && consentRefusal())) {
+                  tapLog(`${button}: not sent (${!ready ? 'not ready yet' : pressed ? 'already pressed' : consentRefusal()})`);
+                  return;
+                }
                 hush();
                 if (w.mode === 'press') setPressed(true);
-                void OkEmu.pressQueue(button);
+                send(button);
               }} />
             )}
             <Text style={styles.dim}>This {DEVICE_WORD} is also the key, so its press proves less than a hard key's.</Text>

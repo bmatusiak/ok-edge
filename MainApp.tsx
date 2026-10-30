@@ -1192,9 +1192,14 @@ function Shell() {
      * app restart"). With the key locked - or a key switch still waiting for this key's unlock - the app is open on the
      * Testing tab alone, with no bucket open. Its unlock (Login Bypass) goes through the identity check, which skips
      * the PIN but not which identity the key is; then every tab.
+     *
+     * ONLY AFTER A LOGIN IN THIS RUN. Testing mode also turns itself on (a hard key in a debug build, the web dev
+     * server, a testnet soft key adopted) - and on its own it skipped the splash and the login into the locked Testing
+     * tab, where a hard key or an already unlocked soft key had no Login Bypass and nothing could log in. Until the
+     * login screen's Log in or Enter testing mode, the run takes the ordinary path below (splash, then login).
      */
-    if (testing.enabled) {
-      if (emu.device === 'unlocked' && !awaitingUnlock.current && configMode !== PRE && loggedInThisRun) {
+    if (testing.enabled && loggedInThisRun) {
+      if (emu.device === 'unlocked' && !awaitingUnlock.current && configMode !== PRE) {
         setPhase(prev => (prev === 'identity' || (prev === 'main' && passed) ? prev : 'identity'));
       } else {
         if (passed) { setPassed(false); void endSession('the key locked'); }
@@ -1564,6 +1569,8 @@ function Shell() {
                 setTab(TESTING_TAB);
               }}
               onContinue={() => {
+                /* first: the branch below returns before the PIN, and that PIN's unlock must find this run logged in */
+                setLoggedInThisRun(true);
                 if (keys.backend === 'embedded' && keys.soft.state === 'stopped') {
                   /* start the live soft key; the effect above picks setup or PIN once it answers */
                   setContinuing(true);
@@ -1572,7 +1579,6 @@ function Shell() {
                 }
                 /* the web app asks its key nothing until now (useWebKey armWebKey); an unlocked key then goes on to the identity check */
                 if (shell === 'webapp') armWebKey();
-                setLoggedInThisRun(true);
                 // A blank key has no PIN to enter; it needs one chosen.
                 setPhase(emu.device === 'uninitialized' ? 'setup' : 'pin');
               }}
