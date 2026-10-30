@@ -99,3 +99,21 @@ export type AppTab = {
 };
 
 export type AppWatch = (props: WatchContext) => ReactNode;
+
+/*
+ * A CHANNEL: one way this device talks - Bluetooth, sync, the MCP, the desktop's pipe to the CLI (src/features/channels). Its icon
+ * sits in the status bar (any of them opens Activity - Brad, 2026-10-29: "a single activity panel, containing all icons");
+ * its card is on the Activity tab. A platform has the channels its list names.
+ */
+export type ChannelContext = {
+  openTab: (name: string) => void;
+  /** the phone's Bluetooth (TabContext.bt): null where there is none */
+  bt: TabContext['bt'];
+};
+export type AppChannel = {
+  name: string;
+  /** its place among the icons and the cards */
+  order: number;
+  icon: (ctx: ChannelContext) => ReactNode;
+  card: (ctx: ChannelContext) => ReactNode;
+};

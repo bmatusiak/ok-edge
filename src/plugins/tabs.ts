@@ -10,7 +10,7 @@
  *   - testing mode with the key still locked: only the tabs marked inLockedTesting (This Key, Testing), nothing else -
  *     no bucket is open (Brad, 2026-10-25).
  */
-import type {AppTab, AppWatch, TabState} from './types';
+import type {AppChannel, AppTab, AppWatch, TabState} from './types';
 
 export type TabsService = {
   add(tab: AppTab, watch?: AppWatch): void;
@@ -19,6 +19,9 @@ export type TabsService = {
   shown(state: TabState): readonly AppTab[];
   /** a watch with no tab (the key's prompts: the press sheet, the busy sheet, ...) */
   watch(watch: AppWatch): void;
+  /** a channel: its status icon and its Activity card (types.ts AppChannel) */
+  channel(channel: AppChannel): void;
+  channels(): readonly AppChannel[];
 };
 
 export function shownOf(tabs: readonly AppTab[], state: TabState, dev: boolean): AppTab[] {
@@ -35,6 +38,7 @@ export function shownOf(tabs: readonly AppTab[], state: TabState, dev: boolean):
 export default function setup(_imports: unknown, register: (err: Error | null, services: {tabs: TabsService}) => void) {
   const tabs: AppTab[] = [];
   const watches: AppWatch[] = [];
+  const channels: AppChannel[] = [];
   register(null, {
     tabs: {
       add(tab, watch) {
@@ -46,6 +50,8 @@ export default function setup(_imports: unknown, register: (err: Error | null, s
       watches: () => watches.slice(),
       shown: state => shownOf(tabs, state, __DEV__),
       watch: w => { watches.push(w); },
+      channel: c => { channels.push(c); channels.sort((a, b) => a.order - b.order); },
+      channels: () => channels.slice(),
     },
   });
 }

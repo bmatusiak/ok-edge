@@ -16,7 +16,6 @@ import type {TabsService} from '../plugins/tabs';
 import {WANTED, PRE} from '../ui/configModeNotes';
 import {theme} from '../ui/theme';
 import {hasSoftKeyPlugin} from '../buildInfo';
-import {useSharedBtKeyboard} from '../hooks/BtKeyboardContext';
 import {onOpenBudget} from '../edgeNav';
 import {onOpenKeyChainWizard} from '../keyChainNav';
 import {BT_SEQ_BASE, takeOpenedAlarm} from '../edgeAlerts';
@@ -216,14 +215,10 @@ export const bluetooth = tabPlugin({
 /* SYNC: the identity, the server, the sync service and the paired devices (SyncScreen picks per shell's services) */
 export const sync = tabPlugin({name: 'Sync', order: ORDER.Sync, render: ctx => <SyncScreen testing={ctx.testing} />});
 
-/* ACTIVITY: the status icons' one tab (Brad, 2026-10-29) - reached by pressing any of them, so not in the menu */
-/* the keyboard's state in words - read inside the phone's keyboard provider, as the bar's ⌨ is */
-function KeyboardState() {
-  return <Text style={{color: theme.text, fontSize: 13}}>{useSharedBtKeyboard().state}</Text>;
-}
+/* ACTIVITY: the status icons' one tab (Brad, 2026-10-29) - reached by pressing any of them, so not in the menu; its cards are the channels' (src/features/channels) */
 export const activity = tabPlugin({
   name: 'Activity', order: ORDER.Activity, hidden: true,
-  render: ctx => <ActivityScreen bt={ctx.bt ? {on: ctx.bt.on, fido: ctx.bt.fido.state, keyboard: <KeyboardState />} : null} onOpen={ctx.openTab} />,
+  render: ctx => <ActivityScreen ctx={{openTab: ctx.openTab, bt: ctx.bt}} />,
 });
 
 /*

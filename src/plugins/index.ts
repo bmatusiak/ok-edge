@@ -30,7 +30,7 @@ const app = Rectify.build(PLUGINS, (err: Error | null, ready: any) => {
 app.start();
 
 /* read from registry.ts by anyone; re-exported here for MainApp, which also starts the app by importing this file */
-export {shownTabs, pluginTabs, pluginRecipientSources, pluginWatches, usePluginsStarted} from './registry';
+export {shownTabs, pluginTabs, pluginRecipientSources, pluginWatches, pluginChannels, usePluginsStarted} from './registry';
 
 /*
  * Each plugin's in-app e2e suite, by plugin name (__e2e_tests__/13b-passwords.e2e.js asks for it):

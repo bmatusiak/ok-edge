@@ -5,5 +5,7 @@
  * management), no slots on This Key; no Bluetooth tab (a browser is not a Bluetooth keyboard or authenticator).
  */
 import {common, edge, thisKey} from './core';
+import {syncChannel} from './channels/sync';
+import {mcpChannel} from './channels/mcp';
 
-export const coreFeatures = [thisKey({slots: false}), edge({always: false}), ...common];
+export const coreFeatures = [thisKey({slots: false}), edge({always: false}), ...common, syncChannel, mcpChannel];

@@ -7,7 +7,7 @@
 import {useEffect, useState} from 'react';
 import type {TabsService} from './tabs';
 import type {RecipientSource, RecipientsService} from './recipients';
-import type {AppTab, AppWatch, TabState} from './types';
+import type {AppChannel, AppTab, AppWatch, TabState} from './types';
 
 let started: TabsService | null = null;
 let recipientsService: RecipientsService | null = null;
@@ -34,6 +34,11 @@ export function pluginTabs(): readonly AppTab[] {
 /** The plugins that offer people's public keys to core screens (src/plugins/recipients.ts). */
 export function pluginRecipientSources(): readonly RecipientSource[] {
   return recipientsService ? recipientsService.list() : [];
+}
+
+/** The channels this platform has, in order: each one's status icon and Activity card. */
+export function pluginChannels(): readonly AppChannel[] {
+  return started ? started.channels() : [];
 }
 
 export function pluginWatches(): readonly AppWatch[] {

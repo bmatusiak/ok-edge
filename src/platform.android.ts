@@ -17,3 +17,5 @@ export const KEY_WAITS_FOR_LOGIN: boolean = false;
 export const SOFT_KEY_HERE: boolean = true;
 /* the test build's banner - the phone's says what adb could do with the debugging lock off */
 export const TEST_BUILD_BANNER: string = "TEST BUILD - debugging lock OFF: with adb on, a computer could approve and press";
+/* a line under the Activity cards: how this platform reaches its other devices, where it needs saying */
+export const ACTIVITY_NOTE: string | null = null;
