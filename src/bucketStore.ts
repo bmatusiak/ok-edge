@@ -360,7 +360,13 @@ export async function bucketState(identity: string, previous?: string | null): P
     if (previous && previous !== id && (await desktop.invoke('okedge:bucketHas', previous, currentNet()))) return 'kept';
   }
   if (Object.keys(await rowCache(id).table()).length) return 'sealed';
-  return (await sealedUnder(id, previous)) !== null ? 'sealed' : 'none';
+  /*
+   * A bucket stored in the old X-Wing form cannot be opened (openIdentityBucket drops it): it counts as none - the login
+   * plan then counts the identity's proof signature it will need (Pixel, 2026-10-29: counted as 'sealed', the plan paid
+   * one signature too few and the login asked a second press), and the button says Create Bucket.
+   */
+  const stored = await sealedUnder(id, previous);
+  return stored !== null && isSealedForm(stored.text) ? 'sealed' : 'none';
 }
 
 /*
