@@ -191,8 +191,9 @@ export async function joinServerRoom(): Promise<void> {
       if (p.up) tradeSoon(p.up);
     });
     r.on('close', () => {
-      console.log('[room] the connection closed');
-      if (room !== r) return;
+      /* a room left for another (a new server, a new key site) closes a moment later: not this device's room */
+      if (room !== r) { console.log('[room] the previous room\'s connection closed'); return; }
+      console.log('[room] the connection closed - joining again shortly');
       room = null;
       joinedFor = null;
       set({status: 'error', why: 'the connection closed - joining again shortly', peers: []});
