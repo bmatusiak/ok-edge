@@ -681,10 +681,9 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   }
 
   /**
-   * The owner statement (Brad, 2026-10-08): the key signs its own fingerprint and this
-   * phone's NAMETAG with its owner key - no press, no link. Another device of yours checks
-   * it with its own owner key (lib devices.classify); so does this phone, against the
-   * statements that arrive with offered logs.
+   * This device's NAMETAG, certified (lib edge.statement -> certify; Brad, 2026-10-30): the key waits for a
+   * press, writes the certification's link and signs its fingerprint and the nametag with its owner key.
+   * Another device of yours checks it with the owner keys it reads from its key (lib devices.classify).
    */
   async statement(nametag: string) {
     return this.edge.statement(nametag);
