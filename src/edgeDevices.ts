@@ -257,7 +257,8 @@ export async function loadDevices(): Promise<Device[]> {
 
 /** A device's signed nametag in the bucket, judged under this key's owner key: its nametag, or null (none, or not this key's). */
 export async function nametagOf(d: {deviceId: string}): Promise<{nametag: string} | null> {
-  return (await signedNametags({withOwn: true})).find(n => n.deviceId === d.deviceId.toLowerCase()) ?? null;
+  const n = (await signedNametags({withOwn: true})).find(x => x.deviceId === d.deviceId.toLowerCase());
+  return n?.nametag ? {nametag: n.nametag} : null;
 }
 /** Every nametag this device's key signed, newest first (the first is its nametag now) - [] when none. */
 export async function ownNames(): Promise<string[]> {
@@ -270,8 +271,12 @@ export async function ownNames(): Promise<string[]> {
  * 2026-10-30: "the your devices section is the list of signed nametags, cant be removed from edge, it syncs with
  * edge"). A statement counts when both its signatures verify under THIS key's owner keys (grants.verifyStatement) -
  * one another key signed is not yours, and is not listed. There is nothing to forget: the list is what the bucket holds.
+ *
+ * A KEY WITH NO NAMETAG IS LISTED TOO, as UNNAMED (Brad, 2026-10-30: "your devices section also needs to show UNNAMED keys,
+ * until they are named"): every key whose log this identity's bucket holds (its <dev>.meta) - only this identity's key
+ * opens that bucket, so a log in it is one of yours - with nametag null until a signed one arrives.
  */
-export type SignedNametags = {deviceId: string; nametag: string; names: string[]; publicKey: string; publicKeyPq: string};
+export type SignedNametags = {deviceId: string; nametag: string | null; names: string[]; publicKey: string; publicKeyPq: string};
 export async function signedNametags(o: {withOwn?: boolean} = {}): Promise<SignedNametags[]> {
   const entries = await logEntries();
   if (!entries) return [];
@@ -302,7 +307,17 @@ export async function signedNametags(o: {withOwn?: boolean} = {}): Promise<Signe
     const names = [head.nametag, ...sorted.map(s => s.nametag)].filter((n, i, a) => a.indexOf(n) === i);
     out.push({deviceId: dev, nametag: head.nametag, names, publicKey: head.publicKey, publicKeyPq: head.publicKeyPq});
   }
-  return out.sort((a, b) => a.nametag.localeCompare(b.nametag));
+  for (const [k, v] of Object.entries(entries)) {
+    if (!k.endsWith('.meta')) continue;
+    let id = '';
+    try { id = String(JSON.parse(v).deviceId ?? '').toLowerCase(); } catch { continue; }
+    if (!id || byDev.has(id) || (!o.withOwn && id === currentDevice)) continue;
+    let keys: {publicKey?: string; publicKeyPq?: string} = {};
+    try { keys = JSON.parse(entries[`${k.slice(0, -5)}.keys`] ?? '{}'); } catch { /* none filed yet */ }
+    out.push({deviceId: id, nametag: null, names: [], publicKey: keys.publicKey ?? '', publicKeyPq: keys.publicKeyPq ?? ''});
+  }
+  /* named keys by name, then the unnamed ones */
+  return out.sort((a, b) => (a.nametag === null ? 1 : 0) - (b.nametag === null ? 1 : 0) || (a.nametag ?? a.deviceId).localeCompare(b.nametag ?? b.deviceId));
 }
 
 /* ------------------------------------------------ held logs */
