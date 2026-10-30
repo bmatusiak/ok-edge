@@ -813,7 +813,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const e = (await this.ended()).find(x => x.grantId === grantId);
     if (!e) throw new Error(`edge: budget ${grantId} cannot be continued`);
     this.requests.push({
-      id: this.nextRequest++, from: 'this phone (Continue)', reason: `continues #${grantId}: ${e.reason}`,
+      id: this.nextRequest++, from: 'this device (Continue)', reason: `continues #${grantId}: ${e.reason}`,
       scopes: e.scopes, ttlMinutes: e.minutesLeft,
     });
     const k = REGISTRY() + toHex(this.deviceId) + '.' + grantId;
@@ -906,7 +906,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   /* R27 for Approve and resume: the head the strict check verified, or a refusal */
   private async verifiedHead(): Promise<Uint8Array> {
     const s = await this.strictHead();
-    if (!s.ok) throw new Error(`edge: this phone's copy of the chain does not verify (${s.reason}) - sync or settle it first`);
+    if (!s.ok) throw new Error(`edge: this device's copy of the chain does not verify (${s.reason}) - sync or settle it first`);
     return s.head;
   }
 

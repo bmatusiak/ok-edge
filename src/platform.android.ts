@@ -3,7 +3,7 @@ import type {DesktopBridge, Shell} from './platform.types';
 
 export type {DesktopBridge, Shell} from './platform.types';
 export const shell: Shell = 'android';
-export const DEVICE_WORD: string = 'phone';
+export const DEVICE_WORD: string = 'device';
 /* a finger swipes, and the page shows it moves: no bars */
 export const SHOW_SCROLLBARS: boolean = false;
 export const desktop: DesktopBridge | null = null;
@@ -19,3 +19,5 @@ export const SOFT_KEY_HERE: boolean = true;
 export const TEST_BUILD_BANNER: string = "TEST BUILD - debugging lock OFF: with adb on, a computer could approve and press";
 /* a line under the Activity cards: how this platform reaches its other devices, where it needs saying */
 export const ACTIVITY_NOTE: string | null = null;
+/* how this device is named to the others in its room (src/serverRoom.ts; the key in use is added there) */
+export function deviceName(): string { return 'Phone'; }

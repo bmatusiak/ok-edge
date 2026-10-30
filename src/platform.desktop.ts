@@ -29,3 +29,5 @@ export const SOFT_KEY_HERE: boolean = true;
 export const TEST_BUILD_BANNER: string = "TEST BUILD - not a release";
 /* a line under the Activity cards: how this platform reaches its other devices, where it needs saying */
 export const ACTIVITY_NOTE: string | null = null;
+/* how this device is named to the others in its room (src/serverRoom.ts; the key in use is added there) */
+export function deviceName(): string { return 'Desktop'; }

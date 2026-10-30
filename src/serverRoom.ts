@@ -25,7 +25,8 @@ import {handleTrade, proofMaterial} from './bucketTrade';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {RULES} from './bucketRules';
 import {phoneSyncTraded} from './sync';
-import {shell} from './platform';
+import {deviceName, shell} from './platform';
+import {activeBackend} from './hooks/KeyContext';
 import {attachAgents, detachAgents} from './mcpAgents';
 import {ioPulse} from './btActivity';
 
@@ -132,11 +133,11 @@ async function thisDevice(): Promise<RoomPeer> {
     id = Array.from(randomBytes(8), b => b.toString(16).padStart(2, '0')).join('');
     await AsyncStorage.setItem(DEVICE_KEY, id);
   }
-  if (shell === 'android') return {id, name: 'Phone (soft key)', kind: 'android'};
-  if (shell === 'desktop') return {id, name: 'Desktop (soft key)', kind: 'desktop'};
-  const ua = String(navigator?.userAgent ?? '');
-  const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'browser';
-  return {id, name: `${browser} (web app)`, kind: 'webapp'};
+  /*
+   * this device's kind (platform deviceName) and THE KEY IN USE - the desktop on key 3 called itself "Desktop (soft key)"
+   * when the name was fixed per shell (2026-10-30)
+   */
+  return {id, name: `${deviceName()} (${activeBackend() === 'usb' ? 'hard key' : 'soft key'})`, kind: shell};
 }
 
 let room: any = null;

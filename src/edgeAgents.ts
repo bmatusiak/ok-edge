@@ -88,7 +88,7 @@ let soft: SoftKeyEdge | null = null;
  */
 const DECLINED_CLOSE_MS = 30_000;
 let declinedTimer: ReturnType<typeof setTimeout> | null = null;
-export const UNATTENDED_DETAIL = 'nobody is at the phone - an earlier request timed out and nobody has checked yet';
+export const UNATTENDED_DETAIL = 'nobody is at the device - an earlier request timed out and nobody has checked yet';
 function unattended(): boolean {
   return current?.phase === 'done' && !current.result.ok && current.result.refusal === 'timeout';
 }
@@ -215,7 +215,7 @@ export function handleEdgeMessage(msg: any, from: string): Promise<unknown | nul
   /* a sheet the person answers: a budget, or the agent identity (a sync is held, never asked - 2026-10-08) */
   const asks = msg?.type === requestLib.TYPE || msg?.type === identityLib.SET_TYPE;
   if (asks && inFlight) {
-    return Promise.resolve({ok: false, refusal: 'busy', detail: 'another request is on the phone - ask again when it is answered'});
+    return Promise.resolve({ok: false, refusal: 'busy', detail: 'another request is on this device - ask again when it is answered'});
   }
   if (asks) inFlight = true;
   /* the time a request spends on the phone, step by step (Brad, 2026-10-06: the A13's slow answers) - times only */
@@ -228,8 +228,8 @@ export function handleEdgeMessage(msg: any, from: string): Promise<unknown | nul
      * reason, and tell the agent rather than leaving it to its own timeout.
      */
     const detail = String((e as any)?.message || e);
-    if (current) show({phase: 'done', ask: current.ask, result: {ok: false, refusal: 'invalid', detail: `the phone failed: ${detail}`}});
-    return {ok: false, refusal: 'invalid', detail: `the phone failed: ${detail}`};
+    if (current) show({phase: 'done', ask: current.ask, result: {ok: false, refusal: 'invalid', detail: `the device failed: ${detail}`}});
+    return {ok: false, refusal: 'invalid', detail: `the device failed: ${detail}`};
   });
   queue = run.catch(() => undefined);
   if (asks) run.finally(() => { inFlight = false; }).catch(() => undefined);
@@ -280,7 +280,7 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
   if (!checked.ok) return null;
   seen.add(String(msg.nonce).toLowerCase());
   soft = soft ?? (await SoftKeyEdge.open());
-  if (!soft) return {ok: false, refusal: 'invalid', detail: "this phone's key has no Edge"};
+  if (!soft) return {ok: false, refusal: 'invalid', detail: "this device's key has no Edge"};
   /*
    * WHICH COMPUTER IS THE PAIRING (Brad, 2026-10-11: "checking every field in a token means
    * nothing if we never check the signature"): `computer` is the paired computer behind this
@@ -292,7 +292,7 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
    */
   const peer = String(msg.peer).toLowerCase();
   if (String(msg.payload.deviceId).toLowerCase() !== toHexId(soft.deviceId)) {
-    return {ok: false, refusal: 'invalid', detail: "those links are another chain's, not this phone's key"};
+    return {ok: false, refusal: 'invalid', detail: "those links are another chain's, not this device's key"};
   }
   const p = msg.payload;
   if (msg.type === syncLib.GIVE_TYPE) {
@@ -329,7 +329,7 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
   }
   /* HAVE / LINKS / OFFER for ANOTHER device's chain: what this phone holds of it (merged or held) */
   const other = p.chain ? String(p.chain).toLowerCase() : null;
-  if (other && other === toHexId(soft.deviceId)) return {ok: false, refusal: 'invalid', detail: "that is this phone's own chain"};
+  if (other && other === toHexId(soft.deviceId)) return {ok: false, refusal: 'invalid', detail: "that is this device's own chain"};
   if (msg.type === syncLib.HAVE_TYPE && other) {
     const merged = (await loadMirror(fromHexId(other))).links.map((r: any) => seqOfLink(r));
     const heldOne = (await loadHeld()).find(h => h.deviceId === other);
@@ -423,7 +423,7 @@ async function handleIdentity(msg: any, seen: Set<string>, from: string): Promis
     return result;
   }
   await keepIdentity(msg.record, computer.name);
-  show({phase: 'done', ask: asked, result: {ok: true, text: 'Kept: every computer paired with this phone uses this agent identity.'}});
+  show({phase: 'done', ask: asked, result: {ok: true, text: 'Kept: every computer paired with this device uses this agent identity.'}});
   return {ok: true};
 }
 
@@ -451,7 +451,7 @@ async function handle(msg: any, from: string): Promise<unknown | null> {
     /* a timed-out sheet nobody has closed: nobody is there to press - refused at once, no new sheet */
     if (unattended()) return {ok: false, refusal: 'timeout', detail: UNATTENDED_DETAIL};
     soft = soft ?? (await SoftKeyEdge.open());
-    if (!soft) return {ok: false, refusal: 'invalid', detail: 'this phone\'s key has no Edge'};
+    if (!soft) return {ok: false, refusal: 'invalid', detail: 'this device\'s key has no Edge'};
     await soft.loadAgentBudgets();
     step('budgets');
     /*
@@ -467,7 +467,7 @@ async function handle(msg: any, from: string): Promise<unknown | null> {
     step('check');
     const blocked = copy.ok
       ? null
-      : `this phone's copy of the chain does not verify (${copy.reason}${copy.seq !== undefined ? ` at #${copy.seq}` : ''}). Sync or settle it on the Edge tab.`;
+      : `this device's copy of the chain does not verify (${copy.reason}${copy.seq !== undefined ? ` at #${copy.seq}` : ''}). Sync or settle it on the Edge tab.`;
     let asked: SheetAsk | null = null;
     const r: any = await soft.answerAgent(msg, {
       seen,

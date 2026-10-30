@@ -19,3 +19,9 @@ export const SOFT_KEY_HERE: boolean = false;
 export const TEST_BUILD_BANNER: string = "TEST BUILD - not a release";
 /* a line under the Activity cards: how this platform reaches its other devices, where it needs saying */
 export const ACTIVITY_NOTE: string | null = "The web app reaches its other devices through the server's room only.";
+/* how this device is named to the others in its room (src/serverRoom.ts; the key in use is added there) */
+export function deviceName(): string {
+  const ua = String(globalThis.navigator?.userAgent ?? '');
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  return `${browser} web app`;
+}

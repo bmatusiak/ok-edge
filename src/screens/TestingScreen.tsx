@@ -315,8 +315,8 @@ export function TestingScreen({
       <Section title="Testnet">
         <Text style={styles.note}>
           {currentNet() === 'test'
-            ? 'This soft key is the testnet\'s: a throwaway key with its own Edge chain. Clear testnet restarts the app and deletes it before any soft key starts - its flash and EEPROM, every Edge record and Key Chain entry the phone kept for it. The live chain is not touched.'
-            : 'Deletes the testnet\'s soft key (its own flash and EEPROM) and every Edge record and Key Chain entry the phone kept for it. The live chain is not touched.'}
+            ? 'This soft key is the testnet\'s: a throwaway key with its own Edge chain. Clear testnet restarts the app and deletes it before any soft key starts - its flash and EEPROM, every Edge record and Key Chain entry this device kept for it. The live chain is not touched.'
+            : 'Deletes the testnet\'s soft key (its own flash and EEPROM) and every Edge record and Key Chain entry this device kept for it. The live chain is not touched.'}
         </Text>
         <View style={styles.row}>
           <View style={styles.cell}>

@@ -208,7 +208,7 @@ function GuestBookPages({ctx, onSwap}: {ctx: TabContext; onSwap: (s: Swap) => vo
     .sort((a: Contact, b: Contact) => a.name.localeCompare(b.name));
   const items: EdgeListItem[] = [];
   if (gb.recovered) {
-    items.push({key: 'recovered', kind: 'row', tone: 'alarm', title: 'The saved list did not read', subtitle: 'It was kept aside on the phone and a new, empty list started.'});
+    items.push({key: 'recovered', kind: 'row', tone: 'alarm', title: 'The saved list did not read', subtitle: 'It was kept aside on this device and a new, empty list started.'});
   }
   items.push({key: 's-mine', kind: 'section', title: 'My card', right: mine ? String(mine.length) : ''});
   if (mine && !mine.length) {
