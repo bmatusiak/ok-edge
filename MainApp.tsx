@@ -132,23 +132,6 @@ function IoPolicySync({setTarget}: {setTarget: (address: string | null) => void}
   return null;
 }
 
-/**
- * Bluetooth, keyboard, authenticator - blue armed, green connected, grey off.
- *
- * AND the thing that starts them, which is not a coincidence.
- *
- * Auto-start used to live on the Bluetooth screen, where it did nothing until
- * you opened the Bluetooth tab - the one component certain not to be mounted
- * at the moment "start on app start" is about. It belongs wherever is mounted
- * for the life of the app, and these icons are exactly that: they report the
- * radio on every tab, so they are always here to act on it.
- *
- * A component rather than three expressions in App, because it reads the
- * keyboard session through the context that App WRAPS but is not inside -
- * calling the hook in App's own body throws.
- */
-
-
 /* while waiting for Bluetooth to be ready after the phone's Bluetooth came back: ask this often (RadioStatus) */
 const READY_ASK_MS = 1500;
 /* how many times the Bluetooth off/on sequence restarts ours to land where the computer knows it */
@@ -253,6 +236,21 @@ function McpStatus({onPress}: {onPress: () => void}) {
 /* ⚿: a session silent this long counts as gone (its command was killed without a goodbye) */
 const SESSION_QUIET_MS = 15000;
 
+/**
+ * Bluetooth, keyboard, authenticator - blue armed, green connected, grey off.
+ *
+ * AND the thing that starts them, which is not a coincidence.
+ *
+ * Auto-start used to live on the Bluetooth screen, where it did nothing until
+ * you opened the Bluetooth tab - the one component certain not to be mounted
+ * at the moment "start on app start" is about. It belongs wherever is mounted
+ * for the life of the app, and these icons are exactly that: they report the
+ * radio on every tab, so they are always here to act on it.
+ *
+ * A component rather than three expressions in App, because it reads the
+ * keyboard session through the context that App WRAPS but is not inside -
+ * calling the hook in App's own body throws.
+ */
 function RadioStatus({
   on,
   setOn,
@@ -889,14 +887,6 @@ function Shell() {
   }, []);
   const resumeChecked = useRef(false);
 
-  /*
-   * The slot being edited, if any.
-   *
-   * Held here rather than inside SlotsScreen because the editor is a FULL
-   * SCREEN with a back arrow, not a sheet - there is too much in a slot for a
-   * modal on a phone - so it replaces the body and the drawer alike.
-   */
-  const [openSlot, setOpenSlot] = useState<{id: string; index: number; label: string | null} | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [phase, setPhase] = useState<Phase>(SPLASH_SEEN ? 'login' : 'splash');
   /* past the PIN, a newer web build asks (UpdateSheet) instead of reloading the page by itself (src/webUpdate.ts) */
@@ -1225,7 +1215,7 @@ function Shell() {
             {/*
               THE STATUS ICONS, ONE GROUP (Brad, 2026-10-29: "a single activity panel, containing all icons so they're
               not spaced or separated - a press on any icon takes you to the same panel now"): the phone's radio icons
-              (no Bluetooth on the desktop, none needed on the web - ANDROID_ONLY_TABS), then sync (⇄) and the MCP (🔗) on
+              (no Bluetooth on the desktop, none needed on the web - BLUETOOTH_HERE, a platform value), then sync (⇄) and the MCP (🔗) on
               every platform. Any of them opens the Activity tab, which leads on to each one's own tab.
             */}
             <View style={styles.barMid}>

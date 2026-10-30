@@ -33,7 +33,7 @@ import {EdgeAgentsCard} from '../ui/EdgeAgentsCard';
 import {AgentsCard} from '../ui/AgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
 import type {EdgeRow, EdgeView, Verdict} from '../edgeStore';
-import type {EdgeBudget, EdgeCopyCheck, EdgeRequest} from '../edgeFake';
+import type {EdgeBudget, EdgeCopyCheck, EdgeRequest} from '../edge/types';
 import {DEVICE_WORD, shell} from '../platform';
 import {activeBackend} from '../hooks/KeyContext';
 

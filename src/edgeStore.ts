@@ -15,7 +15,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {block, chain, codes, copy, grants, sync as syncLib, receipts} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
-import type {EdgeCopyKey, EdgeLinkRecord, EdgeSource} from './edgeFake';
+import type {EdgeCopyKey, EdgeLinkRecord, EdgeSource} from './edge/types';
 import {raiseAlarms} from './edgeAlerts';
 import {computerHeldMs} from './vendorBridge';
 import {currentNet, edgeKey} from './net';
@@ -929,25 +929,14 @@ function sameCopy(links: EdgeLinkRecord[], was: {records: EdgeLinkRecord[]}): bo
   return links.length === was.records.length && samePrefix(links, was);
 }
 const verifiedNow = new Map<string, Verified>();
-/** for tests: forget what this session verified, as a restart does */
-export function forgetVerified() {
-  verifiedNow.clear();
-  inMemory.clear(); /* a restart reads the copy from storage again */
-  storedText.clear();
-  answers.clear(); /* the one chain state forgets too: a restart */
-  asking.clear();
-}
 /*
  * WHERE THE VERIFY TIME GOES (A13, 2026-10-07: "verify 740" on a check that was
  * skipped). Summed over a sync, printed in its log line: decode, receipts, check, rows.
  */
 let vlaps: Record<string, number> = {};
 const vlap = (n: string, t0: number) => { vlaps[n] = (vlaps[n] ?? 0) + Date.now() - t0; };
-/* the path each verdict took, for the log and the tests: not saved, nothing sensitive */
+/* the path each verdict took, for the sync's log line: not saved, nothing sensitive */
 let lastCheck: 'full' | 'new-links' | 'sealed' | 'skipped' | null = null;
-export function lastCheckPath() {
-  return lastCheck;
-}
 
 export function evaluate(mirror: Mirror, head: {seq: number; head: Uint8Array; ringFrom: number} | null, held: EdgeLinkRecord[] = [], key: EdgeCopyKey | null = null): EdgeView {
   return evaluateWith(mirror, head, held, key, false)!;

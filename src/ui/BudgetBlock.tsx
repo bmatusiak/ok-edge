@@ -15,7 +15,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {EdgeBudget} from '../edgeFake';
+import type {EdgeBudget} from '../edge/types';
 import {theme} from './theme';
 import {budgetStatusText, type BudgetStatus} from '../budgetStatus';
 

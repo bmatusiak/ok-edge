@@ -19,7 +19,7 @@ import {consentRefusal} from '../debugGuard';
 import {BudgetCard} from '../screens/EdgeScreen';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {chainState, type EdgeView} from '../edgeStore';
-import type {EdgeBudget} from '../edgeFake';
+import type {EdgeBudget} from '../edge/types';
 import {budgetStatus} from '../budgetStatus';
 import {openBudget} from '../edgeNav';
 import {currentNet} from '../net';

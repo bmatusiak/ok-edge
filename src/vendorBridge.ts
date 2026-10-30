@@ -214,9 +214,6 @@ function isEdgeRequest(data: Uint8Array): boolean {
  */
 let computerHolding = false;
 const freeListeners = new Set<() => void>();
-export function computerHoldsKey(): boolean {
-  return computerHolding;
-}
 /*
  * All the time a computer has held the key, so far (ms). A sync takes the difference
  * across itself: its log then says how much of it was waiting for a computer's

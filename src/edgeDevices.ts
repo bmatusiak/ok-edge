@@ -25,7 +25,7 @@ import {devices as devicesLib, sync as syncLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import {keepMerged, loadMirror} from './edgeStore';
-import type {EdgeLinkRecord} from './edgeFake';
+import type {EdgeLinkRecord} from './edge/types';
 import {edgeKey, netTag} from './net';
 
 const DEVICES = (): string => edgeKey('devices');
@@ -36,7 +36,6 @@ const DEVICES = (): string => edgeKey('devices');
  * "this device" is the key the app is using now (setCurrentDevice, from SoftKeyEdge.open).
  */
 const OWN = (deviceIdHex: string): string => edgeKey(`ownStatement.${deviceIdHex.toLowerCase()}`);
-const LEGACY_OWN = (): string => edgeKey('ownStatement');
 let currentDevice: string | null = null;
 let currentIsHard = false;
 export function setCurrentDevice(deviceIdHex: string, backend?: string): void {
@@ -110,18 +109,8 @@ async function readJson<T>(key: string, fallback: T): Promise<T> {
 /** A key's own latest statement (its nametag) - by default the key the app is using now - or null before one is set. */
 export async function ownStatement(deviceIdHex: string | null = currentDevice): Promise<StoredStatement | null> {
   if (!deviceIdHex) return null;
-  const kept = await readJson<StoredStatement | null>(OWN(deviceIdHex), null);
-  if (kept) return kept;
-  /*
-   * the one statement kept before per-device statements: it belongs to the device it names, and moves there -
-   * to a soft key only: a hard key re-signing the phone's name used to write over it (it would carry "Pixel 6a")
-   */
-  const legacy = currentIsHard && deviceIdHex.toLowerCase() === currentDevice ? null : await readJson<StoredStatement | null>(LEGACY_OWN(), null);
-  if (legacy && legacy.deviceId.toLowerCase() === deviceIdHex.toLowerCase()) {
-    await AsyncStorage.setItem(OWN(deviceIdHex), JSON.stringify(legacy));
-    return legacy;
-  }
-  return null;
+  /* (the one statement kept before per-device statements is no longer read - no migrations, Brad 2026-10-30) */
+  return readJson<StoredStatement | null>(OWN(deviceIdHex), null);
 }
 
 /**

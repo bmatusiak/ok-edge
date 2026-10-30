@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import {edgeKey} from './net';
-import type {EdgeLinkRecord} from './edgeFake';
+import type {EdgeLinkRecord} from './edge/types';
 
 const KEEP = 256;
 const LINK_BYTES = 64;

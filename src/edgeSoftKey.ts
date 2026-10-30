@@ -184,7 +184,7 @@ function bucketShared(deviceIdHex: string): {mark: string; links: [string, strin
   bucketSharedWhy = `the bucket holds no log for ${deviceIdHex.slice(0, 8)} (${stores.map(s => `${s} ${Object.keys(open.bucket.stores[s] ?? {}).length} keys`).join(', ')})`;
   return null;
 }
-import type {EdgeBudget, EdgeCopyCheck, EdgeCopyKey, EdgeEnded, EdgeInbox, EdgeKeyState, EdgeLinkRecord, EdgeRequest, EdgeSource} from './edgeFake';
+import type {EdgeBudget, EdgeCopyCheck, EdgeCopyKey, EdgeEnded, EdgeInbox, EdgeKeyState, EdgeLinkRecord, EdgeRequest, EdgeSource} from './edge/types';
 import {currentNet, edgeKey} from './net';
 
 const {DECISION, OP} = codes;

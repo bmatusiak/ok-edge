@@ -9,7 +9,7 @@
  * session, kept outside React so switching tabs keeps it.
  */
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, type EdgeKeyState, type EdgeRequest, type EdgeSource} from '../edgeFake';
+import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, type EdgeKeyState, type EdgeRequest, type EdgeSource} from '../edge/types';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {onKeyFree} from '../vendorBridge';
 import {hasSoftKeyPlugin} from '../buildInfo';

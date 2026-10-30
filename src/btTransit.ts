@@ -62,12 +62,9 @@ const BOX_ALIAS = 'clipair';
 const TRANSIT_OFF_KEY = 'okt.clipair.transitOff';
 /*
  * ONE NAME PER THING (Brad, 2026-10-25: "we can't call 2 different things the same thing, this is how bugs happen"):
- * these are cli pairs, not Bluetooth's own pairings, and were stored under btpair names before. A phone paired
- * then keeps its computers: load() opens the old record once, seals it under the new names, then removes the old.
+ * these are cli pairs, not Bluetooth's own pairings. (Records kept under the older btpair names are no longer read -
+ * no migrations, Brad 2026-10-30: such a phone pairs its computers again.)
  */
-const OLD_STORE_KEY = 'okt.btpair.v1';
-const OLD_BOX_ALIAS = 'btpair';
-const OLD_TRANSIT_OFF_KEY = 'okt.btpair.transitOff';
 const NOTICES_MAX = 20;
 
 /** A paired computer as the lib makes it (phonePairApprove), secrets included. */
@@ -187,25 +184,11 @@ export function createBtTransit(deps: Deps = {}) {
     if (loading) return loading;
     loading = (async () => {
       const off = await storage.getItem(TRANSIT_OFF_KEY);
-      transitOffWanted = (off ?? (await storage.getItem(OLD_TRANSIT_OFF_KEY))) === '1';
-      let sealed = await storage.getItem(STORE_KEY);
-      let alias = BOX_ALIAS;
-      if (!sealed) {
-        sealed = await storage.getItem(OLD_STORE_KEY);
-        alias = OLD_BOX_ALIAS;
-      }
+      transitOffWanted = off === '1';
+      const sealed = await storage.getItem(STORE_KEY);
       if (sealed) {
         try {
-          state = JSON.parse(fromHexText(await box.boxOpen(alias, sealed))) as Stored;
-          if (alias === OLD_BOX_ALIAS) {
-            /* sealed under the new names first, then the old record goes - a stop between leaves both, never neither */
-            await save();
-            if (off === null) await storage.setItem(TRANSIT_OFF_KEY, transitOffWanted ? '1' : '0');
-            await storage.removeItem(OLD_STORE_KEY);
-            await storage.removeItem(OLD_TRANSIT_OFF_KEY);
-            await box.boxForget?.(OLD_BOX_ALIAS).catch(() => false);
-            log('info', '[bt] cli pairs moved from their old btpair names');
-          }
+          state = JSON.parse(fromHexText(await box.boxOpen(BOX_ALIAS, sealed))) as Stored;
           return state;
         } catch (e) {
           /*

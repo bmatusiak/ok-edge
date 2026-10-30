@@ -14,7 +14,7 @@
  * (edgeStore.evaluate - this session's in-memory check, re-done at every start).
  */
 import {codes} from 'node-onlykey-lib/edge';
-import type {EdgeBudget} from './edgeFake';
+import type {EdgeBudget} from './edge/types';
 import type {EdgeView} from './edgeStore';
 
 export type BudgetStatus =

@@ -223,10 +223,6 @@ export function applyHeldKeyChain(): Promise<boolean> {
   queue = run.catch(() => {});
   return run.catch(() => false);
 }
-export async function heldCount(): Promise<number> {
-  const held = await AsyncStorage.getItem(HELD_KEY()).catch(() => null);
-  return held ? keychain.list.parse(held).length : 0;
-}
 
 /** This phone's Key Chain list as it is now (public entries), with anything held merged in first. */
 export async function readKeyChainList(): Promise<any[]> {
