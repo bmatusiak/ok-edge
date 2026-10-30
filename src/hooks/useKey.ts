@@ -281,7 +281,8 @@ export function useKey({
    * keyboard detaches it from the kernel. Keeping that after the user has
    * moved on would be rude as well as surprising.
    */
-  const {start, connect: connectHard, state: hardState, busy: hardBusy} = hard;
+  const {start, connect: connectHard, state: hardState, busy: hardBusy, device: hardDevice} = hard;
+  const askedOpenPipe = useRef(false);
 
   /*
    * What the backend WAS, so leaving the hard key is an event and not a
@@ -319,6 +320,20 @@ export function useKey({
     if (hardState === 'stopped' && !hardBusy && !UsbPipe.isRunning()) {
       void start().then(() => connectHard());
     }
+    /*
+     * A PIPE ALREADY OPEN IS ASKED TOO (Windows desktop, 2026-10-30: "the key is unlocked the app does not see it that
+     * way"): a page that reloads finds the pipe the main process kept open, so it starts at 'running' and the branch
+     * above never runs - and with it never the OKCONNECT that says locked or unlocked, so Log in sat on "Waiting for the
+     * key…" over an unlocked key. Opened through start() all the same: it finds the main process's pipe (usbhid connect,
+     * already open) and gives this page the pipe's interfaces, without which the key's UNLOCKED reply is not read as
+     * the vendor interface's and the state stays unknown (seen: OKCONNECT "UNLOCKED…" logged, the screen unchanged).
+     * Asked once per open pipe: a connect that fails is not retried in a loop from here.
+     */
+    if (hardState === 'running' && hardDevice === 'unknown' && !hardBusy && !askedOpenPipe.current) {
+      askedOpenPipe.current = true;
+      void start().then(() => connectHard());
+    }
+    if (hardState !== 'running') askedOpenPipe.current = false;
 
     /*
      * No cleanup that closes: the branch above already handles leaving, and
@@ -331,7 +346,7 @@ export function useKey({
      * up hard enough that the screen stops painting. Measured, by doing it.
      * `start` is a useCallback and stable.
      */
-  }, [backend, start, connectHard, hardState, hardBusy]);
+  }, [backend, start, connectHard, hardState, hardBusy, hardDevice]);
 
   /**
    * AN ERRORED PIPE IS RETRIED, WITH BACKOFF.
