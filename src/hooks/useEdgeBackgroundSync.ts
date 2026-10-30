@@ -8,9 +8,13 @@
  * start ("Gap #0", Approve blocked). On the soft key the app is in the middle:
  * it can copy links as they are made, whatever tab is open.
  *
- * WHEN: every PERIOD_MS, and SETTLE_MS after a confirmation clears (a pressed
- * sign was just linked) - but only when the soft key's vendor interface has
- * been quiet for SETTLE_MS, whoever was using it. The sync is the app talking
+ * WHEN: on an EVENT, never on a timer (Brad, 2026-10-29: "event based is the fastest path over time ... event based
+ * is also safer; timers are only meant to help inactivity protection"). The soft key's Edge plugin says "edge_link" each
+ * time it stores a link, whoever asked for it (this app, a computer over Bluetooth or USB); a round follows, and one
+ * round when the watch starts (what happened while the app was shut). It used to read the head every 15 s, link or no
+ * link - on the busy sheet, "Working with your key" every 10-15 s. A round still waits until the soft key's vendor
+ * interface has been quiet for SETTLE_MS, whoever was using it; a link stored meanwhile is caught by the next try (the
+ * watchdog's tick, below), which asks the key nothing when no link is waiting. The sync is the app talking
  * to that interface, and two conversations at once swap answers: a computer's
  * (vendorBridge.ts owner), and the app's own. MEASURED ON THE A13
  * (2026-10-03): Key Chain read its slots while a sync ran - the same slots
@@ -38,7 +42,9 @@ import {vendorQuietForMs} from '../vendorBridge';
 import {getOnlyKey} from '../onlykey';
 import {transport as oktransport} from 'node-onlykey-lib';
 import type {KeyWaiting} from '../transport/OkEmu';
+import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 
+/* the watch round's own clock (createWatchRound) - rounds now come from the firmware's event, not from it */
 const PERIOD_MS = 15000;
 /* the alarms that move with the clock (owed 10 min, expired) when the head did not */
 const ALARM_EVERY_MS = 60000;
@@ -77,19 +83,24 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
       offs.push(app.transport.on('write', mark));
     }).catch(() => {});
     let source: SoftKeyEdge | null = null;
+    /* the last round's answers from the key: the clock's alarms (owed 10 min, expired) are raised again from them, no key asked */
+    let lastAnswers: {view: ChainAnswer['view']; refusedTx: number | undefined; live: number[]; past: Awaited<ReturnType<SoftKeyEdge['pastBudgets']>>} | null = null;
+    let lastClockAlarms = Date.now();
     const round = createWatchRound<ChainAnswer>({
       validity: () => chainState.validity(source!),
       alarms: async a => {
         const s = source!;
         const [mirror, st, live, past] = await Promise.all([loadMirror(s.deviceId), s.state(), s.budgets(), s.pastBudgets()]);
+        lastAnswers = {view: a.view, refusedTx: st.refusedTx, live: live.map(b => b.grantId), past};
+        lastClockAlarms = Date.now();
         await raiseWatchAlarms(mirror, a.view, {refusedTx: st.refusedTx, live: live.map(b => b.grantId), past});
         /* R30: a paired key that stopped syncing (reminder, then the alarm) */
       },
     }, {periodMs: PERIOD_MS, alarmEveryMs: ALARM_EVERY_MS});
-    /* force: a confirmation just cleared - a link was made, catch it now */
-    const attempt = async (force = false) => {
-      if (!alive || busy) return;
-      if (!force && !round.due()) return; /* the timer and the native tick share one clock */
+    /* a link is waiting to be copied: one round when the watch starts, then each "edge_link" (or a confirmation cleared) */
+    let pending = true;
+    const attempt = async () => {
+      if (!alive || busy || !pending) return; /* nothing new stored: the key is not asked */
       /*
        * B7 stage 2, option A (spec 2026-10-04): no longer only with the app in
        * front - the soft key's foreground service keeps this process alive, and
@@ -99,18 +110,36 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
       if (vendorQuietForMs() < SETTLE_MS) return; /* a computer is talking to the key */
       if (Date.now() - lastTraffic < SETTLE_MS) return; /* the key is in use - by this app too */
       busy = true;
+      pending = false;
       try {
         source = await SoftKeyEdge.open(); /* null: locked, or no Edge */
         if (source && alive) await round.run();
       } catch (e) {
+        pending = true;
         console.log(`[edge-watch] sync failed: ${errText(e)}`);
         /* the next tick tries again; the tab shows any real error when opened */
       } finally {
         busy = false;
       }
     };
-    kick.current = () => setTimeout(() => void attempt(true), SETTLE_MS);
-    const timer = setInterval(() => void attempt(), PERIOD_MS);
+    kick.current = () => { pending = true; setTimeout(() => void attempt(), SETTLE_MS); };
+    /* the firmware's event: a link was stored */
+    const offLink = (() => {
+      try {
+        const sub = NativeOkEmu.onPluginEvent(ev => { if (ev.name === 'edge_link') kick.current(); });
+        return () => sub.remove();
+      } catch {
+        return () => {};
+      }
+    })();
+    void attempt();
+    /* the alarms that move with the clock alone, from the last round's answers - inactivity protection, no key asked */
+    const clockAlarms = async () => {
+      if (!lastAnswers || !source || busy || Date.now() - lastClockAlarms < ALARM_EVERY_MS) return;
+      lastClockAlarms = Date.now();
+      const a = lastAnswers;
+      await raiseWatchAlarms(await loadMirror(source.deviceId), a.view, {refusedTx: a.refusedTx, live: a.live, past: a.past}).catch(() => {});
+    };
 
     /* the heartbeat: the native watchdog posts "Edge watching stopped" 30 s after the last one */
     watching(true);
@@ -121,11 +150,12 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
      * the screen off (the Pixel, 2026-10-04: the beats stopped a minute after the
      * screen went off, the "watching stopped" notice came, no alarm did). The
      * native watchdog sends a tick every 10 s while watching; a tick still runs
-     * JS. Beat on each; a round runs at most every PERIOD_MS, whichever clock asks.
+     * JS. Beat on each; a round runs only for a link still waiting (stored while the key was busy), and the clock's alarms from the last answers.
      */
     const offTick = onWatchTick(() => {
       beat();
-      void attempt();
+      void attempt(); /* only a link still waiting (stored while the key was busy) - else nothing is asked */
+      void clockAlarms();
     });
 
     /*
@@ -153,7 +183,7 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
 
     return () => {
       alive = false;
-      clearInterval(timer);
+      offLink();
       clearInterval(beats);
       offTick();
       clearInterval(holdTimer);
