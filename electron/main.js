@@ -43,6 +43,13 @@ const TEST = process.env.OKEDGE_FLAVOR === 'test';
 const WEB_ROOT = path.join(__dirname, '..', 'dist', TEST ? 'web-test' : 'web');
 if (TEST) app.setPath('userData', `${app.getPath('userData')}-test`);
 
+/*
+ * THE BOX'S PAGE TOOLS DRIVE THIS WINDOW TOO (OKEDGE_DEVTOOLS_PORT; tools/box/page-click.js and page-console.js with
+ * CDP_PORT, tools/box/desktop-test.sh): Chrome's DevTools port on this machine, so a desktop run is driven and read like
+ * the web app's. A developer's switch - a release clears every OKEDGE_ variable above, this one with them.
+ */
+if (process.env.OKEDGE_DEVTOOLS_PORT) app.commandLine.appendSwitch('remote-debugging-port', String(Number(process.env.OKEDGE_DEVTOOLS_PORT)));
+
 
 /* one channel per thing the page may ask for; preload.js lists the same names */
 ipcMain.handle('okedge:about', () => ({
