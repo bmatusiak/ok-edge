@@ -101,15 +101,14 @@ export function useEdge() {
       lap('past');
       const dv = s as unknown as {deviceBudgets?: (id: string, name: string) => Promise<EdgeBudget[]>};
       if (dv.deviceBudgets) {
-        const {loadDevices, nametagOf, nametagOr, ownStatement} = require('../edgeDevices');
+        const {signedNametags, nametagOr, ownStatement} = require('../edgeDevices');
         const all: EdgeBudget[] = [];
         const views: Record<string, EdgeView> = {};
         const dview = s as unknown as {deviceView?: (id: string) => Promise<EdgeView>};
-        for (const d of await loadDevices().catch(() => [])) {
-          const n = await nametagOf(d).catch(() => null);
+        for (const d of await signedNametags().catch(() => [])) {
           const view = dview.deviceView ? await dview.deviceView(d.deviceId).catch(() => null) : null;
           if (view) views[String(d.deviceId).toLowerCase()] = view;
-          all.push(...(await dv.deviceBudgets(d.deviceId, nametagOr(n?.nametag)).catch(() => [])));
+          all.push(...(await dv.deviceBudgets(d.deviceId, nametagOr(d.nametag)).catch(() => [])));
         }
         setOthers(all);
         setDeviceViews(views);

@@ -21,12 +21,12 @@
  * name per fingerprint and never 'unknown'.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {devices as devicesLib, sync as syncLib} from 'node-onlykey-lib/edge';
+import {devices as devicesLib, grants as grantsLib, sync as syncLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import {keepMerged, loadMirror} from './edgeStore';
 import type {EdgeLinkRecord} from './edge/types';
-import {edgeKey, netTag} from './net';
+import {currentNet, edgeKey, netTag} from './net';
 
 const DEVICES = (): string => edgeKey('devices');
 /*
@@ -34,8 +34,33 @@ const DEVICES = (): string => edgeKey('devices');
  * phone kept ONE statement, so another key's re-sign wrote over the soft key's, and the phone's owner key flipped
  * to the hard key's identity while it was plugged in). Each key's statement is kept under its own device id;
  * "this device" is the key the app is using now (setCurrentDevice, from SoftKeyEdge.open).
+ *
+ * KEPT IN ONE PLACE, THE IDENTITY BUCKET (Brad, 2026-10-30: "the your devices section is the list of signed nametags,
+ * cant be removed from edge, it syncs with edge"): the `edge-logs` store's `<dev>.statement` - the key the CLI files
+ * (edge/cli/nametag.js), every device's log carries (lib logblocks) and every trade moves. This app kept its own copy
+ * in plain storage before, so a nametag set on one host never showed on another (the desktop's "Your devices" read
+ * none while the bucket held three).
  */
-const OWN = (deviceIdHex: string): string => edgeKey(`ownStatement.${deviceIdHex.toLowerCase()}`);
+const LOGS = (): string => (currentNet() === 'test' ? 'edge-logs-test' : 'edge-logs');
+/*
+ * EVERY NAMETAG A KEY SIGNED (Brad, 2026-10-30: "each KEY has its own row, and in that row, show all the name tags that
+ * KEY has signed, so if a key name is changed i can see the old names it had"). The log's `<dev>.statement` holds only
+ * the newest (lib logblocks merges it by seq), so each statement is also kept here, once, under its own key
+ * `<dev>.<its signature's first 16 hex>` - written once and never changed, so every trade's per-key merge is their union.
+ */
+const NAMES = (): string => (currentNet() === 'test' ? 'edge-names-test' : 'edge-names');
+const statementKey = (deviceIdHex: string): string => `${deviceIdHex.slice(0, 16).toLowerCase()}.statement`;
+/* one <dev>.statement value -> the statement it holds, or null */
+function statementIn(text: string | undefined): StoredStatement | null {
+  if (!text) return null;
+  try {
+    const s = JSON.parse(text).statement;
+    return s && s.deviceId && s.nametag ? (s as StoredStatement) : null;
+  } catch {
+    return null;
+  }
+}
+const logEntries = (): Promise<Record<string, string> | null> => require('./bucketStore').storeEntries(LOGS());
 let currentDevice: string | null = null;
 let currentIsHard = false;
 export function setCurrentDevice(deviceIdHex: string, backend?: string): void {
@@ -106,61 +131,67 @@ async function readJson<T>(key: string, fallback: T): Promise<T> {
 
 /* ------------------------------------------------ this phone */
 
-/** A key's own latest statement (its nametag) - by default the key the app is using now - or null before one is set. */
+/** A key's signed nametag statement in the bucket - by default the key the app is using now - or null: none set (UNNAMED), or no bucket open. */
 export async function ownStatement(deviceIdHex: string | null = currentDevice): Promise<StoredStatement | null> {
   if (!deviceIdHex) return null;
-  /* (the one statement kept before per-device statements is no longer read - no migrations, Brad 2026-10-30) */
-  return readJson<StoredStatement | null>(OWN(deviceIdHex), null);
+  const entries = await logEntries();
+  return entries ? statementIn(entries[statementKey(deviceIdHex)]) : null;
 }
 
 /**
- * This key's owner public keys, from its own statement: the P-256 one (X||Y) and its ML-DSA-65
- * twin (1952 bytes) - null before a nametag is set, or when the statement lacks either (both
- * are needed to check any statement).
+ * This key's owner public keys: the P-256 one (X||Y) and its ML-DSA-65 twin (1952 bytes), as the key gives them when
+ * it signs a statement - asked once a session per device (no press, no link), held in memory only.
+ *
+ * THE OWNER KEY IS THE KEY'S, NOT STORAGE'S (Brad, 2026-10-11: "checking every field in a token means nothing if we
+ * never check the signature"): every other device's nametag and log is judged against it, so it comes from the key.
+ * It does not need a nametag of this device's own (until 2026-10-30 it was read from this device's stored statement,
+ * and an UNNAMED device could judge nothing - "name this device first"): the statement asked for here is over the
+ * nametag this device has, or the word UNNAMED, and is never kept - only the owner keys it carries are.
  */
+const owners = new Map<string, {ownerKey: Uint8Array; ownerKeyPq: Uint8Array}>();
 export async function ownerKey(soft?: {statement(nametag: string): Promise<any>} | null): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
-  const s = await ownStatement();
-  if (!(s?.ownerKey && s.ownerKeyPq)) return null;
-  /*
-   * THE OWNER KEY IS THE KEY'S, NOT STORAGE'S (Brad, 2026-10-11: "checking every field in a token
-   * means nothing if we never check the signature"). Every held log is judged against this key,
-   * and storage is something anything on the phone could edit: once a session it is compared with
-   * a statement the soft key signs now (no press, no link). Not the key's, or the key cannot
-   * answer: no owner key - nothing classifies as yours.
-   */
-  const id = `${s.ownerKey}.${s.ownerKeyPq}`.toLowerCase();
-  if (!ownerConfirmed.has(id)) {
-    try {
-      /*
-       * the Edge source already open when the caller has one (SoftKeyEdge.takeShared, Pixel 2026-10-29): opening another
-       * runs takeShared again, which asks this again - a loop that never returned and asked the key on every turn
-       */
-      const src = soft ?? await require('./edgeSoftKey').SoftKeyEdge.open();
-      const fresh = src ? store(await src.statement(s.nametag)) : null;
-      if (!fresh || `${fresh.ownerKey}.${fresh.ownerKeyPq}`.toLowerCase() !== id) {
-        console.log("[edge] the stored owner key is not this key's - not used");
-        return null;
-      }
-      ownerConfirmed.add(id);
-    } catch {
+  const dev = currentDevice;
+  if (!dev) return null;
+  const held = owners.get(dev);
+  if (held) return held;
+  try {
+    /*
+     * the Edge source already open when the caller has one (SoftKeyEdge.takeShared, Pixel 2026-10-29): opening another
+     * runs takeShared again, which asks this again - a loop that never returned and asked the key on every turn
+     */
+    const src = soft ?? await require('./edgeSoftKey').SoftKeyEdge.open();
+    if (!src) return null;
+    const st = await src.statement((await ownStatement(dev))?.nametag ?? UNNAMED);
+    if (!(st?.ownerKey?.length && st.ownerKeyPq?.length) || !grantsLib.verifyStatement(st, st.ownerKey, st.ownerKeyPq)) {
+      console.log("[edge] the key's statement does not verify with the owner keys it names - none used");
       return null;
     }
+    const o = {ownerKey: st.ownerKey as Uint8Array, ownerKeyPq: st.ownerKeyPq as Uint8Array};
+    owners.set(dev, o);
+    return o;
+  } catch {
+    return null;
   }
-  return {ownerKey: fromHex(s.ownerKey), ownerKeyPq: fromHex(s.ownerKeyPq)};
 }
-/* the owner keys the key itself gave this session (a statement it signed) - memory only */
-const ownerConfirmed = new Set<string>();
 
 /**
- * Set this phone's nametag: the key signs it with its owner key (no press, no link) and the
- * phone keeps that statement - it travels with this phone's log to your other devices.
+ * Set this device's nametag: the key signs it with its owner key (no press, no link) and the statement goes into the
+ * identity bucket under this device - from there every trade carries it to your other devices and the CLI.
  */
 export async function setNametag(soft: {statement(nametag: string): Promise<any>}, nametag: string): Promise<StoredStatement> {
   const st = await soft.statement(nametag);
   const s = store(st);
-  /* signed by the key just now: its owner key is the key's for this session */
-  if (s.ownerKey && s.ownerKeyPq) ownerConfirmed.add(`${s.ownerKey}.${s.ownerKeyPq}`.toLowerCase());
-  await AsyncStorage.setItem(OWN(s.deviceId), JSON.stringify(s));
+  if (st.ownerKey?.length && st.ownerKeyPq?.length) owners.set(s.deviceId.toLowerCase(), {ownerKey: st.ownerKey, ownerKeyPq: st.ownerKeyPq});
+  const entries = await logEntries();
+  if (!entries) throw new Error('no bucket is open here - log in first');
+  /* the shape lib logblocks files a device's statement in (its split of a copy) */
+  const {ownerKey: _ok, ownerKeyPq: _okPq, ...signed} = s;
+  const {writeEntries} = require('./bucketStore');
+  await writeEntries(LOGS(), {[statementKey(s.deviceId)]: JSON.stringify({v: 1, deviceId: s.deviceId, statement: signed})});
+  /* and into the key's history of names (at: when it was set here - unsigned, it only orders two names signed at one seq) */
+  await writeEntries(NAMES(), {[`${statementKey(s.deviceId).slice(0, 16)}.${s.signature.slice(0, 16).toLowerCase()}`]: JSON.stringify({v: 1, deviceId: s.deviceId, statement: signed, at: Date.now()})});
+  /* the bucket changed: traded with the devices in the room now, not at the next join */
+  require('./serverRoom').bucketChanged();
   notify();
   return s;
 }
@@ -224,19 +255,54 @@ export async function loadDevices(): Promise<Device[]> {
   return readJson<Device[]>(DEVICES(), []);
 }
 
-/** A device's nametag now, and what it was called before (its own signed statements only). */
-export async function nametagOf(d: Device): Promise<{nametag: string; previously: string[]} | null> {
-  const owner = await ownerKey();
-  if (!owner) return d.statements.length ? {nametag: d.statements[d.statements.length - 1].nametag, previously: []} : null;
-  const r = devicesLib.nametagOf(devicesLib.statementsOf(d), owner.ownerKey, owner.ownerKeyPq);
-  return r ? {nametag: r.nametag, previously: r.previously} : null;
+/** A device's signed nametag in the bucket, judged under this key's owner key: its nametag, or null (none, or not this key's). */
+export async function nametagOf(d: {deviceId: string}): Promise<{nametag: string} | null> {
+  return (await signedNametags({withOwn: true})).find(n => n.deviceId === d.deviceId.toLowerCase()) ?? null;
+}
+/** Every nametag this device's key signed, newest first (the first is its nametag now) - [] when none. */
+export async function ownNames(): Promise<string[]> {
+  const dev = currentDevice;
+  return dev ? (await signedNametags({withOwn: true})).find(n => n.deviceId === dev)?.names ?? [] : [];
 }
 
-/** Forget a device on this phone (its merged copy stays; a later log from it asks again). */
-export async function forgetDevice(deviceId: string): Promise<void> {
-  const list = (await loadDevices()).filter(d => d.deviceId !== deviceId.toLowerCase());
-  await AsyncStorage.setItem(DEVICES(), JSON.stringify(list));
-  notify();
+/**
+ * YOUR DEVICES: every device of this key whose signed nametag the identity bucket holds, this one left out (Brad,
+ * 2026-10-30: "the your devices section is the list of signed nametags, cant be removed from edge, it syncs with
+ * edge"). A statement counts when both its signatures verify under THIS key's owner keys (grants.verifyStatement) -
+ * one another key signed is not yours, and is not listed. There is nothing to forget: the list is what the bucket holds.
+ */
+export type SignedNametags = {deviceId: string; nametag: string; names: string[]; publicKey: string; publicKeyPq: string};
+export async function signedNametags(o: {withOwn?: boolean} = {}): Promise<SignedNametags[]> {
+  const entries = await logEntries();
+  if (!entries) return [];
+  const owner = await ownerKey();
+  if (!owner) return [];
+  const mine = (s: StoredStatement | null): s is StoredStatement => !!s && grantsLib.verifyStatement(toStatement(s), owner.ownerKey, owner.ownerKeyPq);
+  /* each key's statements: its newest in the log, and every one in its history of names */
+  const byDev = new Map<string, {now: StoredStatement | null; all: {s: StoredStatement; at: number}[]}>();
+  const of = (dev: string) => byDev.get(dev) ?? (byDev.set(dev, {now: null, all: []}), byDev.get(dev)!);
+  for (const [k, v] of Object.entries(entries)) {
+    if (!k.endsWith('.statement')) continue;
+    const s = statementIn(v);
+    if (mine(s)) of(s.deviceId.toLowerCase()).now = s;
+  }
+  for (const v of Object.values((await require('./bucketStore').storeEntries(NAMES())) ?? {}) as string[]) {
+    const s = statementIn(v);
+    if (!mine(s)) continue;
+    let at = 0;
+    try { at = Number(JSON.parse(v).at) || 0; } catch { /* no time: ordered by its seq alone */ }
+    of(s.deviceId.toLowerCase()).all.push({s, at});
+  }
+  const out: SignedNametags[] = [];
+  for (const [dev, {now, all}] of byDev) {
+    if (!o.withOwn && dev === currentDevice) continue;
+    /* newest first: by the key's seq when signed, then by when it was set; the log's own newest leads */
+    const sorted = all.sort((a, b) => (b.s.seq ?? -1) - (a.s.seq ?? -1) || b.at - a.at).map(x => x.s);
+    const head = now ?? sorted[0];
+    const names = [head.nametag, ...sorted.map(s => s.nametag)].filter((n, i, a) => a.indexOf(n) === i);
+    out.push({deviceId: dev, nametag: head.nametag, names, publicKey: head.publicKey, publicKeyPq: head.publicKeyPq});
+  }
+  return out.sort((a, b) => a.nametag.localeCompare(b.nametag));
 }
 
 /* ------------------------------------------------ held logs */
@@ -260,8 +326,13 @@ async function saveHeld(list: HeldLog[]): Promise<void> {
 export type NewItem = {deviceId: string; nametag: string; links: number; from: string; at: number; newDevice: boolean; missing: string[]; warning: string | null};
 const NEWS = (): string => edgeKey('newInLog');
 
+/*
+ * ONLY WARNINGS (Brad, 2026-10-30: "the notification about new nametags can be removed"): a log that merged is not a
+ * notice - it is in the log, under its key's row in Your devices. A log that did not check still is. Rows kept from
+ * before that say only "new" are not shown.
+ */
 export async function loadNew(): Promise<NewItem[]> {
-  return readJson<NewItem[]>(NEWS(), []);
+  return (await readJson<NewItem[]>(NEWS(), [])).filter(n => n.warning);
 }
 
 /* one row per device: a later arrival before you looked adds to that row; its warning is the latest arrival's (merged now = an older warning cleared) */
@@ -336,7 +407,6 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
   /* an earlier copy of it that failed a check is answered by this one */
   if (list.some(h => h.deviceId === id)) await saveHeld(list.filter(h => h.deviceId !== id));
   const came = Math.max(0, (await loadMirror(o.deviceId)).links.length - had);
-  await addNew({deviceId: id, nametag: v.nametag ?? o.statement.nametag, links: came, from: o.from, at: now, newDevice: v.class === 'mine-new', missing: v.complete ? [] : v.missing, warning: null});
   console.log(`[edge] log of "${v.nametag ?? o.statement.nametag}" (${id.slice(0, 8)}): merged, ${came} new link(s)${v.complete ? "" : `, ${v.missing.length} use(s) without their words`}`);
   return {held: true, count: came};
 }
@@ -373,10 +443,8 @@ export async function waitingCount(): Promise<number> {
 export async function bannerLine(): Promise<string | null> {
   const list = await loadNew();
   if (!list.length) return null;
-  const w = list.find(n => n.warning);
-  if (w) return `Warning: a log from "${w.nametag}" ${(w.warning ?? '').split(';')[0]}`;
-  const names = list.map(n => `"${n.nametag}"${n.newDevice ? ' (a new device of your key)' : ''}`);
-  return `New in your log: ${names.join(', ')}`;
+  const w = list[0];
+  return `Warning: a log from "${w.nametag}" ${(w.warning ?? '').split(';')[0]}`;
 }
 
 /*

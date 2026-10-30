@@ -812,7 +812,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
    */
   const items: EdgeListItem[] = [];
   if (waiting > 0) {
-    items.push({key: 'new-banner', kind: 'row', title: bannerTitle ?? 'New in your log', subtitle: 'Already in your log - tap to see it', tone: 'warn', onPress: () => setReviewOpen(true), accessibilityLabel: 'See what is new in your log'});
+    items.push({key: 'new-banner', kind: 'row', title: bannerTitle ?? 'A log that did not check', subtitle: 'Not merged - tap to see it', tone: 'warn', onPress: () => setReviewOpen(true), accessibilityLabel: 'See the log that did not check'});
   }
   /*
    * PAST ITS LIFETIME = NOT LIVE, whatever the key still lists (Brad, 2026-10-06:

@@ -14,14 +14,15 @@ import {useEffect, useState} from 'react';
 import {chain} from 'node-onlykey-lib/edge';
 import {fromHex} from 'node-onlykey-lib/bytes';
 import {loadMirror} from '../edgeStore';
-import {loadDevices, nametagOf, onDevicesChanged} from '../edgeDevices';
+import {onDevicesChanged, signedNametags} from '../edgeDevices';
 
 export type DeviceLink = {seq: number; op: number; slot: number; flags: number; grantId: number; seenAt?: number};
 export type YourDevice = {
   deviceId: string;
   publicKey: string;
   nametag: string | null;
-  previously: string[];
+  /* every nametag this key signed, newest first (edgeDevices.signedNametags) */
+  names: string[];
   links: DeviceLink[]; /* newest first */
   mergedUpTo: number | null;
   mergedAt: number | null;
@@ -36,15 +37,15 @@ export function useYourDevices(headSeq: number | null | undefined): YourDevice[]
     (async () => {
       try {
         const out: YourDevice[] = [];
-        for (const d of await loadDevices()) {
+        /* the devices whose signed nametag the bucket holds (edgeDevices.signedNametags) - and their links merged here, if any */
+        for (const d of await signedNametags()) {
           const m = await loadMirror(fromHex(d.deviceId));
           const links = m.links.map(r => {
             const f = chain.decodeLink(r.link);
             return {seq: f.seq, op: f.op, slot: f.slot, flags: f.flags, grantId: f.grantId, seenAt: m.seen[f.seq]};
           }).reverse();
           const last = (m.merged ?? [])[(m.merged ?? []).length - 1] ?? null;
-          const n = await nametagOf(d);
-          out.push({deviceId: d.deviceId, publicKey: d.publicKey, nametag: n?.nametag ?? null, previously: n?.previously ?? [], links, mergedUpTo: last?.seq ?? null, mergedAt: last?.at ?? null});
+          out.push({deviceId: d.deviceId, publicKey: d.publicKey, nametag: d.nametag, names: d.names, links, mergedUpTo: last?.seq ?? null, mergedAt: last?.at ?? null});
         }
         if (!gone) setDevices(out);
       } catch {

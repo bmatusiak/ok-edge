@@ -3,15 +3,15 @@
  * is set "in the Edge Management drawer"; a device gives "its own name for its device
  * fingerprint in the block"; "find a way to fix multi names for the same device").
  *
- * This phone: its nametag, signed by its key's owner key (no press, no link) and carried
- * with its log to your other devices. Your devices: each device whose log you approved,
- * by its own newest nametag (older ones "previously"), its fingerprint, how far it is
- * merged. Forget takes it off this phone's list; its copy stays.
+ * This device: its nametag, signed by its key's owner key (no press, no link) and kept in the
+ * identity bucket, which carries it to your other devices. Your devices: one row per key whose
+ * signed nametag the bucket holds - every name it signed, newest first, its fingerprint, how far
+ * its log is merged here. Nothing to remove: the list is what Edge holds (Brad, 2026-10-30).
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, View} from 'react-native';
 import {grants} from 'node-onlykey-lib/edge';
-import {deviceName, refreshNametag, forgetDevice, nametagOr, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
+import {deviceName, ownNames, refreshNametag, nametagOr, onDevicesChanged, ownStatement, setNametag, type StoredStatement} from '../edgeDevices';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {useYourDevices} from '../hooks/useYourDevices';
 import {Btn, Section} from './components';
@@ -26,13 +26,14 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState<string | null>(null);
   const devices = useYourDevices(headSeq);
   const [devName, setDevName] = useState('');
+  const [names, setNames] = useState<string[]>([]);
   /* the probed device name is only offered in the dialog: the person keeps it or types their own (Brad, 2026-10-30) */
   const load = useCallback(async () => {
     setOwn(await ownStatement());
     setDevName(await deviceName());
+    setNames(await ownNames());
     const s = await refreshNametag(await SoftKeyEdge.open().catch(() => null));
     if (s) setOwn(s);
   }, []);
@@ -59,6 +60,7 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
     <>
       <Section title={`This ${DEVICE_WORD}`}>
         <Text style={styles.op}>{nametagOr(own?.nametag)}</Text>
+        {names.length > 1 ? <Text style={styles.dim}>{`Earlier: ${names.slice(1).join(', ')}`}</Text> : null}
         {own ? <Text style={styles.dim}>{`Device ${short(own.deviceId)}`}</Text> : null}
         <Text style={styles.dim}>{`Your other devices see this ${DEVICE_WORD} by its nametag. The key signs it; no press.`}</Text>
         {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
@@ -67,20 +69,12 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
         </View>
       </Section>
       <Section title={`Your devices${devices.length ? ` (${devices.length})` : ''}`}>
-        {!devices.length ? <Text style={styles.dim}>None yet. A computer's sync brings your other devices' logs; you approve each from the banner at the top of this tab.</Text> : null}
+        {!devices.length ? <Text style={styles.dim}>None yet. Each key of yours shows here once its nametag is signed - sync brings them from your other devices.</Text> : null}
         {devices.map(d => (
           <View key={d.deviceId} style={styles.item}>
             <Text style={styles.op}>{nametagOr(d.nametag)}</Text>
-            {d.previously.length ? <Text style={styles.dim}>{`Previously: ${d.previously.join(', ')}`}</Text> : null}
+            {d.names.length > 1 ? <Text style={styles.dim}>{`Earlier: ${d.names.slice(1).join(', ')}`}</Text> : null}
             <Text style={styles.dim}>{`Device ${short(d.deviceId)}${d.mergedUpTo !== null ? ` · merged up to #${d.mergedUpTo}` : ''}${d.mergedAt ? ` · ${new Date(d.mergedAt).toLocaleString()}` : ''}`}</Text>
-            {confirming === d.deviceId ? (
-              <View style={styles.row}>
-                <Btn title="Forget" tone="danger" onPress={() => { setConfirming(null); void forgetDevice(d.deviceId); }} />
-                <Btn title="Cancel" onPress={() => setConfirming(null)} />
-              </View>
-            ) : (
-              <View style={styles.row}><Btn title="Forget…" onPress={() => setConfirming(d.deviceId)} /></View>
-            )}
           </View>
         ))}
       </Section>
