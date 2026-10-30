@@ -5,5 +5,6 @@
 import {common, edge, passkeys, settings, settingsPages, thisKey} from './core';
 import {syncChannel} from './channels/sync';
 import {mcpChannel} from './channels/mcp';
+import {ipcChannel} from './channels/ipc';
 
-export const coreFeatures = [thisKey({slots: true}), edge({always: true}), passkeys, settings, ...settingsPages, ...common, syncChannel, mcpChannel];
+export const coreFeatures = [thisKey({slots: true}), edge({always: true}), passkeys, settings, ...settingsPages, ...common, syncChannel, mcpChannel, ipcChannel];

@@ -234,7 +234,7 @@ export function onKeyFree(listener: () => void): () => void {
 
 /*
  * THE COMPUTER'S HOLD ON THE KEY (see startVendorBridge for why): one per bridge - the phone's Bluetooth
- * bridge, and on the desktop the CLI behind the app's socket (src/hooks/useDesktopHost.ts). The same
+ * bridge, and on the desktop the CLI behind the app's socket (src/features/channels/ipc.tsx). The same
  * rules for both: the app's own reads wait while a computer talks, and go again once it is quiet.
  */
 export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
@@ -266,7 +266,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
     console.log(`[vendor] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
     for (const l of [...freeListeners]) l();
   }
-  /* sticky: held until releaseHold - a desktop CLI's whole connection (useDesktopHost), not until the key is quiet */
+  /* sticky: held until releaseHold - a desktop CLI's whole connection (features/channels/ipc.tsx), not until the key is quiet */
   function holdForComputer(transport: any, sticky = false): Promise<void> {
     if (holding) return holding;
     holding = new Promise<void>(ready => {

@@ -56,7 +56,6 @@ import {SetupScreen} from './src/screens/SetupScreen';
 import {sync, useSync} from './src/sync';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import {btTransit} from './src/btTransit';
-import {useDesktopHost} from './src/hooks/useDesktopHost';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {endSession, keptSession} from './src/webSession';
@@ -256,7 +255,6 @@ function Shell() {
   /* Read here, acted on by RadioStatus, edited by the Bluetooth tab. */
   const auto = useBtAuto();
   /* the desktop: the CLI on this computer answered by the same host as Bluetooth on the phone */
-  useDesktopHost();
 
 
   const hid = useUsbHid({log: usbLog.log});

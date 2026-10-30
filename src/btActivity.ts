@@ -16,7 +16,7 @@
  * for the eye.
  */
 /* sync: a bucket trade over any carrier (Bluetooth, the server's room, the desktop's file/IPC service) - the ⇄; mcp: an agent's message from the server's /mcp - the 🔗 (Brad, 2026-10-29) */
-export type IoChannel = 'key' | 'keyboard' | 'sync' | 'mcp';
+export type IoChannel = 'key' | 'keyboard' | 'sync' | 'mcp' | 'ipc';
 
 export const IO_SHOW_MS = 1000;
 export const IO_STEP_MS = 250;
