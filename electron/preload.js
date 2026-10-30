@@ -25,6 +25,8 @@ const CHANNELS = new Set([
   'okedge:sharedLinks',
   /* this identity's bucket, opened once and kept with the CLI's in ~/.onlykey-js (node-onlykey-lib bucket/cli/home.js) */
   'okedge:bucketHas', 'okedge:bucketKeep', 'okedge:bucketRead', 'okedge:bucketMergeIn',
+  /* the key's site: the window opens there (electron/main.js THE PAGE RUNS AT THE KEY'S SITE) */
+  'okedge:keySite',
   /* which key the page has open, so a CLI reaches the same one (electron/desktop/hosting.js) */
   'okedge:activeKey',
   /* the sync service this app hosts, and pairing a phone from the Sync tab (electron/desktop/sync.js) */

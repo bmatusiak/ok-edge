@@ -50,6 +50,41 @@ if (TEST) app.setPath('userData', `${app.getPath('userData')}-test`);
  */
 if (process.env.OKEDGE_DEVTOOLS_PORT) app.commandLine.appendSwitch('remote-debugging-port', String(Number(process.env.OKEDGE_DEVTOOLS_PORT)));
 
+/*
+ * THE PAGE RUNS AT THE KEY'S SITE (Brad, 2026-10-30: the firmware says where the server is - "we use the default rpid in
+ * the firmware to ask what the rpid is, then we use that"; PROPOSAL-rectify-ok-edge.md R2). The key's own site (its
+ * ctap_bridge site) is where its sync lives, and the bucket key is derived under it - over Windows' WebAuthn, which lets
+ * a page use only its own origin as the rpId. Served as https://apps.crp.to the page could not derive under the key's
+ * site ("the browser will not assert rpId ok-edge.bmatusiak.workers.dev from this page"), so the desktop never joined
+ * its server. So the page, after its identity check, tells this process the key's site (okedge:keySite); it is kept in
+ * key-site.json and the window opens there - this process answers that host from dist/web as it answers apps.crp.to,
+ * and every path that is not one of those files goes to the real server (its room's /ws, /mcp). Until a key has named
+ * its site: apps.crp.to, as before.
+ */
+const SITE_FILE = path.join(app.getPath('userData'), 'key-site.json');
+const isHost = (s) => typeof s === 'string' && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(s) && s.length < 254;
+function readKeySite() {
+  try {
+    const s = JSON.parse(fs.readFileSync(SITE_FILE, 'utf8')).site;
+    return isHost(s) ? s.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+let keySite = readKeySite();
+const pageUrl = () => `https://${keySite || 'apps.crp.to'}/index.html`;
+ipcMain.handle('okedge:keySite', (e, site) => {
+  if (site !== null && !isHost(site)) return false;
+  const next = site ? site.toLowerCase() : null;
+  if (next === keySite) return false;
+  keySite = next;
+  try { fs.writeFileSync(SITE_FILE, JSON.stringify({ site: keySite })); } catch (err) { console.error(`[site] not kept: ${err.message}`); }
+  console.log(`[site] the key's site is ${keySite || 'none'} - the page opens at ${pageUrl()}`);
+  /* a development page (OKEDGE_WEB_URL) stays where it is: its server is the developer's */
+  if (!process.env.OKEDGE_WEB_URL) setImmediate(() => e.sender.loadURL(pageUrl()));
+  return true;
+});
+
 
 /* one channel per thing the page may ask for; preload.js lists the same names */
 ipcMain.handle('okedge:about', () => ({
@@ -95,7 +130,7 @@ function createWindow() {
    */
   if (!dev && !TEST) win.removeMenu();
   if (dev) win.loadURL(dev);
-  else win.loadURL('https://apps.crp.to/index.html');
+  else win.loadURL(pageUrl());
   /*
    * OKEDGE_SHOT=<file.png>: a picture of THIS window once the page has rendered, then quit - how a
    * test or a check looks at the desktop shell without capturing the person's whole screen.
@@ -142,13 +177,15 @@ if (!app.requestSingleInstanceLock()) {
 app.whenReady().then(() => {
   protocol.handle('https', (request) => {
     const url = new URL(request.url);
-    if (url.hostname !== 'apps.crp.to') return net.fetch(request, { bypassCustomProtocolHandlers: true });
+    const site = keySite && url.hostname === keySite && keySite !== 'apps.crp.to';
+    if (url.hostname !== 'apps.crp.to' && !site) return net.fetch(request, { bypassCustomProtocolHandlers: true });
     /* inside dist/web only, whatever the path says */
     const file = path.normalize(path.join(WEB_ROOT, decodeURIComponent(url.pathname)));
-    if (!file.startsWith(WEB_ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-      return net.fetch(pathToFileURL(path.join(WEB_ROOT, 'index.html')).toString());
-    }
-    return net.fetch(pathToFileURL(file).toString());
+    const isFile = file.startsWith(WEB_ROOT) && fs.existsSync(file) && !fs.statSync(file).isDirectory();
+    if (isFile) return net.fetch(pathToFileURL(file).toString());
+    /* the key's site is a real server too: what is not this app's page goes to it (/ws, /mcp, its version.json) */
+    if (site && url.pathname !== '/') return net.fetch(request, { bypassCustomProtocolHandlers: true });
+    return net.fetch(pathToFileURL(path.join(WEB_ROOT, 'index.html')).toString());
   });
   createWindow();
   /* the CLI's way in (electron/desktop/hosting.js): onlykey-js reaches the key through this app while it runs */

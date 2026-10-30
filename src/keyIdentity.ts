@@ -15,6 +15,7 @@ import {SoftKeyEdge} from './edgeSoftKey';
 import {activeBackend} from './hooks/KeyContext';
 import {getOnlyKey} from './onlykey';
 import {setKeySite} from './serverRoom';
+import {keySiteRead} from './siteOrigin';
 
 export type KeyIdentity =
   /* site: the key's own (ctap_bridge's) - its Edge and bucket are bound to it; null: it names none */
@@ -80,6 +81,8 @@ export async function readKeyIdentity(alive: () => boolean = () => true): Promis
      * plugin read it from the key. A key without ctap_bridge, or with it off, has none: no server, Bluetooth only.
      */
     setKeySite(held.site ?? null);
+    /* the desktop opens its page at that site (siteOrigin.desktop.ts); elsewhere nothing */
+    keySiteRead(held.site ?? null);
     if (!alive()) return null;
     return keep({kind: 'read', identity, edgeIdentity, nametag: statement?.nametag ?? null, bucket, site: held.site ?? null, at: Date.now()});
   } catch (e: unknown) {
