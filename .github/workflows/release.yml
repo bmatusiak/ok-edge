@@ -62,8 +62,10 @@ name: release
 on:
   # EVERY PUSH TO MAIN IS TESTED; THE VERSION-BUMP COMMIT IS RELEASED (Brad, 2026-10-29: "auto trigger on the version
   # bump commit" - that run builds and publishes; "if no version bump, run only the testing gate" - "so github will
-  # tell us if there is an issue"). The gate job runs on every push; the build line waits for the trigger job, which
-  # lets it go on only when app.json's version changed in the push.
+  # tell us if there is an issue"; "the version build is commit directed, but normal checking is only the latest from
+  # push"). The gate job tests the push's latest commit; the build line waits for the trigger job, which finds the
+  # commit in the push that changed app.json's version and has the build line build and publish THAT commit - newer
+  # commits after it in the same push are tested, not released.
   push:
     branches: [main]
   workflow_dispatch:
@@ -96,6 +98,8 @@ jobs:
     outputs:
       go: ${{ steps.v.outputs.go }}
       publish: ${{ steps.v.outputs.publish }}
+      # the commit the build line builds and publishes: the version-bump commit (or, by hand, the one started on)
+      ref: ${{ steps.v.outputs.ref }}
     steps:
       - name: Checkout ok-edge
         uses: actions/checkout@v4
@@ -111,21 +115,31 @@ jobs:
           PUBLISH_INPUT: ${{ inputs.publish }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then
-            echo "started by hand: publish=${PUBLISH_INPUT:-false}"
+            echo "started by hand on ${GITHUB_SHA:0:7}: publish=${PUBLISH_INPUT:-false}"
             echo "go=true" >> "$GITHUB_OUTPUT"
             echo "publish=${PUBLISH_INPUT:-false}" >> "$GITHUB_OUTPUT"
+            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          now=$(node -p "require('./app.json').expo.version")
-          was=$(git show "$BEFORE:app.json" 2>/dev/null | node -e "let s='';process.stdin.on('data',(d)=>{s+=d}).on('end',()=>{try{console.log(JSON.parse(s).expo.version)}catch{console.log('')}})")
-          if [ -n "$was" ] && [ "$was" != "$now" ]; then
-            echo "version $was -> $now: the release builds and publishes"
+          # app.json's version at a commit ('' when it has none there)
+          version() { git show "$1:app.json" 2>/dev/null | node -e "let s='';process.stdin.on('data',(d)=>{s+=d}).on('end',()=>{try{console.log(JSON.parse(s).expo.version)}catch{console.log('')}})"; }
+          # the push's commits, oldest first (a new branch has no before: its newest commit alone)
+          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then commits=$(git rev-list --reverse "$BEFORE..$GITHUB_SHA"); else commits=$GITHUB_SHA; fi
+          bump=""; from=""; to=""
+          for c in $commits; do
+            was=$(version "$c^"); now=$(version "$c")
+            if [ -n "$was" ] && [ -n "$now" ] && [ "$was" != "$now" ]; then bump=$c; from=$was; to=$now; fi
+          done
+          if [ -n "$bump" ]; then
+            echo "version $from -> $to in ${bump:0:7}: the build line builds and publishes ${bump:0:7}; the test gate tests ${GITHUB_SHA:0:7}"
             echo "go=true" >> "$GITHUB_OUTPUT"
             echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "ref=$bump" >> "$GITHUB_OUTPUT"
           else
-            echo "no version bump (${was:-unknown} -> $now): the test gate only - nothing is built"
+            echo "no version bump in this push: the test gate only, on ${GITHUB_SHA:0:7} - nothing is built"
             echo "go=false" >> "$GITHUB_OUTPUT"
             echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
           fi
 
   firmware:
@@ -134,6 +148,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
+      # the release commit, for the jobs after (they need this job, not the trigger)
+      ref: ${{ needs.trigger.outputs.ref }}
       emulator: ${{ steps.plan.outputs.emulator }}
       version: ${{ steps.plan.outputs.version }}
       version_code: ${{ steps.plan.outputs.version_code }}
@@ -144,6 +160,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ok-edge
+          # the release commit (the version bump), not the push's latest
+          ref: ${{ needs.trigger.outputs.ref }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -330,6 +348,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ok-edge
+          # the release commit (the version bump), not the push's latest
+          ref: ${{ needs.firmware.outputs.ref }}
           fetch-depth: 0
 
       # package.json: "test-moniker": "file:../test-moniker"
@@ -420,7 +440,7 @@ jobs:
           cp ok-edge/android/app/build/outputs/apk/release/app-release.apk "out/$file"
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           node ok-edge/tools/release/android-manifest.js --apk "out/$file" --apksigner "$apksigner" --repo "$GITHUB_REPOSITORY" \
-            --tag "$TAG" --version "$VERSION" --version-code "$CODE" --commit "$GITHUB_SHA" --out out/manifest.json
+            --tag "$TAG" --version "$VERSION" --version-code "$CODE" --commit "${{ needs.firmware.outputs.ref }}" --out out/manifest.json
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
@@ -458,6 +478,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ok-edge
+          # the release commit (the version bump), not the push's latest
+          ref: ${{ needs.firmware.outputs.ref }}
 
       - name: Checkout test-moniker
         uses: actions/checkout@v4
@@ -508,7 +530,7 @@ jobs:
           node ok-edge/tools/release/desktop-package.js --platform ${{ matrix.platform }} \
             --emulator node-onlykey-emulator/emulator --out out --repo "$GITHUB_REPOSITORY" \
             --tag "${{ needs.firmware.outputs.tag }}" --version "${{ needs.firmware.outputs.version }}" \
-            --version-code "${{ needs.firmware.outputs.version_code }}" --commit "$GITHUB_SHA"
+            --version-code "${{ needs.firmware.outputs.version_code }}" --commit "${{ needs.firmware.outputs.ref }}"
           echo "desktop (${{ matrix.name }}): $(ls out | grep -v json)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the package
@@ -544,6 +566,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ok-edge
+          # the release commit (the version bump), not the push's latest
+          ref: ${{ needs.firmware.outputs.ref }}
 
       - name: Checkout test-moniker
         uses: actions/checkout@v4
@@ -613,7 +637,7 @@ jobs:
 
       - name: Assemble the site
         working-directory: ok-edge
-        run: node tools/release/cloudflare-site.js --docs docs --worker worker-out --out ../site --commit "$GITHUB_SHA" --tag "${{ needs.firmware.outputs.tag }}"
+        run: node tools/release/cloudflare-site.js --docs docs --worker worker-out --out ../site --commit "${{ needs.firmware.outputs.ref }}" --tag "${{ needs.firmware.outputs.tag }}"
 
       - name: Upload the site
         uses: actions/upload-artifact@v4
@@ -638,6 +662,8 @@ jobs:
     timeout-minutes: 20
     env:
       TAG: ${{ needs.firmware.outputs.tag }}
+      # the commit released: the version bump, not the push's latest
+      RELEASE_SHA: ${{ needs.trigger.outputs.ref }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -660,7 +686,7 @@ jobs:
           prod=artifacts/firmware/$(fw prod b.file)
           test=artifacts/firmware/$(fw test b.file)
           {
-            echo "Built by the release workflow (run $GITHUB_RUN_ID) from main ${GITHUB_SHA:0:7}."
+            echo "Built by the release workflow (run $GITHUB_RUN_ID) from main ${RELEASE_SHA:0:7}."
             echo
             echo "- Android app: $(basename "$apk") - com.okrn, signed with the repo debug keystore"
             echo "  sha256 $(node -p "require('./artifacts/android/manifest.json').sha256")"
@@ -676,7 +702,7 @@ jobs:
             echo "  WARNING: the test firmware exposes debugging - its console prints key data. Never use it with live"
             echo "  credentials and never restore a backup to it: it would expose them. For test keys only."
           } > notes.md
-          gh release create "$TAG" "$apk" "$win" "$linux" "$prod" "$test" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file notes.md
+          gh release create "$TAG" "$apk" "$win" "$linux" "$prod" "$test" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" --prerelease --title "$TAG" --notes-file notes.md
 
       # the built site, one commit per release on the cloudflare branch (created on the first run)
       - name: The site onto the cloudflare branch
@@ -690,7 +716,7 @@ jobs:
           cp -a ../artifacts/site/. .
           git add -A
           git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
-            commit --quiet -m "$TAG: the built site from main ${GITHUB_SHA:0:7} (release workflow run $GITHUB_RUN_ID)"
+            commit --quiet -m "$TAG: the built site from main ${RELEASE_SHA:0:7} (release workflow run $GITHUB_RUN_ID)"
           git push --quiet origin cloudflare
           echo "cloudflare branch: $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
 
