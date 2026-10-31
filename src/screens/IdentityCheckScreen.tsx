@@ -56,7 +56,7 @@ type Open = {kind: 'idle'} | {kind: 'opening'} | {kind: 'press'} | {kind: 'faile
  * kept with its opening and listed in every device's budget history. The site is the page's own (a browser binds the
  * key's answers to it); the app and the browser are what this app says of itself; the time is the opening's.
  */
-declare const location: {host: string; hostname: string} | undefined;
+declare const location: {host: string; hostname: string; search: string; assign(url: string): void} | undefined;
 declare const navigator: {userAgent?: string} | undefined;
 function loginReason(): string {
   if (shell === 'webapp') {
