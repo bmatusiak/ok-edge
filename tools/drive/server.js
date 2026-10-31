@@ -159,6 +159,16 @@ async function shotOf(app, name) {
     fs.writeFileSync(file, Buffer.from(r.png, 'base64'));
     line(`[${app.shell}] picture: ${file}`);
     bus.emit('shot', file, app.shell);
+    /* the web app's browser window too, from its machine: Chrome's own dialogs are not the page's (targets.js windowShot) */
+    if (app.shell === 'webapp') {
+      const w = await proc('window-shot', 'webapp');
+      if (w.ok) {
+        const wfile = file.replace(/\.png$/, '-window.png');
+        fs.writeFileSync(wfile, Buffer.from(w.what, 'base64'));
+        line(`[${app.shell}] its browser window: ${wfile}`);
+        bus.emit('shot', wfile, app.shell);
+      } else line(`[${app.shell}] no picture of its browser window: ${w.why}`);
+    }
     return file;
   } catch (e) { line(`[${app.shell}] no picture (${name}): ${e.message}`); return null; }
 }

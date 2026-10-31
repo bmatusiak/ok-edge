@@ -117,6 +117,36 @@ function gadget() {
   return `its gadget soft key started (${GADGET_STORE})`;
 }
 
+/*
+ * THE GADGET'S OWN SOCKET, HELD HERE (the emulator dials its controller; one controller at a time - press.js's rule):
+ * the key's LED and console come in as events, and its presses go out, through the one connection. What the LED shows
+ * is the key's state - the web app cannot see it (its key is outside the browser), the machine holding the key can.
+ * "[gadget]" lines go to the web app's tab (#3's path: the testnet every line, the live chain none).
+ */
+let gadgetHost = null;
+let gadgetUp = false;
+let gadgetLed = { hex: null, at: 0 };
+let gadgetOut = () => {};
+function holdGadget(onOut) {
+  gadgetOut = onOut;
+  if (gadgetHost) return null;
+  const IpcHost = require(path.join(EMU, 'lib', 'ipc-host'));
+  const host = new IpcHost({ socketPath: GADGET_SOCK });
+  try { host.listen(); } catch (e) { return `could not hold the gadget's socket: ${e.message} (a press.js or GUI holds it?)`; }
+  gadgetHost = host;
+  host.on('device-connect', () => { gadgetUp = true; gadgetOut('[gadget] the soft key connected'); });
+  host.on('device-disconnect', () => { gadgetUp = false; gadgetOut('[gadget] the soft key went (it starts again by itself)'); });
+  host.on('led', (m) => {
+    const hex = (m.pixels || []).map((p) => `#${[p.r, p.g, p.b].map((v) => v.toString(16).padStart(2, '0')).join('')}`).join(' ');
+    if (hex === gadgetLed.hex) return;
+    gadgetLed = { hex, at: Date.now() };
+    /* off between blinks is not news: a waiting key blinks */
+    if (!/^(#000000 ?)+$/.test(hex)) gadgetOut(`[gadget] led ${hex}`);
+  });
+  host.on('log', (m) => { for (const l of String(m.text || '').split('\n')) if (l.trim()) gadgetOut(`[gadget] ${l}`); });
+  return null;
+}
+
 /* the end of a target's output log (launch() writes LOGS/<name>.log) */
 function tail(name, n) {
   try { return fs.readFileSync(path.join(LOGS, `${name}.log`), 'utf8').split('\n').slice(-n).join('\n'); } catch (e) { return `(no log: ${e.message})`; }
@@ -215,8 +245,17 @@ function createTargets(line = () => {}, out = () => {}) {
       /* the box's web app: docs/ served as https://apps.crp.to:8443 and Chromium on the box screen (as tools/box/webapp.sh did) */
       async start() {
         if (!LINUX) return 'the web app target is the Linux box\'s';
+        /* its key first: the gadget held and running, whatever else already runs */
+        if (KEY === 'gadget') {
+          const held = holdGadget((l) => out('webapp', l));
+          if (held) line(`webapp: ${held}`);
+        }
+        const keyNote = KEY === 'gadget' ? gadget() : 'its key: hard key 2 on this USB';
         const c = running.get('webapp');
-        if (c && c.some((x) => !exited(x))) return 'already running';
+        if (c && c.some((x) => !exited(x))) return `already running (${keyNote})`;
+        /* started by a drive-remote before this one (its children outlive it): found by their command lines */
+        const found = procs((cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js'));
+        if (found && found.length) return `already running, not started here (pids ${found.map((p) => p.pid).join(', ')}; ${keyNote})`;
         const spki = fs.readFileSync(path.join(ROOT, 'devcert/apps.crp.to.spki'), 'utf8').trim();
         const serve = launch('serve-docs', NODE, [path.join(EDGE, 'tools/box/serve-docs.js'), path.join(EDGE, 'docs'), path.join(ROOT, 'devcert'), '8443']);
         const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333', '--host-resolver-rules=MAP apps.crp.to 127.0.0.1',
@@ -224,7 +263,25 @@ function createTargets(line = () => {}, out = () => {}) {
         { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });
         running.set('webapp', [serve, browser]);
         followOut('webapp', 'webapp-chromium');
-        return `started${KEY === 'gadget' ? ` (${gadget()})` : ' (its key: hard key 2 on this USB)'}`;
+        return `started (${keyNote})`;
+      },
+      /*
+       * THE BROWSER'S WINDOW, PICTURED BY ITS MACHINE (Brad, 2026-10-31: "the webapp screenshot does not see the security
+       * key dialog"): the page draws only itself (src/drive/shot.webapp.ts); Chrome's own dialogs are the browser's, so
+       * the machine running it takes the window too - the one picture an app cannot take of itself. -> PNG base64.
+       */
+      async windowShot() {
+        if (!LINUX) return { why: 'the browser window is pictured on Linux only so far' };
+        const env = { ...process.env, DISPLAY: process.env.DRIVE_DISPLAY || ':10' };
+        const id = await new Promise((resolve) => execFile('xdotool', ['search', '--onlyvisible', '--class', 'chromium'], { env }, (err, out) => resolve(err ? '' : String(out).trim().split('\n').pop())));
+        if (!id) return { why: 'no Chromium window on the screen' };
+        return new Promise((resolve) => execFile('import', ['-window', id, 'png:-'], { env, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 }, (err, out) => resolve(err ? { why: `import: ${err.message}` } : { png: out.toString('base64') })));
+      },
+      /* the web app's key as its machine sees it (the gadget's LED now, and since when) */
+      async keyState() {
+        if (KEY === 'hard') return 'hard key 2: read it with tools/box/owner-key.js';
+        if (!gadgetHost) return 'the gadget is not held here (start the web app through the drive)';
+        return `${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}`;
       },
       /*
        * A PRESS ON THE WEB APP'S KEY (the drive's answer to "[press] key waits", src/hostChallenge.ts): the key is outside
@@ -234,10 +291,13 @@ function createTargets(line = () => {}, out = () => {}) {
       async press({ buttons = ['1'] } = {}) {
         const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
         if (!b.length) b.push('1');
-        const r = KEY === 'hard'
-          ? await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...b], 70000)
-          : await runIn(EMU, NODE, ['bin/press.js', `--socket=${GADGET_SOCK}`, '--quiet', ...b], 30000);
-        return r.ok ? `pressed ${b.join(' ')} on the ${KEY === 'hard' ? 'hard key' : 'gadget soft key'}` : `press failed: ${r.out.split('\n').pop()}`;
+        if (KEY === 'gadget') {
+          if (!gadgetHost || !gadgetUp) return 'press failed: the gadget soft key is not connected to this machine';
+          for (const x of b) gadgetHost.press(Number(x), 'tap');
+          return `pressed ${b.join(' ')} on the gadget soft key`;
+        }
+        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...b], 70000);
+        return r.ok ? `pressed ${b.join(' ')} on the hard key` : `press failed: ${r.out.split('\n').pop()}`;
       },
       async stop() {
         const c = running.get('webapp') || [];
@@ -353,6 +413,8 @@ function createTargets(line = () => {}, out = () => {}) {
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
+      if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }
+      if (action === 'key-state') return t.keyState ? { ok: true, what: await t.keyState() } : { ok: false, why: `${target}'s key is in the app: its flags say its state` };
       if (action === 'press') return t.press ? { ok: true, what: await t.press(args) } : { ok: false, why: `${target}'s key is in the app: the drive taps its own button` };
       return { ok: false, why: `no action "${action}"` };
     },
