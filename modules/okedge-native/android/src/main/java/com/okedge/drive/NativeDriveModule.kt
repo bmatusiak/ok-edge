@@ -72,9 +72,9 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
   /*
    * ONLY TEXT A PERSON SEES (2026-10-31, the Pixel's first drive: the login screen's "Log in" and "Enter testing mode"
    * were still read under the Testing tab, so the login flow kept judging "the login screen" and waited out its
-   * watchdog). isShown and a visible rect are not enough - a view faded to nothing, or a whole screen drawn over it,
-   * still has both. So a text counts when its alpha (with its parents') is above zero AND it is on top at its centre:
-   * the view a touch there would reach is the text, or what lies over it has no background (a transparent overlay).
+   * watchdog). The rule is Android's own, the one its accessibility (and uiautomator) uses: a text counts when its node
+   * is visible to the user, no parent hides it from accessibility, and its alpha (with its parents') is above zero. (A
+   * home-made "on top at its centre" test came first and read nothing at all on the setup screen - replaced.)
    */
   private fun collect(v: View, lines: MutableList<String>, alpha: Float = 1f) {
     if (!v.isShown) return
@@ -89,53 +89,13 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
     if (v is EditText) return
     if (v is TextView) {
       val r = Rect()
-      if (v.getGlobalVisibleRect(r) && r.width() > 0 && r.height() > 0 && onTop(v, r.centerX(), r.centerY())) {
+      if (v.getGlobalVisibleRect(r) && r.width() > 0 && r.height() > 0 && v.createAccessibilityNodeInfo().isVisibleToUser) {
         val t = v.text?.toString()?.trim()
         if (!t.isNullOrEmpty()) lines.add(t)
       }
       return
     }
     if (v is ViewGroup) for (i in 0 until v.childCount) collect(v.getChildAt(i), lines, a)
-  }
-
-  /* is `v` uncovered at screen point (x, y)? */
-  private fun onTop(v: View, x: Int, y: Int): Boolean {
-    val root = v.rootView
-    val hit = topAt(root, x, y) ?: return true
-    if (hit === v || isAncestor(v, hit)) return true
-    /* covered by `hit`: hidden only when something between it and their common parent paints a background */
-    var c: View? = hit
-    while (c != null && !isAncestor(c, v)) {
-      if (paints(c)) return false
-      c = c.parent as? View
-    }
-    return true
-  }
-
-  /* the topmost shown, non-transparent view at (x, y): the last child drawn that holds the point, descended into */
-  private fun topAt(v: View, x: Int, y: Int): View? {
-    if (!v.isShown || v.alpha <= 0.01f) return null
-    val r = Rect()
-    if (!v.getGlobalVisibleRect(r) || !r.contains(x, y)) return null
-    if (v is ViewGroup) {
-      for (i in v.childCount - 1 downTo 0) {
-        val hit = topAt(v.getChildAt(i), x, y)
-        if (hit != null) return hit
-      }
-    }
-    return v
-  }
-
-  private fun isAncestor(a: View, of: View): Boolean {
-    var p = of.parent
-    while (p != null) { if (p === a) return true; p = p.parent }
-    return false
-  }
-
-  private fun paints(v: View): Boolean {
-    val bg = v.background ?: return false
-    if (bg is android.graphics.drawable.ColorDrawable) return android.graphics.Color.alpha(bg.color) > 0 && bg.alpha > 0
-    return true
   }
 
   /*
