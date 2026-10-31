@@ -281,7 +281,7 @@ function createTargets(line = () => {}, out = () => {}) {
       async keyState() {
         if (KEY === 'hard') return 'hard key 2: read it with tools/box/owner-key.js';
         if (!gadgetHost) return 'the gadget is not held here (start the web app through the drive)';
-        return `${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}`;
+        return `the testnet soft key (gadget): ${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}`;
       },
       /*
        * A PRESS ON THE WEB APP'S KEY (the drive's answer to "[press] key waits", src/hostChallenge.ts): the key is outside
