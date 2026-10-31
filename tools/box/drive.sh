@@ -84,10 +84,13 @@ session_on() {
 session_off() { SESSION=""; [ -n "$DRIVE_SESSION" ] && kill "$DRIVE_SESSION" 2>/dev/null; DRIVE_SESSION=""; }
 # one budget on the open soft key: request, approve + its press, three signs it pays
 budget_demo() {
-  C "Menu" "Edge" > /dev/null
+  # precheck: a sheet left open covers the tab (the device filter, 2026-10-31: every click went into it and the demo
+  # carried on blind) - close it first; every move below must happen or the demo stops with page-click's reason
+  has "Show all" && { C "Close" > /dev/null || return 1; }
+  C "Menu" "Edge" > /dev/null || return 1
   # precheck: a live budget is spent, not stacked on; an ask already waiting is approved, not asked again
   if ! has "Active"; then
-    has "Approve" || C "▲ Edge Management" "Agent: request a budget" "Close Edge Management" > /dev/null
+    has "Approve" || C "▲ Edge Management" "Agent: request a budget" "Close Edge Management" "?Approve" > /dev/null || return 1
     step '?Active' "Approve" || return 1
   fi
   # each sign ends on the state it is for: the use counted; the last one, no live budget left (it completed)
