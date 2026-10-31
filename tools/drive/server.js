@@ -543,6 +543,18 @@ function cmdEvent(machine, name, ev) {
   bus.emit('cmd', name, ev, machine);
 }
 
+/*
+ * THE KEYS ON EACH MACHINE (targets.js watchKeys - a remote's, and this machine's own): each change a drive line and a
+ * 'keys' event for the window; the apps' own soft keys are in their flags (status). null = not watched on that OS yet.
+ */
+let localKeys = null;
+const keyWords = (keys) => (keys === null ? 'not watched there yet' : keys.length ? keys.map((k) => `${k.kind} (usb ${k.usb}${k.serial ? `, serial ${k.serial}` : ''}${k.hidraw && k.hidraw.length ? `, ${k.hidraw.length} hidraw` : ''})`).join(', ') : 'no OnlyKey');
+function keysSaid(machine, keys) {
+  line(`[keys] ${machine}: ${keyWords(keys)}`);
+  bus.emit('keys', machine, keys);
+}
+localTargets.watchKeys((keys) => { localKeys = keys; if (keys !== null) keysSaid('this machine', keys); });
+
 /* lines a process wrote before its app connected (its start-up): held, then handed to the app's record when it does */
 const outBefore = new Map(); /* shell -> lines */
 function appOut(shell, l) {
@@ -586,6 +598,7 @@ function dialRemote(url, again = false) {
     if (m.t === 'app-msg') { const s = r.socks.get(m.cid); if (s) s.emit('message', m.data); return; }
     if (m.t === 'app-close') { const s = r.socks.get(m.cid); if (s) { r.socks.delete(m.cid); s.readyState = 3; s.emit('close'); } return; }
     if (m.t === 'proc-reply') { const w = r.waiting.get(m.id); if (w) { r.waiting.delete(m.id); w(m); } return; }
+    if (m.t === 'keys') { r.keys = m.keys; keysSaid(r.machine, m.keys); return; }
     if (m.t === 'app-out') { appOut(String(m.shell), String(m.line)); return; }
     if (m.t === 'cmd') cmdEvent(r.machine, String(m.name), m.ev || {});
   });
@@ -737,7 +750,8 @@ function start({ port = 8790, remotes: urls = [] } = {}) {
 function status() {
   return {
     apps: [...apps.values()].map((a) => ({ shell: a.shell, net: a.net, via: a.ws && a.ws.via, flags: a.flags })),
-    remotes: [...remotes.values()].map((r) => ({ machine: r.machine, up: r.ws.readyState === 1, targets: r.targets })),
+    remotes: [...remotes.values()].map((r) => ({ machine: r.machine, up: r.ws.readyState === 1, targets: r.targets, keys: r.keys || null })),
+    localKeys,
   };
 }
 

@@ -200,13 +200,16 @@ function showStatus() {
     chips.push([s.server ? 'ok' : 'bad', s.server ? 'server connected' : 'no server']);
     chips.push(['', `${s.apps} app(s)`]);
   } else {
-    for (const r of s.remotes) chips.push([r.up ? 'ok' : 'bad', `remote ${r.machine || '?'}${r.up ? '' : ' (down)'}`]);
+    /* a machine's USB keys (watchKeys): how many of each kind - "hard" a real OnlyKey, "gadget" the emulator's soft key */
+    const keyCount = (keys) => (!keys ? '' : ` · keys: ${keys.length ? Object.entries(keys.reduce((m, k) => ({ ...m, [k.kind]: (m[k.kind] || 0) + 1 }), {})).map(([k, n]) => `${n} ${k}`).join(', ') : 'none'}`);
+    for (const r of s.remotes) chips.push([r.up ? 'ok' : 'bad', `remote ${r.machine || '?'}${r.up ? '' : ' (down)'}${keyCount(r.keys)}`]);
+    if (s.localKeys) chips.push(['', `this machine${keyCount(s.localKeys)}`]);
     if (!s.apps.length) chips.push(['bad', 'no app connected']);
     const up = new Set();
     for (const a of s.apps) {
       up.add(a.shell);
       tabOf(a.shell);
-      chips.push(['ok', `${a.shell}${a.via ? ` via ${a.via}` : ''}${a.flags && a.flags.phase ? ` - ${a.flags.phase}` : ''}`]);
+      chips.push(['ok', `${a.shell}${a.via ? ` via ${a.via}` : ''}${a.flags && a.flags.phase ? ` - ${a.flags.phase}` : ''}${a.flags && a.flags.key && a.flags.key !== 'unknown' ? ` · its key ${a.flags.key}` : ''}`]);
     }
     for (const [n, t] of tabs) if (t.kind === 'app' && n !== DRIVE && n !== RUNS_TAB) t.dot.classList.toggle('up', up.has(n));
   }

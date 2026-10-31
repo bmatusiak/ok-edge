@@ -201,6 +201,43 @@ function holdGadget(onOut) {
   return null;
 }
 
+/*
+ * THE KEYS ON THIS MACHINE (Brad, 2026-10-31: "a key status monitor on the drive server/remote to detect keys on the
+ * host/gadget/usb devices"): every OnlyKey on its USB (vendor 1d50:60fc), read from /sys - a HARD key on a real port, or
+ * the GADGET soft key under the emulator's dummy_hcd - with its bus/device, its serial and its hidraw nodes. Watched by
+ * the kernel's own USB events (udevadm monitor): each add or remove reads the set again, and only a changed set is told.
+ * Linux so far; Windows' device-change events come with the drive on Windows (step 4).
+ */
+function keysOnUsb() {
+  if (!LINUX) return null;
+  const keys = [];
+  const read = (p) => { try { return fs.readFileSync(p, 'utf8').trim(); } catch { return ''; } };
+  for (const d of fs.readdirSync('/sys/bus/usb/devices')) {
+    const dir = `/sys/bus/usb/devices/${d}`;
+    if (`${read(`${dir}/idVendor`)}:${read(`${dir}/idProduct`)}` !== '1d50:60fc') continue;
+    let real = dir;
+    try { real = fs.realpathSync(dir); } catch { /* as listed */ }
+    const hidraw = [];
+    try {
+      for (const h of fs.readdirSync('/sys/class/hidraw')) {
+        try { if (fs.realpathSync(`/sys/class/hidraw/${h}/device`).startsWith(`${real}/`)) hidraw.push(`/dev/${h}`); } catch { /* gone */ }
+      }
+    } catch { /* no hidraw class */ }
+    keys.push({ kind: real.includes('dummy_hcd') ? 'gadget' : 'hard', usb: `${read(`${dir}/busnum`)}/${read(`${dir}/devnum`)}`, serial: read(`${dir}/serial`) || null, hidraw });
+  }
+  return keys;
+}
+let keysWatch = null;
+function watchKeys(onChange) {
+  let last = '';
+  const tell = () => { const k = keysOnUsb(); const s = JSON.stringify(k); if (s !== last) { last = s; onChange(k); } };
+  tell();
+  if (!LINUX || keysWatch) return;
+  keysWatch = spawn('udevadm', ['monitor', '--udev', '--subsystem-match=usb'], { stdio: ['ignore', 'pipe', 'ignore'] });
+  keysWatch.stdout.on('data', (b) => { if (/\b(add|remove|bind|unbind)\b/.test(String(b))) tell(); });
+  keysWatch.on('exit', () => { keysWatch = null; });
+}
+
 /* the end of a target's output log (launch() writes LOGS/<name>.log) */
 function tail(name, n) {
   try { return fs.readFileSync(path.join(LOGS, `${name}.log`), 'utf8').split('\n').slice(-n).join('\n'); } catch (e) { return `(no log: ${e.message})`; }
@@ -542,6 +579,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
 
   return {
     list: Object.keys(T),
+    /* this machine's keys, as they change (watchKeys) */
+    watchKeys,
     async act(action, target, args = {}) {
       const t = T[target];
       if (!t) return { ok: false, why: `no target "${target}" (${Object.keys(T).join(', ')})` };
@@ -551,6 +590,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
+      if (action === 'keys') return { ok: true, what: JSON.stringify(keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
       if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }

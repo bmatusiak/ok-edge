@@ -30,6 +30,7 @@ let logFile = null;
 const line = (t) => { const l = `${new Date().toTimeString().slice(0, 8)} ${t}`; if (logFile) logFile.write(`${l}\n`); bus.emit('line', l); };
 
 let server = null; /* the drive server's control connection */
+let keysNow; /* this machine's keys, last told (watchKeys) */
 const apps = new Map(); /* cid -> the app's socket */
 let nextCid = 1;
 const toServer = (o) => { if (server && server.readyState === 1) server.send(JSON.stringify(o)); };
@@ -54,6 +55,8 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
     server = ws;
     line(`drive server connected from ${req.socket.remoteAddress}`);
     ws.send(JSON.stringify({ t: 'remote-hello', machine: os.hostname(), targets: targets.list }));
+    /* this machine's keys, as they are now */
+    if (keysNow !== undefined) toServer({ t: 'keys', keys: keysNow });
     /* the apps already here are announced again: their connections live on through a server restart */
     for (const cid of apps.keys()) toServer({ t: 'app-open', cid });
     ws.on('message', async (data) => {
@@ -96,6 +99,12 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
     ws.on('close', () => { apps.delete(cid); toServer({ t: 'app-close', cid }); });
   });
 
+  /* the keys on this machine's USB, told as they change (targets.js watchKeys - the kernel's USB events) */
+  targets.watchKeys((keys) => {
+    keysNow = keys;
+    line(`keys here: ${keys === null ? 'not watched on this OS yet' : keys.length ? keys.map((k) => `${k.kind} (usb ${k.usb}${k.serial ? `, serial ${k.serial}` : ''})`).join(', ') : 'no OnlyKey'}`);
+    toServer({ t: 'keys', keys });
+  });
   line(`drive-remote on ${os.hostname()}: apps on 127.0.0.1:${appPort}, the server on :${controlPort} - targets ${targets.list.join(', ')}`);
 }
 
