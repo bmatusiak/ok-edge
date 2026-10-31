@@ -117,7 +117,12 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
     if (UNTIL && UNTIL.test(line)) act(async () => finish(0, `until: ${line.slice(0, 160)}`));
   };
   /* the states: one in-page observer per label, answering when it shows (never a poll) */
-  const stateWatch = (label) => call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
+  /*
+   * presence (--done): the state wanted counts when it is there at all - the step's precheck (drive.sh) found it absent
+   * before the click, so any showing now is the step's doing. change (--fail): a failure label already on screen (the
+   * "Try again" a retry starts from) counts only once it went and came back.
+   */
+  const stateWatch = (label, presence) => call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
     const want = ${JSON.stringify(label)};
     const find = () => [...document.querySelectorAll('body *')].some((el) => {
       const q = el.getBoundingClientRect();
@@ -126,8 +131,8 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
       const t = (el.innerText || '').trim();
       return t === want && ![...el.children].some((c) => (c.innerText || '').trim() === t);
     });
-    /* a CHANGE to it: a label already showing (the "Try again" a retry starts from) counts once it went and came back */
     let gone = !find();
+    if (${presence ? 'true' : 'false'} && !gone) return resolve(true);
     const obs = new MutationObserver(() => {
       const there = find();
       if (!there) gone = true;
@@ -135,8 +140,8 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
     });
     obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
   })` });
-  for (const l of DONE) stateWatch(l).then(() => act(async () => finish(0, `done: the page shows "${l}"`)));
-  for (const l of FAIL) stateWatch(l).then(() => act(async () => finish(1, `FAILED: the page shows "${l}" - ${String(await evaluate("(document.body.innerText.match(/[^\\n]*(did not|Not made|rror)[^\\n]*/) || [''])[0]")).slice(0, 200)}`)));
+  for (const l of DONE) stateWatch(l, true).then(() => act(async () => finish(0, `done: the page shows "${l}"`)));
+  for (const l of FAIL) stateWatch(l, false).then(() => act(async () => finish(1, `FAILED: the page shows "${l}" - ${String(await evaluate("(document.body.innerText.match(/[^\\n]*(did not|Not made|rror)[^\\n]*/) || [''])[0]")).slice(0, 200)}`)));
   await call('Runtime.enable');
   say(`listening${APPROVE ? ' (testnet approvals too)' : ''}${UNTIL ? ` until /${UNTIL.source}/` : ''}`);
 })().catch((e) => { console.error(`page-presser: ${e.message || e}`); process.exit(1); });

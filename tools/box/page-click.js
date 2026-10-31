@@ -90,6 +90,13 @@ const FIND = (label) => `(() => {
   } else if (args[0] === '--text') {
     /* the page's visible text, bounded: an error message is longer than a label */
     console.log(String(await evaluate('document.body.innerText')).slice(0, Number(args[1]) || 3000));
+  } else if (args[0] === '--has') {
+    /* a PRECHECK: is it on screen now (live or not)? exit 0 yes, 1 no - no waiting, no click */
+    const at = await evaluate(FIND(args[1]));
+    const there = !!(at && at.x !== undefined);
+    console.log(there ? `has: "${args[1]}"` : `has not: "${args[1]}"`);
+    ws.close();
+    process.exit(there ? 0 : 1);
   } else if (args[0] === '--labels') {
     console.log((await evaluate(FIND(null))).seen.join(' | '));
   } else {

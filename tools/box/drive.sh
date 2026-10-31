@@ -20,13 +20,19 @@ waitline() {
   kill "$(cat "$tp")" 2>/dev/null; rm -f "$tp"
   return "$found"
 }
-# step "<outcome regex>" <clicks...>: the presser listens first, then the clicks, then the outcome (or its failure).
-# SHOW='<regex>' prints the console lines that match as they come; LIFE=<s> is the step's watchdog (default 90).
-# "?<text>" as the outcome: the STATE wanted, on the page (Brad, 2026-10-31: "you dont have an end detection when the
-# state you want is there or not") - page-click waits for that text by the page's own changes, under the same watchdog,
-# and the presser is stopped when it is there. A console regex is for outcomes the page does not show.
+# has <label>: a precheck - on screen now? (no wait)
+has() { timeout 30 node tools/box/page-click.js --has "$1" > /dev/null 2>&1; }
+# step "<goal>" <clicks...> - one move, driven by state (Brad, 2026-10-31: "you have no prechecking on the state when
+# you're in the middle of driving"):
+#   1. PRECHECK: a goal "?<text>" already on the page - the step is done, nothing clicked;
+#   2. the presser listens, then the clicks;
+#   3. it ends on the goal showing, a failure newly shown ("Try again"; FAIL=<label>), or its watchdog (LIFE=<s>, 90).
+# The goal is a STATE on the page. A console regex is only for an outcome the page does not show AND that only this
+# step's own click can cause - a line logged before the step starts is never seen (a finished login waited out its
+# watchdog for a "room joined" that had come and gone). SHOW='<regex>' prints matching console lines as they come.
 step() {
   local until="$1"; shift
+  if [ "${until#\?}" != "$until" ] && has "${until#\?}"; then echo "   already: \"${until#\?}\""; return 0; fi
   local log; log=$(mktemp)
   local untilArgs=(--until "$until")
   [ "${until#\?}" != "$until" ] && untilArgs=(--done "${until#\?}")
@@ -41,11 +47,14 @@ step() {
   rm -f "$log"
   return $code
 }
-# the PIN on the soft key's keypad, and the login that follows - ends on the identity check's own verdict
+# logged in: the unlocked key's own page - from wherever the app is (the screen says which move is next)
+LOGGED_IN="Slots — Soft Key"
 login() {
-  C "Menu" "This Key" > /dev/null
-  # the end of a login: the room joined (or why not) - a card login logs no [identity] verdict; a failure says "did not open"
-  step '\[room\] (joined|not joined)|\[identity\] .*(proven|a manual login)|did not open' "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1"
+  if has "$LOGGED_IN"; then echo "   already logged in"; return 0; fi
+  if has "Try again"; then step "?$LOGGED_IN" "Try again"; return; fi
+  local b; for b in "Decrypt Bucket" "Create Bucket"; do has "$b" && { step "?$LOGGED_IN" "$b"; return; }; done
+  has "Button 1" || C "Menu" "This Key" > /dev/null
+  step "?$LOGGED_IN" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1"
 }
 # the app (re)started and its page up (the browser's own target event), then into testing mode
 appup() {
@@ -56,13 +65,18 @@ appup() {
 }
 # one budget on the open soft key: request, approve + its press, three signs it pays
 budget_demo() {
-  C "Menu" "Edge" "▲ Edge Management" "Agent: request a budget" "Close Edge Management" > /dev/null
-  # each step ends on the state it is for: the budget live, then each use counted, then the budget sealed
-  step '?Active' "Approve" || return 1
+  C "Menu" "Edge" > /dev/null
+  # precheck: a live budget is spent, not stacked on; an ask already waiting is approved, not asked again
+  if ! has "Active"; then
+    has "Approve" || C "▲ Edge Management" "Agent: request a budget" "Close Edge Management" > /dev/null
+    step '?Active' "Approve" || return 1
+  fi
+  # each sign ends on the state it is for: the use counted; the last one, no live budget left (it completed)
   local i
   for i in 1 2; do
     step "?$i of 3 uses spent" "▲ Edge Management" "Agent: a sign the budget pays" "Close Edge Management" || return 1
   done
-  step '\[edge\] sealed #[0-9]+: budget [0-9]+ ended' "▲ Edge Management" "Agent: a sign the budget pays" "Close Edge Management" || return 1
+  step "?No budget. A budget lets an agent use the key a set number of times without a press; you approve it once." \
+    "▲ Edge Management" "Agent: a sign the budget pays" "Close Edge Management" || return 1
   timeout 20 node tools/box/page-click.js --text 4000 | sed -n '/^Past budgets/,$p' | head -12
 }
