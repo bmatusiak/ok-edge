@@ -110,6 +110,32 @@ export function fileOwnLog(source: SoftKeyEdge, mirror: any, checkpoint: EdgeCop
   }).finally(() => { filing = null; });
   return filing;
 }
+/*
+ * THE CARD'S TOP, REBUILT WITH EACH FILING (Brad, 2026-10-31: "the top of the head needs to be carried in the login
+ * card"): the newest checkpoint with its head - the newest this connection saw (a receipt's, a certify's, a budget
+ * start's, a proven head: edge.newestCheckpoint) or this filing's anchor - and the copy's links after it, oldest first,
+ * as far as they run without a gap.
+ */
+type Cp = {seq: number; head: Uint8Array | null; signature: Uint8Array; signaturePq?: Uint8Array | null};
+async function fileCardTop(source: SoftKeyEdge, mirror: any, anchor: Cp | null): Promise<void> {
+  const seen: Cp | null = source.newestCheckpoint();
+  const cp = [seen, anchor].filter((c): c is Cp => !!c?.head && !!c.signaturePq?.length).sort((a, b) => b.seq - a.seq)[0];
+  if (!cp) return;
+  const {certify} = require('node-onlykey-lib/edge');
+  const links: Uint8Array[] = [];
+  for (const r of mirror.links as EdgeLinkRecord[]) {
+    const seq = chain.decodeLink(r.link).seq;
+    if (seq <= cp.seq) continue;
+    if (seq !== cp.seq + links.length + 1 || links.length >= certify.TOP_REACH) break;
+    links.push(r.link);
+  }
+  const top = certify.top(cp, links);
+  if (await require('./loginCard').fileTop(toHex(source.deviceId), top)) {
+    console.log(`[card] top filed: checkpoint #${cp.seq} + ${links.length} link(s)`);
+    require('./serverRoom').bucketChanged();
+  }
+}
+
 async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeCopyKey['checkpoint']): Promise<void> {
   const {storeEntries, writeEntries} = require('./bucketStore');
   const {logblocks} = require('node-onlykey-lib/edge');
@@ -125,6 +151,7 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
   const hex = (b: Uint8Array | null | undefined) => (b ? toHex(b) : '');
   const seals = (mirror.seals ?? []) as {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array}[];
   const anchor = checkpoint?.signaturePq?.length ? checkpoint : [...seals].reverse().find(s => s.signaturePq?.length) ?? null;
+  await fileCardTop(source, mirror, anchor).catch((e: unknown) => console.log(`[card] top not filed - ${String((e as Error)?.message ?? e)}`));
   const own = await require('./edgeDevices').ownStatement(toHex(source.deviceId));
   const j = {
     v: 1,
@@ -312,6 +339,9 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const last = mirror?.links[mirror.links.length - 1];
     if (last?.head && typeof (app.edge as any).knownHead === 'function') {
       (app.edge as any).knownHead(require('node-onlykey-lib/edge').chain.decodeLink(last.link).seq, last.head, deviceId);
+    } else if (!last && mirror?.anchor && typeof (app.edge as any).knownHead === 'function') {
+      /* a copy that starts at a checkpoint and holds nothing after it yet: its anchor is where it ends */
+      (app.edge as any).knownHead(mirror.anchor.seq, mirror.anchor.head, deviceId);
     }
     await soft.takeShared().catch((e: any) => console.log(`[edge] shared records: not read - ${String(e?.message ?? e)}`));
     return soft;
@@ -396,6 +426,27 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
      */
     const seq = h.seq === null ? -1 : h.seq;
     return {seq, head: h.head, ringFrom: h.oldest === null ? seq + 1 : h.oldest};
+  }
+
+  /*
+   * WARM UP (Brad, 2026-10-31: "provide it the top of the head between a checkpoint to the head, for edge to unlock
+   * itself"): this key's login card's top - the local copy, else the open bucket's - and the lib checks it against the
+   * key's checkpoint keys, welds it on and proves the head it reaches. No press. EDGE_NO_CHECKPOINT when there is no
+   * top, or it is more than 1024 links back, or it ends before the key's ring.
+   */
+  /** the newest checkpoint this connection saw with its head (lib edge.newestCheckpoint), or null */
+  newestCheckpoint(): {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq: Uint8Array} | null {
+    return typeof this.edge.newestCheckpoint === 'function' ? this.edge.newestCheckpoint() : null;
+  }
+
+  async warmUp(): Promise<void> {
+    /* the copy may have grown since open() (the bucket's log, takeShared): where it ends now, then the top only if needed */
+    const mirror = await loadMirror(this.deviceId).catch(() => null);
+    const last = mirror?.links[mirror.links.length - 1];
+    if (last?.head) this.edge.knownHead(chain.decodeLink(last.link).seq, last.head, this.deviceId);
+    const top = (await this.edge.head()).head ? null : await require('./loginCard').cardTop(toHex(this.deviceId));
+    const cp = await this.edge.warmUp(top);
+    console.log(`[edge] warmed up at #${cp?.seq ?? '-'}: ${top ? `the login card's top (#${top.checkpoint.seq} + ${top.links.length} link(s))` : 'this host already held the head'}`);
   }
 
   async read(fromSeq: number, count: number): Promise<EdgeLinkRecord[]> {

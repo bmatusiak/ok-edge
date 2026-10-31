@@ -43,6 +43,8 @@ export interface EdgeSource {
   readonly deviceId: Uint8Array;
   /** The key's live head; ringFrom = the oldest seq it can still READ. */
   head(): Promise<{seq: number; head: Uint8Array; ringFrom: number}>;
+  /** Warm Edge up from the login card's top when this host cannot weld the key's head - no press (EDGE_NO_CHECKPOINT without one). */
+  warmUp?(): Promise<void>;
   read(fromSeq: number, count: number): Promise<EdgeLinkRecord[]>;
   /* useLastHead: the head the caller just read (a sync) may be reused */
   budgets(useLastHead?: boolean): Promise<EdgeBudget[]>;

@@ -345,6 +345,8 @@ function follows(prev: EdgeLinkRecord | undefined, r: EdgeLinkRecord): boolean {
   if (!prev) return true;
   const p = seqOf(prev);
   if (f.seq <= p) return false;
+  /* a head this host could not weld (the key never reveals it): nothing to weld from, so not this copy's next link */
+  if (f.seq === p + 1 && (!prev.head || !r.head)) return false;
   return f.seq !== p + 1 || sameBytes(chain.weld(prev.head, r.link), r.head);
 }
 
@@ -552,8 +554,21 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
   const mirror = await loadMirror(source.deviceId);
   const sealsBefore = mirror.seals?.length ?? 0;
   lap('load');
-  const head = await source.head();
+  let head = await source.head();
   lap('head');
+  /*
+   * WARM UP FIRST (Brad, 2026-10-31: "to warm up edge, we need a checkpoint"; web app on key 2: a new browser, the chain
+   * past the key's 8-link ring, read the ring with no heads and threw "head must be 32 bytes"). A key that never
+   * reveals its head, and a host that cannot weld it: the login card's top (SoftKeyEdge.warmUp) proves it, no press.
+   * Without one nothing is read or stored - the copy waits for a checkpoint.
+   */
+  if (head.seq >= 0 && !head.head) {
+    if (!source.warmUp) throw Object.assign(new Error('this device needs a checkpoint - certify to start'), {code: 'EDGE_NO_CHECKPOINT'});
+    await source.warmUp();
+    head = await source.head();
+    if (!head.head) throw Object.assign(new Error('this device needs a checkpoint - certify to start'), {code: 'EDGE_NO_CHECKPOINT'});
+    lap('warm-up');
+  }
   setAsideStrays(mirror, head.seq, now);
   /*
    * A NEW COPY STARTS AT THE KEY'S CHECKPOINT: nothing held yet and nothing verified - read one checkpoint, check

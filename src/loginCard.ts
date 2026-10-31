@@ -16,7 +16,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {currentNet, edgeKey} from './net';
 
-export type CardRecord = {v: number; kind: 'login-card'; thing: {device: string; identity: string; site: string}; certification: Record<string, unknown>};
+/* top: the newest checkpoint and the links after it (lib certify.top) - beside the owner-signed part, rebuilt without a press */
+export type CardTop = {checkpoint: {seq: number; head: string; signature: string; signaturePq: string}; links: string[]};
+export type CardRecord = {v: number; kind: 'login-card'; thing: {device: string; identity: string; site: string}; certification: Record<string, unknown>; top?: CardTop};
 
 const CARDS = (): string => (currentNet() === 'test' ? 'edge-cards-test' : 'edge-cards');
 const LOCAL = (identity: string, device: string): string => edgeKey(`card.${identity.toLowerCase()}.${device.toLowerCase()}`);
@@ -44,6 +46,51 @@ async function fileCard(identity: string, rec: CardRecord): Promise<void> {
   await require('./bucketStore').writeEntries(CARDS(), {[rec.thing.device]: JSON.stringify(rec)});
   await AsyncStorage.setItem(LOCAL(identity, rec.thing.device), JSON.stringify(rec));
   require('./serverRoom').bucketChanged();
+}
+
+/* this key's cards kept on this host (one per identity) */
+async function localCards(device: string): Promise<{key: string; rec: CardRecord}[]> {
+  const suffix = `.${device.toLowerCase()}`;
+  const keys = (await AsyncStorage.getAllKeys()).filter(k => k.startsWith(edgeKey('card.')) && k.endsWith(suffix));
+  const out: {key: string; rec: CardRecord}[] = [];
+  for (const key of keys) {
+    try {
+      const rec = JSON.parse((await AsyncStorage.getItem(key)) || 'null');
+      if (rec?.kind === 'login-card' && rec.thing?.device === device.toLowerCase()) out.push({key, rec});
+    } catch { /* not a card */ }
+  }
+  return out;
+}
+
+/**
+ * THE TOP TO WARM EDGE FROM (SoftKeyEdge.warmUp): the newest top among this key's cards - the local copies, and the open
+ * bucket's (a new browser has only that one, after the login opened the bucket) - or null.
+ */
+export async function cardTop(device: string): Promise<CardTop | null> {
+  const tops = (await localCards(device)).map(c => c.rec.top);
+  tops.push((await bucketCard(device).catch(() => null))?.top);
+  const have = tops.filter((t): t is CardTop => !!t?.checkpoint);
+  return have.sort((a, b) => b.checkpoint.seq - a.checkpoint.seq)[0] ?? null;
+}
+
+/**
+ * A NEWER TOP FOR THIS KEY'S CARD (Brad, 2026-10-31: "keep our login card updated with a good checkpoint to provide
+ * edge warmup"): with each filing of the key's log (edgeSoftKey.fileOwnLog, on the encrypted bucket's sync), into the
+ * bucket's card and the local copies - only when it is newer. A key with no card yet has nowhere to carry it.
+ */
+export async function fileTop(device: string, top: CardTop): Promise<boolean> {
+  const inBucket = await bucketCard(device).catch(() => null);
+  const newer = (rec: CardRecord | null) => !!rec && (!rec.top || rec.top.checkpoint.seq < top.checkpoint.seq ||
+    (rec.top.checkpoint.seq === top.checkpoint.seq && rec.top.links.length < top.links.length));
+  let filed = false;
+  if (newer(inBucket)) {
+    await require('./bucketStore').writeEntries(CARDS(), {[device.toLowerCase()]: JSON.stringify({...inBucket, top})});
+    filed = true;
+  }
+  for (const c of await localCards(device)) {
+    if (newer(c.rec)) { await AsyncStorage.setItem(c.key, JSON.stringify({...c.rec, top})); filed = true; }
+  }
+  return filed;
 }
 
 /* ---------------------------------------------------------------- the offer (LoginCardSheet) */
