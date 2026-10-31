@@ -374,6 +374,8 @@ function attachApp(sock) {
       app.text = String(m.text || '');
       app.ready = true;
       apps.set(app.shell, app);
+      /* what its process said while it started (#3) begins its record */
+      if (outBefore.has(app.shell)) { app.recent.unshift(...outBefore.get(app.shell)); outBefore.delete(app.shell); }
       pressWhenAsked(app);
       line(`app connected: ${app.shell} (${app.os}, ${app.net})${sock.via ? ` via ${sock.via}` : ''}`);
       hellos.emit('hello', app);
@@ -458,11 +460,14 @@ const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l
  * prefixes.
  */
 const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]'];
+/* lines a process wrote before its app connected (its start-up): held, then handed to the app's record when it does */
+const outBefore = new Map(); /* shell -> lines */
 function appOut(shell, l) {
   const a = apps.get(shell);
   if (!(a && a.net === 'test') && !LIVE_PREFIXES.some((p) => l.startsWith(p))) return;
   const s = `${stamp()} [main] ${l}`;
   if (a) keep(a.recent, s);
+  else { if (!outBefore.has(shell)) outBefore.set(shell, []); keep(outBefore.get(shell), s); }
   bus.emit('app-line', shell, s);
 }
 
