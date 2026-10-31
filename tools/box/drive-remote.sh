@@ -10,10 +10,10 @@ source ~/.nvm/nvm.sh >/dev/null
 cd ~/project/onlykey/ok-edge || exit 1
 L=~/project/onlykey/logs
 RPID=$L/drive-remote.pid
-WPID=$L/drive-remote-window.pid
 alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 if [ "$1" = stop ]; then
-  for f in "$RPID" "$WPID"; do alive "$f" && kill "$(cat "$f")"; rm -f "$f"; done
+  alive "$RPID" && kill "$(cat "$RPID")"; rm -f "$RPID"
+  bash tools/box/live-window.sh close "drive (live)"
   echo stopped; exit 0
 fi
 [ -s ~/.onlykey-drive-token ] || { echo "no ~/.onlykey-drive-token - the drive server's machine has the same file"; exit 2; }
@@ -22,13 +22,10 @@ if ! alive "$RPID"; then
   setsid nohup node tools/drive/remote.js > "$L/drive-remote.out" 2>&1 < /dev/null &
   echo $! > "$RPID"
 fi
-if ! alive "$WPID"; then
-  cat > "$L/drive-remote-watch.sh" <<EOF
+cat > "$L/drive-remote-watch.sh" <<EOF
 echo "== drive-remote: the box's apps and every run's lines (logs/drive-remote.log) =="
 tail -n 30 -F $L/drive-remote.log
 EOF
-  DISPLAY=:10 XAUTHORITY=$HOME/.Xauthority setsid xfce4-terminal --title "drive (live)" --geometry 150x45 \
-    -e "bash $L/drive-remote-watch.sh" > /dev/null 2>&1 < /dev/null &
-  echo $! > "$WPID"
-fi
-echo "drive-remote pid $(cat "$RPID"), window pid $(cat "$WPID")"
+# one window, reused (live-window.sh): a second start finds it by its title
+bash tools/box/live-window.sh open "drive (live)" "bash $L/drive-remote-watch.sh"
+echo "drive-remote pid $(cat "$RPID")"

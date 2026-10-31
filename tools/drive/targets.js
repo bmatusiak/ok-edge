@@ -62,12 +62,18 @@ function createTargets() {
       async stop() {
         const child = running.get('desktop');
         running.delete('desktop');
-        if (child) return stopGroup(child);
-        /* one this module did not start (tools/box/desktop-test.sh, a person): its processes by pid, as that script
-         * stops them, and their exits waited for - never a pattern that could match the caller's own command */
-        if (!LINUX) return 'not started here';
-        const r = await run('bash', ['-c', 'p="$(pgrep -x electron) $(pgrep -f \'^node electron/start.js\')"; [ -z "${p// /}" ] && { echo none; exit 0; }; kill $p 2>/dev/null; for x in $p; do timeout 20 tail --pid=$x -f /dev/null; done; echo stopped']);
-        return r.out || 'stopped';
+        let what = child ? await stopGroup(child) : 'not started here';
+        /*
+         * one this module did not start (tools/box/desktop-test.sh, a person), and what is still exiting of one it did:
+         * its processes by pid, as that script stops them, and EACH EXIT WAITED FOR (tail --pid: the process's own end)
+         * - an app asked to quit was still in the process list, the start that followed took it for a running app and
+         * started nothing (2026-10-31). Never a pattern that could match the caller's own command.
+         */
+        if (LINUX) {
+          const r = await run('bash', ['-c', 'p="$(pgrep -x electron) $(pgrep -f \'^node electron/start.js\')"; [ -z "${p// /}" ] && { echo none; exit 0; }; kill $p 2>/dev/null; for x in $p; do timeout 20 tail --pid=$x -f /dev/null; done; echo stopped']);
+          if (r.out !== 'none') what = r.out || 'stopped';
+        }
+        return what;
       },
     },
     webapp: {

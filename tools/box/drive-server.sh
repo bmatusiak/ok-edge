@@ -7,23 +7,20 @@ source ~/.nvm/nvm.sh >/dev/null
 cd ~/project/onlykey/ok-edge || exit 1
 L=~/project/onlykey/logs
 SPID=$L/drive-server.pid
-WPID=$L/drive-server-window.pid
 alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 if [ "$1" = stop ]; then
-  for f in "$SPID" "$WPID"; do alive "$f" && kill "$(cat "$f")"; rm -f "$f"; done
+  alive "$SPID" && kill "$(cat "$SPID")"; rm -f "$SPID"
+  bash tools/box/live-window.sh close "drive server (live)"
   echo stopped; exit 0
 fi
 if ! alive "$SPID"; then
   setsid nohup node tools/drive/server.js > "$L/drive-server.out" 2>&1 < /dev/null &
   echo $! > "$SPID"
 fi
-if ! alive "$WPID"; then
-  cat > "$L/drive-server-watch.sh" <<EOF
+cat > "$L/drive-server-watch.sh" <<EOF
 echo "== the drive server (logs/drive-server.log) =="
 tail -n 30 -F $L/drive-server.log
 EOF
-  DISPLAY=:10 XAUTHORITY=$HOME/.Xauthority setsid xfce4-terminal --title "drive server (live)" --geometry 150x45 \
-    -e "bash $L/drive-server-watch.sh" > /dev/null 2>&1 < /dev/null &
-  echo $! > "$WPID"
-fi
-echo "drive server pid $(cat "$SPID"), window pid $(cat "$WPID")"
+# one window, reused (live-window.sh): a second start finds it by its title
+bash tools/box/live-window.sh open "drive server (live)" "bash $L/drive-server-watch.sh"
+echo "drive server pid $(cat "$SPID")"

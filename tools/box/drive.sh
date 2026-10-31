@@ -18,11 +18,8 @@ if [ -z "$DRIVE_TEED" ]; then
   echo "== $(date +%T) drive: ${0##*/} $*"
 fi
 drive_window() {
-  local pidf=~/project/onlykey/logs/drive-window.pid
-  [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && return 0
-  DISPLAY=:10 XAUTHORITY=$HOME/.Xauthority setsid xfce4-terminal --title "drive (live)" --geometry 140x40 \
-    -e "bash $HOME/project/onlykey/ok-edge/tools/box/drive-watch.sh" > /dev/null 2>&1 < /dev/null &
-  echo $! > "$pidf"
+  # one window, reused (live-window.sh) - its own title: "drive (live)" is the drive-remote's
+  bash ~/project/onlykey/ok-edge/tools/box/live-window.sh open "box drive (live)" "bash $HOME/project/onlykey/ok-edge/tools/box/drive-watch.sh" > /dev/null
 }
 drive_window
 # clear_overlays: whatever a stopped run left open over the page - the Edge Management drawer (its backdrop covered
