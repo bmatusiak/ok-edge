@@ -264,6 +264,16 @@ function attachApp(sock) {
     if (!app) {
       if (m.t !== 'hello') return;
       app = new App(sock, m);
+      return;
+    }
+    /*
+     * CONNECTED = ITS STATE IS HERE: the hello is followed at once by its controls and its screen (client.ts), and the
+     * app counts as connected only on that screen - a script that started on the hello alone prechecked an empty
+     * control list and went for a Menu that was not there (2026-10-31).
+     */
+    if (!app.ready && m.t === 'screen') {
+      app.text = String(m.text || '');
+      app.ready = true;
       apps.set(app.shell, app);
       pressWhenAsked(app);
       line(`app connected: ${app.shell} (${app.os}, ${app.net})${sock.via ? ` via ${sock.via}` : ''}`);
