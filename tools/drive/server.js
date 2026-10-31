@@ -459,7 +459,7 @@ const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l
  * holds here too: on the testnet every line; otherwise - the live chain, or the app not connected yet - only a drive's
  * prefixes.
  */
-const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]'];
+const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]', '[net]'];
 /* lines a process wrote before its app connected (its start-up): held, then handed to the app's record when it does */
 const outBefore = new Map(); /* shell -> lines */
 function appOut(shell, l) {

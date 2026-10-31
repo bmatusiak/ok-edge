@@ -31,13 +31,14 @@ import {quit} from './quit';
 import {screenText, watchScreen} from './screen';
 import {watchNativeLog} from './nativeLog';
 import {watchErrors} from './errors';
+import {watchNet} from './net';
 
 /*
  * WHAT MAY LEAVE THE APP (memory: the app log carries key bytes - a new sink takes an allowlist, never "every line").
  * On the testnet every line goes: its keys are throwaway, and that is where a drive works. On the live chain only the
  * lines a drive reads, by their prefix - never the firmware's console, raw traffic, or the native log.
  */
-const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]'];
+const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]'];
 const mayLeave = (line: string, native: boolean) =>
   currentNet() === 'test' || (!native && LIVE_PREFIXES.some(p => line.startsWith(p)));
 
@@ -156,6 +157,9 @@ export function startDrive(): void {
 
   /* the native side's own log (Android: its logcat), marked as such - the testnet only (mayLeave) */
   watchNativeLog(l => { if (ws && mayLeave(l, true)) send({t: 'log', line: `[logcat] ${l}`, at: Date.now()}); });
+
+  /* its requests and sockets (#4, net.ts) - not this connection to the drive */
+  watchNet(l => { if (ws && mayLeave(l, false)) send({t: 'log', line: l, at: Date.now()}); }, URL);
 
   /* the net decides what the server may press (the testnet only): told as it changes */
   onNet(net => send({t: 'net', net}));
