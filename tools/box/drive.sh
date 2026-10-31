@@ -22,16 +22,29 @@ waitline() {
 }
 # step "<outcome regex>" <clicks...>: the presser listens first, then the clicks, then the outcome (or its failure).
 # SHOW='<regex>' prints the console lines that match as they come; LIFE=<s> is the step's watchdog (default 90).
+# "?<text>" as the outcome: the STATE wanted, on the page (Brad, 2026-10-31: "you dont have an end detection when the
+# state you want is there or not") - page-click waits for that text by the page's own changes, under the same watchdog,
+# and the presser is stopped when it is there. A console regex is for outcomes the page does not show.
 step() {
   local until="$1"; shift
   local log; log=$(mktemp)
-  node tools/box/page-presser.js --approve --until "$until" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
+  local state="" untilArgs=(--until "$until")
+  [ "${until#\?}" != "$until" ] && { state="$until"; untilArgs=(); }
+  node tools/box/page-presser.js --approve "${untilArgs[@]}" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
   local p=$!
   if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
   [ $# -gt 0 ] && C "$@"
-  # its lines as they come (a cutoff from outside used to lose them all), ending with the presser
-  tail -n +1 --pid=$p -f "$log" | sed 's/^/   /'
-  wait $p; local code=$?
+  local code
+  if [ -n "$state" ]; then
+    local got; got=$(timeout $(( ${LIFE:-90} + 10 )) node tools/box/page-click.js --life "${LIFE:-90}" "$state" 2>&1 | tail -1)
+    kill $p 2>/dev/null; wait $p 2>/dev/null
+    sed 's/^/   /' "$log"; echo "   $got"
+    case "$got" in there:*) code=0;; *) code=1;; esac
+  else
+    # its lines as they come (a cutoff from outside used to lose them all), ending with the presser
+    tail -n +1 --pid=$p -f "$log" | sed 's/^/   /'
+    wait $p; code=$?
+  fi
   rm -f "$log"
   return $code
 }
@@ -51,11 +64,12 @@ appup() {
 # one budget on the open soft key: request, approve + its press, three signs it pays
 budget_demo() {
   C "Menu" "Edge" "▲ Edge Management" "Agent: request a budget" "Close Edge Management" > /dev/null
-  step 'end #[0-9]+ Edge: opening a budget .*ok' "Approve" || return 1
+  # each step ends on the state it is for: the budget live, then each use counted, then the budget sealed
+  step '?Active' "Approve" || return 1
   local i
-  for i in 1 2 3; do
-    step 'end #[0-9]+ Edge: filing a receipt .*ok' "▲ Edge Management" "Agent: a sign the budget pays" || return 1
-    C "Close Edge Management" > /dev/null
+  for i in 1 2; do
+    step "?$i of 3 uses spent" "▲ Edge Management" "Agent: a sign the budget pays" "Close Edge Management" || return 1
   done
+  step '\[edge\] sealed #[0-9]+: budget [0-9]+ ended' "▲ Edge Management" "Agent: a sign the budget pays" "Close Edge Management" || return 1
   timeout 20 node tools/box/page-click.js --text 4000 | sed -n '/^Past budgets/,$p' | head -12
 }
