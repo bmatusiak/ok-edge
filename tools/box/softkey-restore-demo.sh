@@ -15,18 +15,23 @@ C() { CDP_PORT=9334 timeout 90 node tools/box/page-click.js "$@" 2>&1 | tail -1 
 L() { CDP_PORT=9334 timeout 20 node tools/box/page-click.js --labels 2>&1 | tail -1; }
 has() { case "$(L)" in *"$1"*) return 0;; esac; return 1; }
 waitfor() { for _ in $(seq 1 "${2:-30}"); do has "$1" && return 0; sleep 1; done; say "never saw \"$1\" - there: $(L | cut -c1-300)"; return 1; }
-# answer the app's own press sheets until `until` shows (a press only while "Press the soft key" is on screen)
+# answer the app's own press sheets until `until` shows - or, as "!text", until text is gone (a sheet closed). A press
+# sheet is answered FIRST: the page under a sheet still says everything it said (Slots, Edge...), so checking `until`
+# first returned with the key still waiting (2026-10-31: the login card's certify was never pressed).
 presses() {
   local until="$1" n=0
   for _ in $(seq 1 "${2:-90}"); do
     T=$(L)
     case "$T" in
-      *"$until"*) say "reached \"$until\" after $n press(es)"; return 0;;
-      *"Press the soft key"*) C "Press the soft key" >/dev/null; n=$((n + 1)); sleep 2;;
-      *"Not now"*"Make the card"*|*"Make the card"*) C "Make the card" >/dev/null; sleep 2;;
-      *"Try again"*) say "failed: $(CDP_PORT=9334 timeout 20 node tools/box/page-click.js --text 3000 | grep -E 'did not|Error' | head -1 | cut -c1-200)"; return 1;;
-      *) sleep 1;;
+      *"Press the soft key"*) C "Press the soft key" >/dev/null; n=$((n + 1)); sleep 2; continue;;
+      *"Try again"*) say "failed: $(CDP_PORT=9334 timeout 20 node tools/box/page-click.js --text 5000 | grep -E 'did not|Not made|Error' | head -1 | cut -c1-200)"; return 1;;
     esac
+    if [ "${until#!}" != "$until" ]; then
+      case "$(CDP_PORT=9334 timeout 20 node tools/box/page-click.js --text 8000)" in *"${until#!}"*) ;; *) say "\"${until#!}\" gone after $n press(es)"; return 0;; esac
+    else
+      case "$T" in *"$until"*) say "reached \"$until\" after $n press(es)"; return 0;; esac
+    fi
+    sleep 1
   done
   say "timed out before \"$until\""; return 1
 }
@@ -54,11 +59,12 @@ unlock
 presses "Slots" 120 || exit 1
 # the card offer comes after the first sync
 for _ in $(seq 1 20); do has "Make the card" && break; sleep 1; done
-has "Make the card" && { C "Make the card" >/dev/null; presses "Slots" 40; }
+has "Make the card" && { C "Make the card" >/dev/null; sleep 2; presses "!login card" 60 || exit 1; }
 say "5. Edge: one budget, three signs it pays"
 C "Menu" wait:1 "Edge" wait:4 "▲ Edge Management" wait:2 "Agent: request a budget" wait:2 "Close Edge Management" wait:2 >/dev/null
-waitfor "Approve" 20 && C "Approve" >/dev/null
-presses "Active" 30
+waitfor "Approve" 20 || exit 1
+C "Approve" >/dev/null; sleep 2
+presses "!Waiting for you" 40 || exit 1
 for i in 1 2 3; do C "▲ Edge Management" wait:2 "Agent: a sign the budget pays" wait:6 "Close Edge Management" wait:2 >/dev/null; done
 CDP_PORT=9334 timeout 20 node tools/box/page-click.js --text 4000 | sed -n '/^Past budgets/,$p' | head -12
 say "done"
