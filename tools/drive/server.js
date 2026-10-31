@@ -365,7 +365,7 @@ function driveFor(app, say) {
   const up = (opts) => (app.ws && !app.closed ? Promise.resolve(api) : start(app.shell, opts));
 
   /* a target's machine, asked directly (#7 health, #1 last words): proc's answer, {ok, what, where} */
-  const machine = (action, target = app.shell) => proc(action, target);
+  const machine = (action, target = app.shell, args = {}) => proc(action, target, args);
   const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
   return api;
 }
