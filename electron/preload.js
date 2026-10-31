@@ -28,6 +28,8 @@ const CHANNELS = new Set([
   'okedge:keySite',
   /* which key the page has open, so a CLI reaches the same one (electron/desktop/hosting.js) */
   'okedge:activeKey',
+  /* the window's picture of itself, for a drive (src/drive/shot.desktop.ts) */
+  'okedge:shot',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',

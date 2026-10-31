@@ -25,10 +25,14 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const EventEmitter = require('events');
-const { WebSocketServer } = require('ws');
+/* ws 7 (what ok-edge has) exports the server as WebSocket.Server; ws 8 as WebSocketServer */
+const WS = require('ws');
+const WebSocketServer = WS.WebSocketServer || WS.Server;
 
 const PORT = Number((process.argv.indexOf('--port') >= 0 && process.argv[process.argv.indexOf('--port') + 1]) || 8790);
 const SCRIPTS = path.join(__dirname, 'scripts');
+/* the app's pictures of itself, one file each, named by when and why - beside the log */
+const SHOTS = path.join(path.dirname(process.env.DRIVE_LOG || path.join(process.env.HOME || process.env.USERPROFILE || '.', 'project/onlykey/logs/drive-server.log')), 'drive-shots');
 const LOG = process.env.DRIVE_LOG || path.join(process.env.HOME || process.env.USERPROFILE || '.', 'project/onlykey/logs/drive-server.log');
 try { fs.mkdirSync(path.dirname(LOG), { recursive: true }); } catch { /* stdout still has it */ }
 const logFile = fs.createWriteStream(LOG, { flags: 'a' });
@@ -103,6 +107,23 @@ function pressWhenAsked(app) {
 }
 
 /* ------------------------------------------------------------------ the script's API */
+
+/*
+ * A PICTURE, ASKED OF THE APP (Brad, 2026-10-31: "have the app do it, not the drive server"; "trigger screenshots on an
+ * event - on an error or when you want"): the app captures itself (src/drive/shot.ts) and this saves it. A run takes
+ * one by itself when it stops; a script takes one with d.shot(name). -> the file, or null with the reason logged.
+ */
+async function shotOf(app, name) {
+  try {
+    const r = await app.call({ t: 'shot' }, 20000);
+    if (!r.ok) { line(`[${app.shell}] no picture (${name}): ${r.why}`); return null; }
+    fs.mkdirSync(SHOTS, { recursive: true });
+    const file = path.join(SHOTS, `${new Date().toTimeString().slice(0, 8).replace(/:/g, '')}-${app.shell}-${String(name).replace(/[^a-z0-9-]/gi, '_')}.png`);
+    fs.writeFileSync(file, Buffer.from(r.png, 'base64'));
+    line(`[${app.shell}] picture: ${file}`);
+    return file;
+  } catch (e) { line(`[${app.shell}] no picture (${name}): ${e.message}`); return null; }
+}
 
 function driveFor(app, say) {
   const lastLines = [];
@@ -191,7 +212,7 @@ function driveFor(app, say) {
     return driveFor(next, say);
   }
 
-  return { app, say, until, tap, fill, fillFile, step, goto, restarted, has: (l) => app.has(l) };
+  return { app, say, until, tap, fill, fillFile, step, goto, restarted, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
 }
 
 /* ------------------------------------------------------------------ the server */
@@ -241,11 +262,13 @@ function control(ws) {
     const watch = (l) => send({ t: 'line', line: l });
     watchers.add(watch);
     let code = 1;
+    let shotApp = null;
     try {
       const file = path.join(SCRIPTS, `${String(m.script).replace(/[^a-z0-9-]/gi, '')}.js`);
       if (!fs.existsSync(file)) throw new Error(`no script "${m.script}" (${SCRIPTS})`);
       const shell = m.app || [...apps.keys()][0];
       const app = apps.get(shell);
+      shotApp = app;
       if (!app) throw new Error(`no ${shell || 'app'} connected - start it in testing mode (it dials ws://127.0.0.1:${PORT})`);
       delete require.cache[require.resolve(file)];
       const say = (t) => line(`[${m.script}] ${t}`);
@@ -255,6 +278,9 @@ function control(ws) {
       code = 0;
     } catch (e) {
       line(`[${m.script}] STOPPED: ${e.message}`);
+      /* the picture of where it stopped, taken by the app itself - the newest connection of that shell (a restart makes a new one) */
+      const now = shotApp && apps.get(shotApp.shell);
+      if (now) await shotOf(now, `${m.script}-stopped`);
     } finally {
       watchers.delete(watch);
       send({ t: 'end', code });

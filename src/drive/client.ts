@@ -9,6 +9,7 @@
  *   commands in: tap {label}                   the top layer's enabled control, pressed by calling it
  *                fill {field, value}           a registered text field, by its placeholder
  *                state {}                      controls + screen text now
+ *                shot {}                       the app's picture of itself (shot.ts: each shell captures its own)
  *
  * EVENTS, NOT TIMERS (Brad, 2026-10-31): nothing here polls. A dropped connection is dialled again on the app's next
  * change (a control, a log line), never on a clock.
@@ -21,6 +22,7 @@ import {Platform} from 'react-native';
 import {driveGate, fillField, liveControls, onDriveChange, tapLabel} from './registry';
 import {shell} from '../platform';
 import {currentNet, onNet} from '../net';
+import {shot} from './shot';
 
 const URL = process.env.EXPO_PUBLIC_OKEDGE_DRIVE_URL || 'ws://127.0.0.1:8790';
 
@@ -61,6 +63,7 @@ function dial(): void {
     if (m.t === 'tap') { const why = tapLabel(String(m.label)); reply(!why, why ? {why} : {}); }
     else if (m.t === 'fill') { const why = fillField(String(m.field), String(m.value ?? '')); reply(!why, why ? {why} : {}); }
     else if (m.t === 'state') reply(true, {controls: liveControls(), text: screenText()});
+    else if (m.t === 'shot') void shot().then(r => reply('png' in r, r));
     else reply(false, {why: `unknown command "${m.t}"`});
   };
 }

@@ -86,6 +86,13 @@ ipcMain.handle('okedge:keySite', (e, site) => {
 });
 
 
+/*
+ * THE APP'S PICTURE OF ITSELF, for a drive (PROPOSAL-drive.md; Brad, 2026-10-31: "asking the app for the screenshot,
+ * not host dependent - have the app do it"): this window's own page as a PNG, base64. Only a debug or TEST build's
+ * page asks (src/drive/shot.desktop.ts, behind the drive's debugging gate).
+ */
+ipcMain.handle('okedge:shot', async (e) => (await e.sender.capturePage()).toPNG().toString('base64'));
+
 /* one channel per thing the page may ask for; preload.js lists the same names */
 ipcMain.handle('okedge:about', () => ({
   electron: process.versions.electron,
