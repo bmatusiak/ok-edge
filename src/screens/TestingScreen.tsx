@@ -79,6 +79,8 @@ export function TestingScreen({
   onE2EStart?: () => void;
 }) {
   const [armed, setArmed] = useState(false);
+  /* the wipe is done and the firmware still says running: the phone's case (see the Factory reset button) */
+  const [wiped, setWiped] = useState(false);
   const [armedHard, setArmedHard] = useState(false);
   const [armedTestnet, setArmedTestnet] = useState(false);
   const [testnetSaid, setTestnetSaid] = useState<string | null>(null);
@@ -294,10 +296,25 @@ export function TestingScreen({
                   return;
                 }
                 setArmed(false);
-                void OkEmu.factoryReset();
+                /*
+                 * ITS END, SAID THE SAME ON EVERY SHELL (2026-10-31, the Pixel's first drive): the desktop's firmware
+                 * halts after a wipe and the halted banner offers "Restart the app"; the phone's reboots inside its
+                 * thread, which cannot be restarted in place, so nothing halted, nothing was offered and the app went on
+                 * showing the old key. Logged either way, and the restart offered here while the firmware still says
+                 * running - the halted banner covers the other case.
+                 */
+                OkEmu.factoryReset().then(
+                  () => { console.log('[softkey] factory reset: flash and EEPROM wiped - restart the app to start the blank key'); setWiped(true); },
+                  (e: unknown) => console.log(`[softkey] factory reset failed: ${(e as Error)?.message ?? e}`),
+                );
               }}
             />
           </View>
+          {wiped && emu.state === 'running' ? (
+            <View style={styles.cell}>
+              <Btn title="Restart the app" tone="primary" onPress={() => void OkEmu.restartApp()} />
+            </View>
+          ) : null}
           {armed ? (
             <View style={styles.cell}>
               <Btn title="Cancel" onPress={() => setArmed(false)} />
