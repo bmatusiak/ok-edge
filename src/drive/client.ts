@@ -122,8 +122,11 @@ export function startDrive(): void {
       if (ws) {
         const line = args.map(a => (typeof a === 'string' ? a : a instanceof Error ? a.stack ?? a.message : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
         if (mayLeave(line, false)) send({t: 'log', line, at: Date.now()});
-        /* React Native says an unhandled rejection only this way (a warning); the web shells have their own event */
-        if (/unhandled promise rejection/i.test(line)) reportError('unhandled rejection', line);
+        /*
+         * React Native says an unhandled rejection only this way - "Uncaught (in promise, id: N) ..." in 0.88 (older ones:
+         * "Possible Unhandled Promise Rejection"); the web shells have their own event
+         */
+        if (/unhandled promise rejection|uncaught \(in promise/i.test(line)) reportError('unhandled rejection', line);
       }
       /*
        * not connected: the app's own activity is the event to dial again on (one attempt in flight) - a restarted
