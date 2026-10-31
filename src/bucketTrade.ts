@@ -69,7 +69,14 @@ async function ensureMe(): Promise<void> {
    * same key"): the derive is touchless, bound to the site the key names (ctap_bridge), the same on every device of the
    * identity; a key that names none has no bucket key here (the lib says so: NO_KEY_SITE).
    */
-  const bucketKey = await bucketLib.bucketIdentity.deriveBucketKeyAt(ok, identity.publicKey, identity.site);
+  /*
+   * Touchless is not unasked: the key's derive setting (field 30) decides, and its default is the 3-button code. A
+   * hard key cannot show it, so this host does - without it a key that asks the code waited for digits nobody saw,
+   * and any press read as a wrong code (CTAP2_ERR_OPERATION_DENIED; key 2, 2026-10-30).
+   */
+  const made = challengeOpts(`Making this ${DEVICE_WORD}'s bucket key`);
+  let bucketKey;
+  try { bucketKey = await bucketLib.bucketIdentity.deriveBucketKeyAt(ok, identity.publicKey, identity.site, made.opts); } finally { made.done(); }
   /* the certificate is a signature: a hard key may wait for a 3-button code, which this host shows (hostChallenge.ts) */
   const ask = challengeOpts(`Certifying this ${DEVICE_WORD}'s bucket key`);
   let certificate;
