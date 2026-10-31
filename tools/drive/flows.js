@@ -45,7 +45,12 @@ function loginState(app) {
    */
   if (app.top && !f.busy) { const c = ['Close menu', 'Close Edge Management'].find((l) => app.has(l)); if (c) return `close:${c}`; }
   if (f.busy || app.top) return null;
-  if (f.identityCheck) return ['Try again', 'Continue', 'Decrypt Bucket', 'Create Bucket'].find((b) => app.has(b)) || null;
+  if (f.identityCheck) {
+    /* a key whose site is not this page's: its "Go to <site>" is the move (the deployed flow - apps.crp.to first) */
+    const go = app.controls.find((c) => c.enabled && /^Go to /.test(c.label));
+    if (go) return go.label;
+    return ['Try again', 'Continue', 'Decrypt Bucket', 'Create Bucket'].find((b) => app.has(b)) || null;
+  }
   /*
    * a debug build's testing bar has Login Bypass (it types the testing PIN itself): the way a debug login goes (Brad,
    * 2026-10-07: "fix your way on logging in, now that we have the login bypass button") - the keypad only without it
@@ -85,9 +90,14 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
   for (let moves = 0; moves < 12; moves++) {
     const left = Math.max(5, Math.round((until - Date.now()) / 1000));
     const now = await d.until((app) => loginState(app) !== null, { life: left, fail: [] }).then(() => loginState(d.app));
-    if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return; }
+    if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return d; }
     d.say(`login: ${now}`);
     if (now.startsWith('close:')) await d.tap(now.slice(6));
+    else if (now.startsWith('Go to ')) {
+      /* the key's site opens as a new page - a new connection: the drive goes on with it (its hello is the event) */
+      d = await d.restarted(() => d.tap(now));
+      continue;
+    }
     else if (now === 'login screen') {
       /* the web app's chain is its key's - the gadget is a testnet key: unlocked from its machine, then Log in */
       if (d.app.shell === 'webapp') { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
@@ -166,7 +176,7 @@ async function restore(d, { backup, passphraseFile, passphraseKey = 'passphrase'
   await d.fillFile("the backup's passphrase", passphraseFile, passphraseKey);
   await d.tap('Restore');
   d = await d.restarted(() => d.tap('Restart the app'), { life: 120 });
-  await login(d, { pin });
+  d = await login(d, { pin });
   await d.step('the login card', { goal: /\[card\] .*certified at/, act: () => d.tap('Make the card') });
   return d;
 }

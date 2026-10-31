@@ -3,6 +3,6 @@
 const { login, budget } = require('../flows');
 module.exports = async (d, [times = '1']) => {
   d = await d.up();
-  await login(d);
+  d = await login(d);
   for (let n = 1; n <= Number(times); n++) { d.say(`budget ${n} of ${times}`); await budget(d); }
 };
