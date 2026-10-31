@@ -63,7 +63,15 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
     if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return; }
     d.say(`login: ${now}`);
     if (now === 'login screen') await d.tap('Enter testing mode');
-    else if (now === 'bypass') await d.tap('Login Bypass');
+    else if (now === 'bypass') {
+      /*
+       * its end is the key unlocked - the bypass types seven digits, and while it does the key is still "locked" with
+       * no button live (2026-10-31, the Pixel: judged "elsewhere" mid-bypass, a Menu tap found nothing)
+       */
+      await d.tap('Login Bypass');
+      await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] });
+      continue;
+    }
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
     else if (now === 'not set up') throw new Error('login: the soft key is not set up (a restore or setup comes first)');
