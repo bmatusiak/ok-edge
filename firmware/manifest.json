@@ -28,7 +28,7 @@
     "emulator/plugins/version_control": "58b6a28df1d5"
   },
   "sourcesFrom": "node-onlykey-emulator 8cee0d1",
-  "emulatorCommit": "6cbcf57473d471e093485b8158c1bfbaefb7d481",
+  "emulatorCommit": "e12d990682f27dfa6a1b9c92ab68053023dc22d7",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
