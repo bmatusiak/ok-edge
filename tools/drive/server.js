@@ -252,6 +252,8 @@ function driveFor(app, say) {
   /*
    * until(goal): a label / text line (string), a log line (RegExp), or a test of the app (function). Prechecked
    * against the state now; then only events from now on (7). fail: labels that end it as failed when they newly show.
+   * life is a QUIET time (box, 2026-10-31: a fresh browser warming Edge up read the chain for 35 s, and a 30 s wait for
+   * the budget button gave up 5 s before it came): every line the app logs starts it again, up to five lives in all.
    */
   function until(goal, { life = 60, fail = ['Try again'] } = {}) {
     const test = typeof goal === 'function' ? () => goal(app) : typeof goal === 'string' ? () => app.has(goal) : null;
@@ -259,8 +261,14 @@ function driveFor(app, say) {
     const failing = new Set(fail.filter((f) => app.has(f))); /* already showing: only a NEW showing fails */
     return new Promise((resolve, reject) => {
       const off = () => { clearTimeout(dog); app.off('log', onLog); app.off('controls', onState); app.off('screen', onState); app.off('close', onClose); };
-      const dog = setTimeout(() => { off(); reject(failure(`WATCHDOG: no "${goal}" in ${life} s`)); }, life * 1000);
-      const onLog = (l) => { if (goal instanceof RegExp && goal.test(l)) { off(); resolve(l); } };
+      const cap = Date.now() + 5 * life * 1000;
+      const bark = () => { off(); reject(failure(`WATCHDOG: no "${goal}" in ${life} s of quiet (${Math.round((Date.now() - cap) / 1000) + 5 * life} s in all)`)); };
+      let dog = setTimeout(bark, life * 1000);
+      const onLog = (l) => {
+        if (goal instanceof RegExp && goal.test(l)) { off(); resolve(l); return; }
+        clearTimeout(dog);
+        dog = setTimeout(bark, Math.max(0, Math.min(life * 1000, cap - Date.now())));
+      };
       const onState = () => {
         if (test && test()) { off(); resolve('now'); return; }
         for (const f of fail) {
