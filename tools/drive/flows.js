@@ -87,7 +87,7 @@ async function unlockOutsideKey(d, pin) {
  * logged in to the soft key, as a state machine: look, take the one move that state calls for, wait for the state to
  * change, look again - from the login screen, the keypad, the identity check, a failed try, another tab
  */
-async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
+async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
   const until = Date.now() + life * 1000;
   for (let moves = 0; moves < 12; moves++) {
     const left = Math.max(5, Math.round((until - Date.now()) / 1000));
@@ -131,6 +131,24 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
     await d.until((app) => { const s = loginState(app); return s !== null && s !== now; }, { life: Math.max(5, Math.round((until - Date.now()) / 1000)), fail: [] });
   }
   throw new Error('login: twelve moves and not in');
+}
+
+/*
+ * THE LOGIN, ACROSS A PAGE THAT RELOADS ITSELF (2026-10-31: the web app's first visit to the key's site reloads once for
+ * its service worker and newest build, before it can say so): the page's going mid-login is waited out - its next
+ * hello, under the restart's watchdog - and the login goes on with it, three times at most. Returns the drive for the
+ * page it ends on.
+ */
+async function login(d, opts = {}) {
+  for (let reloads = 0; ; reloads++) {
+    try {
+      return await loginMoves(d, opts);
+    } catch (e) {
+      if (reloads >= 3 || !/the app disconnected|is not connected|the app went/.test(e.message)) throw e;
+      d.say(`the ${d.app.shell} page went mid-login (a reload) - going on with its next connection`);
+      d = await d.restarted();
+    }
+  }
 }
 
 /* one budget on the soft key: asked, approved (its press answered by the server), three signs it pays */

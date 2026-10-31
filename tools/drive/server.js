@@ -353,6 +353,9 @@ function driveFor(app, say) {
       const dog = setTimeout(() => { hellos.off('hello', onHello); reject(failure(`WATCHDOG: ${app.shell} did not come back in ${life} s`)); }, life * 1000);
       const onHello = (a) => { if (a.shell === app.shell && a !== app) { clearTimeout(dog); hellos.off('hello', onHello); resolve(a); } };
       hellos.on('hello', onHello);
+      /* waiting with nothing to set off (a page that reloaded itself): a newer connection already up is the one */
+      const now = apps.get(app.shell);
+      if (!act && now && now !== app && now.ready && !now.closed) onHello(now);
     });
     back.catch(() => {});
     /* the restart a flow sets off (a "Restart the app" tap) is a going it asked for */
