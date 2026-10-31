@@ -115,15 +115,19 @@ const FIND = (label) => `(() => {
        */
       let at = await evaluate(FIND(a));
       if (!at || at.x === undefined || at.disabled) {
-        const r = await call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
+        /* the same watchdog on this side too: a page that reloads mid-wait takes its observer and its timer with it */
+        const r = await Promise.race([
+          new Promise((resolve) => setTimeout(() => resolve({ result: { result: { value: null } } }), LIFE * 1000 + 2000)),
+          call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
           const find = () => { const f = ${FIND(a)}; return f && f.x !== undefined && !f.disabled ? f : null; };
           const done = (v) => { obs.disconnect(); clearTimeout(life); resolve(v); };
           const life = setTimeout(() => done(null), ${LIFE * 1000});
           const obs = new MutationObserver(() => { const f = find(); if (f) done(f); });
           obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
           const f = find(); if (f) done(f);
-        })` });
-        at = r.result.result.value || await evaluate(FIND(a));
+        })` }),
+        ]);
+        at = (r.result && r.result.result && r.result.result.value) || await evaluate(FIND(a));
       }
       if (!at || at.x === undefined) throw new Error(`WATCHDOG: "${a}" not on screen in ${LIFE} s; there: ${(at?.seen || []).join(' | ')}`);
       if (at.disabled) throw new Error(`WATCHDOG: "${a}" still ${at.covered ? 'covered' : 'disabled'} after ${LIFE} s - not clicked`);

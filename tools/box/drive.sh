@@ -8,7 +8,8 @@ source ~/.nvm/nvm.sh >/dev/null
 cd ~/project/onlykey/ok-edge || return 1
 export CDP_PORT=9334
 say() { echo "== $(date +%T) $*"; }
-C() { timeout 120 node tools/box/page-click.js "$@" 2>&1 | tail -1 | cut -c1-200; }
+# a click (or ?label wait) - its exit status is page-click's: a step that did not happen fails the caller
+C() { local out; out=$(timeout 120 node tools/box/page-click.js "$@" 2>&1); local code=$?; echo "$out" | tail -1 | cut -c1-200; return $code; }
 # the first line of `file` matching `re`, as it is written (tail -f, no polling); the reader ends with the match -
 # with a writer pid, also when the writer ends (a presser that died before its line - "fetch failed", the page not up
 # yet - left this waiting for good, 2026-10-31); returns 1 then
