@@ -6,6 +6,7 @@
  *                log {line, at}                its console lines and (Android) its own logcat, as mayLeave allows
  *                controls {list}               the top layer's controls, on every change (registry.tsx)
  *                screen {text}                 the screen's text, on every change (screen.ts: each shell reads its own)
+ *                error {kind, message}         an exception or unhandled rejection, as it happens (the server pictures it)
  *   commands in: tap {label}                   the top layer's enabled control, pressed by calling it
  *                fill {field, value}           a registered text field, by its placeholder
  *                state {}                      controls + screen text now
@@ -51,6 +52,13 @@ function send(msg: object): void {
   if (ws && ws.readyState === 1) {
     try { ws.send(JSON.stringify(msg)); } catch { /* the next change dials again */ }
   }
+}
+
+/* an error, to the drive: on the live chain its kind only - the message stays on the device (mayLeave's rule) */
+function reportError(kind: string, e: unknown): void {
+  if (!ws) return;
+  const message = e instanceof Error ? (e.stack ?? e.message) : String(e);
+  send({t: 'error', kind, message: currentNet() === 'test' ? message.slice(0, 4000) : '(live chain: the message stays on the device)', at: Date.now()});
 }
 
 /* the screen's text, read by the shell (screen.ts / screen.android.ts) and sent */
@@ -111,6 +119,8 @@ export function startDrive(): void {
       if (ws) {
         const line = args.map(a => (typeof a === 'string' ? a : a instanceof Error ? a.stack ?? a.message : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
         if (mayLeave(line, false)) send({t: 'log', line, at: Date.now()});
+        /* React Native says an unhandled rejection only this way (a warning); the web shells have their own event */
+        if (/unhandled promise rejection/i.test(line)) reportError('unhandled rejection', line);
       }
       /*
        * not connected: the app's own activity is the event to dial again on (one attempt in flight) - a restarted
@@ -118,6 +128,24 @@ export function startDrive(): void {
        */
       else dial();
     };
+  }
+
+  /*
+   * ERRORS ARE EVENTS (drive debugging #2): an exception (React Native's global handler - its red box is a fatal one -
+   * or the page's error event) and an unhandled rejection reach the drive as {t: 'error'}; the server logs it and
+   * takes a picture with a log sample, at the moment it happens. The app's own handling is unchanged.
+   */
+  const EU = (globalThis as any).ErrorUtils;
+  if (EU?.getGlobalHandler && EU?.setGlobalHandler) {
+    const previous = EU.getGlobalHandler();
+    EU.setGlobalHandler((e: unknown, isFatal?: boolean) => {
+      reportError(isFatal ? 'exception (fatal)' : 'exception', e);
+      previous?.(e, isFatal);
+    });
+  }
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && typeof document !== 'undefined') {
+    window.addEventListener('error', (ev: ErrorEvent) => reportError('exception', ev.error ?? ev.message));
+    window.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => reportError('unhandled rejection', ev.reason));
   }
 
   /* a key request in flight: a drive waits it out before its next move */

@@ -44,6 +44,31 @@ function launch(name, cmd, args, env = {}) {
   return spawn(cmd, args, { cwd: EDGE, env: { ...process.env, ...env }, detached: LINUX, stdio: ['ignore', out, out], shell: !LINUX, windowsHide: false });
 }
 
+/*
+ * A TARGET'S OUTPUT, AS IT IS WRITTEN (drive debugging #3): the file stays its sink - the app never depends on the drive
+ * staying open - and this follows it by the file system's own change events (fs.watch: inotify), reading only what was
+ * added, line by line. A file started again (a new launch truncates it) is read from its start.
+ */
+function follow(name, onLine) {
+  const file = path.join(LOGS, `${name}.log`);
+  let at = 0;
+  let rest = '';
+  const read = () => {
+    let size;
+    try { size = fs.statSync(file).size; } catch { return; }
+    if (size < at) { at = 0; rest = ''; }
+    if (size === at) return;
+    const buf = Buffer.alloc(size - at);
+    const fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buf, 0, buf.length, at); } finally { fs.closeSync(fd); }
+    at = size;
+    const lines = (rest + buf.toString('utf8')).split('\n');
+    rest = lines.pop();
+    for (const l of lines) if (l.trim()) onLine(l.replace(/\r$/, ''));
+  };
+  try { const w = fs.watch(file, read); read(); return w; } catch { return null; }
+}
+
 /* the end of a target's output log (launch() writes LOGS/<name>.log) */
 function tail(name, n) {
   try { return fs.readFileSync(path.join(LOGS, `${name}.log`), 'utf8').split('\n').slice(-n).join('\n'); } catch (e) { return `(no log: ${e.message})`; }
@@ -108,8 +133,17 @@ async function endStrays(line) {
   return 'killed';
 }
 
-function createTargets(line = () => {}) {
+/*
+ * createTargets(line, out): line(text) is this machine's own log; out(shell, text) is a target's output, line by line,
+ * for the drive's tab of that app (#3).
+ */
+function createTargets(line = () => {}, out = () => {}) {
   const running = new Map(); /* target -> its child (or children) */
+  const followers = new Map(); /* target -> its output's watcher */
+  const followOut = (target, name) => {
+    if (followers.get(target)) followers.get(target).close();
+    followers.set(target, follow(name, (l) => out(target, l)));
+  };
 
   const T = {
     desktop: {
@@ -118,8 +152,9 @@ function createTargets(line = () => {}) {
         if ((c && !exited(c)) || strayElectrons().length) return 'already running';
         const env = { ...(LINUX ? { OKEDGE_NODE: process.execPath, DISPLAY: process.env.DRIVE_DISPLAY || ':10' } : {}) };
         const child = launch('desktop-test', LINUX ? 'npm' : 'npm.cmd', ['run', 'electron:test', ...(LINUX ? ['--', '--no-sandbox'] : [])], env);
+        /* kept after it exits: its exit code is its last words (lastWords); the next start replaces it */
         running.set('desktop', child);
-        child.once('exit', () => { if (running.get('desktop') === child) running.delete('desktop'); });
+        followOut('desktop', 'desktop-test');
         return 'started';
       },
       async stop() {
@@ -140,6 +175,7 @@ function createTargets(line = () => {}) {
           `--ignore-certificate-errors-spki-list=${spki}`, `--user-data-dir=${path.join(ROOT, 'webapp-chromium')}`, '--no-first-run', '--new-window', 'https://apps.crp.to:8443/'],
         { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });
         running.set('webapp', [serve, browser]);
+        followOut('webapp', 'webapp-chromium');
         return 'started';
       },
       async stop() {

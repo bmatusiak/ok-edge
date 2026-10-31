@@ -39,6 +39,11 @@ function loginState(app) {
    */
   if (app.has('Enter testing mode')) return 'login screen';
   if (f.phase === 'main' && f.passed && !f.busy && (!app.top || app.has('Make the card'))) return 'in';
+  /*
+   * a menu or drawer a stopped run left open goes nowhere by itself (2026-10-31, the Pixel: the menu stayed open and the
+   * login waited out its watchdog): closing it is the move - never a sheet, which may be a press being answered
+   */
+  if (app.top && !f.busy) { const c = ['Close menu', 'Close Edge Management'].find((l) => app.has(l)); if (c) return `close:${c}`; }
   if (f.busy || app.top) return null;
   if (f.identityCheck) return ['Try again', 'Decrypt Bucket', 'Create Bucket'].find((b) => app.has(b)) || null;
   /*
@@ -62,7 +67,8 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
     const now = await d.until((app) => loginState(app) !== null, { life: left, fail: [] }).then(() => loginState(d.app));
     if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return; }
     d.say(`login: ${now}`);
-    if (now === 'login screen') await d.tap('Enter testing mode');
+    if (now.startsWith('close:')) await d.tap(now.slice(6));
+    else if (now === 'login screen') await d.tap('Enter testing mode');
     else if (now === 'bypass') {
       /*
        * its end is the key unlocked - the bypass types seven digits, and while it does the key is still "locked" with

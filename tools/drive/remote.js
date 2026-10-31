@@ -39,7 +39,7 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
   try { fs.mkdirSync(path.dirname(LOG), { recursive: true }); } catch { /* the window still has it */ }
   logFile = fs.createWriteStream(LOG, { flags: 'a' });
   if (!token) { line('no token - set DRIVE_TOKEN or write ~/.onlykey-drive-token (the server uses the same); nothing started'); return; }
-  const targets = createTargets(line);
+  const targets = createTargets(line, (shell, l) => toServer({ t: 'app-out', shell, line: l }));
 
   /* ---- the server's side */
   const controlHttp = http.createServer();

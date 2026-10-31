@@ -157,7 +157,9 @@ async function shotOf(app, name) {
  */
 async function shotNow(by, shell) {
   const targets = [...apps.values()].filter((a) => !shell || a.shell === shell);
-  line(`picture asked from the ${by} window${shell ? ` (${shell})` : ''}`);
+  /* by: the window that asked ('host', a remote's machine) - or 'error', the app's own error (#2) */
+  const why = by === 'error' ? 'a picture on an error' : `picture asked from the ${by} window`;
+  line(`${why}${shell ? ` (${shell})` : ''}`);
   /*
    * and a sample of the log with it (Brad: "the picture now should take a sample of the log"): the drive's last lines
    * and each app's own, up to this moment - written before the pictures are asked, so it is the moment he pressed
@@ -165,7 +167,7 @@ async function shotNow(by, shell) {
   fs.mkdirSync(SHOTS, { recursive: true });
   const tag = `${String(by).replace(/[^a-z0-9-]/gi, '_')}${shell ? `-${shell}` : ''}`;
   const file = path.join(SHOTS, `${stamp().replace(/:/g, '')}-seen-by-${tag}.log`);
-  const parts = [`== picture asked from the ${by} window${shell ? ` (${shell})` : ''} at ${new Date().toISOString()}`, '', `== the drive (last ${recent.length} lines)`, ...recent];
+  const parts = [`== ${why}${shell ? ` (${shell})` : ''} at ${new Date().toISOString()}`, '', `== the drive (last ${recent.length} lines)`, ...recent];
   for (const a of targets) parts.push('', `== ${a.shell}'s own log (last ${a.recent.length} lines)`, ...a.recent);
   fs.writeFileSync(file, `${parts.join('\n')}\n`);
   line(`log sample: ${file}`);
@@ -378,6 +380,18 @@ function attachApp(sock) {
     if (m.t === 'net') { app.net = String(m.net); line(`[${app.shell}] net: ${app.net}`); app.emit('screen'); return; }
     if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
     if (m.t === 'log') { const l = `${stamp()} ${m.line}`; keep(app.recent, l); bus.emit('app-line', app.shell, l); app.emit('log', String(m.line)); return; }
+    /*
+     * AN ERROR IN THE APP (drive debugging #2): logged in its tab, the whole message kept in its lines, and a picture
+     * with a log sample at once - one per burst: none is asked while one is on its way (an event, not a clock)
+     */
+    if (m.t === 'error') {
+      const msg = String(m.message || '').split('\n');
+      line(`[${app.shell}] ERROR ${m.kind}: ${msg[0].slice(0, 200)}`);
+      for (const l of msg.slice(0, 40)) { const s = `${stamp()} [ERROR ${m.kind}] ${l}`; keep(app.recent, s); bus.emit('app-line', app.shell, s); }
+      app.emit('error-event', m);
+      if (!app.picturing) { app.picturing = true; shotNow('error', app.shell).finally(() => { app.picturing = false; }); }
+      return;
+    }
     if (m.t === 'controls') { app.controls = m.list || []; app.top = m.top || 0; app.flags = m.flags || {}; app.emit('controls'); return; }
     if (m.t === 'screen') { app.text = String(m.text || ''); app.emit('screen'); }
   });
@@ -433,7 +447,22 @@ wss.on('connection', (ws, req) => {
  */
 const TOKEN = (process.env.DRIVE_TOKEN || (() => { try { return fs.readFileSync(path.join(require('os').homedir(), '.onlykey-drive-token'), 'utf8'); } catch { return ''; } })()).trim();
 const remotes = new Map(); /* url -> {ws, machine, targets, waiting} */
-const localTargets = createTargets((l) => line(l));
+const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l));
+
+/*
+ * A TARGET'S OWN OUTPUT (drive debugging #3) - the desktop's main process (the soft key host, IPC), the web app's
+ * browser - into that app's tab as "[main]" lines. The app's rule for what may leave it (src/drive/client.ts mayLeave)
+ * holds here too: on the testnet every line; otherwise - the live chain, or the app not connected yet - only a drive's
+ * prefixes.
+ */
+const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]'];
+function appOut(shell, l) {
+  const a = apps.get(shell);
+  if (!(a && a.net === 'test') && !LIVE_PREFIXES.some((p) => l.startsWith(p))) return;
+  const s = `${stamp()} [main] ${l}`;
+  if (a) keep(a.recent, s);
+  bus.emit('app-line', shell, s);
+}
 
 /*
  * dialRemote(url, again): a remote that went (restarted, the box rebooted) is dialed again every 5 s while it is gone -
@@ -466,7 +495,8 @@ function dialRemote(url, again = false) {
     }
     if (m.t === 'app-msg') { const s = r.socks.get(m.cid); if (s) s.emit('message', m.data); return; }
     if (m.t === 'app-close') { const s = r.socks.get(m.cid); if (s) { r.socks.delete(m.cid); s.readyState = 3; s.emit('close'); } return; }
-    if (m.t === 'proc-reply') { const w = r.waiting.get(m.id); if (w) { r.waiting.delete(m.id); w(m); } }
+    if (m.t === 'proc-reply') { const w = r.waiting.get(m.id); if (w) { r.waiting.delete(m.id); w(m); } return; }
+    if (m.t === 'app-out') appOut(String(m.shell), String(m.line));
   });
   ws.on('error', (e) => { if (!again) line(`drive-remote ${url}: ${e.message} - dialing it again every 5 s while it is gone`); });
   ws.on('close', () => {
