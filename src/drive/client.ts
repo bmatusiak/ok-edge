@@ -38,7 +38,7 @@ import {watchNet} from './net';
  * On the testnet every line goes: its keys are throwaway, and that is where a drive works. On the live chain only the
  * lines a drive reads, by their prefix - never the firmware's console, raw traffic, or the native log.
  */
-const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]'];
+const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]', '[key]'];
 const mayLeave = (line: string, native: boolean) =>
   currentNet() === 'test' || (!native && LIVE_PREFIXES.some(p => line.startsWith(p)));
 
@@ -107,6 +107,8 @@ function dial(): void {
     else if (m.t === 'quit') void quit().then(r => reply('ok' in r, r));
     /* the proof of #2 (errors are events): a rejection nothing handles, as a real bug would leave one */
     else if (m.t === 'raise') { reply(true); void Promise.reject(new Error('drive: a test rejection (run.js raise)')); }
+    /* the proof of #4 (the network trace): a request to the drive server's own address, which must come back as [net] */
+    else if (m.t === 'net-check') { reply(true); void fetch(URL.replace(/^ws/, 'http')).catch(() => {}); }
     else reply(false, {why: `unknown command "${m.t}"`});
   };
 }
@@ -142,6 +144,21 @@ export function startDrive(): void {
 
   /* a key request in flight: a drive waits it out before its next move */
   onKeyBusy(b => setDriveFlag('busy', !!b));
+
+  /*
+   * EACH KEY REQUEST, ONE LINE (drive debugging #6; memory: don't hammer the key): what it was, how it went (straight
+   * to the key, or through the browser's tunnel), how long, and whether it waited for a press - from the app's own
+   * keyBusy, when it ends. The server counts them per run.
+   */
+  const keyStarted = new Map<number, number>();
+  onKeyBusy(b => {
+    if (!b) return;
+    if (!b.done) { if (!keyStarted.has(b.ops)) keyStarted.set(b.ops, Date.now()); return; }
+    const t0 = keyStarted.get(b.ops);
+    keyStarted.delete(b.ops);
+    const line = `[key] ${b.what} via ${b.via}${t0 ? ` in ${Date.now() - t0} ms` : ''}${b.press ? ' (press)' : ''}`;
+    if (ws && mayLeave(line, false)) send({t: 'log', line, at: Date.now()});
+  });
 
   /*
    * the controls changed: the screen did too - its text goes with them (2026-10-31, the Pixel: connected before its
