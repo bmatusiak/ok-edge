@@ -148,7 +148,13 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
     }
     else if (now === 'bypass' && pin !== TEST_PIN) {
       /* the bypass types TEST_PIN, not this key's: the keypad with its own PIN */
-      if (d.app.flags.tab === 'This Key') { for (const n of pin) await d.tap(`Button ${n}`); } else await d.goto('This Key');
+      /* the state stays "bypass" while its button shows: each move ends on its own goal, not on a state change */
+      if (d.app.flags.tab !== 'This Key') { await d.goto('This Key'); continue; }
+      for (const n of pin) await d.tap(`Button ${n}`);
+      await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] }).catch(() => {
+        throw new Error(`login: the key stayed locked after its PIN on the keypad (--pin ${pin.length} digits) - one wrong attempt; not tried again`);
+      });
+      continue;
     }
     else if (now === 'bypass') {
       /*
