@@ -94,15 +94,19 @@ function pressWhenAsked(app) {
       line(r.ok ? `[${app.shell}] pressed: ${why}` : `[${app.shell}] press refused: ${r.why}`);
     } catch (e) { line(`[${app.shell}] press: ${e.message}`); } finally { pressing = false; }
   };
-  app.on('controls', () => {
-    if (app.net !== 'test') return;
-    if (app.controls.some((c) => c.label === 'Press the soft key' && c.enabled)) void press('Press the soft key', 'a press sheet');
-  });
+  /*
+   * ONE PRESS PER WAIT, on the app's own event: "[press] sheet up: <what>" is logged once, when the key waits and the
+   * button is live (src/ui/PressSheet.tsx Locate). Pressing whenever a "Press the soft key" showed pressed again as
+   * soon as the request sheet's twin came to the top (three presses for one approval, 2026-10-31).
+   * An approval (" - approve") is the script's to give, not this presser's.
+   */
   app.on('log', async (l) => {
     if (app.net !== 'test') return;
-    const code = l.match(/^\[press\] sheet up: derive code ([1-6]) ([1-6]) ([1-6]) - /);
-    if (!code) return;
-    for (const d of code.slice(1, 4)) await press(d, `the derive code's ${d}`);
+    const up = l.match(/^\[press\] sheet up: (.*) - button at /);
+    if (!up || / - approve$/.test(up[1])) return;
+    const code = up[1].match(/^derive code ([1-6]) ([1-6]) ([1-6])$/);
+    if (code) { for (const d of code.slice(1, 4)) await press(d, `the derive code's ${d}`); return; }
+    await press('Press the soft key', up[1]);
   });
 }
 
