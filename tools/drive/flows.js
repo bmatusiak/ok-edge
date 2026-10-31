@@ -73,7 +73,7 @@ async function unlockOutsideKey(d, pin) {
   const s = await d.machine('key-state');
   if (!s.ok) throw new Error(`the web app's key: ${s.why}`);
   if (!/\btestnet\b/.test(s.what)) throw new Error(`the web app's key is not a testnet one (${s.what}) - the drive does not unlock it`);
-  if (!/ connected;/.test(s.what)) throw new Error(`the web app's key: ${s.what}`);
+  if (!/: connected;/.test(s.what)) throw new Error(`the web app's key: ${s.what}`);
   if (!/led #000000/.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
   d.say('its key is locked (dark) - its PIN on its buttons');
   const lit = d.until(/\[gadget\] led #(?!000000)/, { life: 20, fail: [] });

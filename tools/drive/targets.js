@@ -174,7 +174,22 @@ function holdGadget(onOut) {
   try { host.listen(); } catch (e) { return `could not hold the gadget's socket: ${e.message} (a press.js or GUI holds it?)`; }
   gadgetHost = host;
   host.on('device-connect', () => { gadgetUp = true; gadgetOut('[gadget] the soft key connected'); });
-  host.on('device-disconnect', () => { gadgetUp = false; gadgetOut('[gadget] the soft key went (it starts again by itself)'); });
+  host.on('device-disconnect', () => {
+    gadgetUp = false;
+    gadgetOut('[gadget] the soft key went');
+    /*
+     * BACK THE WAY A HARD KEY COMES BACK, WHOEVER STARTED IT (2026-10-31: "firmware requested restart - exiting", and the
+     * daemon an earlier drive-remote had started stayed gone - its respawn died with that remote): once no daemon is left
+     * (checked every 250 ms, 5 s at most - not our child, its exit is no event here), this machine starts it again.
+     */
+    if (gadgetChild && !exited(gadgetChild)) return; /* ours: its exit event starts it again (gadget()) */
+    const until = Date.now() + 5000;
+    const check = () => {
+      if (gadgetElsewhere().length) { if (Date.now() < until) setTimeout(check, 250); return; }
+      gadgetOut(`[gadget] ${gadget()}`);
+    };
+    check();
+  });
   host.on('led', (m) => {
     const hex = (m.pixels || []).map((p) => `#${[p.r, p.g, p.b].map((v) => v.toString(16).padStart(2, '0')).join('')}`).join(' ');
     if (hex === gadgetLed.hex) return;
