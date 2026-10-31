@@ -74,6 +74,9 @@ async function unlockOutsideKey(d, pin) {
   if (!s.ok) throw new Error(`the web app's key: ${s.why}`);
   if (!/\btestnet\b/.test(s.what)) throw new Error(`the web app's key is not a testnet one (${s.what}) - the drive does not unlock it`);
   if (!/: connected;/.test(s.what)) throw new Error(`the web app's key: ${s.what}`);
+  /* one key on the USB: the browser asks every security key it sees, and a second one nobody presses holds the request */
+  const many = s.what.match(/; (\d+) OnlyKeys on this machine's USB/);
+  if (many && Number(many[1]) > 1) throw new Error(`${many[1]} OnlyKeys on the web app's machine - the browser asks them all; unplug the other one (or DRIVE_WEBAPP_KEY=hard to drive key 2 instead)`);
   if (!/led #000000/.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
   d.say('its key is locked (dark) - its PIN on its buttons');
   const lit = d.until(/\[gadget\] led #(?!000000)/, { life: 20, fail: [] });

@@ -358,9 +358,15 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       },
       /* the web app's key as its machine sees it (the gadget's LED now, and since when) */
       async keyState() {
-        if (KEY === 'hard') return 'hard key 2: read it with tools/box/owner-key.js';
-        if (!gadgetHost) return 'the gadget is not held here (start the web app through the drive)';
-        return `the testnet soft key (gadget): ${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}`;
+        /*
+         * how many OnlyKeys this machine's USB holds (2026-10-31: key 2 plugged into the box beside the gadget - the
+         * browser asked both, key 2 locked and unpressed, and the login sat at "connecting to the key")
+         */
+        const usb = LINUX ? (await runIn(EDGE, 'lsusb', [], 10000)).out.split('\n').filter((l) => /1d50:60fc/i.test(l)).length : null;
+        const keys = usb === null ? '' : `; ${usb} OnlyKey${usb === 1 ? '' : 's'} on this machine's USB`;
+        if (KEY === 'hard') return `hard key 2: read it with tools/box/owner-key.js${keys}`;
+        if (!gadgetHost) return `the gadget is not held here (start the web app through the drive)${keys}`;
+        return `the testnet soft key (gadget): ${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}${keys}`;
       },
       /*
        * A PRESS ON THE WEB APP'S KEY (the drive's answer to "[press] key waits", src/hostChallenge.ts): the key is outside
