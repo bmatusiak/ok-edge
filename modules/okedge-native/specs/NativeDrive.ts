@@ -19,6 +19,11 @@ export interface Spec extends TurboModule {
    * the next comes after screenText() is read). false stops it. The native side of the web's MutationObserver.
    */
   watchScreen(on: boolean): void;
+  /**
+   * Follow this app's own logcat (its process only, from now on): each line emits the device event "okedgeDriveLog"
+   * with the line, the JS console's own (ReactNativeJS) left out. false stops it. src/drive decides what leaves the phone.
+   */
+  watchLog(on: boolean): void;
 }
 
 /* get, not getEnforcing: the drive is a debugging tool - an app without the module drives without pictures or text */

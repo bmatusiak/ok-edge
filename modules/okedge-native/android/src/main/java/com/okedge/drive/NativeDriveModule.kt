@@ -83,10 +83,7 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
      * inactive screen) - what Android's own accessibility (uiautomator) leaves out, so does this (2026-10-31: the
      * login screen's texts stayed in the tree under the Testing tab, and uiautomator did not list them)
      */
-    if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) {
-      android.util.Log.d("okedge-drive", "hidden subtree: ${v.javaClass.name} ${v.width}x${v.height} children=${(v as? ViewGroup)?.childCount ?: 0} parent=${(v.parent as? View)?.javaClass?.name}")
-      return
-    }
+    if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) return
     val a = alpha * v.alpha
     if (a <= 0.01f) return
     if (v is EditText) return
@@ -142,13 +139,45 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
   override fun onHostPause() {}
   override fun onHostDestroy() { detach() }
 
+  /*
+   * THE APP'S OWN LOGCAT (Brad, 2026-10-31: "test-moniker did some logcat tricks ... pull logcat into the drive server
+   * for the app process"): test-moniker follows `adb logcat --pid <the app>` from the host; an app may read its own
+   * process's log with no permission and no adb, so the app does it (the drive's rule: the app gives its own events).
+   * Each line is an "okedgeDriveLog" event, from now on (-T 1), in logcat's time format. The JS console's own lines
+   * (ReactNativeJS) are left out - the drive has those already. The JS side decides what may leave the phone.
+   */
+  private var logcat: Process? = null
+
+  override fun watchLog(on: Boolean) {
+    logcat?.destroy()
+    logcat = null
+    if (!on) return
+    val p = try {
+      ProcessBuilder("logcat", "-v", "time", "-T", "1", "--pid=${android.os.Process.myPid()}").redirectErrorStream(true).start()
+    } catch (e: Exception) {
+      reactContext.emitDeviceEvent(LOG_EVENT, "[logcat] could not start: ${e.message}")
+      return
+    }
+    logcat = p
+    Thread({
+      try {
+        p.inputStream.bufferedReader().forEachLine { l ->
+          if (!l.contains(" ReactNativeJS") && !l.startsWith("--------- beginning of")) reactContext.emitDeviceEvent(LOG_EVENT, l)
+        }
+      } catch (_: Exception) { /* destroyed: watchLog(false) or the module going */ }
+    }, "okedge-drive-logcat").apply { isDaemon = true }.start()
+  }
+
   override fun invalidate() {
     main.post { detach() }
+    logcat?.destroy()
+    logcat = null
     super.invalidate()
   }
 
   companion object {
     const val NAME = NativeDriveSpec.NAME
     const val EVENT = "okedgeDriveScreen"
+    const val LOG_EVENT = "okedgeDriveLog"
   }
 }

@@ -3,7 +3,7 @@
  * (desktop, web app, Android) - and gives it events and takes commands. The app opens no port.
  *
  *   events out:  hello {shell, net}           once a connection is up
- *                log {line, at}                every console line this app writes (what the box tools read)
+ *                log {line, at}                its console lines and (Android) its own logcat, as mayLeave allows
  *                controls {list}               the top layer's controls, on every change (registry.tsx)
  *                screen {text}                 the screen's text, on every change (screen.ts: each shell reads its own)
  *   commands in: tap {label}                   the top layer's enabled control, pressed by calling it
@@ -27,6 +27,16 @@ import {currentNet, onNet} from '../net';
 import {shot} from './shot';
 import {quit} from './quit';
 import {screenText, watchScreen} from './screen';
+import {watchNativeLog} from './nativeLog';
+
+/*
+ * WHAT MAY LEAVE THE APP (memory: the app log carries key bytes - a new sink takes an allowlist, never "every line").
+ * On the testnet every line goes: its keys are throwaway, and that is where a drive works. On the live chain only the
+ * lines a drive reads, by their prefix - never the firmware's console, raw traffic, or the native log.
+ */
+const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]'];
+const mayLeave = (line: string, native: boolean) =>
+  currentNet() === 'test' || (!native && LIVE_PREFIXES.some(p => line.startsWith(p)));
 
 const URL = process.env.EXPO_PUBLIC_OKEDGE_DRIVE_URL || 'ws://127.0.0.1:8790';
 
@@ -98,7 +108,10 @@ export function startDrive(): void {
     const original = console[level].bind(console);
     console[level] = (...args: unknown[]) => {
       original(...args);
-      if (ws) send({t: 'log', line: args.map(a => (typeof a === 'string' ? a : a instanceof Error ? a.stack ?? a.message : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' '), at: Date.now()});
+      if (ws) {
+        const line = args.map(a => (typeof a === 'string' ? a : a instanceof Error ? a.stack ?? a.message : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
+        if (mayLeave(line, false)) send({t: 'log', line, at: Date.now()});
+      }
       /*
        * not connected: the app's own activity is the event to dial again on (one attempt in flight) - a restarted
        * server was never found by an idle app that waited for a control change (2026-10-31). Local only; never the key.
@@ -121,6 +134,9 @@ export function startDrive(): void {
 
   /* the screen's text on every change - the page's MutationObserver, Android's layout event - while connected */
   watchScreen(() => { if (ws) sendScreen(); });
+
+  /* the native side's own log (Android: its logcat), marked as such - the testnet only (mayLeave) */
+  watchNativeLog(l => { if (ws && mayLeave(l, true)) send({t: 'log', line: `[logcat] ${l}`, at: Date.now()}); });
 
   /* the net decides what the server may press (the testnet only): told as it changes */
   onNet(net => send({t: 'net', net}));
