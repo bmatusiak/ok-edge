@@ -28,23 +28,16 @@ waitline() {
 step() {
   local until="$1"; shift
   local log; log=$(mktemp)
-  local state="" untilArgs=(--until "$until")
-  [ "${until#\?}" != "$until" ] && { state="$until"; untilArgs=(); }
-  node tools/box/page-presser.js --approve "${untilArgs[@]}" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
+  local untilArgs=(--until "$until")
+  [ "${until#\?}" != "$until" ] && untilArgs=(--done "${until#\?}")
+  # a failure the page shows ends the step at once: "Try again" (FAIL=<label> for another)
+  node tools/box/page-presser.js --approve "${untilArgs[@]}" --fail "${FAIL:-Try again}" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
   local p=$!
   if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
   [ $# -gt 0 ] && C "$@"
-  local code
-  if [ -n "$state" ]; then
-    local got; got=$(timeout $(( ${LIFE:-90} + 10 )) node tools/box/page-click.js --life "${LIFE:-90}" "$state" 2>&1 | tail -1)
-    kill $p 2>/dev/null; wait $p 2>/dev/null
-    sed 's/^/   /' "$log"; echo "   $got"
-    case "$got" in there:*) code=0;; *) code=1;; esac
-  else
-    # its lines as they come (a cutoff from outside used to lose them all), ending with the presser
-    tail -n +1 --pid=$p -f "$log" | sed 's/^/   /'
-    wait $p; code=$?
-  fi
+  # its lines as they come (a cutoff from outside used to lose them all), ending with the presser
+  tail -n +1 --pid=$p -f "$log" | sed 's/^/   /'
+  wait $p; local code=$?
   rm -f "$log"
   return $code
 }

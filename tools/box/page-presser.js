@@ -11,9 +11,15 @@
 // 2026-10-31: "you need a watch dog inactivity timer, so an event has an expected end of life"). Other lines do not
 // reset it - the app logs all the time, and an idle cutoff they reset never fired. On expiry it prints the last lines
 // it saw and the buttons on screen, and exits 1.
-//   CDP_PORT=9334 node tools/box/page-presser.js [--approve] [--until 'REGEX'] [--life 90] [--show 'REGEX']
+// THE PAGE'S STATE ends it too (Brad, 2026-10-31: "an end detection when the state you want is there or not"):
+// --done LABEL (exit 0) and --fail LABEL (exit 1), each repeatable - a control or text with exactly that label, watched
+// by a MutationObserver in the page; a failure the app shows but does not log ("Try again") ends the step at once.
+//   CDP_PORT=9334 node tools/box/page-presser.js [--approve] [--until 'REGEX'] [--done L]... [--fail L]... [--life 90] [--show 'REGEX']
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i < 0 ? dflt : args[i + 1]; };
+const all = (name) => args.flatMap((a, i) => (a === name && args[i + 1] !== undefined ? [args[i + 1]] : []));
+const DONE = all('--done');
+const FAIL = all('--fail');
 const APPROVE = args.includes('--approve');
 const UNTIL = opt('--until', null) ? new RegExp(opt('--until')) : null;
 const LIFE_MS = Number(opt('--life', 90)) * 1000;
@@ -110,6 +116,27 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
     }
     if (UNTIL && UNTIL.test(line)) act(async () => finish(0, `until: ${line.slice(0, 160)}`));
   };
+  /* the states: one in-page observer per label, answering when it shows (never a poll) */
+  const stateWatch = (label) => call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
+    const want = ${JSON.stringify(label)};
+    const find = () => [...document.querySelectorAll('body *')].some((el) => {
+      const q = el.getBoundingClientRect();
+      if (!q.width || !q.height) return false;
+      if (el.getAttribute('aria-label') === want) return true;
+      const t = (el.innerText || '').trim();
+      return t === want && ![...el.children].some((c) => (c.innerText || '').trim() === t);
+    });
+    /* a CHANGE to it: a label already showing (the "Try again" a retry starts from) counts once it went and came back */
+    let gone = !find();
+    const obs = new MutationObserver(() => {
+      const there = find();
+      if (!there) gone = true;
+      else if (gone) { obs.disconnect(); resolve(true); }
+    });
+    obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  })` });
+  for (const l of DONE) stateWatch(l).then(() => act(async () => finish(0, `done: the page shows "${l}"`)));
+  for (const l of FAIL) stateWatch(l).then(() => act(async () => finish(1, `FAILED: the page shows "${l}" - ${String(await evaluate("(document.body.innerText.match(/[^\\n]*(did not|Not made|rror)[^\\n]*/) || [''])[0]")).slice(0, 200)}`)));
   await call('Runtime.enable');
   say(`listening${APPROVE ? ' (testnet approvals too)' : ''}${UNTIL ? ` until /${UNTIL.source}/` : ''}`);
 })().catch((e) => { console.error(`page-presser: ${e.message || e}`); process.exit(1); });
