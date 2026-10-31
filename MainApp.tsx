@@ -53,6 +53,7 @@ const SPLASH_SEEN: boolean = (() => {
 import {LoginScreen} from './src/screens/LoginScreen';
 import {PinScreen} from './src/screens/PinScreen';
 import {SetupScreen} from './src/screens/SetupScreen';
+import {HardKeySetupScreen} from './src/screens/HardKeySetupScreen';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
@@ -881,6 +882,9 @@ function Shell() {
                 setPhase(emu.device === 'uninitialized' ? 'setup' : 'pin');
               }}
             />
+          ) : phase === 'setup' && keys.backend === 'usb' ? (
+            /* a hard key's PIN goes in on its own buttons - nothing here can press them */
+            <HardKeySetupScreen onDone={() => setPhase('login')} />
           ) : phase === 'setup' ? (
             <SetupScreen
               onDone={() => setPhase('login')}
