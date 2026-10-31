@@ -144,7 +144,7 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
    * for the app process"): test-moniker follows `adb logcat --pid <the app>` from the host; an app may read its own
    * process's log with no permission and no adb, so the app does it (the drive's rule: the app gives its own events).
    * Each line is an "okedgeDriveLog" event, from now on (-T 1), in logcat's time format. The JS console's own lines
-   * (ReactNativeJS) are left out - the drive has those already. The JS side decides what may leave the phone.
+   * (ReactNativeJS, "I/ReactNativeJS(") are left out - the drive has those already. The JS side decides what may leave the phone.
    */
   private var logcat: Process? = null
 
@@ -162,7 +162,7 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
     Thread({
       try {
         p.inputStream.bufferedReader().forEachLine { l ->
-          if (!l.contains(" ReactNativeJS") && !l.startsWith("--------- beginning of")) reactContext.emitDeviceEvent(LOG_EVENT, l)
+          if (!l.contains("/ReactNativeJS") && !l.startsWith("--------- beginning of")) reactContext.emitDeviceEvent(LOG_EVENT, l)
         }
       } catch (_: Exception) { /* destroyed: watchLog(false) or the module going */ }
     }, "okedge-drive-logcat").apply { isDaemon = true }.start()

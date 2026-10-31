@@ -208,11 +208,28 @@ function driveFor(app, say) {
   }
 
   /* tap: wait (by events) until the control is live, then call it; a refusal stops the script (11) */
+  /*
+   * tap(label): the control live, then the app's own tap. "Covered" or "disabled" from the app means this server's copy
+   * of the controls was a moment old - an overlay opened as the tap went out (2026-10-31, the Pixel: "Approve" is
+   * covered) - so it waits for the app's next controls and tries again, within the same watchdog.
+   */
   async function tap(label, { life = 30 } = {}) {
-    await until(() => app.controls.some((c) => c.label === label && c.enabled), { life, fail: [] })
-      .catch((e) => { throw failure(`"${label}" never became live: ${e.message.split('\n')[0]}`); });
-    const r = await app.call({ t: 'tap', label });
-    if (!r.ok) throw failure(`tap "${label}": ${r.why}`);
+    const end = Date.now() + life * 1000;
+    for (;;) {
+      const left = Math.max(1, Math.round((end - Date.now()) / 1000));
+      await until(() => app.controls.some((c) => c.label === label && c.enabled), { life: left, fail: [] })
+        .catch((e) => { throw failure(`"${label}" never became live: ${e.message.split('\n')[0]}`); });
+      const r = await app.call({ t: 'tap', label });
+      if (r.ok) break;
+      if (!/is (covered|disabled)/.test(String(r.why)) || Date.now() >= end) throw failure(`tap "${label}": ${r.why}`);
+      say(`"${label}" ${String(r.why).replace(/^"[^"]*" /, '')} - waiting for the app's next controls`);
+      await new Promise((resolve) => {
+        const dog = setTimeout(done, Math.max(0, end - Date.now()));
+        function done() { clearTimeout(dog); app.off('controls', done); app.off('close', done); resolve(); }
+        app.once('controls', done); app.once('close', done);
+      });
+      if (app.closed) throw failure(`tap "${label}": the app went`);
+    }
     say(`tapped "${label}"`);
   }
 
