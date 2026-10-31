@@ -442,7 +442,15 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
          */
         const usb = LINUX ? (await runIn(EDGE, 'lsusb', [], 10000)).out.split('\n').filter((l) => /1d50:60fc/i.test(l)).length : null;
         const keys = usb === null ? '' : `; ${usb} OnlyKey${usb === 1 ? '' : 's'} on this machine's USB`;
-        if (KEY === 'hard') return `hard key 2: read it with tools/box/owner-key.js${keys}`;
+        if (KEY === 'hard') {
+          /*
+           * key 2 - a test-hex key restored from the testnet backup: its lock state read by the lib's CLI ("status", no
+           * press), the way webapp-edge-budget.sh read it. Its PIN is the kit's (1111111), not the soft keys' testing one.
+           */
+          const st = await runIn(ROOT, NODE, [path.join(ROOT, 'node-onlykey-lib', 'cli', 'index.js'), 'status'], 30000);
+          const state = (st.out.split('\n').find((l) => /^\s*state\s/.test(l)) || '').trim().split(/\s+/)[1] || `unread (${st.out.split('\n').pop()})`;
+          return `hard key 2, the testnet test key (kit PIN): ${state === 'unlocked' || state === 'locked' ? 'connected' : 'not connected'}; state ${state}${keys}`;
+        }
         if (!gadgetHost) return `the gadget is not held here (start the web app through the drive)${keys}`;
         return `the testnet soft key (gadget): ${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}${keys}`;
       },

@@ -77,6 +77,24 @@ async function unlockOutsideKey(d, pin) {
   /* one key on the USB: the browser asks every security key it sees, and a second one nobody presses holds the request */
   const many = s.what.match(/; (\d+) OnlyKeys on this machine's USB/);
   if (many && Number(many[1]) > 1) throw new Error(`${many[1]} OnlyKeys on the web app's machine - the browser asks them all; unplug the other one (or DRIVE_WEBAPP_KEY=hard to drive key 2 instead)`);
+  /*
+   * HARD KEY 2 (DRIVE_WEBAPP_KEY=hard): its state is the CLI's read, its PIN the kit's. Pressed only when it reads
+   * "locked" - a press on a locked hard key is a PIN attempt (ten wipe it), on an unlocked one it types a slot - and
+   * read again after, 2 s apart, ten reads at most (each read is a request to the key: no more than that).
+   */
+  if (/^hard key 2/.test(s.what)) {
+    if (/state unlocked/.test(s.what)) { d.say('its key (hard key 2) is unlocked'); return; }
+    if (!/state locked/.test(s.what)) throw new Error(`the web app's key: ${s.what} - not pressed: its state is not read as locked`);
+    d.say('its key (hard key 2) is locked - the kit PIN on its buttons, through its debug console');
+    const r = await d.machine('press', d.app.shell, { buttons: '1111111'.split('') });
+    if (!r.ok) throw new Error(`the web app's key: ${r.why}`);
+    for (let i = 0; i < 10; i++) {
+      await new Promise((ok) => setTimeout(ok, 2000));
+      const n = await d.machine('key-state');
+      if (n.ok && /state unlocked/.test(n.what)) { d.say('its key (hard key 2) is unlocked'); return; }
+    }
+    throw new Error('hard key 2 did not read unlocked within 20 s of its PIN - nothing more is pressed');
+  }
   if (!/led #000000/.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
   d.say('its key is locked (dark) - its PIN on its buttons');
   const lit = d.until(/\[gadget\] led #(?!000000)/, { life: 20, fail: [] });
