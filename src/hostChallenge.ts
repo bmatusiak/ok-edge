@@ -20,6 +20,11 @@ export function onHostChallenge(l: (c: HostChallenge | null) => void): () => voi
 }
 function set(c: HostChallenge | null) {
   current = c;
+  /*
+   * A KEY OUTSIDE THE APP WAITS (a hard key, or the web app's key over WebAuthn): said once, as the soft key's press
+   * sheet says its own ("[press] sheet up", PressSheet Locate) - the drive presses that key from the machine holding it
+   */
+  if (c) console.log(`[press] key waits: ${c.what} - buttons ${c.digits.length ? c.digits.join(' ') : 'any'}`);
   for (const l of [...listeners]) l(c);
 }
 

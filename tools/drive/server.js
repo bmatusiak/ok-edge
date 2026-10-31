@@ -120,6 +120,21 @@ function pressWhenAsked(app) {
    */
   app.on('log', async (l) => {
     if (app.net !== 'test') return;
+    /*
+     * A KEY OUTSIDE THE APP WAITS (src/hostChallenge.ts - the web app's key, a hard key): pressed by the machine that
+     * holds it (targets.js press), its buttons as the app shows them - one wait, one press
+     */
+    const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/);
+    if (outside) {
+      if (pressing) return;
+      pressing = true;
+      try {
+        const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
+        const r = await proc('press', app.shell, { buttons });
+        line(r.ok ? `[${app.shell}] pressed: ${r.what} - ${outside[1]}` : `[${app.shell}] press refused: ${r.why}`);
+      } finally { pressing = false; }
+      return;
+    }
     const up = l.match(/^\[press\] sheet up: (.*) - button at /);
     if (!up || / - approve$/.test(up[1])) return;
     const code = up[1].match(/^derive code ([1-6]) ([1-6]) ([1-6])$/);
@@ -522,7 +537,7 @@ function dialRemote(url, again = false) {
  * --remote, this machine's own targets. A remote not connected yet is waited for, by its hello, under a watchdog.
  */
 const remoteHellos = new EventEmitter();
-async function proc(action, target) {
+async function proc(action, target, args = {}) {
   if (REMOTES.length) {
     for (const u of REMOTES) dialRemote(u);
     const has = () => [...remotes.values()].find((r) => r.ws.readyState === 1 && r.targets.includes(target));
@@ -541,11 +556,11 @@ async function proc(action, target) {
     const reply = await new Promise((resolve) => {
       const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${r.machine} did not answer "${action} ${target}" in 120 s` }); }, 120000);
       r.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });
-      r.ws.send(JSON.stringify({ t: 'proc', id, action, target }));
+      r.ws.send(JSON.stringify({ t: 'proc', id, action, target, args }));
     });
     return { ...reply, where: r.machine };
   }
-  return { ...(await localTargets.act(action, target)), where: 'this machine' };
+  return { ...(await localTargets.act(action, target, args)), where: 'this machine' };
 }
 
 /*

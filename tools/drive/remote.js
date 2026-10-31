@@ -71,7 +71,7 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
       }
       else if (m.t === 'proc') {
         line(`${m.action} ${m.target}`);
-        const r = await targets.act(m.action, m.target).catch((e) => ({ ok: false, why: e.message }));
+        const r = await targets.act(m.action, m.target, m.args || {}).catch((e) => ({ ok: false, why: e.message }));
         /* last words are long: the server keeps them; here, their size */
         line(`${m.action} ${m.target}: ${!r.ok ? r.why : m.action === 'last-words' ? `${String(r.what).split('\n').length} lines sent` : r.what}`);
         toServer({ t: 'proc-reply', id: m.id, ...r });

@@ -75,6 +75,48 @@ function follow(name, onLine) {
   try { const w = fs.watch(file, read); read(); return w; } catch { return null; }
 }
 
+/* a short command in a folder, under its watchdog */
+function runIn(cwd, cmd, args, timeout) {
+  return new Promise((resolve) => execFile(cmd, args, { cwd, windowsHide: true, timeout }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() })));
+}
+
+/*
+ * THE WEB APP'S KEY (was tools/box/softkey-gadget.sh): the testnet SOFT key as a real USB OnlyKey on the box (the
+ * emulator's dummy_hcd gadget), so the browser reaches it over WebAuthn - or hard key 2 (DRIVE_WEBAPP_KEY=hard). The
+ * gadget runs a COPY of the box desktop app's testnet soft key: two firmware runs on one flash would corrupt it. The
+ * firmware's own restart (CPU_RESTART: config mode, a wipe, its timeouts) ends the emulator process; its exit is the
+ * event to start it again on the same storage, so it comes back the way a hard key does. It outlives the browser: a
+ * web app restart is a page reload, not a key unplugged.
+ */
+const KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' ? 'hard' : 'gadget';
+const EMU = process.env.EMU || path.join(ROOT, 'node-onlykey-emulator', 'emulator');
+const GADGET_STORE = path.join(ROOT, 'webapp-softkey');
+const GADGET_SRC = path.join(os.homedir(), '.config/Electron-test/okemu/plugins-config.edge-test');
+const GADGET_SOCK = '/tmp/okemu-webapp.sock';
+let gadgetChild = null;
+let gadgetStopping = false;
+function gadgetElsewhere() {
+  if (!LINUX) return [];
+  return fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d)).filter((d) => {
+    try { return fs.readFileSync(`/proc/${d}/cmdline`, 'utf8').includes(`bin/daemon.js\0--storage\0${GADGET_STORE}`); } catch { return false; }
+  }).map(Number);
+}
+function gadget() {
+  if (gadgetChild && !exited(gadgetChild)) return 'its gadget soft key already runs';
+  const other = gadgetElsewhere();
+  if (other.length) return `its gadget soft key already runs (pid ${other.join(', ')}, not started here)`;
+  if (!fs.existsSync(GADGET_STORE)) fs.cpSync(GADGET_SRC, GADGET_STORE, { recursive: true });
+  gadgetStopping = false;
+  const startOne = () => {
+    gadgetChild = spawn(NODE, ['bin/daemon.js', '--storage', GADGET_STORE, '--socket', GADGET_SOCK], {
+      cwd: EMU, detached: LINUX, stdio: ['ignore', fs.openSync(path.join(LOGS, 'webapp-softkey.log'), 'a'), fs.openSync(path.join(LOGS, 'webapp-softkey.log'), 'a')],
+    });
+    gadgetChild.once('exit', () => { if (!gadgetStopping) startOne(); });
+  };
+  startOne();
+  return `its gadget soft key started (${GADGET_STORE})`;
+}
+
 /* the end of a target's output log (launch() writes LOGS/<name>.log) */
 function tail(name, n) {
   try { return fs.readFileSync(path.join(LOGS, `${name}.log`), 'utf8').split('\n').slice(-n).join('\n'); } catch (e) { return `(no log: ${e.message})`; }
@@ -182,7 +224,20 @@ function createTargets(line = () => {}, out = () => {}) {
         { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });
         running.set('webapp', [serve, browser]);
         followOut('webapp', 'webapp-chromium');
-        return 'started';
+        return `started${KEY === 'gadget' ? ` (${gadget()})` : ' (its key: hard key 2 on this USB)'}`;
+      },
+      /*
+       * A PRESS ON THE WEB APP'S KEY (the drive's answer to "[press] key waits", src/hostChallenge.ts): the key is outside
+       * the browser, so this machine presses it - the gadget soft key through the emulator's own socket, or hard key 2
+       * through its DEBUG console (DRIVE_WEBAPP_KEY=hard; tools/box/hardkey-press.js). buttons: ['1'] or a code.
+       */
+      async press({ buttons = ['1'] } = {}) {
+        const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
+        if (!b.length) b.push('1');
+        const r = KEY === 'hard'
+          ? await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...b], 70000)
+          : await runIn(EMU, NODE, ['bin/press.js', `--socket=${GADGET_SOCK}`, '--quiet', ...b], 30000);
+        return r.ok ? `pressed ${b.join(' ')} on the ${KEY === 'hard' ? 'hard key' : 'gadget soft key'}` : `press failed: ${r.out.split('\n').pop()}`;
       },
       async stop() {
         const c = running.get('webapp') || [];
@@ -289,7 +344,7 @@ function createTargets(line = () => {}, out = () => {}) {
 
   return {
     list: Object.keys(T),
-    async act(action, target) {
+    async act(action, target, args = {}) {
       const t = T[target];
       if (!t) return { ok: false, why: `no target "${target}" (${Object.keys(T).join(', ')})` };
       if (action === 'start') return { ok: true, what: await t.start() };
@@ -298,6 +353,7 @@ function createTargets(line = () => {}, out = () => {}) {
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
+      if (action === 'press') return t.press ? { ok: true, what: await t.press(args) } : { ok: false, why: `${target}'s key is in the app: the drive taps its own button` };
       return { ok: false, why: `no action "${action}"` };
     },
   };
