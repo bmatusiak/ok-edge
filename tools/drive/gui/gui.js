@@ -47,7 +47,7 @@ function classOf(l) {
 const tabs = new Map(); /* name -> {button, dot, log, shots, lazy, seen} */
 let current = DRIVE;
 
-function tabOf(name) {
+function tabOf(name, kind = 'app') {
   if (tabs.has(name)) return tabs.get(name);
   const button = document.createElement('button');
   const dot = document.createElement('span');
@@ -57,7 +57,7 @@ function tabOf(name) {
   button.onclick = () => show(name);
   $('tabs').appendChild(button);
   const log = document.createElement('div');
-  log.className = 'log hidden';
+  log.className = `log hidden${kind === 'cmd' ? ' cli' : ''}`;
   $('logs').appendChild(log);
   const shots = document.createElement('div');
   shots.className = 'shots hidden';
@@ -70,12 +70,12 @@ function tabOf(name) {
       try { e.target.src = `data:image/png;base64,${fs.readFileSync(e.target.dataset.file).toString('base64')}`; } catch { e.target.alt = 'gone'; }
     }
   }, { root: shots, rootMargin: '400px' });
-  const t = { button, dot, log, shots, lazy, seen: new Set() };
+  const t = { button, dot, log, shots, lazy, seen: new Set(), kind };
   tabs.set(name, t);
   /* an app's tab opens with what it said before the window saw it (the server keeps its last 300 lines) */
-  if (name !== DRIVE && name !== RUNS_TAB && mod.recentOf) for (const l of mod.recentOf(name)) addLine(name, l);
+  if (kind === 'app' && name !== DRIVE && name !== RUNS_TAB && mod.recentOf) for (const l of mod.recentOf(name)) addLine(name, l);
   /* and with its saved pictures */
-  if (name !== DRIVE && name !== RUNS_TAB) for (const p of past) if (p.shell === name) addShotTo(name, p.f, false);
+  if (kind === 'app' && name !== DRIVE && name !== RUNS_TAB) for (const p of past) if (p.shell === name) addShotTo(name, p.f, false);
   if (name === current) show(name);
   return t;
 }
@@ -208,7 +208,7 @@ function showStatus() {
       tabOf(a.shell);
       chips.push(['ok', `${a.shell}${a.via ? ` via ${a.via}` : ''}${a.flags && a.flags.phase ? ` - ${a.flags.phase}` : ''}`]);
     }
-    for (const [n, t] of tabs) if (n !== DRIVE) t.dot.classList.toggle('up', up.has(n));
+    for (const [n, t] of tabs) if (t.kind === 'app' && n !== DRIVE && n !== RUNS_TAB) t.dot.classList.toggle('up', up.has(n));
   }
   tabs.get(DRIVE).dot.classList.add('up');
   $('chips').replaceChildren(...chips.map(([c, t]) => { const e = document.createElement('span'); e.className = `chip ${c}`; e.textContent = t; return e; }));
@@ -222,6 +222,24 @@ show(DRIVE);
 /* a connect or disconnect always logs a drive line: the status is redrawn on each */
 mod.bus.on('line', (l) => { addLine(DRIVE, l); showStatus(); });
 mod.bus.on('app-line', (shell, l) => addLine(shell, l));
+/*
+ * COMMAND TABS (Brad, 2026-10-31: "a build output tab and a tab style for cli commands"): a build or a CLI run on a
+ * machine, live in a tab of its own with a terminal's look - "$ command" first, its output as it comes, "exit N" last.
+ * Its dot: running (amber), done (green), failed (red). The same command again reuses its tab, under a rule.
+ */
+mod.bus.on('cmd', (name, ev, machine) => {
+  const t = tabOf(name, 'cmd');
+  const stamp = new Date().toTimeString().slice(0, 8);
+  if (ev.t === 'start') {
+    if (t.log.childElementCount) addLine(name, '──────────');
+    addLine(name, `${stamp} $ ${ev.cmd}    (${machine})`);
+    t.dot.className = 'dot run';
+  } else if (ev.t === 'line') addLine(name, ev.text);
+  else if (ev.t === 'end') {
+    addLine(name, `${stamp} exit ${ev.code} ${ev.code === 0 ? '✓' : '✗'}`);
+    t.dot.className = `dot ${ev.code === 0 ? 'up' : 'fail'}`;
+  }
+});
 mod.bus.on('shot', (file, shell) => addShot(file, shell));
 mod.bus.on('sample', (file, shell) => addShot(file, shell));
 listPast();

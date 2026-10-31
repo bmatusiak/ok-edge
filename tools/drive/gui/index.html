@@ -18,6 +18,10 @@
   nav button.on { color: var(--text); border-bottom-color: var(--accent); }
   nav button .dot { margin-right: 6px; color: var(--dim); }
   nav button .dot.up { color: var(--ok); }
+  nav button .dot.run { color: var(--warn); }
+  nav button .dot.fail { color: var(--bad); }
+  /* a command's tab (a build, the CLI): a terminal's look */
+  .log.cli { background: #07090b; color: #c8d3c0; font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; line-height: 1.35; }
   main { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
   .log { overflow-y: auto; padding: 6px 12px; white-space: pre-wrap; word-break: break-word; min-height: 0; }
   .log .fail { color: var(--bad); } .log .pass { color: var(--ok); } .log .press { color: var(--warn); } .log .run { color: var(--accent); }

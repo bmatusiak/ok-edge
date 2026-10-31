@@ -9,11 +9,16 @@
  */
 const WebSocket = require('ws');
 
-const argv = process.argv.slice(2);
+/* everything after "--" goes to the script untouched (run.js cli --app desktop -- edge status --test-mode) */
+const all = process.argv.slice(2);
+const dd = all.indexOf('--');
+const argv = dd >= 0 ? all.slice(0, dd) : all;
+const passed = dd >= 0 ? all.slice(dd + 1) : [];
 const at = argv.indexOf('--app');
 const app = at >= 0 ? argv[at + 1] : undefined;
 const rest = at >= 0 ? argv.filter((_, i) => i !== at && i !== at + 1) : argv;
-const [script, ...args] = rest;
+const [script, ...own] = rest;
+const args = [...own, ...passed];
 if (!script) { console.error('usage: run.js <script> [--app desktop|webapp|android] [args...]'); process.exit(2); }
 
 const ws = new WebSocket(`ws://127.0.0.1:${process.env.DRIVE_PORT || 8790}/control`);

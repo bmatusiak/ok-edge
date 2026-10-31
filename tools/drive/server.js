@@ -518,7 +518,7 @@ wss.on('connection', (ws, req) => {
  */
 const TOKEN = (process.env.DRIVE_TOKEN || (() => { try { return fs.readFileSync(path.join(require('os').homedir(), '.onlykey-drive-token'), 'utf8'); } catch { return ''; } })()).trim();
 const remotes = new Map(); /* url -> {ws, machine, targets, waiting} */
-const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l));
+const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l), (name, ev) => cmdEvent('this machine', name, ev));
 
 /*
  * A TARGET'S OWN OUTPUT (drive debugging #3) - the desktop's main process (the soft key host, IPC), the web app's
@@ -527,6 +527,17 @@ const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l
  * prefixes.
  */
 const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]', '[net]', '[gadget]'];
+/*
+ * A COMMAND ON A MACHINE (a build, the lib's CLI - targets.js streamIn), for the drive window's command tabs (bus
+ * 'cmd'): its start and its end are drive lines too, so a run's record and the drive tab say what ran and how it ended.
+ * Its output is a debug build's, or the CLI against a testnet key - nothing the live chain says.
+ */
+function cmdEvent(machine, name, ev) {
+  if (ev.t === 'start') line(`[${name}] $ ${ev.cmd} (${machine})`);
+  if (ev.t === 'end') line(`[${name}] exit ${ev.code}${ev.code === 0 ? '' : ' - failed'}`);
+  bus.emit('cmd', name, ev, machine);
+}
+
 /* lines a process wrote before its app connected (its start-up): held, then handed to the app's record when it does */
 const outBefore = new Map(); /* shell -> lines */
 function appOut(shell, l) {
@@ -570,7 +581,8 @@ function dialRemote(url, again = false) {
     if (m.t === 'app-msg') { const s = r.socks.get(m.cid); if (s) s.emit('message', m.data); return; }
     if (m.t === 'app-close') { const s = r.socks.get(m.cid); if (s) { r.socks.delete(m.cid); s.readyState = 3; s.emit('close'); } return; }
     if (m.t === 'proc-reply') { const w = r.waiting.get(m.id); if (w) { r.waiting.delete(m.id); w(m); } return; }
-    if (m.t === 'app-out') appOut(String(m.shell), String(m.line));
+    if (m.t === 'app-out') { appOut(String(m.shell), String(m.line)); return; }
+    if (m.t === 'cmd') cmdEvent(r.machine, String(m.name), m.ev || {});
   });
   ws.on('error', (e) => { if (!again) line(`drive-remote ${url}: ${e.message} - dialing it again every 5 s while it is gone`); });
   ws.on('close', () => {
@@ -604,7 +616,7 @@ async function proc(action, target, args = {}) {
     if (r.ws.readyState !== 1 || !r.targets.includes(target)) continue;
     const id = r.nextId++;
     /* the machine's answer, under its watchdog: 2 minutes, a build 30 (a cold Gradle build is long) */
-    const life = action === 'build' ? 30 * 60 : 120;
+    const life = action === 'build' ? 30 * 60 : action === 'cli' ? 10 * 60 : 120;
     const reply = await new Promise((resolve) => {
       const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${r.machine} did not answer "${action} ${target}" in ${life} s` }); }, life * 1000);
       r.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });

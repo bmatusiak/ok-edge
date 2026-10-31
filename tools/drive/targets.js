@@ -75,6 +75,41 @@ function follow(name, onLine) {
   try { const w = fs.watch(file, read); read(); return w; } catch { return null; }
 }
 
+/*
+ * A COMMAND, SEEN AS IT RUNS (Brad, 2026-10-31: "drive should have a build output tab and a tab style for cli
+ * commands"): every line of its output goes to onEvent as it comes - {t:'start', cmd} first, {t:'line', text} each,
+ * {t:'end', code} last - and the drive window gives the command a tab of its own. Its whole output also comes back
+ * (out), and it ends under its watchdog. No shell: the command and its arguments as given.
+ */
+function streamIn(cwd, cmd, args, { timeout, env, onEvent = () => {} } = {}) {
+  return new Promise((resolve) => {
+    onEvent({ t: 'start', cmd: [cmd, ...args].join(' ') });
+    let all = '';
+    let rest = '';
+    let child;
+    try {
+      child = spawn(cmd, args, { cwd, env: env || process.env, windowsHide: true, shell: !LINUX && /\.(cmd|bat)$/i.test(cmd) });
+    } catch (e) { onEvent({ t: 'end', code: -1 }); resolve({ ok: false, out: e.message }); return; }
+    const feed = (data) => {
+      const text = String(data);
+      all += text;
+      const lines = (rest + text).split(/\r?\n/);
+      rest = lines.pop();
+      for (const l of lines) onEvent({ t: 'line', text: l });
+    };
+    child.stdout.on('data', feed);
+    child.stderr.on('data', feed);
+    const dog = timeout ? setTimeout(() => { onEvent({ t: 'line', text: `[drive] no end in ${Math.round(timeout / 1000)} s - ended` }); end(child, 'SIGKILL'); }, timeout) : null;
+    child.on('error', (e) => { all += `\n${e.message}`; onEvent({ t: 'line', text: e.message }); });
+    child.on('close', (code) => {
+      if (dog) clearTimeout(dog);
+      if (rest) onEvent({ t: 'line', text: rest });
+      onEvent({ t: 'end', code });
+      resolve({ ok: code === 0, out: all.trim() });
+    });
+  });
+}
+
 /* a short command in a folder, under its watchdog */
 function runIn(cwd, cmd, args, timeout) {
   return new Promise((resolve) => execFile(cmd, args, { cwd, windowsHide: true, timeout }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() })));
@@ -226,7 +261,7 @@ async function endStrays(line) {
  * createTargets(line, out): line(text) is this machine's own log; out(shell, text) is a target's output, line by line,
  * for the drive's tab of that app (#3).
  */
-function createTargets(line = () => {}, out = () => {}) {
+function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
   const running = new Map(); /* target -> its child (or children) */
   const followers = new Map(); /* target -> its output's watcher */
   const followOut = (target, name) => {
@@ -455,21 +490,34 @@ function createTargets(line = () => {}, out = () => {}) {
   const NPM = LINUX ? 'npm' : 'npm.cmd';
   const built = (name, r) => (r.ok ? { ok: true, what: `${name} built` } : { ok: false, why: `${name} build failed: ${r.out.split('\n').slice(-4).join(' | ')}` });
   const logBuild = (target, r) => { try { fs.writeFileSync(path.join(LOGS, `build-${target}.log`), r.out); } catch { /* the reply has the end */ } return r; };
+  /* a build's output, live, in the drive window's "build <target>" tab (streamIn) */
+  const shown = (name) => ({ onEvent: (ev) => cmd(name, ev) });
   const build = {
-    async desktop() { return built('the desktop test export', logBuild('desktop', await runIn(EDGE, NPM, ['run', 'build:desktop:test'], 20 * 60000))); },
-    async webapp() { return built('the web app (docs/, --dev)', logBuild('webapp', await runIn(EDGE, NPM, ['run', 'build:webapp'], 20 * 60000))); },
+    async desktop() { return built('the desktop test export', logBuild('desktop', await streamIn(EDGE, NPM, ['run', 'build:desktop:test'], { timeout: 20 * 60000, ...shown('build desktop') }))); },
+    async webapp() { return built('the web app (docs/, --dev)', logBuild('webapp', await streamIn(EDGE, NPM, ['run', 'build:webapp'], { timeout: 20 * 60000, ...shown('build webapp') }))); },
     async android() {
       const sdk = process.env.ANDROID_HOME || path.join(os.homedir(), LINUX ? 'Android/Sdk' : 'AppData/Local/Android/Sdk');
-      const g = await new Promise((resolve) => execFile(path.join(EDGE, 'android', LINUX ? 'gradlew' : 'gradlew.bat'), ['assembleDebug', '-q'], {
-        cwd: path.join(EDGE, 'android'), windowsHide: true, timeout: 30 * 60000, maxBuffer: 64 * 1024 * 1024,
-        env: { ...process.env, ANDROID_HOME: sdk, OKEDGE_APP_ID: APP_ID, OKRN_DEBUG_LOCK: 'off' },
-      }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() })));
+      const g = await streamIn(path.join(EDGE, 'android'), path.join(EDGE, 'android', LINUX ? 'gradlew' : 'gradlew.bat'), ['assembleDebug'], {
+        timeout: 30 * 60000, env: { ...process.env, ANDROID_HOME: sdk, OKEDGE_APP_ID: APP_ID, OKRN_DEBUG_LOCK: 'off' }, ...shown('build android'),
+      });
       logBuild('android', g);
       if (!g.ok) return built('the debug APK', g);
-      const inst = await adb(['install', '-r', path.join(EDGE, 'android/app/build/outputs/apk/debug/app-debug.apk')]);
+      const inst = await streamIn(EDGE, ADB, ['-s', process.env.ANDROID_SERIAL || '26251JEGR09693', 'install', '-r', path.join(EDGE, 'android/app/build/outputs/apk/debug/app-debug.apk')], { timeout: 5 * 60000, ...shown('install android') });
       return inst.ok ? { ok: true, what: 'the debug APK built and installed (data kept)' } : { ok: false, why: `install: ${inst.out.split('\n').pop()}` };
     },
   };
+
+  /*
+   * THE LIB'S CLI ON THIS MACHINE (onlykey-js - for a hard key the CLI is the app), its output live in its own tab
+   * ("cli <args>"). No input: a question it asks is answered "no" by its closed stdin - the CLI's own rule for a pipe.
+   */
+  async function cli(args = []) {
+    const tool = path.join(ROOT, 'node-onlykey-lib', 'cli', 'index.js');
+    if (!fs.existsSync(tool)) return { ok: false, why: `no ${tool} on this machine` };
+    const name = `cli ${args.join(' ')}`.slice(0, 60);
+    const r = await streamIn(ROOT, NODE, [tool, ...args], { timeout: 10 * 60000, ...shown(name) });
+    return r.ok ? { ok: true, what: r.out.split('\n').slice(-12).join('\n') } : { ok: false, why: `exit not 0: ${r.out.split('\n').slice(-6).join(' | ')}` };
+  }
 
   return {
     list: Object.keys(T),
@@ -483,6 +531,7 @@ function createTargets(line = () => {}, out = () => {}) {
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
+      if (action === 'cli') return cli(args.argv || []);
       if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }
       if (action === 'key-state') return t.keyState ? { ok: true, what: await t.keyState() } : { ok: false, why: `${target}'s key is in the app: its flags say its state` };
       if (action === 'press') return t.press ? { ok: true, what: await t.press(args) } : { ok: false, why: `${target}'s key is in the app: the drive taps its own button` };
