@@ -28,7 +28,6 @@ import {afterLogin, localCard} from '../loginCard';
 import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
-import {Linking} from 'react-native';
 import {setDriveFlag} from '../drive/registry';
 
 /*
@@ -194,7 +193,10 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         <View style={styles.elsewhere}>
           <Text style={[styles.hint, styles.press]}>{`This key belongs to ${read.site} - not this page (${location!.hostname}).`}</Text>
           <Text style={styles.hint}>Its Edge history and its bucket are bound to that site: here they cannot open, and nothing this page makes reaches them.</Text>
-          <Btn title={`Go to ${read.site}`} tone="primary" onPress={() => { void Linking.openURL(`https://${read.site}/`); }} />
+          {/* the same tab, with the same query (Brad, 2026-10-31: "the button that takes you to the site should keep the
+              same tab" - "with same query"): a redirect, not a second tab left behind on the wrong site holding its own
+              requests; the query (?testing-mode=...) goes along */}
+          <Btn title={`Go to ${read.site}`} tone="primary" onPress={() => { location!.assign(`https://${read.site}/${location!.search}`); }} />
         </View>
       ) : null}
       <View style={styles.action}>
