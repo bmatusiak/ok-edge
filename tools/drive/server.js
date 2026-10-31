@@ -298,6 +298,8 @@ function driveFor(app, say) {
     expectGone(app.shell);
     if (act) await act();
     const next = await back;
+    /* back: from here a going is not asked for (a start set the mark with no old app to use it up) */
+    expected.delete(app.shell);
     app.off('log', remember);
     say(`${next.shell} is back (${next.net})`);
     return driveFor(next, say);
