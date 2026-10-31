@@ -46,11 +46,13 @@ async function takeOtherLogs(ownIdHex: string, soft: SoftKeyEdge): Promise<void>
   const {logblocks, copyfile} = require('node-onlykey-lib/edge');
   const open = tradeBucket();
   if (!open) return;
-  /* judged only under this device's owner key (its own nametag statement): none yet - nothing marked, asked again later */
-  if (!(await require('./edgeDevices').ownerKey(soft))) {
-    if (saidShared.get('others') !== 'no owner key') { saidShared.set('others', 'no owner key'); console.log("[edge] other devices' logs: waiting - the key did not give its owner keys (locked, or an older firmware)"); }
-    return;
-  }
+  /*
+   * NO OWNER-KEY OR STATEMENT GATE (Brad, 2026-10-31: "the whole point is to plugin my key and see the history"; merge
+   * is offline verification only): a log merges when it verifies against its own checkpoint and keys. A nametag
+   * statement, when there is one, only names it - a log the CLI filed (key 2's, box 2026-10-31) has none, and was
+   * never even judged.
+   */
+  void soft;
   const own = logblocks.devOf(ownIdHex);
   for (const store of currentNet() === 'test' ? ['edge-logs-test'] : ['edge-logs']) {
     const recs = (open.bucket.stores[store] ?? {}) as Record<string, {v: string | null; at: string; archived?: boolean}>;
@@ -62,8 +64,8 @@ async function takeOtherLogs(ownIdHex: string, soft: SoftKeyEdge): Promise<void>
       if (takenOther.has(mark)) continue;
       takenOther.add(mark);
       const j = logblocks.join(Object.fromEntries(mine.map(([k, r]) => [k, r.v as string])), JSON.parse(recs[`${dev}.meta`].v as string).deviceId);
-      if (!j || !j.links.length || !j.checkpoint || !j.statement || !j.publicKey) {
-        console.log(`[edge] other devices' logs: ${dev.slice(0, 8)} has no checkpoint - not judged`);
+      if (!j || !j.links.length || !j.checkpoint || !j.publicKey) {
+        console.log(`[edge] other devices' logs: ${dev.slice(0, 8)} has ${!j || !j.links.length ? 'no links' : !j.checkpoint ? 'no checkpoint' : 'no public key'} - not judged`);
         continue;
       }
       const c = copyfile.fromJSON(j, fromHex(j.deviceId));

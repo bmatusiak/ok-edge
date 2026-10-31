@@ -560,7 +560,18 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
    * both halves against the key's own public keys, and hold only what comes after it. A key that will not give a
    * checkpoint that verifies for its current head leaves the copy as it was (the full read below, as before).
    */
-  if (!mirror.links.length && !mirror.lastSeen && !mirror.anchor && head.seq >= 0 && source.copyKey) {
+  /*
+   * ...UNLESS THE KEY STILL HOLDS THE CHAIN'S START (box, 2026-10-31: two soft keys restored from one backup each began
+   * their copy at their login card, #9 - the CONTINUE at #6 that says where each forked was never read, so the Edge
+   * tab could not show the restore as a fork, nor the two forks of one backup as the flag). A chain that starts in
+   * the ring - at #0, or with a restored device's CONTINUE - is read from its start; the lib welds from there.
+   */
+  const ringStart = !mirror.links.length && !mirror.lastSeen && !mirror.anchor && head.seq >= 0
+    ? (head.ringFrom === 0 ? 'genesis' : await source.read(head.ringFrom, 1).then(
+      ([r]) => (r && chain.decodeLink(r.link).op === OP_CONTINUE ? 'continue' : null), () => null))
+    : null;
+  if (ringStart) console.log(`[edge] copy ${toHex(source.deviceId).slice(0, 8)}: a new copy - the key still holds the chain's start (${ringStart} at #${head.ringFrom}); reading it all`);
+  if (!ringStart && !mirror.links.length && !mirror.lastSeen && !mirror.anchor && head.seq >= 0 && source.copyKey) {
     const k = await source.copyKey({checkpoint: true}).catch(() => null);
     const cp = k?.checkpoint;
     let good = false;
