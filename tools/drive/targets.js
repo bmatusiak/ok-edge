@@ -44,6 +44,11 @@ function launch(name, cmd, args, env = {}) {
   return spawn(cmd, args, { cwd: EDGE, env: { ...process.env, ...env }, detached: LINUX, stdio: ['ignore', out, out], shell: !LINUX, windowsHide: false });
 }
 
+/* the end of a target's output log (launch() writes LOGS/<name>.log) */
+function tail(name, n) {
+  try { return fs.readFileSync(path.join(LOGS, `${name}.log`), 'utf8').split('\n').slice(-n).join('\n'); } catch (e) { return `(no log: ${e.message})`; }
+}
+
 const exited = (child) => child.exitCode !== null || child.signalCode !== null;
 /* the child's own exit event, or the watchdog */
 const exitOf = (child, ms) => new Promise((resolve) => {
@@ -165,6 +170,29 @@ function createTargets(line = () => {}) {
     },
   };
 
+  /*
+   * LAST WORDS (drive debugging #1, Brad 2026-10-31: "yes i like it all"): an app that went without being asked cannot
+   * say why - the machine it ran on can. Android keeps a crash buffer and its own record of why each process ended
+   * (ApplicationExitInfo: crash, native crash, low memory, killed); a desktop or web app here is our child, so its exit
+   * code and the end of its output log say it.
+   */
+  const exitOf_ = (c) => (!c ? 'not started here' : exited(c) ? `exited: code ${c.exitCode}${c.signalCode ? `, signal ${c.signalCode}` : ''}` : `still running (pid ${c.pid}) - the app closed its connection, the process did not end`);
+  const lastWords = {
+    async android() {
+      const why = await adb(['shell', 'dumpsys', 'activity', 'exit-info', APP_ID]);
+      const crash = await adb(['logcat', '-b', 'crash', '-d', '-t', '80']);
+      const first = why.out.split('\n').filter((l) => /ApplicationExitInfo|reason|description|timestamp|importance/i.test(l)).slice(0, 8).join('\n');
+      return `== Android's record of the last exits (dumpsys activity exit-info ${APP_ID})\n${first || why.out.slice(0, 1500)}\n\n== the crash buffer (logcat -b crash, last 80)\n${crash.out || '(empty)'}`;
+    },
+    async desktop() {
+      return `== the process: ${exitOf_(running.get('desktop'))}\n\n== the end of its output (logs/desktop-test.log)\n${tail('desktop-test', 60)}`;
+    },
+    async webapp() {
+      const [serve, browser] = running.get('webapp') || [];
+      return `== the server: ${exitOf_(serve)}\n== the browser: ${exitOf_(browser)}\n\n== the browser's output (logs/webapp-chromium.log)\n${tail('webapp-chromium', 40)}\n\n== the server's output (logs/serve-docs.log)\n${tail('serve-docs', 20)}`;
+    },
+  };
+
   return {
     list: Object.keys(T),
     async act(action, target) {
@@ -173,6 +201,7 @@ function createTargets(line = () => {}) {
       if (action === 'start') return { ok: true, what: await t.start() };
       if (action === 'stop') return { ok: true, what: await t.stop() };
       if (action === 'restart') { const s = await t.stop(); return { ok: true, what: `${s}; ${await t.start()}` }; }
+      if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       return { ok: false, why: `no action "${action}"` };
     },
   };

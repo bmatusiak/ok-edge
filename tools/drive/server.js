@@ -292,6 +292,8 @@ function driveFor(app, say) {
       hellos.on('hello', onHello);
     });
     back.catch(() => {});
+    /* the restart a flow sets off (a "Restart the app" tap) is a going it asked for */
+    expectGone(app.shell);
     if (act) await act();
     const next = await back;
     app.off('log', remember);
@@ -305,6 +307,7 @@ function driveFor(app, say) {
    * app's hello - its own event - and hand back the drive for that new connection; stop ends on its close.
    */
   async function procOrThrow(action, target) {
+    if (action === 'stop' || action === 'restart') expectGone(target);
     const r = await proc(action, target);
     if (!r.ok) throw failure(`${action} ${target} (${r.where}): ${r.why}`);
     say(`${action} ${target} on ${r.where}: ${r.what}`);
@@ -316,6 +319,7 @@ function driveFor(app, say) {
    */
   async function quitApp() {
     if (app.closed || !app.ws) return;
+    expectGone(app.shell);
     const gone = new Promise((resolve) => app.once('close', resolve));
     const r = await app.call({ t: 'quit' }).catch((e) => ({ ok: false, why: e.message }));
     if (!r.ok) { say(`quit: ${r.why} - stopped from outside`); return; }
@@ -383,7 +387,38 @@ function attachApp(sock) {
     line(`app gone: ${app.shell}`);
     app.closed = true;
     app.emit('close');
+    /* not asked by a drive, and not its remote's link dropping: ask the machine it ran on why (lastWordsOf) */
+    const asked = expected.get(app.shell) > Date.now();
+    expected.delete(app.shell);
+    if (sock.remoteGone) line(`[${app.shell}] its drive-remote's link went - the app may still be running`);
+    else if (!asked) void lastWordsOf(app);
   });
+}
+
+/*
+ * GONE WITHOUT BEING ASKED (drive debugging #1, Brad 2026-10-31): a drive's quit, stop or restart - and a flow's
+ * awaited restart - mark the app as expected to go (expectGone, 2 minutes); any other "app gone" asks the target's
+ * machine for its last words (targets.js: Android's exit record and crash buffer, a desktop process's exit and output)
+ * and keeps them beside the pictures with its last screen, its live controls and its last 300 lines. No picture: a
+ * gone app cannot be asked for one - its last screen text stands in.
+ */
+const expected = new Map(); /* shell -> until when its going is expected */
+const expectGone = (shell) => expected.set(shell, Date.now() + 120000);
+async function lastWordsOf(app) {
+  line(`[${app.shell}] gone - not asked by the drive: asking for its last words`);
+  const r = await proc('last-words', app.shell);
+  const words = r.ok ? String(r.what) : `(no last words: ${r.why})`;
+  fs.mkdirSync(SHOTS, { recursive: true });
+  const file = path.join(SHOTS, `${stamp().replace(/:/g, '')}-gone-${app.shell}.log`);
+  fs.writeFileSync(file, [
+    `== ${app.shell} went at ${new Date().toISOString()}, not asked by the drive (${r.where || '?'})`, '', words, '',
+    '== its last screen', app.text || '(none)', '',
+    '== its live controls', app.liveLabels().join(' | ') || '(none)', '',
+    `== its last lines (${app.recent.length})`, ...app.recent, '',
+  ].join('\n'));
+  for (const l of words.split('\n').filter((x) => /reason|description|exited|still running|FATAL|signal|Exception/i.test(x)).slice(0, 6)) bus.emit('app-line', app.shell, `${stamp()} [last words] ${l.trim()}`);
+  line(`[${app.shell}] last words: ${file}`);
+  bus.emit('sample', file, app.shell);
 }
 
 wss.on('connection', (ws, req) => {
@@ -435,7 +470,7 @@ function dialRemote(url, again = false) {
   });
   ws.on('error', (e) => { if (!again) line(`drive-remote ${url}: ${e.message} - dialing it again every 5 s while it is gone`); });
   ws.on('close', () => {
-    for (const s of r.socks.values()) { s.readyState = 3; s.emit('close'); }
+    for (const s of r.socks.values()) { s.readyState = 3; s.remoteGone = true; s.emit('close'); }
     r.socks.clear();
     if (remotes.get(url) === r && r.targets.length) line(`drive-remote ${r.machine} gone - dialing it again every 5 s while it is gone`);
     if (remotes.get(url) === r && REMOTES.includes(url)) setTimeout(() => dialRemote(url, true), 5000);
