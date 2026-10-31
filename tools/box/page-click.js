@@ -3,7 +3,7 @@
 // no screen coordinates. Each label is found as a visible element whose aria-label is that label (--labels shows these
 // as [label]), or else the innermost visible element whose text is exactly that label; a real
 // mouse press and release go to its centre (React Native Web's Pressable answers pointer events, not element.click()).
-//   node tools/box/page-click.js "Create Bucket" [wait:2] ["Passwords" ...]   click in turn
+//   node tools/box/page-click.js "Create Bucket" ["Passwords" ...] ["?Done"]     click in turn; ?Label waits for it, no click
 //   node tools/box/page-click.js --labels                                     what is on screen, clicking nothing
 //   node tools/box/page-click.js --text [chars=3000]                          the page's visible text
 //   node tools/box/page-click.js --eval 'EXPR'                                EXPR's value in the page, as JSON
@@ -89,17 +89,34 @@ const FIND = (label) => `(() => {
   } else if (args[0] === '--labels') {
     console.log((await evaluate(FIND(null))).seen.join(' | '));
   } else {
-    for (const a of args) {
-      if (a.startsWith('wait:')) { await new Promise((r) => setTimeout(r, Number(a.slice(5)) * 1000)); continue; }
+    for (const arg of args) {
+      if (arg.startsWith('wait:')) { await new Promise((r) => setTimeout(r, Number(arg.slice(5)) * 1000)); continue; }
+      /* "?Label": wait until it is there and live, click nothing - a step's end the page shows ("Restart the app") */
+      const only = arg.startsWith('?');
+      const a = only ? arg.slice(1) : arg;
+      /*
+       * THERE AND LIVE, BY EVENT (Brad, 2026-10-31: "your script should be event based, not timer based"): a
+       * MutationObserver in the page looks again on each change - the control appearing, waking from disabled, its
+       * cover (a sheet) going - instead of a poll every 200 ms. The 60 s is an inactivity cutoff: the page went quiet
+       * without it.
+       */
       let at = await evaluate(FIND(a));
-      if (!at || at.x === undefined) throw new Error(`"${a}" is not on screen; there: ${(at?.seen || []).join(' | ')}`);
-      /* a disabled control: wait for it (the page's own work with the key ends - ~6 s a request on a key without 0016), up to 60 s, then say so */
-      for (let n = 0; at && at.disabled && n < 300; n++) {
-        await new Promise((r) => setTimeout(r, 200));
-        at = await evaluate(FIND(a));
-        if (!at || at.x === undefined) throw new Error(`"${a}" left the screen while it was disabled`);
+      if (!at || at.x === undefined || at.disabled) {
+        const r = await call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
+          const find = () => { const f = ${FIND(a)}; return f && f.x !== undefined && !f.disabled ? f : null; };
+          let quiet;
+          const done = (v) => { obs.disconnect(); clearTimeout(quiet); resolve(v); };
+          const rest = () => { clearTimeout(quiet); quiet = setTimeout(() => done(null), 60000); };
+          const obs = new MutationObserver(() => { rest(); const f = find(); if (f) done(f); });
+          obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+          rest();
+          const f = find(); if (f) done(f);
+        })` });
+        at = r.result.result.value || await evaluate(FIND(a));
       }
-      if (at.disabled) throw new Error(`"${a}" stayed ${at.covered ? "covered" : "disabled"} for 60 s - not clicked`);
+      if (!at || at.x === undefined) throw new Error(`"${a}" is not on screen; there: ${(at?.seen || []).join(' | ')}`);
+      if (at.disabled) throw new Error(`"${a}" stayed ${at.covered ? 'covered' : 'disabled'} while the page went quiet for 60 s - not clicked`);
+      if (only) { console.log(`there: "${a}"`); continue; }
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
         await call('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
       }

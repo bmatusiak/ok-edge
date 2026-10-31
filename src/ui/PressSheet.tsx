@@ -220,7 +220,7 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
               fido.canPress ? (
                 !pressed ? (
                   <View style={styles.row}>
-                    <Locate what={`passkey ${fidoAskNow()?.command ?? '?'} ${fidoAskNow()?.rpId ?? '?'}`}>
+                    <Locate what={`passkey ${fidoAskNow()?.command ?? '?'} ${fidoAskNow()?.rpId ?? '?'}`} live={ready}>
                       <Btn large title="Press the soft key" tone="primary" disabled={!ready} onPress={() => { if (!ready || pressed) return; hush(); setPressed(true); fido.confirm(); }} />
                     </Locate>
                   </View>
@@ -256,17 +256,26 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
  * (2026-10-20: "if you controlling the a13, you press the buttons"). A real release keeps its
  * lock and logs nothing.
  */
-export function Locate({what, children}: {what: string; children: React.ReactNode}) {
+/*
+ * THE LINE MEANS "TAP NOW" (Brad, 2026-10-31: "your script should be event based, not timer based"). It was logged
+ * 800 ms after the sheet's first layout, while the button wakes 1 s after the wait is seen (`ready`) - a driver that
+ * tapped on the line hit a disabled button, and one that polled the screen tapped seconds late or after the key gave
+ * up. So it is logged when the button is LIVE (`live`: woken, not refused) and laid out, once per wait.
+ */
+export function Locate({what, live = true, children}: {what: string; live?: boolean; children: React.ReactNode}) {
   const ref = useRef<any>(null);
+  const [laid, setLaid] = useState(false);
+  useEffect(() => {
+    if (!live || !laid || (!__DEV__ && buildInfo.debugLock)) return;
+    /* the next frame: a sheet still sliding in when the button woke reads where it lands, not where it was */
+    const f = requestAnimationFrame(() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => {
+      const r = PixelRatio.get();
+      console.log(`[press] sheet up: ${what} - button at ${Math.round((x + w / 2) * r)},${Math.round((y + h / 2) * r)}`);
+    }));
+    return () => cancelAnimationFrame(f);
+  }, [live, laid, what]);
   return (
-    <View ref={ref} collapsable={false} onLayout={() => {
-      if (!__DEV__ && buildInfo.debugLock) return;
-      /* measured once the sheet has slid in and settled: at its first layout the Edge sheet's Approve read ~195 px high */
-      setTimeout(() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => {
-        const r = PixelRatio.get();
-        console.log(`[press] sheet up: ${what} - button at ${Math.round((x + w / 2) * r)},${Math.round((y + h / 2) * r)}`);
-      }), 800);
-    }}>
+    <View ref={ref} collapsable={false} onLayout={() => setLaid(true)}>
       {children}
     </View>
   );
@@ -336,7 +345,7 @@ function DeriveButtons({d, ready, pressed, onPress}: {d: DeriveWait; ready: bool
     return pressed ? null : (
       <>
         <View style={styles.row}>
-          <Locate what={`derive ${deriveNameOf(d.label) ?? d.label.slice(0, 8)}`}>
+          <Locate what={`derive ${deriveNameOf(d.label) ?? d.label.slice(0, 8)}`} live={ready}>
             <Btn large title="Press the soft key" tone="primary" disabled={!ready} onPress={() => onPress('1')} />
           </Locate>
         </View>
@@ -348,11 +357,14 @@ function DeriveButtons({d, ready, pressed, onPress}: {d: DeriveWait; ready: bool
   return (
     <>
       <Text style={styles.op}>Enter this code on the key: <Text style={[styles.title, {color: theme.text}]}>{d.code?.join(' ')}</Text></Text>
-      <View style={styles.keypad}>
-        {['1', '2', '3', '4', '5', '6'].map(b => (
-          <Btn key={b} large title={b} disabled={!ready} onPress={() => onPress(b)} />
-        ))}
-      </View>
+      {/* the code's own event: "derive code 3 1 4" - a driver taps those three digits, in order, when it comes */}
+      <Locate what={`derive code ${d.code?.join(' ') ?? '?'}`} live={ready}>
+        <View style={styles.keypad}>
+          {['1', '2', '3', '4', '5', '6'].map(b => (
+            <Btn key={b} large title={b} disabled={!ready} onPress={() => onPress(b)} />
+          ))}
+        </View>
+      </Locate>
     </>
   );
 }
@@ -365,7 +377,7 @@ function VendorButtons({w, what, ready, pressed, onPress}: {w: KeyWaiting; what:
       {refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
       {w.mode === 'press' && !pressed ? (
         <View style={styles.row}>
-          <Locate what={what}>
+          <Locate what={what} live={ready && refusal === null}>
             <Btn large title="Press the soft key" tone="primary" disabled={!ready || refusal !== null} onPress={() => onPress('1')} />
           </Locate>
         </View>

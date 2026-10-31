@@ -241,7 +241,7 @@ export function EdgeRequestSheet() {
             {s.phase === 'ask' && refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
             {s.phase === 'ask' && !acting ? (
               <View style={styles.row}>
-                <Locate what={a.kind === 'identity' ? 'agent identity - approve' : `budget ask "${a.view.reason}" - approve`}>
+                <Locate what={a.kind === 'identity' ? 'agent identity - approve' : `budget ask "${a.view.reason}" - approve`} live={!(off || refusal !== null || !!a.blocked)}>
                 <Btn
                   large
                   title="Approve"
@@ -269,7 +269,7 @@ export function EdgeRequestSheet() {
                     </Text>
                     {refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
                     <View style={styles.row}>
-                      <Locate what={a.kind === 'identity' ? 'agent identity press' : `budget press "${a.view.reason}"`}>
+                      <Locate what={a.kind === 'identity' ? 'agent identity press' : `budget press "${a.view.reason}"`} live={!(off || refusal !== null)}>
                         <Btn large title="Press the soft key" tone="primary" disabled={off || refusal !== null} onPress={consent(() => void pressFromSheet())} />
                       </Locate>
                     </View>
