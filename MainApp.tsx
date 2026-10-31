@@ -491,6 +491,7 @@ function Shell() {
   useEffect(() => setDriveFlag('phase', phase), [phase]);
   useEffect(() => setDriveFlag('tab', tab), [tab]);
   useEffect(() => setDriveFlag('key', emu.device), [emu.device]);
+  useEffect(() => setDriveFlag('passed', passed), [passed]);
   /*
    * A LOGIN THIS TAB KEPT (webSession.ts, chosen at the identity check): on a reload the login screen goes on by itself
    * - the key is asked (armWebKey), and the identity check opens the bucket with no press. Once a page load.
