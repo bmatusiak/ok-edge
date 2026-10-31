@@ -20,8 +20,9 @@ CLI=$!
 seen=0
 while kill -0 $CLI 2>/dev/null; do
   sleep 0.5
-  # a line asking for the press - not one saying not to, or that one was made
-  n=$(grep -iE "press" "$LOG" | grep -viE "don.t press|pressed|no press|without a press|press when asked" | wc -l)
+  # only the CLI's own "the key waits now" lines (edge budget: "PRESS the key now"; a pressed sign/certify: "press on
+  # the OnlyKey: <what>") - a heading that mentions a press to come ("answer y/N, then press the key") is not one
+  n=$(grep -E "PRESS the key now|press on the OnlyKey:" "$LOG" | wc -l)
   if [ "$n" -gt "$seen" ]; then
     seen=$n
     sleep 1
