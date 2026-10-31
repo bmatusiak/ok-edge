@@ -30,6 +30,8 @@ const CHANNELS = new Set([
   'okedge:activeKey',
   /* the window's picture of itself, for a drive (src/drive/shot.desktop.ts) */
   'okedge:shot',
+  /* the app closing itself, for a drive (src/drive/quit.desktop.ts) */
+  'okedge:quit',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',

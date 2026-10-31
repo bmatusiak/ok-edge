@@ -92,6 +92,8 @@ ipcMain.handle('okedge:keySite', (e, site) => {
  * page asks (src/drive/shot.desktop.ts, behind the drive's debugging gate).
  */
 ipcMain.handle('okedge:shot', async (e) => (await e.sender.capturePage()).toPNG().toString('base64'));
+/* the app closes itself for a drive's stop or restart - as a window close would, storage flushed (src/drive/quit.desktop.ts) */
+ipcMain.handle('okedge:quit', () => { setImmediate(() => app.quit()); return true; });
 
 /* one channel per thing the page may ask for; preload.js lists the same names */
 ipcMain.handle('okedge:about', () => ({

@@ -10,6 +10,7 @@
  *                fill {field, value}           a registered text field, by its placeholder
  *                state {}                      controls + screen text now
  *                shot {}                       the app's picture of itself (shot.ts: each shell captures its own)
+ *                quit {}                       the app closes itself (quit.ts) - a drive's stop, storage flushed
  *
  * EVENTS, NOT TIMERS (Brad, 2026-10-31): nothing here polls. A dropped connection is dialled again on the app's next
  * change (a control, a log line), never on a clock.
@@ -24,6 +25,7 @@ import {onKeyBusy} from '../keyBusy';
 import {shell} from '../platform';
 import {currentNet, onNet} from '../net';
 import {shot} from './shot';
+import {quit} from './quit';
 
 const URL = process.env.EXPO_PUBLIC_OKEDGE_DRIVE_URL || 'ws://127.0.0.1:8790';
 
@@ -71,6 +73,7 @@ function dial(): void {
      * first hello (2026-10-31: a restarted server waited for an app that was connected all along) */
     else if (m.t === 'hello') { send({t: 'hello', shell, net: currentNet(), os: Platform.OS}); send(controlsMsg()); send({t: 'screen', text: screenText()}); }
     else if (m.t === 'shot') void shot().then(r => reply('png' in r, r));
+    else if (m.t === 'quit') void quit().then(r => reply('ok' in r, r));
     else reply(false, {why: `unknown command "${m.t}"`});
   };
 }

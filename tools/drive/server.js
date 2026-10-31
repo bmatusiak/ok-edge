@@ -235,12 +235,24 @@ function driveFor(app, say) {
     if (!r.ok) throw failure(`${action} ${target} (${r.where}): ${r.why}`);
     say(`${action} ${target} on ${r.where}: ${r.what}`);
   }
+  /*
+   * THE APP CLOSES ITSELF FIRST (2026-10-31: a restart that killed the app's processes lost what Chromium had not
+   * flushed - its copy of its own chain): asked to quit (src/drive/quit.ts), it goes, and its connection closing is
+   * the event. The target's stop after it ends whatever is left (its watchdog: 20 s).
+   */
+  async function quitApp() {
+    if (app.closed || !app.ws) return;
+    const gone = new Promise((resolve) => app.once('close', resolve));
+    const r = await app.call({ t: 'quit' }).catch((e) => ({ ok: false, why: e.message }));
+    if (!r.ok) { say(`quit: ${r.why} - stopped from outside`); return; }
+    say(`${app.shell} asked to close itself`);
+    await Promise.race([gone, new Promise((resolve) => setTimeout(resolve, 20000))]);
+  }
   const start = (target = app.shell, opts) => restarted(() => procOrThrow('start', target), opts);
-  const restart = (target = app.shell, opts) => restarted(() => procOrThrow('restart', target), opts);
+  const restart = (target = app.shell, opts) => restarted(async () => { if (target === app.shell) await quitApp(); await procOrThrow('restart', target); }, opts);
   async function stop(target = app.shell) {
-    const gone = app.closed || !app.ws ? Promise.resolve() : new Promise((resolve) => app.once('close', resolve));
+    if (target === app.shell) await quitApp();
     await procOrThrow('stop', target);
-    if (target === app.shell) await Promise.race([gone, new Promise((resolve) => setTimeout(resolve, 20000))]);
   }
   /* the app up: as it is when connected, else started */
   const up = (opts) => (app.ws && !app.closed ? Promise.resolve(api) : start(app.shell, opts));
