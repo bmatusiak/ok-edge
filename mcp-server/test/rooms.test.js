@@ -102,12 +102,12 @@ test('the sealed copy: a device puts its rows, a fresh device of the identity ca
   const keys = bucketLib.sealedCopy.keysOf(me.bucketKey);
   const phone = await open(dev('Pixel', 'android'));
   const store = phone.sealedStore();
-  if (!(await store.on())) {
-    /* a server not set to keep this identity (a deploy with SEALED_IDENTITIES empty): nothing kept, the put refused */
-    await assert.rejects(store.put({ ['a'.repeat(32)]: { tag: 'b'.repeat(32), blob: 'x' } }), /did not keep/);
-    phone.close();
-    return;
-  }
+  /* every identity syncs: the copy is on whatever the tier (free: dropped after 7 days untouched; lifetime: kept) */
+  assert.equal(await store.on(), true);
+  const tier = store.tier();
+  assert.ok(tier && ['free', 'lifetime'].includes(tier.tier), `the table says its tier: ${JSON.stringify(tier)}`);
+  if (tier.tier === 'free') assert.ok(tier.purgeAt > Date.now(), 'a free copy says when it is dropped');
+  else assert.equal(tier.purgeAt, null);
   const b = bucketLib.create({ owner: me.id });
   bucketLib.kv(b, 'guestbook').setItem('myname', 'Pixel Tester');
   const up = await bucketLib.sealedCopy.syncWith(b, keys, store, { randomBytes, heads: { aaaaaaaaaaaaaaaa: 7 } });
@@ -134,4 +134,40 @@ test('the sealed copy: a device puts its rows, a fresh device of the identity ca
   const table = JSON.stringify(await web.sealedStore().table());
   assert.ok(!/guestbook|myname/.test(table));
   web.close();
+});
+
+test('the free tier: a copy nothing touches for its window is dropped; a touch starts the window again (a test server with SEALED_FREE_MS short)', async (t) => {
+  const path = require('path');
+  const lib = path.dirname(require.resolve('node-onlykey-lib/package.json'));
+  const bucketLib = require('node-onlykey-lib/bucket');
+  const { connectRoom } = require(path.join(lib, 'bucket/src/room-client.js'));
+  const me = await identity(`free ${Date.now()}`);
+  const randomBytes = (n) => new Uint8Array(require('crypto').randomBytes(n));
+  const open = (device) => connectRoom({ url: BASE, me, device, WebSocket, randomBytes });
+  const keys = bucketLib.sealedCopy.keysOf(me.bucketKey);
+  const phone = await open(dev('Pixel', 'android'));
+  const store = phone.sealedStore();
+  await store.on();
+  const tier = store.tier();
+  /* a lifetime server (local dev's *), or a free window too long to wait out here: said, not run */
+  if (!tier || tier.tier !== 'free' || tier.purgeAt - Date.now() > 20000) {
+    phone.close();
+    t.skip(`this server's free window is not a test one (${JSON.stringify(tier)}) - run one with --var SEALED_FREE_MS:4000`);
+    return;
+  }
+  const b = bucketLib.create({ owner: me.id });
+  bucketLib.kv(b, 'guestbook').setItem('myname', 'Pixel Tester');
+  await bucketLib.sealedCopy.syncWith(b, keys, store, { randomBytes });
+  const windowMs = tier.purgeAt - Date.now();
+  /* half the window later a touch (a table) starts it again: still there after the first deadline */
+  await new Promise((r) => setTimeout(r, windowMs / 2));
+  await store.table();
+  await new Promise((r) => setTimeout(r, windowMs / 2 + 500));
+  assert.equal(Object.keys(await store.table()).length, 1, 'a touched copy was dropped');
+  phone.close();
+  /* then nothing touches it for a whole window: dropped */
+  await new Promise((r) => setTimeout(r, windowMs + 2000));
+  const again = await open(dev('Pixel', 'android'));
+  assert.deepEqual(await again.sealedStore().table(), {}, 'an untouched free copy was kept');
+  again.close();
 });

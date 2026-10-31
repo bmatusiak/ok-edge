@@ -20,11 +20,13 @@
   "compatibility_date": "2026-10-23",
   "observability": { "enabled": true },
   /*
-   * SEALED_IDENTITIES (mcp-server/src/index.js sealedOn) - the identities whose sealed copy this server keeps: their
-   * bucket identity ids, comma-separated, or * for all - is a Worker SECRET (`npx wrangler secret put SEALED_IDENTITIES`),
-   * not a var here. Cloudflare builds and deploys the cloudflare branch on every push, from the config written from this
-   * file, and a var here would replace the live value with this one on each deploy; a secret is never touched by a
-   * deploy, and no identity id is in git. Unset: none. Local dev keeps all (--var in server:dev).
+   * LIFETIME_IDENTITIES (mcp-server/src/index.js sealedLifetime) - the identities whose sealed copy is kept for good;
+   * every other identity syncs too, on the free tier: its copy is dropped after 7 days without a touch (Brad,
+   * 2026-10-30). Bucket identity ids, comma-separated, or * for all - a Worker SECRET (`npx wrangler secret put
+   * LIFETIME_IDENTITIES`), not a var here. Cloudflare builds and deploys the cloudflare branch on every push, from the
+   * config written from this file, and a var here would replace the live value with this one on each deploy; a secret
+   * is never touched by a deploy, and no identity id is in git. Unset: none is lifetime. Local dev: all (--var in
+   * server:dev). SEALED_FREE_MS (optional) sets the free tier's window, for a test server.
    */
   "build": { "command": "node mcp-server/build-webapp.js" },
   "assets": {

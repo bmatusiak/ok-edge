@@ -50,11 +50,12 @@ function serverLine(name: string, items: number, sealed: RoomState['sealed']): {
   /* the reverse: another device changed it on the server - older here until the round takes it */
   if (sealed.newer.includes(name)) return {line: `newer on the MCP server · ${sealed.status === 'syncing' ? 'taking it now' : 'waiting to take it'}`, mark: '≠'};
   if (sealed.status === 'syncing') return {line: 'syncing with the MCP server…', mark: '?'};
-  if (sealed.status === 'none') return {line: 'the MCP server keeps no copy for this identity', mark: '≠'};
+  if (sealed.status === 'none') return {line: 'the MCP server keeps no copy for this identity (a server from before every identity synced)', mark: '≠'};
   if (sealed.status === 'error') return {line: `not synced with the MCP server - ${sealed.why ?? 'the last round failed'} (${when(sealed.at)})`, mark: '≠'};
   const x = sealed.stores[name];
   if (!x || !items) return {line: 'not on the MCP server', mark: '≠'};
-  const moved = [x.put ? `sent ${x.put}` : '', x.got ? `took ${x.got}` : ''].filter(Boolean).join(', ');
+  const parts = (n: number) => `${n} part${n === 1 ? '' : 's'}`;
+  const moved = [x.put ? `sent ${parts(x.put)}` : '', x.got ? `took ${parts(x.got)}` : ''].filter(Boolean).join(', ');
   return {line: `on the MCP server · checked ${when(sealed.at)}${moved ? ` · ${moved}` : ''}`, mark: '✓'};
 }
 
@@ -124,6 +125,12 @@ export function SyncScreen() {
       ) : (
         <Text style={styles.note}>No bucket is open on this device.</Text>
       )}
+      {/* the copy's tier (Brad, 2026-10-30: "1 free (temp 7 day) and the lifetime (ones i choose)") */}
+      {room.sealed.tier ? (
+        <Text style={styles.note}>{room.sealed.tier.tier === 'lifetime'
+          ? 'The MCP server keeps this copy for good (lifetime).'
+          : `Free tier: the MCP server keeps this copy until ${room.sealed.tier.purgeAt ? new Date(room.sealed.tier.purgeAt).toLocaleString() : 'a week after the last sync'} - each sync moves that a week on.`}</Text>
+      ) : null}
       {/* units new on the server that this device cannot name until it fetches them (their ids are keyed) */}
       {room.sealed.newerUnknown ? <Text style={styles.note}>{`${room.sealed.newerUnknown} new item${room.sealed.newerUnknown === 1 ? '' : 's'} on the MCP server, not here yet`}</Text> : null}
     </Section>

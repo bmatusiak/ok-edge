@@ -69,12 +69,13 @@ export type RoomState = {
    * stale: the stores changed HERE since the last round ("if a change happens it is stale on the server, and needs to
    * sync, and the panel should reflect") - not on the server until the next round sends them. newer: the reverse - stores
    * another device changed on the server (the room's 'sealed-changed'), older here until the next round takes them;
-   * newerUnknown: units new there that this device cannot name before it fetches them.
+   * newerUnknown: units new there that this device cannot name before it fetches them. tier: what the server said of the
+   * copy - free (dropped after 7 days without a touch; purgeAt) or lifetime (kept) - null from a server older than tiers.
    */
-  sealed: {status: 'unknown' | 'none' | 'synced' | 'error' | 'syncing'; at: number | null; why: string | null; stores: Record<string, {units: number; got: number; put: number}>; stale: string[]; newer: string[]; newerUnknown: number};
+  sealed: {status: 'unknown' | 'none' | 'synced' | 'error' | 'syncing'; at: number | null; why: string | null; stores: Record<string, {units: number; got: number; put: number}>; stale: string[]; newer: string[]; newerUnknown: number; tier: {tier: 'free' | 'lifetime'; purgeAt: number | null} | null};
 };
 
-let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false, stores: {}, sealed: {status: 'unknown', at: null, why: null, stores: {}, stale: [], newer: [], newerUnknown: 0}};
+let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false, stores: {}, sealed: {status: 'unknown', at: null, why: null, stores: {}, stale: [], newer: [], newerUnknown: 0, tier: null}};
 
 /*
  * EACH STORE AS THE SERVER GOT IT at the last round: its units' keys, hashes and times (the lib's replicate.summarize -
@@ -390,7 +391,7 @@ async function sealedSync(why: string): Promise<void> {
   const store = r.sealedStore();
   if (!(await store.on())) {
     if (sealedSaid !== 'off') { sealedSaid = 'off'; console.log('[room] the sealed copy: this server keeps none for this identity'); }
-    set({sealed: {status: 'none', at: Date.now(), why: null, stores: {}, stale: [], newer: [], newerUnknown: 0}});
+    set({sealed: {status: 'none', at: Date.now(), why: null, stores: {}, stale: [], newer: [], newerUnknown: 0, tier: null}});
     markFirstSync();
     return;
   }
@@ -409,7 +410,7 @@ async function sealedSync(why: string): Promise<void> {
   sealedSaid = 'on';
   /* the server holds this bucket as it is now: the prints a later change is compared with */
   sealedPrints = storePrints(open.bucket);
-  set({sealed: {status: 'synced', at: Date.now(), why: null, stores: res.stores ?? {}, stale: [], newer: [], newerUnknown: 0}});
+  set({sealed: {status: 'synced', at: Date.now(), why: null, stores: res.stores ?? {}, stale: [], newer: [], newerUnknown: 0, tier: typeof store.tier === 'function' ? store.tier() : null}});
   console.log(`[room] the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
   markFirstSync();
 }

@@ -12,7 +12,7 @@
     "build:desktop:test": "cross-env OKEDGE_SHELL=desktop expo export --platform web --dev --output-dir dist/desktop-test",
     "build:webapp": "node tools/web-build.js --dev",
     "build:webapp:release": "node tools/web-build.js",
-    "server:dev": "npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787 --var SEALED_IDENTITIES:*",
+    "server:dev": "npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787 --var LIFETIME_IDENTITIES:*",
     "server:test": "node --test mcp-server/test/rooms.test.js mcp-server/test/mcp.test.js",
     "electron": "node electron/start.js",
     "electron:dev": "cross-env OKEDGE_WEB_URL=http://localhost:8091 node electron/start.js",
