@@ -121,8 +121,10 @@ budget_demo() {
     step '?Active' "Approve" || return 1
   fi
   # each sign ends on the state it is for: the use counted; the last one, no live budget left (it completed)
-  local i
-  for i in 1 2; do
+  # from the count the screen shows: a budget a stopped run left at 2 of 3 waited for "1 of 3" that could never come
+  local i spent
+  spent=$(timeout 20 node tools/box/page-click.js --text 8000 | grep -oE "^[0-9] of 3 uses spent" | head -1 | cut -c1)
+  for i in $(seq $(( ${spent:-0} + 1 )) 2); do
     step "?$i of 3 uses spent" "▲ Edge Management" "Agent: a sign the budget pays" "Close Edge Management" || return 1
   done
   step "?No budget. A budget lets an agent use the key a set number of times without a press; you approve it once." \
