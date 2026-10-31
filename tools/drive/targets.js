@@ -446,6 +446,31 @@ function createTargets(line = () => {}, out = () => {}) {
     }, (err, stdout, stderr) => resolve({ ok: true, what: `${stdout}${stderr}`.trim() || (err ? err.message : '(no output)') })));
   }
 
+  /*
+   * AN APP'S BUILD, ON ITS MACHINE (Brad, 2026-10-31: "when re-building for a app, close the app, and open it after
+   * build is complete") - the drive's rebuild script stops the app first and starts it after; this is only the build:
+   * the desktop's test export, the web app's --dev docs/, the phone's debug APK built and installed. Its log goes to
+   * logs/build-<target>.log; the last lines come back when it fails.
+   */
+  const NPM = LINUX ? 'npm' : 'npm.cmd';
+  const built = (name, r) => (r.ok ? { ok: true, what: `${name} built` } : { ok: false, why: `${name} build failed: ${r.out.split('\n').slice(-4).join(' | ')}` });
+  const logBuild = (target, r) => { try { fs.writeFileSync(path.join(LOGS, `build-${target}.log`), r.out); } catch { /* the reply has the end */ } return r; };
+  const build = {
+    async desktop() { return built('the desktop test export', logBuild('desktop', await runIn(EDGE, NPM, ['run', 'build:desktop:test'], 20 * 60000))); },
+    async webapp() { return built('the web app (docs/, --dev)', logBuild('webapp', await runIn(EDGE, NPM, ['run', 'build:webapp'], 20 * 60000))); },
+    async android() {
+      const sdk = process.env.ANDROID_HOME || path.join(os.homedir(), LINUX ? 'Android/Sdk' : 'AppData/Local/Android/Sdk');
+      const g = await new Promise((resolve) => execFile(path.join(EDGE, 'android', LINUX ? 'gradlew' : 'gradlew.bat'), ['assembleDebug', '-q'], {
+        cwd: path.join(EDGE, 'android'), windowsHide: true, timeout: 30 * 60000, maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, ANDROID_HOME: sdk, OKEDGE_APP_ID: APP_ID, OKRN_DEBUG_LOCK: 'off' },
+      }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() })));
+      logBuild('android', g);
+      if (!g.ok) return built('the debug APK', g);
+      const inst = await adb(['install', '-r', path.join(EDGE, 'android/app/build/outputs/apk/debug/app-debug.apk')]);
+      return inst.ok ? { ok: true, what: 'the debug APK built and installed (data kept)' } : { ok: false, why: `install: ${inst.out.split('\n').pop()}` };
+    },
+  };
+
   return {
     list: Object.keys(T),
     async act(action, target, args = {}) {
@@ -457,6 +482,7 @@ function createTargets(line = () => {}, out = () => {}) {
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
+      if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }
       if (action === 'key-state') return t.keyState ? { ok: true, what: await t.keyState() } : { ok: false, why: `${target}'s key is in the app: its flags say its state` };
       if (action === 'press') return t.press ? { ok: true, what: await t.press(args) } : { ok: false, why: `${target}'s key is in the app: the drive taps its own button` };
