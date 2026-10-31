@@ -257,13 +257,16 @@ function holdGadget(onOut) {
  * key through the emulator's own driver is the software devices SWD\DEVGEN\OKVHID_* ("OnlyKey Virtual HID", four
  * interfaces) - present (OK) while the emulator runs. Read with PowerShell's Get-PnpDevice.
  */
-const PS_KEYS = "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB\\\\VID_1D50&PID_60FC\\\\[^&]+$' -or $_.InstanceId -match '^SWD\\\\DEVGEN\\\\OKVHID_' } | ForEach-Object { [pscustomobject]@{ id = $_.InstanceId; status = [string]$_.Status; where = (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_LocationInfo -ErrorAction SilentlyContinue).Data } } | ConvertTo-Json -Compress";
+/* the Teensy HalfKay bootloader a key shows while its button holds it there (Brad, 2026-10-31: "drive needs to tell you when a key in bootloader mode has happened") */
+const BOOTLOADER = '16c0:0478';
+const PS_KEYS = "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB\\\\VID_1D50&PID_60FC\\\\[^&]+$' -or $_.InstanceId -match '^USB\\\\VID_16C0&PID_0478\\\\' -or $_.InstanceId -match '^SWD\\\\DEVGEN\\\\OKVHID_' } | ForEach-Object { [pscustomobject]@{ id = $_.InstanceId; status = [string]$_.Status; where = (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_LocationInfo -ErrorAction SilentlyContinue).Data } } | ConvertTo-Json -Compress";
 async function keysOnWindows() {
   const r = await runIn(EDGE, 'powershell', ['-NoProfile', '-Command', PS_KEYS], 30000);
   let list = [];
   try { list = r.out ? [].concat(JSON.parse(r.out)) : []; } catch { return []; }
-  const keys = list.filter((d) => /^USB\\/.test(d.id) && d.status === 'OK')
+  const keys = list.filter((d) => /^USB\\VID_1D50/i.test(d.id) && d.status === 'OK')
     .map((d) => ({ kind: 'hard', usb: d.where || d.id, serial: d.id.split('\\').pop(), hidraw: [] }));
+  for (const d of list.filter((x) => /^USB\\VID_16C0&PID_0478\\/i.test(x.id) && x.status === 'OK')) keys.push({ kind: 'bootloader', usb: d.where || d.id, serial: null, hidraw: [] });
   const virt = list.filter((d) => /^SWD\\DEVGEN\\OKVHID_/.test(d.id) && d.status === 'OK');
   if (virt.length) keys.push({ kind: 'emulator', usb: 'OnlyKey Virtual HID (driver)', serial: null, hidraw: virt.map((d) => d.id.split('_').pop().toLowerCase()) });
   return keys;
@@ -275,7 +278,10 @@ function keysOnUsb() {
   const read = (p) => { try { return fs.readFileSync(p, 'utf8').trim(); } catch { return ''; } };
   for (const d of fs.readdirSync('/sys/bus/usb/devices')) {
     const dir = `/sys/bus/usb/devices/${d}`;
-    if (`${read(`${dir}/idVendor`)}:${read(`${dir}/idProduct`)}` !== '1d50:60fc') continue;
+    const id = `${read(`${dir}/idVendor`)}:${read(`${dir}/idProduct`)}`;
+    /* a key in its HalfKay bootloader (the person held its button): ready to flash, no OnlyKey interfaces */
+    if (id === BOOTLOADER) { keys.push({ kind: 'bootloader', usb: `${read(`${dir}/busnum`)}/${read(`${dir}/devnum`)}`, serial: null, hidraw: [] }); continue; }
+    if (id !== '1d50:60fc') continue;
     let real = dir;
     try { real = fs.realpathSync(dir); } catch { /* as listed */ }
     const hidraw = [];

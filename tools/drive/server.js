@@ -560,8 +560,15 @@ function cmdEvent(machine, name, ev) {
  */
 let localKeys = null;
 const keyWords = (keys) => (keys === null ? 'not watched there yet' : keys.length ? keys.map((k) => `${k.kind} (usb ${k.usb}${k.serial ? `, serial ${k.serial}` : ''}${k.hidraw && k.hidraw.length ? `, ${k.hidraw.length} hidraw` : ''})`).join(', ') : 'no OnlyKey');
+/* which machines had a key in its bootloader at the last change - so it is said once as it comes, and once as it goes */
+const inBootloader = new Map();
 function keysSaid(machine, keys) {
   line(`[keys] ${machine}: ${keyWords(keys)}`);
+  const boot = (keys || []).filter((k) => k.kind === 'bootloader').length;
+  const was = inBootloader.get(machine) || 0;
+  if (boot > was) line(`[keys] ${machine}: A KEY IS IN BOOTLOADER MODE (HalfKay) - ready to flash`);
+  if (boot < was) line(`[keys] ${machine}: the key left bootloader mode`);
+  inBootloader.set(machine, boot);
   bus.emit('keys', machine, keys);
 }
 localTargets.watchKeys((keys) => { localKeys = keys; if (keys !== null) keysSaid('this machine', keys); });
