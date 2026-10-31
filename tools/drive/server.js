@@ -539,13 +539,47 @@ async function proc(action, target) {
   return { ...(await localTargets.act(action, target)), where: 'this machine' };
 }
 
+/*
+ * RUN RECORDS (drive debugging #5, Brad 2026-10-31): each run keeps a folder - drive-runs/<date>-<time>-<script>-<app>/
+ * with lines.log (every line of it) and run.json (what ran, PASS or FAIL and why, when, how long, the pictures and
+ * samples taken while it ran) - so today's run can be laid beside yesterday's. The window lists them (bus 'run').
+ */
+const RUNS = path.join(path.dirname(SHOTS), 'drive-runs');
+function saveRun({ script, app, args, code, reason, started, lines, files }) {
+  try {
+    const ended = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const id = `${started.getFullYear()}${pad(started.getMonth() + 1)}${pad(started.getDate())}-${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())}-${script.replace(/[^a-z0-9-]/gi, '')}-${app}`;
+    const dir = path.join(RUNS, id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'lines.log'), `${lines.join('\n')}\n`);
+    const record = { id, script, app, args, verdict: code === 0 ? 'PASS' : 'FAIL', reason, started: started.toISOString(), ended: ended.toISOString(), ms: ended - started, files, dir };
+    fs.writeFileSync(path.join(dir, 'run.json'), `${JSON.stringify(record, null, 2)}\n`);
+    bus.emit('run', record);
+  } catch (e) { line(`run record not kept: ${e.message}`); }
+}
+/* the kept runs, newest last (the window lists them) */
+function pastRuns() {
+  try {
+    return fs.readdirSync(RUNS).sort().map((d) => { try { return JSON.parse(fs.readFileSync(path.join(RUNS, d, 'run.json'), 'utf8')); } catch { return null; } }).filter(Boolean);
+  } catch { return []; }
+}
+
 function control(ws) {
   ws.on('message', async (data) => {
     let m;
     try { m = JSON.parse(String(data)); } catch { return; }
     if (m.t !== 'run') return;
     const send = (o) => { try { ws.send(JSON.stringify(o)); } catch { /* the caller went */ } };
-    const watch = (l) => send({ t: 'line', line: l });
+    /* the run's record (#5): its lines, the pictures and samples taken while it ran, its verdict */
+    const runLines = [];
+    const runFiles = [];
+    const onFile = (file) => runFiles.push(file);
+    bus.on('shot', onFile);
+    bus.on('sample', onFile);
+    const started = new Date();
+    let reason = '';
+    const watch = (l) => { runLines.push(l); send({ t: 'line', line: l }); };
     watchers.add(watch);
     let code = 1;
     let shotApp = null;
@@ -566,12 +600,16 @@ function control(ws) {
       say('FINISHED');
       code = 0;
     } catch (e) {
+      reason = String(e.message).split('\n')[0];
       line(`[${m.script}] STOPPED: ${e.message}`);
       /* the picture of where it stopped, taken by the app itself - the newest connection of that shell (a restart makes a new one) */
       const now = shotApp && apps.get(shotApp.shell);
       if (now) await shotOf(now, `${m.script}-stopped`);
     } finally {
       watchers.delete(watch);
+      bus.off('shot', onFile);
+      bus.off('sample', onFile);
+      saveRun({ script: String(m.script), app: (shotApp && shotApp.shell) || m.app || '?', args: m.args || [], code, reason, started, lines: runLines, files: runFiles });
       send({ t: 'end', code });
     }
   });
@@ -599,4 +637,4 @@ function status() {
   };
 }
 
-module.exports = { start, bus, status, shotNow, recentOf, SHOTS };
+module.exports = { start, bus, status, shotNow, recentOf, pastRuns, SHOTS, RUNS };

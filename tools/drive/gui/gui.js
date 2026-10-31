@@ -27,6 +27,8 @@ const mod = require(path.join(nw.__dirname, mode === 'remote' ? 'remote.js' : 's
 const $ = (id) => document.getElementById(id);
 const MAX_LINES = 5000;
 const DRIVE = 'drive';
+/* every run's record (#5): a row each, newest first; a click shows its pictures, a double click opens its folder */
+const RUNS_TAB = 'runs';
 let follow = true;
 
 $('mode').textContent = `drive ${mode} - ${require('os').hostname()}`;
@@ -71,9 +73,9 @@ function tabOf(name) {
   const t = { button, dot, log, shots, lazy, seen: new Set() };
   tabs.set(name, t);
   /* an app's tab opens with what it said before the window saw it (the server keeps its last 300 lines) */
-  if (name !== DRIVE && mod.recentOf) for (const l of mod.recentOf(name)) addLine(name, l);
+  if (name !== DRIVE && name !== RUNS_TAB && mod.recentOf) for (const l of mod.recentOf(name)) addLine(name, l);
   /* and with its saved pictures */
-  if (name !== DRIVE) for (const p of past) if (p.shell === name) addShotTo(name, p.f, false);
+  if (name !== DRIVE && name !== RUNS_TAB) for (const p of past) if (p.shell === name) addShotTo(name, p.f, false);
   if (name === current) show(name);
   return t;
 }
@@ -88,7 +90,7 @@ function show(name) {
   const t = tabs.get(name);
   if (follow) t.log.scrollTop = t.log.scrollHeight;
   $('shotNow').title = name === DRIVE ? 'a picture of every connected app and a sample of the log, now' : `a picture of ${name} and a sample of its log, now`;
-  $('shotsHead').textContent = name === DRIVE ? 'every picture, newest first' : `${name}'s pictures, newest first`;
+  $('shotsHead').textContent = name === DRIVE ? 'every picture, newest first' : name === RUNS_TAB ? 'click a run: its pictures and samples' : `${name}'s pictures, newest first`;
 }
 
 function addLine(name, l) {
@@ -163,7 +165,31 @@ function listPast() {
 let past = [];
 
 /* Brad's button: a picture of what he sees, at the moment he sees it - of the open tab's app, or of every app */
-$('shotNow').onclick = () => (mode === 'remote' ? mod.shotNow() : mod.shotNow('host', current === DRIVE ? undefined : current));
+$('shotNow').onclick = () => (mode === 'remote' ? mod.shotNow() : mod.shotNow('host', current === DRIVE || current === RUNS_TAB ? undefined : current));
+
+/* ---------------------------------------------------------------- runs (#5) */
+
+function addRun(rec, fresh = true) {
+  const t = tabOf(RUNS_TAB);
+  const row = document.createElement('div');
+  const when = new Date(rec.started).toLocaleString();
+  const secs = Math.round(rec.ms / 1000);
+  const dur = secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`;
+  row.textContent = `${rec.verdict === 'PASS' ? '✓' : '✗'} ${when}  ${rec.script} on ${rec.app}  ${dur}${rec.reason ? `  - ${rec.reason}` : ''}`;
+  row.className = rec.verdict === 'PASS' ? 'pass' : 'fail';
+  row.style.cursor = 'pointer';
+  row.title = rec.dir;
+  /* its pictures and samples in the picture bar; its folder on a double click */
+  row.onclick = () => {
+    t.shots.replaceChildren();
+    t.seen.clear();
+    for (const f of rec.files || []) addShotTo(RUNS_TAB, f, false);
+    $('shotsHead').textContent = `${rec.script} on ${rec.app}: ${(rec.files || []).length} picture(s) and sample(s)`;
+  };
+  row.ondblclick = () => nw.Shell.openItem(rec.dir);
+  t.log.prepend(row);
+  if (fresh && current === RUNS_TAB) t.log.scrollTop = 0;
+}
 
 /* ---------------------------------------------------------------- status: the chips and the tabs' dots */
 
@@ -191,6 +217,7 @@ function showStatus() {
 /* ---------------------------------------------------------------- events */
 
 tabOf(DRIVE);
+if (mode === 'server') { tabOf(RUNS_TAB); for (const r of mod.pastRuns()) addRun(r, false); mod.bus.on('run', (r) => addRun(r)); }
 show(DRIVE);
 /* a connect or disconnect always logs a drive line: the status is redrawn on each */
 mod.bus.on('line', (l) => { addLine(DRIVE, l); showStatus(); });
