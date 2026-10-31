@@ -12,6 +12,7 @@
  *                state {}                      controls + screen text now
  *                shot {}                       the app's picture of itself (shot.ts: each shell captures its own)
  *                quit {}                       the app closes itself (quit.ts) - a drive's stop, storage flushed
+ *                raise {}                      a test: an unhandled rejection, which must come back as an error event
  *
  * EVENTS, NOT TIMERS (Brad, 2026-10-31): nothing here polls. A dropped connection is dialled again on the app's next
  * change (a control, a log line), never on a clock.
@@ -102,6 +103,8 @@ function dial(): void {
     else if (m.t === 'hello') { send({t: 'hello', shell, net: currentNet(), os: Platform.OS}); send(controlsMsg()); sendScreen(); }
     else if (m.t === 'shot') void shot().then(r => reply('png' in r, r));
     else if (m.t === 'quit') void quit().then(r => reply('ok' in r, r));
+    /* the proof of #2 (errors are events): a rejection nothing handles, as a real bug would leave one */
+    else if (m.t === 'raise') { reply(true); void Promise.reject(new Error('drive: a test rejection (run.js raise)')); }
     else reply(false, {why: `unknown command "${m.t}"`});
   };
 }
