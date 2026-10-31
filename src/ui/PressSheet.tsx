@@ -158,7 +158,9 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
    * builds as Locate's line.
    */
   const tapLog = (line: string) => { if (__DEV__ || !buildInfo.debugLock) console.log(`[press] tap ${line}`); };
-  const state = (p: number) => (p < 0 ? 'not running' : `auth ${p & 0xff}, op 0x${((p >>> 8) & 0xff).toString(16)}, mode ${(p >>> 24) & 7}, window ${(p >>> 27) & 1 ? 'open' : 'shut'}`);
+  /* bits 28-29: a WebAuthn reply the firmware holds - while it does, its main loop drops a sensed press (ok_hal.h) */
+  const held = ['none', 'reply ready', 'reply delivered', 'other'];
+  const state = (p: number) => (p < 0 ? 'not running' : `auth ${p & 0xff}, op 0x${((p >>> 8) & 0xff).toString(16)}, mode ${(p >>> 24) & 7}, window ${(p >>> 27) & 1 ? 'open' : 'shut'}, held ${held[(p >>> 28) & 3]}`);
   const send = (button: string) => {
     /*
      * THE FIRMWARE AT THE TAP, AND ITS SENSE LOOP (the Pixel, 2026-10-30: a login's press was taken from the queue and the
