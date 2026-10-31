@@ -208,8 +208,25 @@ function holdGadget(onOut) {
  * the kernel's own USB events (udevadm monitor): each add or remove reads the set again, and only a changed set is told.
  * Linux so far; Windows' device-change events come with the drive on Windows (step 4).
  */
+/*
+ * WINDOWS: a real OnlyKey is the USB composite device USB\VID_1D50&PID_60FC\<serial> (its parent a USB hub); the soft
+ * key through the emulator's own driver is the software devices SWD\DEVGEN\OKVHID_* ("OnlyKey Virtual HID", four
+ * interfaces) - present (OK) while the emulator runs. Read with PowerShell's Get-PnpDevice.
+ */
+const PS_KEYS = "Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB\\\\VID_1D50&PID_60FC\\\\[^&]+$' -or $_.InstanceId -match '^SWD\\\\DEVGEN\\\\OKVHID_' } | ForEach-Object { [pscustomobject]@{ id = $_.InstanceId; status = [string]$_.Status; where = (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_LocationInfo -ErrorAction SilentlyContinue).Data } } | ConvertTo-Json -Compress";
+async function keysOnWindows() {
+  const r = await runIn(EDGE, 'powershell', ['-NoProfile', '-Command', PS_KEYS], 30000);
+  let list = [];
+  try { list = r.out ? [].concat(JSON.parse(r.out)) : []; } catch { return []; }
+  const keys = list.filter((d) => /^USB\\/.test(d.id) && d.status === 'OK')
+    .map((d) => ({ kind: 'hard', usb: d.where || d.id, serial: d.id.split('\\').pop(), hidraw: [] }));
+  const virt = list.filter((d) => /^SWD\\DEVGEN\\OKVHID_/.test(d.id) && d.status === 'OK');
+  if (virt.length) keys.push({ kind: 'emulator', usb: 'OnlyKey Virtual HID (driver)', serial: null, hidraw: virt.map((d) => d.id.split('_').pop().toLowerCase()) });
+  return keys;
+}
+
 function keysOnUsb() {
-  if (!LINUX) return null;
+  if (!LINUX) return keysOnWindows();
   const keys = [];
   const read = (p) => { try { return fs.readFileSync(p, 'utf8').trim(); } catch { return ''; } };
   for (const d of fs.readdirSync('/sys/bus/usb/devices')) {
@@ -230,11 +247,31 @@ function keysOnUsb() {
 let keysWatch = null;
 function watchKeys(onChange) {
   let last = '';
-  const tell = () => { const k = keysOnUsb(); const s = JSON.stringify(k); if (s !== last) { last = s; onChange(k); } };
-  tell();
-  if (!LINUX || keysWatch) return;
-  keysWatch = spawn('udevadm', ['monitor', '--udev', '--subsystem-match=usb'], { stdio: ['ignore', 'pipe', 'ignore'] });
-  keysWatch.stdout.on('data', (b) => { if (/\b(add|remove|bind|unbind)\b/.test(String(b))) tell(); });
+  let reading = null;
+  /* one read at a time; a change during a read reads again after it */
+  const tell = async () => {
+    if (reading) { reading.again = true; return; }
+    reading = { again: false };
+    do {
+      reading.again = false;
+      const k = await keysOnUsb();
+      const s = JSON.stringify(k);
+      if (s !== last) { last = s; onChange(k); }
+    } while (reading.again);
+    reading = null;
+  };
+  void tell();
+  if (keysWatch) return;
+  if (LINUX) {
+    keysWatch = spawn('udevadm', ['monitor', '--udev', '--subsystem-match=usb'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    keysWatch.stdout.on('data', (b) => { if (/\b(add|remove|bind|unbind)\b/.test(String(b))) void tell(); });
+  } else {
+    /* Windows' own event for a device arriving or going: one PowerShell waits on it and says "change" each time */
+    keysWatch = spawn('powershell', ['-NoProfile', '-Command',
+      "Register-WmiEvent -Query 'SELECT * FROM Win32_DeviceChangeEvent' -SourceIdentifier okdrive | Out-Null; while ($true) { $e = Wait-Event -SourceIdentifier okdrive; Remove-Event -SourceIdentifier okdrive; Write-Output change }"],
+    { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    keysWatch.stdout.on('data', () => void tell());
+  }
   keysWatch.on('exit', () => { keysWatch = null; });
 }
 
@@ -590,7 +627,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
-      if (action === 'keys') return { ok: true, what: JSON.stringify(keysOnUsb()) };
+      if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
       if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }
