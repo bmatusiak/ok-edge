@@ -202,6 +202,7 @@ function driveFor(app, say) {
 
   /* goto: the tab, reading the menu first (14) */
   async function goto(tab) {
+    if (app.flags.tab === tab && !app.has('Close menu')) return; /* there already - the app says so */
     if (!app.has('Close menu')) await tap('Menu');
     await tap(tab);
   }

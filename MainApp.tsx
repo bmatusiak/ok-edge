@@ -489,6 +489,7 @@ function Shell() {
   useEffect(() => { setLoggedIn(phase === 'identity' || phase === 'main'); }, [phase]);
   /* the drive reads where the app is from the app, not from its screen (src/drive/registry.tsx) */
   useEffect(() => setDriveFlag('phase', phase), [phase]);
+  useEffect(() => setDriveFlag('tab', tab), [tab]);
   /*
    * A LOGIN THIS TAB KEPT (webSession.ts, chosen at the identity check): on a reload the login screen goes on by itself
    * - the key is asked (armWebKey), and the identity check opens the bucket with no press. Once a page load.

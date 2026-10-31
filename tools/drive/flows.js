@@ -22,7 +22,7 @@ async function testingMode(d) {
  */
 function loginState(app) {
   /* in = the app says it is in its main phase, nothing open, no key request in flight - its own word, not its screen's */
-  if (app.flags.phase === 'main' && app.settled() && app.has(LOGGED_IN)) return 'in';
+  if (app.flags.phase === 'main' && app.settled() && app.flags.tab === 'This Key') return 'in';
   /* a new device's login ends with its card offered: in, and the flow decides about the card */
   if (app.flags.phase === 'main' && !app.flags.busy && app.has('Make the card')) return 'in';
   if (app.flags.phase === 'identity' || app.flags.busy || app.top) return null;
