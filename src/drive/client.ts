@@ -131,6 +131,17 @@ function dial(): void {
         (e: unknown) => reply(false, {why: String((e as Error)?.message ?? e)}),
       );
     }
+    /*
+     * reload the app: a web page navigates again - which also ends a browser's own security-key dialog left over a
+     * request that timed out (2026-10-31: Chrome's "The request timed out" covered the web app, and nothing in the page
+     * can close it); React Native reloads its bundle
+     */
+    else if (m.t === 'reload') {
+      reply(true);
+      const g = globalThis as any;
+      if (g.location?.reload) g.location.reload();
+      else require('react-native').DevSettings?.reload?.();
+    }
     /* the proof of #4 (the network trace): a request to the drive server's own address, which must come back as [net] */
     else if (m.t === 'net-check') { reply(true); void fetch(URL.replace(/^ws/, 'http')).catch(() => {}); }
     else reply(false, {why: `unknown command "${m.t}"`});
