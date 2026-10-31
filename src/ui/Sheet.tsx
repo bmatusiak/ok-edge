@@ -3,6 +3,7 @@ import {Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vie
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {theme} from './theme';
+import {DriveLayer, DriveTap} from '../drive/registry';
 
 /*
  * THE SHEET: one bottom sheet for every prompt in the app (Brad, 2026-10-12: "the sheet view is
@@ -72,8 +73,11 @@ export function Sheet({
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose ?? (() => undefined)}>
+      {/* an open sheet is the drive's top layer: what is beneath it is covered (src/drive/registry.tsx) */}
+      <DriveLayer open={visible}>
       <View style={styles.backdrop}>
         {onClose ? <Pressable style={styles.dismiss} onPress={onClose} accessibilityLabel="Close" /> : null}
+        {onClose ? <DriveTap label="Close" onPress={onClose} /> : null}
         <View
           testID="sheet"
           style={[
@@ -89,6 +93,7 @@ export function Sheet({
           {footer ? <View style={styles.footer}>{footer}</View> : null}
         </View>
       </View>
+      </DriveLayer>
     </Modal>
   );
 }

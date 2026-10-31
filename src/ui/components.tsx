@@ -10,6 +10,7 @@ import {
 import {device as okdevice} from 'node-onlykey-lib';
 import type {LogEntry} from '../hooks/useLog';
 import {ledColor, levelColor, stateColor, theme} from './theme';
+import {useDriveControl} from '../drive/registry';
 
 export function StatusPill({
   state,
@@ -243,6 +244,8 @@ export function Btn({
    */
   const fg =
     tone === 'primary' ? '#ffffff' : tone === 'danger' ? '#0b0d10' : theme.text;
+  /* a drive taps it by its label, by calling it (src/drive/registry.tsx) - debug builds only */
+  useDriveControl(label ?? title, !disabled, onPress);
   return (
     <Pressable
       onPress={onPress}

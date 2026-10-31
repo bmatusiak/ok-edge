@@ -12,6 +12,7 @@ import React, {useMemo, useState} from 'react';
 import {PanResponder, Pressable, StyleSheet, Text, View} from 'react-native';
 import {Sheet} from './Sheet';
 import {theme} from './theme';
+import {DriveTap} from '../drive/registry';
 
 /* the handle's height - what a list under it leaves free */
 export const DRAWER_HANDLE = 56;
@@ -35,6 +36,7 @@ export function BottomDrawer({title, count, children}: {title: string; count?: n
     <>
       {/* pinned to the bottom of the screen's content, which already ends above the gesture / 3-button
           bar (the Shell's SafeAreaView) - adding the inset here counted it twice (Pixel, 2026-10-12) */}
+      <DriveTap label={`Open ${title}`} onPress={() => setOpen(true)} />
       <View style={styles.handleBar} {...swipe.panHandlers}>
         <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`Open ${title}`} style={styles.handleTap}>
           <View style={styles.grip} />
@@ -49,6 +51,7 @@ export function BottomDrawer({title, count, children}: {title: string; count?: n
         onClose={() => setOpen(false)}
         header={
           <View {...swipe.panHandlers}>
+            <DriveTap label={`Close ${title}`} onPress={() => setOpen(false)} />
             <Pressable onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel={`Close ${title}`} style={styles.handleTap}>
               <View style={styles.grip} />
               <Text style={styles.handleText}>{`▼ ${label}`}</Text>

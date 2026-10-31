@@ -4,6 +4,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Logo} from './Logo';
 import {theme} from './theme';
 import {SHOW_SCROLLBARS} from '../platform';
+import {DriveLayer, DriveTap} from '../drive/registry';
 
 /*
  * A left menu, opened by the logo in the top bar.
@@ -44,6 +45,8 @@ export function Drawer<T extends string>({
   }
 
   return (
+    <DriveLayer open={open}>
+    <DriveTap label="Close menu" onPress={onClose} />
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {/* Tapping anywhere off the panel closes it - the usual escape. */}
       <Pressable
@@ -83,8 +86,9 @@ export function Drawer<T extends string>({
           {tabs.map(tab => {
             const active = tab === value;
             return (
+              <React.Fragment key={tab}>
+              <DriveTap label={tab} onPress={() => { onChange(tab); onClose(); }} />
               <Pressable
-                key={tab}
                 onPress={() => {
                   onChange(tab);
                   onClose();
@@ -98,6 +102,7 @@ export function Drawer<T extends string>({
                   {tab}
                 </Text>
               </Pressable>
+              </React.Fragment>
             );
           })}
         </ScrollView>
@@ -105,6 +110,7 @@ export function Drawer<T extends string>({
         {footer ? <View style={styles.footer}>{footer}</View> : null}
       </View>
     </View>
+    </DriveLayer>
   );
 }
 

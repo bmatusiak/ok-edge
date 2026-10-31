@@ -1,0 +1,265 @@
+#!/usr/bin/env node
+'use strict';
+/*
+ * THE DRIVE SERVER (PROPOSAL-drive.md; Brad, 2026-10-31: "1 server to drive from, 3 things to drive - webapp,
+ * desktop, android - the app connects to the drive server, you call the server to run a drive script").
+ *
+ *   ws /app       an app dials in (src/drive/client.ts): hello {shell, net}, then its events - log lines, its live
+ *                 controls, its screen text - and it answers commands (tap, fill, state)
+ *   ws /control   a caller (tools/drive/run.js) asks: {t: 'run', script, app, args}; every line of the run streams
+ *                 back, and {t: 'end', code}
+ *
+ * Every line also goes to stdout and logs/drive-server.log - the box screen's window shows it as it happens (Brad:
+ * "I hate being blind").
+ *
+ * THE RULES, from PROPOSAL-drive.md's table of 2026-10-31's mistakes (numbers there):
+ *   taps are calls on a live control the app names, never screen positions (1, 21); events only - no polling, and the
+ *   only timers are watchdogs (2, 6, 20); a step prechecks its goal STATE and ends on it, on a failure state newly
+ *   shown, or on its watchdog with the last events (8, 12); history is never an event (7); a failed move stops the
+ *   script (11); every press sheet is answered whenever it comes, by this server, on the testnet only (13); a run
+ *   reads where things stand and goes on from there (22).
+ *
+ *   node tools/drive/server.js [--port 8790]
+ */
+const fs = require('fs');
+const path = require('path');
+const http = require('http');
+const EventEmitter = require('events');
+const { WebSocketServer } = require('ws');
+
+const PORT = Number((process.argv.indexOf('--port') >= 0 && process.argv[process.argv.indexOf('--port') + 1]) || 8790);
+const SCRIPTS = path.join(__dirname, 'scripts');
+const LOG = process.env.DRIVE_LOG || path.join(process.env.HOME || process.env.USERPROFILE || '.', 'project/onlykey/logs/drive-server.log');
+try { fs.mkdirSync(path.dirname(LOG), { recursive: true }); } catch { /* stdout still has it */ }
+const logFile = fs.createWriteStream(LOG, { flags: 'a' });
+
+const stamp = () => new Date().toTimeString().slice(0, 8);
+/* one line, everywhere it is watched: stdout, the log file, and the callers of the runs that are going */
+const watchers = new Set();
+function line(text) {
+  const l = `${stamp()} ${text}`;
+  process.stdout.write(`${l}\n`);
+  logFile.write(`${l}\n`);
+  for (const w of watchers) w(l);
+}
+
+/* ------------------------------------------------------------------ an app on the other end */
+
+class App extends EventEmitter {
+  constructor(ws, hello) {
+    super();
+    this.ws = ws;
+    this.shell = hello.shell;
+    this.net = hello.net;
+    this.os = hello.os;
+    this.controls = [];
+    this.text = '';
+    this.nextId = 1;
+    this.waiting = new Map();
+    this.setMaxListeners(100);
+  }
+  /* a command and its answer; the app answers at once, so its watchdog is short */
+  call(msg, lifeMs = 10000) {
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      const dog = setTimeout(() => { this.waiting.delete(id); reject(new Error(`WATCHDOG: the app did not answer "${msg.t}" in ${lifeMs / 1000} s`)); }, lifeMs);
+      this.waiting.set(id, (r) => { clearTimeout(dog); resolve(r); });
+      this.ws.send(JSON.stringify({ ...msg, id }));
+    });
+  }
+  /* a live control (the top layer's, enabled) or a line of the screen's text, exactly */
+  has(label) {
+    if (this.controls.some((c) => c.label === label && c.enabled)) return true;
+    return this.text.split('\n').some((l) => l.trim() === label);
+  }
+  liveLabels() { return this.controls.filter((c) => c.enabled).map((c) => c.label); }
+}
+
+let apps = new Map(); /* shell -> App: the newest connection of each shell */
+/* every hello, for a script waiting on an app to come back after a restart */
+const hellos = new EventEmitter();
+
+/* THE SESSION PRESSER: every press sheet, whenever it comes, while the app is on the testnet (13) */
+function pressWhenAsked(app) {
+  let pressing = false;
+  const press = async (label, why) => {
+    if (pressing) return;
+    pressing = true;
+    try {
+      const r = await app.call({ t: 'tap', label });
+      line(r.ok ? `[${app.shell}] pressed: ${why}` : `[${app.shell}] press refused: ${r.why}`);
+    } catch (e) { line(`[${app.shell}] press: ${e.message}`); } finally { pressing = false; }
+  };
+  app.on('controls', () => {
+    if (app.net !== 'test') return;
+    if (app.controls.some((c) => c.label === 'Press the soft key' && c.enabled)) void press('Press the soft key', 'a press sheet');
+  });
+  app.on('log', async (l) => {
+    if (app.net !== 'test') return;
+    const code = l.match(/^\[press\] sheet up: derive code ([1-6]) ([1-6]) ([1-6]) - /);
+    if (!code) return;
+    for (const d of code.slice(1, 4)) await press(d, `the derive code's ${d}`);
+  });
+}
+
+/* ------------------------------------------------------------------ the script's API */
+
+function driveFor(app, say) {
+  const lastLines = [];
+  const remember = (l) => { lastLines.push(l); if (lastLines.length > 8) lastLines.shift(); };
+  app.on('log', remember);
+  const failure = (why) => new Error(`${why}\n  last lines:\n${lastLines.map((l) => `    ${l.slice(0, 160)}`).join('\n')}\n  live now: ${app.liveLabels().join(' | ')}`);
+
+  /*
+   * until(goal): a label / text line (string), a log line (RegExp), or a test of the app (function). Prechecked
+   * against the state now; then only events from now on (7). fail: labels that end it as failed when they newly show.
+   */
+  function until(goal, { life = 60, fail = ['Try again'] } = {}) {
+    const test = typeof goal === 'function' ? () => goal(app) : typeof goal === 'string' ? () => app.has(goal) : null;
+    if (test && test()) return Promise.resolve('already');
+    const failing = new Set(fail.filter((f) => app.has(f))); /* already showing: only a NEW showing fails */
+    return new Promise((resolve, reject) => {
+      const off = () => { clearTimeout(dog); app.off('log', onLog); app.off('controls', onState); app.off('screen', onState); app.off('close', onClose); };
+      const dog = setTimeout(() => { off(); reject(failure(`WATCHDOG: no "${goal}" in ${life} s`)); }, life * 1000);
+      const onLog = (l) => { if (goal instanceof RegExp && goal.test(l)) { off(); resolve(l); } };
+      const onState = () => {
+        if (test && test()) { off(); resolve('now'); return; }
+        for (const f of fail) {
+          if (!app.has(f)) failing.delete(f);
+          else if (!failing.has(f)) { off(); reject(failure(`FAILED: the app shows "${f}"`)); return; }
+        }
+      };
+      const onClose = () => { off(); reject(failure('the app disconnected')); };
+      app.on('log', onLog); app.on('controls', onState); app.on('screen', onState); app.on('close', onClose);
+    });
+  }
+
+  /* tap: wait (by events) until the control is live, then call it; a refusal stops the script (11) */
+  async function tap(label, { life = 30 } = {}) {
+    await until(() => app.controls.some((c) => c.label === label && c.enabled), { life, fail: [] })
+      .catch((e) => { throw failure(`"${label}" never became live: ${e.message.split('\n')[0]}`); });
+    const r = await app.call({ t: 'tap', label });
+    if (!r.ok) throw failure(`tap "${label}": ${r.why}`);
+    say(`tapped "${label}"`);
+  }
+
+  async function fill(field, value, { secret = false } = {}) {
+    const r = await app.call({ t: 'fill', field, value });
+    if (!r.ok) throw failure(`fill "${field}": ${r.why}`);
+    say(`filled "${field}"${secret ? ` (${value.length} chars, not logged)` : `: ${value}`}`);
+  }
+  /* a secret from a file on THIS machine (19): only its length is ever logged */
+  async function fillFile(field, file, jsonKey = null) {
+    let v = fs.readFileSync(file, 'utf8');
+    if (jsonKey) v = JSON.parse(v)[jsonKey];
+    if (typeof v !== 'string' || !v) throw new Error(`nothing to fill from ${file}`);
+    await fill(field, v, { secret: true });
+  }
+
+  /* step: precheck the goal, act, end on the goal / a failure / the watchdog (8, 12, 6) */
+  async function step(name, { goal, act, life = 90, fail }) {
+    if (typeof goal === 'string' && app.has(goal)) { say(`${name}: already "${goal}"`); return; }
+    say(`${name}`);
+    const done = until(goal, { life, fail });
+    done.catch(() => {}); /* awaited below; a failure during act is not unhandled */
+    if (act) await act();
+    await done;
+    say(`${name}: done`);
+  }
+
+  /* goto: the tab, reading the menu first (14) */
+  async function goto(tab) {
+    if (!app.has('Close menu')) await tap('Menu');
+    await tap(tab);
+  }
+
+  /*
+   * restarted(act): the app restarts (a tap on "Restart the app", a wipe) and dials again - its new connection is a
+   * new handle; this one is done. -> the new drive. The hello is the event; the watchdog is its life.
+   */
+  async function restarted(act, { life = 90 } = {}) {
+    const back = new Promise((resolve, reject) => {
+      const dog = setTimeout(() => { hellos.off('hello', onHello); reject(failure(`WATCHDOG: ${app.shell} did not come back in ${life} s`)); }, life * 1000);
+      const onHello = (a) => { if (a.shell === app.shell && a !== app) { clearTimeout(dog); hellos.off('hello', onHello); resolve(a); } };
+      hellos.on('hello', onHello);
+    });
+    back.catch(() => {});
+    if (act) await act();
+    const next = await back;
+    app.off('log', remember);
+    say(`${next.shell} is back (${next.net})`);
+    return driveFor(next, say);
+  }
+
+  return { app, say, until, tap, fill, fillFile, step, goto, restarted, has: (l) => app.has(l) };
+}
+
+/* ------------------------------------------------------------------ the server */
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'text/plain' });
+  res.end(`drive server: ${[...apps.values()].map((a) => `${a.shell} (${a.net})`).join(', ') || 'no app connected'}\n`);
+});
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', (ws, req) => {
+  if (req.url === '/control') return control(ws);
+  /* an app: the first message is its hello */
+  let app = null;
+  ws.on('message', (data) => {
+    let m;
+    try { m = JSON.parse(String(data)); } catch { return; }
+    if (!app) {
+      if (m.t !== 'hello') return;
+      app = new App(ws, m);
+      apps.set(app.shell, app);
+      pressWhenAsked(app);
+      line(`app connected: ${app.shell} (${app.os}, ${app.net})`);
+      hellos.emit('hello', app);
+      return;
+    }
+    if (m.t === 'net') { app.net = String(m.net); line(`[${app.shell}] net: ${app.net}`); app.emit('screen'); return; }
+    if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
+    if (m.t === 'log') { app.emit('log', String(m.line)); return; }
+    if (m.t === 'controls') { app.controls = m.list || []; app.emit('controls'); return; }
+    if (m.t === 'screen') { app.text = String(m.text || ''); app.emit('screen'); }
+  });
+  ws.on('close', () => {
+    if (!app) return;
+    if (apps.get(app.shell) === app) apps.delete(app.shell);
+    line(`app gone: ${app.shell}`);
+    app.emit('close');
+  });
+});
+
+function control(ws) {
+  ws.on('message', async (data) => {
+    let m;
+    try { m = JSON.parse(String(data)); } catch { return; }
+    if (m.t !== 'run') return;
+    const send = (o) => { try { ws.send(JSON.stringify(o)); } catch { /* the caller went */ } };
+    const watch = (l) => send({ t: 'line', line: l });
+    watchers.add(watch);
+    let code = 1;
+    try {
+      const file = path.join(SCRIPTS, `${String(m.script).replace(/[^a-z0-9-]/gi, '')}.js`);
+      if (!fs.existsSync(file)) throw new Error(`no script "${m.script}" (${SCRIPTS})`);
+      const shell = m.app || [...apps.keys()][0];
+      const app = apps.get(shell);
+      if (!app) throw new Error(`no ${shell || 'app'} connected - start it in testing mode (it dials ws://127.0.0.1:${PORT})`);
+      delete require.cache[require.resolve(file)];
+      const say = (t) => line(`[${m.script}] ${t}`);
+      say(`start on ${app.shell} (${app.net})${m.args && m.args.length ? ` - ${m.args.join(' ')}` : ''}`);
+      await require(file)(driveFor(app, say), m.args || []);
+      say('FINISHED');
+      code = 0;
+    } catch (e) {
+      line(`[${m.script}] STOPPED: ${e.message}`);
+    } finally {
+      watchers.delete(watch);
+      send({ t: 'end', code });
+    }
+  });
+}
+
+server.listen(PORT, '127.0.0.1', () => line(`drive server on ws://127.0.0.1:${PORT} (apps: /app, runs: /control) - log ${LOG}`));

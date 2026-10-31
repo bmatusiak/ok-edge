@@ -9,6 +9,7 @@ import {Keypad, QueueDots} from '../ui/Keypad';
 import {theme} from '../ui/theme';
 import NativeShare from 'okedge-native/specs/NativeShare';
 import {summarizeBackup} from '../backupFile';
+import {useDriveField} from '../drive/registry';
 
 /** The firmware refuses anything outside this, and says so by name. */
 const MIN_PIN = 7;
@@ -209,6 +210,10 @@ export function SetupScreen({
   /* What the closing view says was restored; null when nothing was. */
   const [restored, setRestored] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* the fields a drive fills, by their placeholders (src/drive/registry.tsx) - debug builds only */
+  useDriveField('-----BEGIN ONLYKEY BACKUP-----', v => { setBackupText(v); setBackupFrom(null); });
+  useDriveField("the backup's passphrase", setPassphrase);
+  useDriveField(`at least ${MIN_PASSPHRASE} characters`, setPassphrase);
 
   /** PIN kinds that have actually been committed, for the closing summary. */
   const [set, setSet] = useState<Kind[]>([]);

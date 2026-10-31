@@ -77,6 +77,8 @@ import type {TabContext} from './src/plugins/types';
 import {setFirmwareConsoleToLogcat} from './src/hooks/useOkEmu';
 import {startKeyChainRecorder} from './src/keyChainRecorder';
 import {startLinkStash} from './src/linkStash';
+import {startDrive} from './src/drive/client';
+import {DriveTap} from './src/drive/registry';
 
 /**
  * Whether the screens that show secrets refuse to be captured.
@@ -137,6 +139,8 @@ export default function App() {
   useEffect(() => startKeyChainRecorder(), []);
   /* every Edge link the soft key writes, kept as it is written (linkStash: a swipe right after a login lost them) */
   useEffect(() => startLinkStash(), []);
+  /* the drive (PROPOSAL-drive.md): dials the drive server - debug builds only (src/drive/client.ts) */
+  useEffect(() => startDrive(), []);
   return (
     <SafeAreaProvider>
       <Shell />
@@ -752,6 +756,7 @@ function Shell() {
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         {ready ? (
           <View style={styles.bar}>
+            <DriveTap label="Menu" onPress={() => setDrawer(true)} />
             <Pressable
               onPress={() => setDrawer(true)}
               accessibilityRole="button"

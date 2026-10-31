@@ -1,6 +1,21 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {theme} from './theme';
+import {useDriveControl} from '../drive/registry';
+
+/*
+ * ONE KEY OF THE PAD, as a drive sees it ("Button n", src/drive/registry.tsx): a tap is the pad's own tap - the hold
+ * pair when the pad counts holds, onPress otherwise - called, not clicked.
+ */
+function DriveKey({n, disabled, holdable, onPress, onHoldStart, onHoldEnd}: {
+  n: number; disabled?: boolean; holdable: boolean; onPress: (n: number) => void;
+  onHoldStart?: (n: number) => void; onHoldEnd?: (n: number) => void;
+}) {
+  useDriveControl(`Button ${n}`, !disabled, () => {
+    if (holdable) { onHoldStart!(n); onHoldEnd!(n); } else onPress(n);
+  });
+  return null;
+}
 
 /*
  * The device's entire input surface: six buttons.
@@ -67,8 +82,9 @@ export function Keypad({
       {(buttons <= 3 ? [[1, 2, 3]] : [[1, 2, 3], [4, 5, 6]]).map(row => (
         <View key={row[0]} style={styles.row}>
           {row.map(n => (
+            <React.Fragment key={n}>
+            <DriveKey n={n} disabled={disabled} holdable={holdable} onPress={onPress} onHoldStart={onHoldStart} onHoldEnd={onHoldEnd} />
             <Pressable
-              key={n}
               disabled={disabled}
               onPress={holdable ? undefined : () => onPress(n)}
               onPressIn={holdable ? () => onHoldStart!(n) : undefined}
@@ -82,6 +98,7 @@ export function Keypad({
               ]}>
               <Text style={styles.keyText}>{n}</Text>
             </Pressable>
+            </React.Fragment>
           ))}
         </View>
       ))}
