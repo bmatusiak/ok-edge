@@ -9,15 +9,18 @@
  * Over the kit's hardware transport, as owner-key.js. Prints the device id and seq before and after.
  *   node tools/box/hardkey-edge-wipe.js
  */
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const KIT = process.env.KIT || path.join(os.homedir(), 'project/onlykey/onlykey-testing');
+/* the box's layout (~/project/onlykey), else the repos beside this ok-edge checkout (Windows) */
+const sibling = (name) => [path.join(os.homedir(), 'project/onlykey', name), path.resolve(__dirname, '../../..', name)].find((p) => fs.existsSync(p));
+const KIT = process.env.KIT || sibling('onlykey-testing');
 const { Device } = require(`${KIT}/lib/device`);
 const { HardwareTransport } = require(`${KIT}/lib/device/hardware`);
 const { detect } = require(`${KIT}/lib/capabilities`);
 const { PINS } = require(`${KIT}/lib/config`);
-const LIB = process.env.OKT_LIB_DIR = process.env.OKT_LIB_DIR || path.join(os.homedir(), 'project/onlykey/node-onlykey-lib');
+const LIB = process.env.OKT_LIB_DIR = process.env.OKT_LIB_DIR || sibling('node-onlykey-lib');
 const { composeLib } = require(`${KIT}/lib/libstack`);
 
 const hex = (b) => Buffer.from(b).toString('hex');
