@@ -9,6 +9,6 @@
      * not the whole dependency tree. (As ok-rn's tsconfig.)
      */
     "maxNodeModuleJsDepth": 1,
-    "types": ["jest", "node"]
+    "types": ["node"]
   }
 }
