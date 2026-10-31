@@ -19,7 +19,8 @@ const KINDS = {
   bootloader: /BOOTLOADER MODE|left bootloader mode/,                          /* a key in HalfKay, and out of it */
   error: /\] ERROR |\bFATAL\b|unhandled rejection/,                             /* an app's error, crash or LogBox */
   app: /app connected|app disconnected|drive server gone|remote .* (connected|gone)/, /* apps and remotes coming and going */
-  keys: /\[keys\] [^:]+: (?!.*start on)/,                                        /* any change in the keys on a machine */
+  /* a change the key monitor saw ("hard (usb …", "no OnlyKey") - not run.js keys' own answer ("hard key - usb …") */
+  keys: /\[keys\] [^:]+: (no OnlyKey|[a-z]+ \((usb|OnlyKey) )/,
   run: /\[[a-z-]+\] (STOPPED|FINISHED)\b/,                                       /* a drive script ending */
   press: /\] pressed: /,                                                         /* a press the drive made */
 };
