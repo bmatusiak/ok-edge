@@ -41,6 +41,11 @@ function loginState(app) {
   if (f.phase === 'main' && f.passed && !f.busy && (!app.top || app.has('Make the card'))) return 'in';
   if (f.busy || app.top) return null;
   if (f.identityCheck) return ['Try again', 'Decrypt Bucket', 'Create Bucket'].find((b) => app.has(b)) || null;
+  /*
+   * a debug build's testing bar has Login Bypass (it types the testing PIN itself): the way a debug login goes (Brad,
+   * 2026-10-07: "fix your way on logging in, now that we have the login bypass button") - the keypad only without it
+   */
+  if (f.key === 'locked' && app.has('Login Bypass')) return 'bypass';
   if (f.key === 'locked') return f.tab === 'This Key' ? 'keypad' : 'elsewhere';
   if (f.key === 'uninitialized') return 'not set up';
   return null;
@@ -58,6 +63,7 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
     if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return; }
     d.say(`login: ${now}`);
     if (now === 'login screen') await d.tap('Enter testing mode');
+    else if (now === 'bypass') await d.tap('Login Bypass');
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
     else if (now === 'not set up') throw new Error('login: the soft key is not set up (a restore or setup comes first)');
