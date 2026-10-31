@@ -25,6 +25,14 @@ drive_window() {
   echo $! > "$pidf"
 }
 drive_window
+# clear_overlays: whatever a stopped run left open over the page - the Edge Management drawer (its backdrop covered
+# even the Menu), the device filter sheet, the menu - closed before the next move; every move then must happen
+clear_overlays() {
+  has "Close Edge Management" && { C "Close Edge Management" > /dev/null || return 1; }
+  has "Show all" && { C "Close" > /dev/null || return 1; }
+  has "Close menu" && { C "Close menu" > /dev/null || return 1; }
+  return 0
+}
 # goto <tab>: the menu's state read first ("Close menu" = open) - a "Menu" click on an open menu closed it, and the
 # tab was never found (2026-10-31)
 goto() { has "Close menu" || C "Menu" > /dev/null || return 1; C "$1" > /dev/null; }
@@ -105,9 +113,7 @@ session_on() {
 session_off() { SESSION=""; [ -n "$DRIVE_SESSION" ] && kill "$DRIVE_SESSION" 2>/dev/null; DRIVE_SESSION=""; }
 # one budget on the open soft key: request, approve + its press, three signs it pays
 budget_demo() {
-  # precheck: a sheet left open covers the tab (the device filter, 2026-10-31: every click went into it and the demo
-  # carried on blind) - close it first; every move below must happen or the demo stops with page-click's reason
-  has "Show all" && { C "Close" > /dev/null || return 1; }
+  clear_overlays || return 1
   goto "Edge" || return 1
   # precheck: a live budget is spent, not stacked on; an ask already waiting is approved, not asked again
   if ! has "Active"; then
