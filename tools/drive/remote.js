@@ -56,6 +56,15 @@ control.on('connection', (ws, req) => {
     if (m.t === 'app-msg') { const a = apps.get(m.cid); if (a && a.readyState === 1) a.send(m.data); }
     else if (m.t === 'app-close') { const a = apps.get(m.cid); if (a) a.close(); }
     else if (m.t === 'line') line(m.line);
+    else if (m.t === 'fill-file') {
+      /* a secret from a file HERE, handed to the app here - the drive server sees only the app's answer, and its length is all that is logged */
+      const a = apps.get(m.cid);
+      let v = null, why = null;
+      try { v = fs.readFileSync(m.file, 'utf8'); if (m.key) v = JSON.parse(v)[m.key]; } catch (e) { why = e.message; }
+      if (!why && (typeof v !== 'string' || !v)) why = 'nothing in that file';
+      if (why || !a) { toServer({ t: 'app-msg', cid: m.cid, data: JSON.stringify({ t: 'reply', id: m.id, ok: false, why: why || 'the app is gone' }) }); }
+      else { line(`fill "${m.field}" from ${m.file} (${v.length} chars)`); a.send(JSON.stringify({ t: 'fill', id: m.id, field: m.field, value: v })); }
+    }
     else if (m.t === 'proc') {
       line(`${m.action} ${m.target}`);
       const r = await targets.act(m.action, m.target).catch((e) => ({ ok: false, why: e.message }));

@@ -183,6 +183,22 @@ function driveFor(app, say) {
   }
   /* a secret from a file on THIS machine (19): only its length is ever logged */
   async function fillFile(field, file, jsonKey = null) {
+    /*
+     * THE SECRET STAYS ON ITS MACHINE: an app behind a drive-remote is filled by that remote, from the file there -
+     * this server never holds the value, only the app's answer (the box's test backup never crosses to Windows)
+     */
+    if (app.ws && app.ws.remote) {
+      const id = app.nextId++;
+      const reply = new Promise((resolve, reject) => {
+        const dog = setTimeout(() => { app.waiting.delete(id); reject(failure(`WATCHDOG: no answer to the fill of "${field}" in 20 s`)); }, 20000);
+        app.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });
+      });
+      app.ws.remote.send(JSON.stringify({ t: 'fill-file', cid: app.ws.cid, id, field, file, key: jsonKey }));
+      const r = await reply;
+      if (!r.ok) throw failure(`fill "${field}" from ${file} on ${app.ws.via}: ${r.why}`);
+      say(`filled "${field}" from ${file} on ${app.ws.via} (not seen here)`);
+      return;
+    }
     let v = fs.readFileSync(file, 'utf8');
     if (jsonKey) v = JSON.parse(v)[jsonKey];
     if (typeof v !== 'string' || !v) throw new Error(`nothing to fill from ${file}`);
@@ -340,6 +356,8 @@ function dialRemote(url) {
     if (m.t === 'app-open') {
       const sock = new EventEmitter();
       sock.via = r.machine;
+      sock.remote = ws;
+      sock.cid = m.cid;
       sock.readyState = 1;
       sock.send = (text) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'app-msg', cid: m.cid, data: text })); };
       sock.close = () => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'app-close', cid: m.cid })); };
