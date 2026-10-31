@@ -25,8 +25,7 @@ const { pathToFileURL } = require('url');
 /*
  * A RELEASE OBEYS NO DEVELOPER SWITCH (Brad, 2026-10-28: "turn off test build for releases, and see what else needs to
  * be turned off for release builds"). Every OKEDGE_* variable is a developer's: OKEDGE_WEB_URL loads any page into the
- * window that holds the key bridge, OKEDGE_FLAVOR=test brings back the menu and devtools, OKEDGE_CONSOLE copies the
- * page's log (which can carry key bytes) to stdout, OKEDGE_DRIVE runs a script in the page, OKEDGE_EMULATOR /
+ * window that holds the key bridge, OKEDGE_FLAVOR=test brings back the menu and devtools, OKEDGE_EMULATOR /
  * OKEDGE_NODE swap in other code. The packaged app (tools/release/desktop-package.js) clears them all
  * before anything reads one - here, first, so the soft key's host it starts inherits none either.
  */
@@ -42,13 +41,6 @@ if (app.isPackaged) {
 const TEST = process.env.OKEDGE_FLAVOR === 'test';
 const WEB_ROOT = path.join(__dirname, '..', 'dist', TEST ? 'desktop-test' : 'desktop');
 if (TEST) app.setPath('userData', `${app.getPath('userData')}-test`);
-
-/*
- * THE BOX'S PAGE TOOLS DRIVE THIS WINDOW TOO (OKEDGE_DEVTOOLS_PORT; tools/box/page-click.js and page-console.js with
- * CDP_PORT, tools/box/desktop-test.sh): Chrome's DevTools port on this machine, so a desktop run is driven and read like
- * the web app's. A developer's switch - a release clears every OKEDGE_ variable above, this one with them.
- */
-if (process.env.OKEDGE_DEVTOOLS_PORT) app.commandLine.appendSwitch('remote-debugging-port', String(Number(process.env.OKEDGE_DEVTOOLS_PORT)));
 
 /*
  * THE PAGE RUNS AT THE KEY'S SITE (Brad, 2026-10-30: the firmware says where the server is - "we use the default rpid in
@@ -141,32 +133,10 @@ function createWindow() {
   if (dev) win.loadURL(dev);
   else win.loadURL(pageUrl());
   /*
-   * OKEDGE_SHOT=<file.png>: a picture of THIS window once the page has rendered, then quit - how a
-   * test or a check looks at the desktop shell without capturing the person's whole screen.
+   * No driving hooks here: the app is driven, read and pictured through the drive (src/drive, tools/drive) - the
+   * timed OKEDGE_SHOT, the injected OKEDGE_DRIVE walk, OKEDGE_CONSOLE and the DevTools port are gone (2026-10-31,
+   * Brad: remove the code that drove before, "so the new drive system is used instead of forgotten").
    */
-  const shot = process.env.OKEDGE_SHOT;
-  if (shot) {
-    win.webContents.once('did-finish-load', () => setTimeout(async () => {
-      fs.writeFileSync(shot, (await win.webContents.capturePage()).toPNG());
-      app.quit();
-    }, Number(process.env.OKEDGE_SHOT_MS || 3000)));
-  }
-  /*
-   * OKEDGE_DRIVE=<file>: a script run in the page once it has loaded - how tools/e2e-desktop.js
-   * walks the app to its test runner (tools/e2e-desktop-drive.js), as tools/e2e.js taps through
-   * adb on the phone. Only on a development page (OKEDGE_WEB_URL): a packaged app never runs one.
-   */
-  const drive = process.env.OKEDGE_DRIVE;
-  if (drive && dev) {
-    /* every load: a development page reloads (Fast Refresh, Metro after a change) and loses it */
-    win.webContents.on('did-finish-load', () => {
-      win.webContents.executeJavaScript(fs.readFileSync(drive, 'utf8')).catch((e) => console.error(`[drive] ${e.message}`));
-    });
-  }
-  /* OKEDGE_CONSOLE=1: the page's console on this process's stdout - how a check reads what the page said */
-  if (process.env.OKEDGE_CONSOLE === '1') {
-    win.webContents.on('console-message', (e) => console.log(`[page ${e.level}] ${e.message}`));
-  }
 }
 
 /*

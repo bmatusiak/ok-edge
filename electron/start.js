@@ -8,7 +8,7 @@
  * still a stub, "no hard key attached") while the same code passed its tests on Metro's live page.
  * A launch is never allowed to show older code than the tree holds.
  *
- * With OKEDGE_WEB_URL (Metro's live page, as tools/e2e-desktop.js runs it) nothing is built.
+ * With OKEDGE_WEB_URL (Metro's live page) nothing is built.
  *
  * THE TEST BUILD (OKEDGE_FLAVOR=test, `npm run electron:test`; Brad, 2026-10-25: "test build and testing mode and
  * test net works on the desktop app, so desktop app can run its on device suite e2e, matching how the phone works"):

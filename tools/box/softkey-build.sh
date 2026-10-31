@@ -5,7 +5,7 @@
 # Why: a soft key built for a kit run (plugin-test.sh, pulse-test-box.sh: edge alone, DEBUG) left the desktop without
 # key_chain - its derive gate then waited for a 3-digit code it never told the app about, and every bucket key derive
 # ended CTAP2_ERR_ACTION_TIMEOUT with no code on screen (2026-10-31).
-# Then rebuild the test export and restart the app:  npm run build:desktop:test && bash tools/box/desktop-test.sh
+# Then rebuild the test export and restart the app:  npm run build:desktop:test, then from the drive: node tools/drive/run.js restart --app desktop
 #   bash tools/box/softkey-build.sh            DEBUG=1 for the debug console (its Serial prints reach the page's console
 #                                               as [okemu-fw] lines); build again without it when done
 source ~/.nvm/nvm.sh >/dev/null

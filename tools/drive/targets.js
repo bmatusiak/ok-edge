@@ -102,7 +102,7 @@ function createTargets(line = () => {}) {
       async start() {
         const c = running.get('desktop');
         if ((c && !exited(c)) || strayElectrons().length) return 'already running';
-        const env = { OKEDGE_DEVTOOLS_PORT: '9334', ...(LINUX ? { OKEDGE_NODE: process.execPath, DISPLAY: process.env.DRIVE_DISPLAY || ':10' } : {}) };
+        const env = { ...(LINUX ? { OKEDGE_NODE: process.execPath, DISPLAY: process.env.DRIVE_DISPLAY || ':10' } : {}) };
         const child = launch('desktop-test', LINUX ? 'npm' : 'npm.cmd', ['run', 'electron:test', ...(LINUX ? ['--', '--no-sandbox'] : [])], env);
         running.set('desktop', child);
         child.once('exit', () => { if (running.get('desktop') === child) running.delete('desktop'); });
