@@ -23,6 +23,6 @@ ws.on('message', (data) => {
   if (m.t === 'line') console.log(m.line);
   if (m.t === 'end') { ws.close(); process.exit(m.code); }
 });
-ws.on('error', (e) => { console.error(`drive: no server (${e.message}) - node tools/drive/server.js`); process.exit(1); });
+ws.on('error', (e) => { console.error(`drive: no server (${e.message}) - start the drive app: node tools/drive/launch.js server [--remote ws://<box>:8791]`); process.exit(1); });
 /* the server ending the run is the end; a server that went away is one too */
 ws.on('close', () => process.exit(1));
