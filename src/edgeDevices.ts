@@ -15,7 +15,9 @@
  *   mine-known  merged on Approve
  *   mine-new    "A device made with your OnlyKey appeared - is it yours?": Yes merges it and
  *               adds it to your devices; No raises the LEAK alarm (kept as evidence)
- *   forged      never merged; kept as evidence against the computer that sent it
+ *   unproven    merged as UNNAMED (no label of yours verifies) - since 2026-10-31 nothing is "forged": a log merges
+ *               when its own chain checks, and only one that does not check is kept apart (Brad: "plugin my key
+ *               and see the history")
  * Decline keeps a log out of your view but stored. The device's nametag comes from its own
  * signed statement - the highest seq wins, older ones stay as history - so there is one
  * name per fingerprint and never 'unknown'.
@@ -110,7 +112,7 @@ export type HeldLog = {
   card?: any;
 };
 /** One log a computer brought, judged: whose it is, whether its chain checks, what words are missing. */
-export type HeldView = {complete: boolean; missing: string[]; deviceId: string; nametag: string | null; claimed: string; class: 'mine-known' | 'mine-new' | 'unproven' | 'forged'; count: number; from: string; at: number; checkOk: boolean; alarm: string | null};
+export type HeldView = {complete: boolean; missing: string[]; deviceId: string; nametag: string | null; claimed: string; class: 'mine-known' | 'mine-new' | 'unproven'; count: number; from: string; at: number; checkOk: boolean; alarm: string | null};
 
 /* a missing half reads as empty bytes: it fails every check (no fallback) */
 const bytesOf = (h: string | undefined | null) => fromHex(h ?? '');
@@ -247,9 +249,9 @@ export type SignedNametags = {deviceId: string; nametag: string | null; names: s
 export async function signedNametags(o: {withOwn?: boolean} = {}): Promise<SignedNametags[]> {
   const entries = await logEntries();
   if (!entries) return [];
+  /* without the owner keys no nametag verifies - every key is listed UNNAMED, never left out (Brad, 2026-10-31) */
   const owner = await ownerKey();
-  if (!owner) return [];
-  const mine = (s: StoredStatement | null): s is StoredStatement => !!s && grantsLib.verifyStatement(toStatement(s), owner.ownerKey, owner.ownerKeyPq);
+  const mine = (s: StoredStatement | null): s is StoredStatement => !!s && !!owner && grantsLib.verifyStatement(toStatement(s), owner.ownerKey, owner.ownerKeyPq);
   /* each key's statements: its newest in the log, and every one in its history of names */
   const byDev = new Map<string, {now: StoredStatement | null; all: {s: StoredStatement; at: number}[]}>();
   const of = (dev: string) => byDev.get(dev) ?? (byDev.set(dev, {now: null, all: []}), byDev.get(dev)!);
@@ -358,13 +360,10 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
     ...(o.notes ? {notes: o.notes} : {}),
   };
   /*
-   * NOT JUDGED WITHOUT THE OWNER KEYS (they are read from the key - a locked key, or firmware before certify, gives none):
-   * nothing is kept, and the log comes again at the next sync.
+   * NO OWNER KEYS NEEDED TO MERGE (Brad, 2026-10-31: "the merge part is offline verification"): a chain checks under its
+   * own checkpoint keys. Without the owner keys (a locked key, firmware before certify) no label can be verified, so the
+   * log merges UNNAMED - it is never left out.
    */
-  if (!(await ownerKey())) {
-    console.log(`[edge] log of "${name}" (${id.slice(0, 8)}): not judged yet - the key gave no owner keys`);
-    return {held: false, count: 0};
-  }
   const v = await judge(entry);
   const list = await loadHeld();
   /*
@@ -373,12 +372,12 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
    * certify - goes into your log when its chain checks, shown under its key as UNNAMED; its nametag is not remembered as
    * yours and nothing alarms. Only a log that does not check, or a proof that does not verify, is kept apart.
    */
-  if (v.class === 'forged' || !v.checkOk) {
+  if (!v.checkOk) {
     /* the same failing log again: listed once */
     const was = list.find(h => h.deviceId === id);
     if (was && was.checkpoint.seq === o.checkpoint.seq && was.checkpoint.head.toLowerCase() === head) return {held: false, count: 0};
     await saveHeld([...list.filter(h => h.deviceId !== id), entry]);
-    const warning = v.class === 'forged' ? `is not made with your OnlyKey - ${o.from} sent it; never merged` : `does not check (${v.alarm}); never merged`;
+    const warning = `does not check (${v.alarm}); never merged`;
     await addNew({deviceId: id, nametag: name, links: entry.records.length, from: o.from, at: now, newDevice: false, missing: [], warning});
     console.log(`[edge] log of "${name}" (${id.slice(0, 8)}): kept apart - it ${warning}`);
     /* a finding about your key: the phone says so out loud too */
@@ -415,7 +414,8 @@ async function judge(h: HeldLog, owner?: Awaited<ReturnType<typeof ownerKey>>, k
   if (owner === undefined) owner = await ownerKey();
   if (known === undefined) known = await loadDevices();
   const merged = ((await loadMirror(fromHex(h.deviceId))).merged ?? []).map(m => ({seq: m.seq, head: m.head}));
-  const c = owner ? devicesLib.classify({log: logOf(h), ownerKey: owner.ownerKey, ownerKeyPq: owner.ownerKeyPq, known, merged}) : {class: 'unproven', nametag: null, check: {ok: false, alarm: 'no-owner-keys'}};
+  /* without the owner keys no label verifies (UNNAMED), and the chain is checked all the same - it needs only its own keys */
+  const c = devicesLib.classify({log: logOf(h), ownerKey: owner ? owner.ownerKey : null, ownerKeyPq: owner ? owner.ownerKeyPq : null, known, merged});
   return {
     deviceId: h.deviceId, nametag: c.nametag, claimed: h.statement?.nametag ?? UNNAMED, class: c.class as HeldView['class'], count: h.records.length, from: h.from, at: h.at,
     checkOk: !!c.check.ok, alarm: c.check.ok ? null : c.check.alarm ?? 'bad',
@@ -426,17 +426,6 @@ async function judge(h: HeldLog, owner?: Awaited<ReturnType<typeof ownerKey>>, k
 /** How many devices have something new in your log you have not looked at yet (the banner). */
 export async function waitingCount(): Promise<number> {
   return (await loadNew()).length;
-}
-
-/**
- * The Edge tab's banner: WHAT came into your log, from WHICH device - a warning first. Tapping it
- * opens the list; "Seen" there is your word that you looked (it never holds anything back).
- */
-export async function bannerLine(): Promise<string | null> {
-  const list = await loadNew();
-  if (!list.length) return null;
-  const w = list[0];
-  return `Warning: a log from "${w.nametag}" ${(w.warning ?? '').split(';')[0]}`;
 }
 
 /*

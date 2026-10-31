@@ -61,7 +61,7 @@ async function saveSeen(seen: Set<string>) {
 /* ---------------------------------------------------------------- the sheet */
 
 export type SheetAsk =
-  /* no peer, sync, sibling or anchor sheet since 2026-10-08: the phone's own links merge at once; another device's log merges when its signatures check and is listed as new (ReviewSheet, 2026-10-24) */
+  /* no peer, sync, sibling or anchor sheet since 2026-10-08: the phone's own links merge at once; another device's log merges when its signatures check and shows in the Edge tab (its device filter, DeviceFilterSheet, 2026-10-31) */
   /* blocked: why Approve is off - this phone's copy does not verify (R27); Decline still answers */
   | {kind: 'request'; computer: string | null; view: any; blocked: string | null; at: number}
   /* SPEC H7 (2026-10-20): a computer sets the agent identity this phone keeps - a tap, no press; `was` = the record it replaces */

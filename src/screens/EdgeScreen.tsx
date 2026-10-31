@@ -26,9 +26,10 @@ import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import {onSheet} from '../edgeAgents';
 import {consentRefusal} from '../debugGuard';
 import {YourDevicesCard} from '../ui/YourDevicesCard';
-import {ReviewSheet} from '../ui/ReviewSheet';
+import {DeviceFilterSheet, type FilterDevice} from '../ui/DeviceFilterSheet';
+import {onFilter, shown} from '../edgeFilter';
 import {useYourDevices, type DeviceLink, type YourDevice} from '../hooks/useYourDevices';
-import {bannerLine, nametagOr, onDevicesChanged, waitingCount} from '../edgeDevices';
+import {currentDeviceId, nametagOr, onDevicesChanged, waitingCount} from '../edgeDevices';
 import {EdgeAgentsCard} from '../ui/EdgeAgentsCard';
 import {AgentsCard} from '../ui/AgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
@@ -733,13 +734,15 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
   /* a device's log opened in full */
   const [allOf, setAllOf] = useState<Set<string>>(new Set());
   /* NEW IN YOUR LOG (Brad, 2026-10-24: "a way to NOTICE and REVIEW what gets merged"): already merged; the banner says what came, the sheet lists it, "Seen" clears it */
+  /* logs whose chain did not check - listed in the filter sheet, never a gate (Brad, 2026-10-31) */
   const [waiting, setWaiting] = useState(0);
-  const [bannerTitle, setBannerTitle] = useState<string | null>(null);
-  const [reviewOpen, setReviewOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  /* the device filter changed: draw the lists again */
+  const [, setFilterTick] = useState(0);
+  useEffect(() => onFilter(() => setFilterTick(t => t + 1)), []);
   useEffect(() => {
     const read = () => {
       void waitingCount().then(setWaiting).catch(() => undefined);
-      void bannerLine().then(setBannerTitle).catch(() => undefined);
     };
     read();
     return onDevicesChanged(read);
@@ -811,9 +814,22 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
    * testing panels are in the drawer at the bottom (src/ui/BottomDrawer.tsx).
    */
   const items: EdgeListItem[] = [];
-  if (waiting > 0) {
-    items.push({key: 'new-banner', kind: 'row', title: bannerTitle ?? 'A log that did not check', subtitle: 'Not merged - tap to see it', tone: 'warn', onPress: () => setReviewOpen(true), accessibilityLabel: 'See the log that did not check'});
-  }
+  /*
+   * THE DEVICE FILTER (Brad, 2026-10-31: the yellow warning row becomes "a filter for different devices"; "by default show
+   * all"): which devices' budgets and presses this list shows - tap for the toggle sheet. Never a gate on the history.
+   */
+  const ownId = currentDeviceId();
+  const filterDevices: FilterDevice[] = [
+    ...(ownId ? [{deviceId: ownId, name: nametagOr(edge.ownName), thisDevice: true}] : []),
+    ...devices.filter(d => d.deviceId.toLowerCase() !== ownId).map(d => ({deviceId: d.deviceId.toLowerCase(), name: deviceName(d)})),
+  ];
+  const showing = filterDevices.filter(d => shown(d.deviceId));
+  items.push({key: 'device-filter', kind: 'row',
+    title: showing.length === filterDevices.length
+      ? `Showing all ${filterDevices.length} device${filterDevices.length === 1 ? '' : 's'}`
+      : `Showing ${showing.length} of ${filterDevices.length} devices`,
+    subtitle: [showing.map(d => d.name).join(', ') || 'none', waiting ? `${waiting} log${waiting === 1 ? '' : 's'} that did not check` : ''].filter(Boolean).join(' · '),
+    onPress: () => setFilterOpen(true), accessibilityLabel: 'Choose which devices to show'});
   /*
    * PAST ITS LIFETIME = NOT LIVE, whatever the key still lists (Brad, 2026-10-06:
    * budget 313 expired on hold and kept Resume and Revoke). Its status follows its
@@ -1008,7 +1024,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
   )});
   /* BUDGET HISTORY (Brad, 2026-10-04): every budget this phone opened that is not live now - tap one for its chain */
   /* and your other devices' budgets, full cards (Brad, 2026-10-09: "i want to see them in the budget history list"), newest first */
-  const history = [...done, ...edge.others].sort((a, b2) => (b2.openedAt ?? 0) - (a.openedAt ?? 0));
+  const history = [...(shown(ownId) ? done : []), ...edge.others.filter(b => shown(b.deviceId))].sort((a, b2) => (b2.openedAt ?? 0) - (a.openedAt ?? 0));
   if (history.length) {
     items.push({key: 's-past', kind: 'section', title: 'Past budgets', right: `${history.length}`});
     for (const b of history) {
@@ -1062,7 +1078,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
     )});
   }
   items.push({key: 's-history', kind: 'section', title: 'Presses', right: rows.length ? `#${rows[0].seq} → #${rows[rows.length - 1].seq} · newest first` : 'nothing yet'});
-  for (const r of rows) {
+  for (const r of shown(ownId) ? rows : []) {
     if (r.fields.op === OP.RECEIPT && attached.has(r.seq)) continue; /* it hangs under its use */
     /* tap: the budget it was for - live or past (Brad, 2026-10-04); a press no budget paid has none */
     const forBudget = r.fields.grantId ? edge.budgets.find(b => b.grantId === r.fields.grantId) ?? edge.past.find(b => b.grantId === r.fields.grantId) : undefined;
@@ -1084,6 +1100,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
    * own nametag and fingerprint, its links newest first - in Presses, below this key's own.
    */
   for (const d of devices) {
+    if (!shown(d.deviceId)) continue;
     if (!d.links.length) continue;
     if (!edge.deviceViews[String(d.deviceId).toLowerCase()]) continue;
     items.push({key: `dv-${d.deviceId}`, kind: 'node', bare: true, render: () => (
@@ -1134,7 +1151,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
         items={items.filter(it => it.key === 'status' || it.key === 'merge-banner' || (pane === 'Presses') === (it.key === 's-history' || it.key === 'live-hold' || it.key === 'live-refused' || /^h\d/.test(it.key) || it.key.startsWith('dv-')))}
         bottomInset={DRAWER_HANDLE} refreshing={edge.busy} onRefresh={edge.sync}
       />
-      <ReviewSheet visible={reviewOpen} onClose={() => setReviewOpen(false)} />
+      <DeviceFilterSheet visible={filterOpen} onClose={() => setFilterOpen(false)} devices={filterDevices} />
       {/* Brad, 2026-10-05: the drawer holds more than agents now */}
       <BottomDrawer title="Edge Management">
         {/* a hard key on the desktop: its nametag ("my device name"), its agent identity, its blocks - from its identity's records */}
