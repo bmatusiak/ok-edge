@@ -54,7 +54,15 @@ async function login(d, { pin = '1111111', life = 180 } = {}) {
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
     else if (now === 'not set up') throw new Error('login: the soft key is not set up (a restore or setup comes first)');
-    else await d.tap(now);
+    else {
+      /*
+       * A MOVE ONLY WHILE ITS STATE HOLDS: the identity check can go on by itself ("Decrypt Bucket" showed for an instant,
+       * the kept bucket opened with no press, and a tap waiting for that button failed a login that had succeeded,
+       * 2026-10-31) - the button live, or the state moved on; only the first is tapped
+       */
+      await d.until((app) => app.controls.some((c) => c.label === now && c.enabled) || loginState(app) !== now, { life: 30, fail: [] });
+      if (loginState(d.app) === now) await d.tap(now);
+    }
     /* the move's effect: the state is another one (or the login is in) */
     await d.until((app) => { const s = loginState(app); return s !== null && s !== now; }, { life: Math.max(5, Math.round((until - Date.now()) / 1000)), fail: [] });
   }
