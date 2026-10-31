@@ -41,7 +41,8 @@ step() {
   node tools/box/page-presser.js --approve "${untilArgs[@]}" --fail "${FAIL:-Try again}" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
   local p=$!
   if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
-  [ $# -gt 0 ] && C "$@"
+  # a click that did not happen ends the step now, with page-click's reason - not after the watchdog
+  if [ $# -gt 0 ] && ! C "$@"; then kill $p 2>/dev/null; wait $p 2>/dev/null; sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
   # its lines as they come (a cutoff from outside used to lose them all), ending with the presser
   tail -n +1 --pid=$p -f "$log" | sed 's/^/   /'
   wait $p; local code=$?
