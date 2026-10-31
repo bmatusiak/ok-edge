@@ -8,6 +8,26 @@ source ~/.nvm/nvm.sh >/dev/null
 cd ~/project/onlykey/ok-edge || return 1
 export CDP_PORT=9334
 say() { echo "== $(date +%T) $*"; }
+# SEEN AS IT HAPPENS (Brad, 2026-10-31: "i hate being blind, and not seeing activity"): everything this shell prints
+# also goes to logs/drive-live.log, and one window on the box screen (DISPLAY=:10) shows it with the session presser's
+# lines, full - opened here unless it is already open (its pid in logs/drive-window.pid; closed by pid, never a pattern)
+DRIVE_LOG=~/project/onlykey/logs/drive-live.log
+if [ -z "$DRIVE_TEED" ]; then
+  export DRIVE_TEED=1
+  exec > >(tee -a "$DRIVE_LOG") 2>&1
+  echo "== $(date +%T) drive: ${0##*/} $*"
+fi
+drive_window() {
+  local pidf=~/project/onlykey/logs/drive-window.pid
+  [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && return 0
+  DISPLAY=:10 XAUTHORITY=$HOME/.Xauthority setsid xfce4-terminal --title "drive (live)" --geometry 140x40 \
+    -e "bash $HOME/project/onlykey/ok-edge/tools/box/drive-watch.sh" > /dev/null 2>&1 < /dev/null &
+  echo $! > "$pidf"
+}
+drive_window
+# goto <tab>: the menu's state read first ("Close menu" = open) - a "Menu" click on an open menu closed it, and the
+# tab was never found (2026-10-31)
+goto() { has "Close menu" || C "Menu" > /dev/null || return 1; C "$1" > /dev/null; }
 # a click (or ?label wait) - its exit status is page-click's: a step that did not happen fails the caller
 C() { local out; out=$(timeout 120 node tools/box/page-click.js "$@" 2>&1); local code=$?; echo "$out" | tail -1 | cut -c1-200; return $code; }
 # the first line of `file` matching `re`, as it is written (tail -f, no polling); the reader ends with the match -
@@ -56,7 +76,7 @@ login() {
   if has "$LOGGED_IN"; then echo "   already logged in"; return 0; fi
   if has "Try again"; then step "?$LOGGED_IN" "Try again"; return; fi
   local b; for b in "Decrypt Bucket" "Create Bucket"; do has "$b" && { step "?$LOGGED_IN" "$b"; return; }; done
-  has "Button 1" || C "Menu" "This Key" > /dev/null
+  has "Button 1" || goto "This Key"
   step "?$LOGGED_IN" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1"
 }
 # the app (re)started and its page up (the browser's own target event), then into testing mode
@@ -76,6 +96,7 @@ session_on() {
   SESSION=1
   [ -n "$DRIVE_SESSION" ] && kill -0 "$DRIVE_SESSION" 2>/dev/null && return 0
   SESSION_LOG=~/project/onlykey/logs/drive-session-$(date +%H%M%S).log
+  touch "$SESSION_LOG"; ln -sf "$SESSION_LOG" ~/project/onlykey/logs/drive-session-current.log
   node tools/box/page-presser.js --approve --life 3600 --show '^\[(identity|bucket|room|card)\]|firmware record: a derive|Opening this identity' >> "$SESSION_LOG" 2>&1 &
   DRIVE_SESSION=$!
   waitline "$SESSION_LOG" 'listening' "$DRIVE_SESSION" > /dev/null
@@ -87,7 +108,7 @@ budget_demo() {
   # precheck: a sheet left open covers the tab (the device filter, 2026-10-31: every click went into it and the demo
   # carried on blind) - close it first; every move below must happen or the demo stops with page-click's reason
   has "Show all" && { C "Close" > /dev/null || return 1; }
-  C "Menu" "Edge" > /dev/null || return 1
+  goto "Edge" || return 1
   # precheck: a live budget is spent, not stacked on; an ask already waiting is approved, not asked again
   if ! has "Active"; then
     has "Approve" || C "▲ Edge Management" "Agent: request a budget" "Close Edge Management" "?Approve" > /dev/null || return 1
