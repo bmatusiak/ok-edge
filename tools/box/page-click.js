@@ -132,6 +132,29 @@ const FIND = (label) => `(() => {
       if (!at || at.x === undefined) throw new Error(`WATCHDOG: "${a}" not on screen in ${LIFE} s; there: ${(at?.seen || []).join(' | ')}`);
       if (at.disabled) throw new Error(`WATCHDOG: "${a}" still ${at.covered ? 'covered' : 'disabled'} after ${LIFE} s - not clicked`);
       if (only) { console.log(`there: "${a}"`); continue; }
+      /*
+       * STILL BEFORE IT IS CLICKED (2026-10-31: "Agent: a sign the budget pays" clicked while the Edge Management drawer
+       * was still sliding in - measured mid-slide, the click landed where the button had been, and the sign never ran,
+       * with no error anywhere). The page's own animation frames are the events: the control's centre is read each
+       * frame until two frames agree, then that is where the click goes. The frames are capped by the same LIFE.
+       */
+      const still = await Promise.race([
+        new Promise((resolve) => setTimeout(() => resolve(null), LIFE * 1000 + 2000)),
+        call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
+          const find = () => { const f = ${FIND(a)}; return f && f.x !== undefined && !f.disabled ? f : null; };
+          let last = null, frames = 0;
+          const tick = () => {
+            const f = find();
+            if (f && last && Math.abs(f.x - last.x) < 0.5 && Math.abs(f.y - last.y) < 0.5) return resolve(f);
+            last = f;
+            if (++frames > ${LIFE} * 60) return resolve(null);
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        })` }).then((r) => r.result && r.result.result && r.result.result.value),
+      ]);
+      if (!still) throw new Error(`WATCHDOG: "${a}" never held still (or left) within ${LIFE} s - not clicked`);
+      at = still;
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
         await call('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
       }
