@@ -207,6 +207,10 @@ function holdGadget(onOut) {
  * the GADGET soft key under the emulator's dummy_hcd - with its bus/device, its serial and its hidraw nodes. Watched by
  * the kernel's own USB events (udevadm monitor): each add or remove reads the set again, and only a changed set is told.
  * Linux so far; Windows' device-change events come with the drive on Windows (step 4).
+ *
+ * NOT WHICH KEY: every OnlyKey gives the same USB serial (1000000000) - a security feature, so a key cannot be tracked
+ * across computers (Brad, 2026-10-31). The monitor says what the machine sees anyway - kind, port, interfaces - and never
+ * asks a key anything to tell keys apart.
  */
 /*
  * WINDOWS: a real OnlyKey is the USB composite device USB\VID_1D50&PID_60FC\<serial> (its parent a USB hub); the soft
