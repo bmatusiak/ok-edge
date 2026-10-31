@@ -78,7 +78,7 @@ import {setFirmwareConsoleToLogcat} from './src/hooks/useOkEmu';
 import {startKeyChainRecorder} from './src/keyChainRecorder';
 import {startLinkStash} from './src/linkStash';
 import {startDrive} from './src/drive/client';
-import {DriveTap} from './src/drive/registry';
+import {DriveTap, setDriveFlag} from './src/drive/registry';
 
 /**
  * Whether the screens that show secrets refuse to be captured.
@@ -487,6 +487,8 @@ function Shell() {
   const [phase, setPhase] = useState<Phase>(SPLASH_SEEN ? 'login' : 'splash');
   /* past the PIN, a newer web build asks (UpdateSheet) instead of reloading the page by itself (src/webUpdate.ts) */
   useEffect(() => { setLoggedIn(phase === 'identity' || phase === 'main'); }, [phase]);
+  /* the drive reads where the app is from the app, not from its screen (src/drive/registry.tsx) */
+  useEffect(() => setDriveFlag('phase', phase), [phase]);
   /*
    * A LOGIN THIS TAB KEPT (webSession.ts, chosen at the identity check): on a reload the login screen goes on by itself
    * - the key is asked (armWebKey), and the identity check opens the bucket with no press. Once a page load.

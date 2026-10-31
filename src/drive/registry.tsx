@@ -109,3 +109,17 @@ export function DriveTap({label, enabled = true, onPress}: {label: string; enabl
   useDriveControl(label, enabled, onPress);
   return null;
 }
+
+/*
+ * WHAT THE APP KNOWS ABOUT ITSELF, for a drive (2026-10-31: "logged in" read off the screen's text came while the
+ * identity check was still running, and the next move raced its press sheet). The app sets these where it decides
+ * them - MainApp its phase, the key-busy events whether a key request is in flight - and every control update carries
+ * them, with whether an overlay is open.
+ */
+const flags: Record<string, unknown> = {};
+export function setDriveFlag(name: string, value: unknown): void {
+  if (!driveGate() || flags[name] === value) return;
+  flags[name] = value;
+  changed();
+}
+export const driveFlags = (): Record<string, unknown> => ({...flags});

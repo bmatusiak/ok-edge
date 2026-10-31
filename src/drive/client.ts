@@ -19,7 +19,8 @@
  * able to enter testing mode - and says which net it is on as that changes; the server presses only on the testnet.
  */
 import {Platform} from 'react-native';
-import {driveGate, fillField, liveControls, onDriveChange, tapLabel} from './registry';
+import {driveFlags, driveGate, fillField, liveControls, onDriveChange, setDriveFlag, tapLabel, topLayer} from './registry';
+import {onKeyBusy} from '../keyBusy';
 import {shell} from '../platform';
 import {currentNet, onNet} from '../net';
 import {shot} from './shot';
@@ -29,6 +30,9 @@ const URL = process.env.EXPO_PUBLIC_OKEDGE_DRIVE_URL || 'ws://127.0.0.1:8790';
 let ws: WebSocket | null = null;
 let dialling = false;
 let started = false;
+
+/* the top layer's controls, whether an overlay is open, and the app's own flags (phase, busy) */
+const controlsMsg = () => ({t: 'controls', list: liveControls(), top: topLayer(), flags: driveFlags()});
 
 function send(msg: object): void {
   if (ws && ws.readyState === 1) {
@@ -51,7 +55,7 @@ function dial(): void {
     dialling = false;
     ws = sock;
     send({t: 'hello', shell, net: currentNet(), os: Platform.OS});
-    send({t: 'controls', list: liveControls()});
+    send(controlsMsg());
     send({t: 'screen', text: screenText()});
   };
   sock.onclose = () => { dialling = false; if (ws === sock) ws = null; };
@@ -65,7 +69,7 @@ function dial(): void {
     else if (m.t === 'state') reply(true, {controls: liveControls(), text: screenText()});
     /* introduce yourself again: a drive server that took over this connection (through a drive-remote) never had the
      * first hello (2026-10-31: a restarted server waited for an app that was connected all along) */
-    else if (m.t === 'hello') { send({t: 'hello', shell, net: currentNet(), os: Platform.OS}); send({t: 'controls', list: liveControls()}); send({t: 'screen', text: screenText()}); }
+    else if (m.t === 'hello') { send({t: 'hello', shell, net: currentNet(), os: Platform.OS}); send(controlsMsg()); send({t: 'screen', text: screenText()}); }
     else if (m.t === 'shot') void shot().then(r => reply('png' in r, r));
     else reply(false, {why: `unknown command "${m.t}"`});
   };
@@ -90,8 +94,11 @@ export function startDrive(): void {
     };
   }
 
+  /* a key request in flight: a drive waits it out before its next move */
+  onKeyBusy(b => setDriveFlag('busy', !!b));
+
   onDriveChange(() => {
-    if (ws) send({t: 'controls', list: liveControls()});
+    if (ws) send(controlsMsg());
     else dial();
   });
 

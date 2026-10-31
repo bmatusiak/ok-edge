@@ -60,6 +60,8 @@ class App extends EventEmitter {
     this.net = hello.net;
     this.os = hello.os;
     this.controls = [];
+    this.top = 0;
+    this.flags = {};
     this.text = '';
     this.nextId = 1;
     this.waiting = new Map();
@@ -81,6 +83,8 @@ class App extends EventEmitter {
     return this.text.split('\n').some((l) => l.trim() === label);
   }
   liveLabels() { return this.controls.filter((c) => c.enabled).map((c) => c.label); }
+  /* nothing open over the screen and no key request in flight - as the app itself says (registry flags) */
+  settled() { return !this.top && !(this.flags && this.flags.busy); }
 }
 
 let apps = new Map(); /* shell -> App: the newest connection of each shell */
@@ -283,7 +287,7 @@ function attachApp(sock) {
     if (m.t === 'net') { app.net = String(m.net); line(`[${app.shell}] net: ${app.net}`); app.emit('screen'); return; }
     if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
     if (m.t === 'log') { app.emit('log', String(m.line)); return; }
-    if (m.t === 'controls') { app.controls = m.list || []; app.emit('controls'); return; }
+    if (m.t === 'controls') { app.controls = m.list || []; app.top = m.top || 0; app.flags = m.flags || {}; app.emit('controls'); return; }
     if (m.t === 'screen') { app.text = String(m.text || ''); app.emit('screen'); }
   });
   sock.on('close', () => {

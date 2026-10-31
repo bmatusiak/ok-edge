@@ -21,7 +21,9 @@ async function testingMode(d) {
  * app started was gone by the time it was tapped).
  */
 function loginState(app) {
-  if (app.has(LOGGED_IN)) return 'in';
+  /* in = the app says it is in its main phase, nothing open, no key request in flight - its own word, not its screen's */
+  if (app.flags.phase === 'main' && app.settled() && app.has(LOGGED_IN)) return 'in';
+  if (app.flags.phase === 'identity' || app.flags.busy || app.top) return null;
   if (app.has('Enter testing mode')) return 'login screen';
   for (const b of ['Try again', 'Decrypt Bucket', 'Create Bucket']) if (app.has(b)) return b;
   if (app.has('Button 1') && app.net === 'test') return 'keypad';
