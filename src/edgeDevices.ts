@@ -368,16 +368,11 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
   const v = await judge(entry);
   const list = await loadHeld();
   /*
-   * UNPROVEN (Brad, 2026-10-30: unnamed devices' logs accepted - a device is yours by its certified card or its nametag):
-   * a log that carries neither is not yours and not an attack either - kept apart quietly, no alarm, no warning banner,
-   * looked at again when its card or nametag arrives.
+   * UNPROVEN IS MERGED (Brad, 2026-10-30: unnamed devices' logs accepted; 2026-10-31: the held logs were "stopping links
+   * from being included"): a log with no card or certified nametag of yours - and an old one whose statement predates
+   * certify - goes into your log when its chain checks, shown under its key as UNNAMED; its nametag is not remembered as
+   * yours and nothing alarms. Only a log that does not check, or a proof that does not verify, is kept apart.
    */
-  if (v.class === 'unproven') {
-    const was = list.find(h => h.deviceId === id);
-    if (!(was && was.checkpoint.seq === o.checkpoint.seq && was.checkpoint.head.toLowerCase() === head)) await saveHeld([...list.filter(h => h.deviceId !== id), entry]);
-    console.log(`[edge] log of ${id.slice(0, 8)}: unproven - no login card or nametag of yours yet; kept apart, not merged`);
-    return {held: true, count: 0};
-  }
   if (v.class === 'forged' || !v.checkOk) {
     /* the same failing log again: listed once */
     const was = list.find(h => h.deviceId === id);
@@ -395,11 +390,13 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
   const had = mirror.links.length;
   /* the merge point is that log's newest checkpoint: kept with both halves - the copy's hybrid anchor */
   await keepMerged(log.deviceId, log.publicKey, log.publicKeyPq, log.records, {seq: entry.checkpoint.seq, head: log.checkpoint.head, signature: log.checkpoint.signature, signaturePq: log.checkpoint.signaturePq, at: now});
-  if (log.statement) await AsyncStorage.setItem(DEVICES(), JSON.stringify(devicesLib.remember(await loadDevices(), log.statement)));
+  /* an unproven log's statement (an old one, unverifiable today) names nothing of yours: not remembered */
+  if (log.statement && v.class !== 'unproven') await AsyncStorage.setItem(DEVICES(), JSON.stringify(devicesLib.remember(await loadDevices(), log.statement)));
   await keepOpenings(id, log.publicKey, entry.openings ?? []);
   await keepNotes(log.deviceId, entry.notes ?? null);
-  /* an earlier copy of it that failed a check is answered by this one */
+  /* an earlier copy of it that failed a check is answered by this one - and its warning goes with it */
   if (list.some(h => h.deviceId === id)) await saveHeld(list.filter(h => h.deviceId !== id));
+  if ((await loadNew()).some(n => n.deviceId === id)) await markSeen(id);
   const came = Math.max(0, (await loadMirror(o.deviceId)).links.length - had);
   console.log(`[edge] log of "${v.nametag ?? name}" (${id.slice(0, 8)}): merged, ${came} new link(s)${v.complete ? "" : `, ${v.missing.length} use(s) without their words`}`);
   return {held: true, count: came};
