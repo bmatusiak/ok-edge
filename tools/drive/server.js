@@ -552,7 +552,7 @@ async function proc(action, target) {
  * samples taken while it ran) - so today's run can be laid beside yesterday's. The window lists them (bus 'run').
  */
 const RUNS = path.join(path.dirname(SHOTS), 'drive-runs');
-function saveRun({ script, app, args, code, reason, started, lines, files }) {
+function saveRun({ script, app, args, code, reason, started, lines, files, keys }) {
   try {
     const ended = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -560,7 +560,7 @@ function saveRun({ script, app, args, code, reason, started, lines, files }) {
     const dir = path.join(RUNS, id);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'lines.log'), `${lines.join('\n')}\n`);
-    const record = { id, script, app, args, verdict: code === 0 ? 'PASS' : 'FAIL', reason, started: started.toISOString(), ended: ended.toISOString(), ms: ended - started, files, dir };
+    const record = { id, script, app, args, verdict: code === 0 ? 'PASS' : 'FAIL', reason, started: started.toISOString(), ended: ended.toISOString(), ms: ended - started, keys, files, dir };
     fs.writeFileSync(path.join(dir, 'run.json'), `${JSON.stringify(record, null, 2)}\n`);
     bus.emit('run', record);
   } catch (e) { line(`run record not kept: ${e.message}`); }
@@ -584,6 +584,10 @@ function control(ws) {
     const onFile = (file) => runFiles.push(file);
     bus.on('shot', onFile);
     bus.on('sample', onFile);
+    /* its key requests (#6), counted from the app's own "[key]" lines - how hard a run leaned on the key */
+    const keys = { requests: 0, presses: 0 };
+    const onAppLine = (shell, l) => { if (shell === (m.app || shell) && / \[key\] /.test(l)) { keys.requests++; if (/\(press\)$/.test(l)) keys.presses++; } };
+    bus.on('app-line', onAppLine);
     const started = new Date();
     let reason = '';
     const watch = (l) => { runLines.push(l); send({ t: 'line', line: l }); };
@@ -613,10 +617,12 @@ function control(ws) {
       const now = shotApp && apps.get(shotApp.shell);
       if (now) await shotOf(now, `${m.script}-stopped`);
     } finally {
+      bus.off('app-line', onAppLine);
+      if (keys.requests) line(`[${m.script}] ${keys.requests} key request(s), ${keys.presses} with a press`);
       watchers.delete(watch);
       bus.off('shot', onFile);
       bus.off('sample', onFile);
-      saveRun({ script: String(m.script), app: (shotApp && shotApp.shell) || m.app || '?', args: m.args || [], code, reason, started, lines: runLines, files: runFiles });
+      saveRun({ script: String(m.script), app: (shotApp && shotApp.shell) || m.app || '?', args: m.args || [], code, reason, started, lines: runLines, files: runFiles, keys });
       send({ t: 'end', code });
     }
   });

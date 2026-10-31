@@ -81,7 +81,8 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
   });
 
   /* ---- the apps' side: each connection relayed, opened and closed with it */
-  const appHttp = http.createServer();
+  /* a plain request (an app's net check, #4) gets an answer, not a hang: the port is for the apps' sockets */
+  const appHttp = http.createServer((req, res) => { res.writeHead(204); res.end(); });
   appHttp.on('error', (e) => line(`the apps' port ${appPort}: ${e.message}`));
   const appSide = new WebSocketServer({ server: appHttp.listen(appPort, '127.0.0.1') });
   appSide.on('connection', (ws) => {
