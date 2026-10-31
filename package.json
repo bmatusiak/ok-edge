@@ -41,7 +41,6 @@
     "test-moniker": "file:../test-moniker"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.14",
     "@types/react": "~19.3.0",
     "@types/react-test-renderer": "^19.3.0",
     "cross-env": "^10.0.0",
