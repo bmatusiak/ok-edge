@@ -113,7 +113,18 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
   for (let moves = 0; moves < 12; moves++) {
     const left = Math.max(5, Math.round((until - Date.now()) / 1000));
     const now = await d.until((app) => loginState(app) !== null, { life: left, fail: [] }).then(() => loginState(d.app));
-    if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return d; }
+    if (now === 'in') {
+      d.say(moves ? 'logged in' : 'logged in already');
+      /*
+       * THE LOGIN CARD, WHEN OFFERED (2026-10-31, the web app: its sheet stayed over the screen and the next flow could
+       * not reach the menu): made here - one certify press, the testnet's - so every flow starts from a screen with
+       * nothing over it. The restore flow made it alone before; now every login does.
+       */
+      if (d.app.controls.some((c) => c.label === 'Make the card' && c.enabled)) {
+        await d.step('the login card', { goal: /\[card\] .*certified at/, act: () => d.tap('Make the card') });
+      }
+      return d;
+    }
     d.say(`login: ${now}`);
     if (now.startsWith('close:')) await d.tap(now.slice(6));
     else if (now.startsWith('Go to ') || now === 'Reload') {
@@ -219,8 +230,8 @@ async function restore(d, { backup, passphraseFile, passphraseKey = 'passphrase'
   await d.fillFile("the backup's passphrase", passphraseFile, passphraseKey);
   await d.tap('Restore');
   d = await d.restarted(() => d.tap('Restart the app'), { life: 120 });
+  /* the login makes this device's login card when it is offered (login) */
   d = await login(d, { pin });
-  await d.step('the login card', { goal: /\[card\] .*certified at/, act: () => d.tap('Make the card') });
   return d;
 }
 
