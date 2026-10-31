@@ -21,17 +21,17 @@ async function testingMode(d) {
  * app started was gone by the time it was tapped).
  */
 function loginState(app) {
-  /* in = the app says it is in its main phase, nothing open, no key request in flight - its own word, not its screen's */
-  if (app.flags.phase === 'main' && app.settled() && app.flags.tab === 'This Key' && app.flags.key === 'unlocked' && app.flags.passed && !app.flags.identityCheck) return 'in';
-  /* a new device's login ends with its card offered: in, and the flow decides about the card */
-  if (app.flags.phase === 'main' && !app.flags.busy && app.has('Make the card')) return 'in';
-  if (app.flags.phase === 'identity' || app.flags.busy || app.top) return null;
-  /* the identity check's own buttons are moves; while it works, nothing is pressed */
-  if (app.flags.identityCheck && !['Try again', 'Decrypt Bucket', 'Create Bucket'].some((b) => app.has(b))) return null;
+  const f = app.flags;
+  /*
+   * THE APP'S FLAGS DECIDE, NEVER A LABEL (2026-10-31: the unlocked key's own buttons panel has a "Button 1" too - read
+   * as "the keypad", it was pressed, which types a slot). Labels only name the moves: the buttons the app offers.
+   */
   if (app.has('Enter testing mode')) return 'login screen';
-  for (const b of ['Try again', 'Decrypt Bucket', 'Create Bucket']) if (app.has(b)) return b;
-  if (app.has('Button 1') && app.net === 'test') return 'keypad';
-  if (app.net === 'test' && app.has('Menu')) return 'elsewhere';
+  if (f.phase === 'main' && f.passed && !f.busy && (!app.top || app.has('Make the card'))) return 'in';
+  if (f.busy || app.top) return null;
+  if (f.identityCheck) return ['Try again', 'Decrypt Bucket', 'Create Bucket'].find((b) => app.has(b)) || null;
+  if (f.key === 'locked') return f.tab === 'This Key' ? 'keypad' : 'elsewhere';
+  if (f.key === 'uninitialized') return 'not set up';
   return null;
 }
 
@@ -49,6 +49,7 @@ async function login(d, { pin = '1111111', life = 180 } = {}) {
     if (now === 'login screen') await d.tap('Enter testing mode');
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
+    else if (now === 'not set up') throw new Error('login: the soft key is not set up (a restore or setup comes first)');
     else await d.tap(now);
     /* the move's effect: the state is another one (or the login is in) */
     await d.until((app) => { const s = loginState(app); return s !== null && s !== now; }, { life: Math.max(5, Math.round((until - Date.now()) / 1000)), fail: [] });
