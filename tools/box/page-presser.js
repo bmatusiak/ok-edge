@@ -30,6 +30,7 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
   const waiting = new Map();
   /* the handler first: a call made before it was set never heard its answer (the presser hung before "listening") */
   let onConsole = () => {};
+  const startedAt = Date.now();
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); return; }
@@ -71,6 +72,12 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
   const act = (fn) => { chain = chain.then(fn).catch((e) => say(`failed: ${e.message || e}`)); };
 
   onConsole = (m) => {
+    /*
+     * ONLY WHAT HAPPENS FROM NOW: Runtime.enable REPLAYS the page's earlier console lines, and each new presser acted on
+     * old "sheet up" lines - clicks where a button once was (it opened a budget's page) - and a step "ended" on an
+     * old outcome line (2026-10-31). A line stamped before this presser started is history, not an event.
+     */
+    if (m.params.timestamp && m.params.timestamp < startedAt) return;
     const line = (m.params.args || []).map((a) => (a.value !== undefined ? String(a.value) : a.description || '')).join(' ');
     recent.push(line.slice(0, 160)); if (recent.length > 8) recent.shift();
     if (SHOW && SHOW.test(line)) say(line.slice(0, 200));
