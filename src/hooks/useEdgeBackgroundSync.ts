@@ -10,13 +10,14 @@
  *
  * WHEN: on an EVENT, never on a timer (Brad, 2026-10-29: "event based is the fastest path over time ... event based
  * is also safer; timers are only meant to help inactivity protection"). The soft key's Edge plugin says "edge_link" each
- * time it stores a link, whoever asked for it (this app, a computer over Bluetooth or USB); a round follows, and one
+ * time it stores a link, whoever asked for it (this app, or a computer); a round follows, and one
  * round when the watch starts (what happened while the app was shut). It used to read the head every 15 s, link or no
  * link - on the busy sheet, "Working with your key" every 10-15 s. A round still waits until the soft key's vendor
  * interface has been quiet for SETTLE_MS, whoever was using it; a link stored meanwhile is caught by the next try (the
  * watchdog's tick, below), which asks the key nothing when no link is waiting. The sync is the app talking
  * to that interface, and two conversations at once swap answers: a computer's
- * (vendorBridge.ts owner), and the app's own. MEASURED ON THE A13
+ * (the phone's Bluetooth vendor bridge had them, until the cli pair went
+ * 2026-10-30), and the app's own. MEASURED ON THE A13
  * (2026-10-03): Key Chain read its slots while a sync ran - the same slots
  * read "unknown", then ECC1 as ed25519 (it holds x25519), and signing the PGP
  * key locked the firmware on the production build. So every vendor report
@@ -38,7 +39,6 @@ import {createWatchRound} from '../edgeWatchRound';
 import {beat, onHoldRequested, onWatchTick, raiseWatchAlarms, takeHoldRequest, watching} from '../edgeAlerts';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {hasSoftKeyPlugin} from '../buildInfo';
-import {vendorQuietForMs} from '../vendorBridge';
 import {getOnlyKey} from '../onlykey';
 import {transport as oktransport} from 'node-onlykey-lib';
 import type {KeyWaiting} from '../transport/OkEmu';
@@ -72,8 +72,7 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
        * (OKEDGE frames, byte 4 = 0xF8): those queue one at a time in the lib, and
        * since the watcher runs in the background the Edge tab's 4 s head check
        * runs there too - counted as traffic, it kept every sync away ("skip: key
-       * traffic", the Pixel, 2026-10-04). Replies are not counted: a computer's
-       * conversation is vendorQuietForMs's to judge.
+       * traffic", the Pixel, 2026-10-04). Replies are not counted.
        */
       const mark = ({iface, data}: {iface: number; data?: ArrayLike<number>}) => {
         if (iface !== IFACE_VENDOR) return;
@@ -107,7 +106,6 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
        * the alarms must reach a phone in a pocket. A press waiting still skips.
        */
       if (waitingRef.current) return;
-      if (vendorQuietForMs() < SETTLE_MS) return; /* a computer is talking to the key */
       if (Date.now() - lastTraffic < SETTLE_MS) return; /* the key is in use - by this app too */
       busy = true;
       pending = false;

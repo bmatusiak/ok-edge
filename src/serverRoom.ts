@@ -10,21 +10,23 @@
  *
  * Once the identity check has opened the bucket, the device joins its identity's room with the key's proof (lib
  * bucket/src/room-client.js: the bucket key over the server's host and a fresh nonce - no code, no account), then:
- *   - ANSWERS the trades other devices start (bucketTrade.ts handleTrade - the peer side the phone answers over
- *     Bluetooth too);
+ *   - ANSWERS the trades other devices start (bucketTrade.ts handleTrade - the peer side);
  *   - STARTS one with each device online - when it joins, and when another comes online - so a blank bucket fills from
  *     whoever is there, and a change made here reaches them. One trade at a time; the merge rules settle both ways.
  * Frames are sealed between the devices of the identity; the server passes ciphertext.
  *
- * Here: the bucket opened in memory (the web app, the phone). The desktop keeps its bucket in the file its sync
- * service shares with the CLI, so it joins through that service (lib `bucket sync --server`).
+ * THE ROOM IS THE SYNC (Brad, 2026-10-30: "just remove ble pair and sync stuff - we are using key3 to push and sync, so
+ * phones are free to become testing over mcp until we rework how ble comes back"). The cli pair's Bluetooth trades and
+ * the desktop's sync service went; what this device knows of its sync - the last trade, each feature after it - is kept
+ * here, in the room's state (the 🔗 shows it; the Sync tab's Features list reads it). Every shell joins with the bucket
+ * opened in memory (bucketStore.ts) - the desktop's too, kept in the file it shares with the CLI.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {handleTrade, proofMaterial} from './bucketTrade';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
-import {RULES} from './bucketRules';
-import {phoneSyncTraded} from './sync';
+import {RULES, storeItems} from './bucketRules';
+import {bucketTraded} from './bucketEvents';
 import {deviceName, shell} from './platform';
 import {activeBackend} from './hooks/KeyContext';
 import {attachAgents, detachAgents} from './mcpAgents';
@@ -42,6 +44,8 @@ const REJOIN_MS = 15000;
 const ANSWER_MS = 120000;
 
 export type RoomPeer = {id: string; name: string; kind: string};
+/** One feature's store, after the latest trade in the room: its items, whether it matched the other device, and when. */
+export type SyncStore = {items: number; same: boolean | null; checkedAt: number; changedAt: number | null};
 export type RoomState = {
   /* the server this device joins, or null (no site on the key, or a web page off the key's site) */
   url: string | null;
@@ -55,9 +59,11 @@ export type RoomState = {
   last: {with: string; at: number; line: string} | null;
   /* the last failure needs the key (its bucket key was not made): only the person tries again */
   needsKey: boolean;
+  /* each feature's store as the room's trades last left it (bucket store names: passwords, guestbook, keychain-test, ...) */
+  stores: Record<string, SyncStore>;
 };
 
-let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false};
+let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false, stores: {}};
 const listeners = new Set<(s: RoomState) => void>();
 const set = (patch: Partial<RoomState>) => {
   state = {...state, ...patch};
@@ -67,6 +73,37 @@ export const roomState = () => state;
 export function onRoomState(l: (s: RoomState) => void): () => void {
   listeners.add(l);
   return () => { listeners.delete(l); };
+}
+
+/*
+ * EACH FEATURE AFTER A TRADE (Brad, 2026-10-25: "a panel that shows the status of each feature, and last sync
+ * timestamps" - the Sync tab's Features list; kept for every carrier in src/sync.ts until the room became the only one,
+ * 2026-10-30). A check this device answered: the two states compared, each store as it is here.
+ */
+function storesChecked(stores: Record<string, {items: number; same: boolean}>): void {
+  const at = Date.now();
+  const next: Record<string, SyncStore> = {};
+  for (const [name, x] of Object.entries(stores)) next[name] = {items: x.items, same: x.same, checkedAt: at, changedAt: state.stores[name]?.changedAt ?? null};
+  set({stores: next});
+}
+/*
+ * Records taken in, per store - and a screen holding a decrypted copy of a changed store asks to decrypt again
+ * (bucketEvents.ts: Passwords' banner). `items`: each store's count after the take - a store this device did not have
+ * yet (a blank web app, the box 2026-10-27: "changed by a sync never" beside 19 items it had just been given) is listed
+ * from it.
+ */
+function storesTraded(taken: Record<string, number>, items: Record<string, number> = {}): void {
+  const at = Date.now();
+  const changed = Object.keys(taken).filter(k => Number(taken[k]) > 0);
+  if (!changed.length) return;
+  const stores = {...state.stores};
+  for (const name of changed) {
+    stores[name] = stores[name]
+      ? {...stores[name], ...(items[name] !== undefined ? {items: items[name]} : {}), changedAt: at, same: true}
+      : {items: items[name] ?? Number(taken[name]), same: true, checkedAt: at, changedAt: at};
+  }
+  set({stores});
+  bucketTraded(changed);
 }
 
 /*
@@ -210,9 +247,21 @@ export async function joinServerRoom(): Promise<void> {
     console.log(`[room] joined ${new URL(url).host} as ${device.name}: ${r.peers().length} other device(s) online`);
     /* the room was joined with the key's proof, so it may trade while the bucket it joined for is open */
     r.serve(async (from: string, message: any) => {
+      /* the 🔗 flashes for every trade message this device answers in the room (btActivity 'mcp') */
+      ioPulse('mcp');
       const out: any = await handleTrade(message, from, {allowed: () => tradeBucket()?.identity === me.id});
-      /* a trade another device started, answered here: it is this device's last trade too (the ⇄ shows it, as its own) */
+      /* a check answered: the two states compared, and each feature as it is here */
+      if (message?.type === bucketLib.trade.TYPES.PROVE && out?.ok && out.state && message.state) {
+        const b = tradeBucket()?.bucket;
+        const differs: string[] = bucketLib.replicate.differs(out.state, message.state);
+        const stores: Record<string, {items: number; same: boolean}> = {};
+        if (b) for (const [name, items] of Object.entries(storeItems(b))) stores[name] = {items, same: !differs.includes(name)};
+        storesChecked(stores);
+      }
+      /* a trade another device started, answered here: it is this device's last trade too (the 🔗 shows it, as its own) */
       if (message?.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
+        const b = tradeBucket()?.bucket;
+        storesTraded(out.taken || {}, b ? storeItems(b) : {});
         const who = r.peers().find((p: RoomPeer) => p.id === from);
         set({last: {with: who ? who.name : from, at: Date.now(), line: 'traded - answered its trade'}});
       }
@@ -291,12 +340,13 @@ async function sealedSync(why: string): Promise<void> {
   const {logblocks} = require('node-onlykey-lib/edge');
   const entries = (name: string) => Object.fromEntries(Object.entries((open.bucket.stores[name] ?? {}) as Record<string, {v: string | null; archived?: boolean}>).filter(([, x]) => x && !x.archived && x.v !== null).map(([k, x]) => [k, x.v as string]));
   const heads = {...logblocks.newestSeqs(entries('edge-logs')), ...logblocks.newestSeqs(entries('edge-logs-test'))};
-  ioPulse('sync');
+  /* the sealed copy's round trip is room traffic too: the 🔗 flashes */
+  ioPulse('mcp');
   const res = await bucketLib.sealedCopy.syncWith(open.bucket, bucketLib.sealedCopy.keysOf(me.bucketKey), store, {rules: RULES, randomBytes, heads});
   for (const x of res.refused) console.log(`[room] the sealed copy: a row refused - ${x}`);
   if (count(res.taken)) {
     await saveTradedBucket();
-    phoneSyncTraded(res.taken);
+    storesTraded(res.taken, storeItems(open.bucket));
   }
   sealedSaid = 'on';
   console.log(`[room] the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
@@ -336,8 +386,8 @@ async function tradeWith(peer: RoomPeer): Promise<void> {
   const open = tradeBucket();
   const me = await proofMaterial();
   if (!r || !open || !me) return;
-  /* the ⇄ flashes for every trade message this device sends in the room (btActivity 'sync') */
-  const send = (m: any) => { ioPulse('sync'); return r.request(peer.id, m, {timeoutMs: ANSWER_MS}); };
+  /* the 🔗 flashes for every trade message this device sends in the room (btActivity 'mcp') */
+  const send = (m: any) => { ioPulse('mcp'); return r.request(peer.id, m, {timeoutMs: ANSWER_MS}); };
   const c = bucketLib.trade.computerSide({bucket: open.bucket, me, randomBytes, rules: RULES});
   const m2 = c.prove(await send(c.hello()));
   const done = (line: string) => {
@@ -364,7 +414,7 @@ async function tradeWith(peer: RoomPeer): Promise<void> {
   }
   if (count(taken)) {
     await saveTradedBucket();
-    phoneSyncTraded(taken);
+    storesTraded(taken, storeItems(open.bucket));
   }
   done(`${settled ? 'traded' : 'not settled'} - took ${count(taken)}, gave ${gave}`);
 }

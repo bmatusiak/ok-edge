@@ -28,8 +28,6 @@ const CHANNELS = new Set([
   'okedge:keySite',
   /* which key the page has open, so a CLI reaches the same one (electron/desktop/hosting.js) */
   'okedge:activeKey',
-  /* the sync service this app hosts, and pairing a phone from the Sync tab (electron/desktop/sync.js) */
-  'okedge:syncState', 'okedge:syncNet', 'okedge:syncEnable', 'okedge:syncSetOn', 'okedge:syncPair', 'okedge:syncPairCancel', 'okedge:syncForget',
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',
@@ -37,7 +35,7 @@ const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning
 /* what the main process may push to the page: the native modules' events (src/desktop/specs) */
 const EVENTS = new Set(['NativeOkEmu:onStream', 'NativeOkEmu:onLed', 'NativeOkEmu:onPluginEvent', 'NativeOkEmu:onRestartRequested',
   'NativeUsbHid:onStatus', 'NativeUsbHid:onData',
-  'okedge:edgeMessage', 'okedge:computerTalks', 'okedge:computerConnected', 'okedge:syncChanged']);
+  'okedge:edgeMessage', 'okedge:computerTalks', 'okedge:computerConnected']);
 
 contextBridge.exposeInMainWorld('okedge', {
   invoke(channel, ...args) {

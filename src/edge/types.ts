@@ -10,7 +10,7 @@ export type EdgeLinkRecord = {link: Uint8Array; head: Uint8Array; reveal?: Uint8
 /** R27: may a budget be asked for from this copy? The first thing that fails, in words. */
 export type EdgeCopyCheck = {ok: true} | {ok: false; reason: string; seq?: number; to?: number};
 export type EdgeBudget = {
-  /* B7 stage 2: the pairing id of the computer it was opened for - a note shows only from it (no agent key since 2026-10-08) */
+  /* B7 stage 2: the id of the computer it was opened for (edgeAgents computerOf) - a note shows only from it (no agent key since 2026-10-08) */
   computerId?: string;
   /* another device's budget (full cards, 2026-10-09): its nametag and device id - the card's corner */
   device?: string;
@@ -101,7 +101,7 @@ export type EdgeKeyState = {owed: number; held: number[]; refusedTx?: number};
 /** A budget someone asked for and the person has not answered yet (spec 4.3 clasp sheet). */
 export type EdgeRequest = {
   id: number;
-  /** who asked: the paired computer, by its pairing name */
+  /** who asked: the computer, by its name (edgeAgents computerOf) */
   from: string;
   reason: string;
   /** identity: on a derived code (201-203, 221-223) the one identity the scope pays for (lib R11a: "ssh://...", "gpg://...") */

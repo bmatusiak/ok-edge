@@ -9,7 +9,6 @@ import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import {stateColor, theme} from '../../ui/theme';
 import {Btn, Section} from '../../ui/components';
 import {barStyles, useIoPurple} from '../../ui/statusBar';
-import {btTransit} from '../../btTransit';
 import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import type {FidoSession} from '../../hooks/useFidoGatt';
 import type {BtAuto} from '../../hooks/useBtAuto';
@@ -22,9 +21,6 @@ const styles = barStyles;
 const READY_ASK_MS = 1500;
 /* how many times the Bluetooth off/on sequence restarts ours to land where the computer knows it */
 const LAYOUT_MAX_TRIES = 5;
-
-/* ⚿: a session silent this long counts as gone (its command was killed without a goodbye) */
-const SESSION_QUIET_MS = 15000;
 
 /**
  * Bluetooth, keyboard, authenticator - blue armed, green connected, grey off.
@@ -87,8 +83,6 @@ function RadioStatus({
     if (r === null || prev === null || r === prev) return;
     if (!r) {
       step.current = 'idle';
-      /* no pairing mode while Bluetooth is off (Brad, 2026-10-05) */
-      btTransit.closePairWindow();
       if (btk.chosenHost) resumeHost.current = btk.chosenHost;
       if (btk.chosenHost) void btk.chooseHost(null).catch(() => {});
       return;
@@ -287,26 +281,15 @@ function RadioStatus({
   const keyboardIo = useIoPurple(c => c === 'keyboard', false);
   const keyIo = useIoPurple(c => c === 'key', false);
   /*
-   * GREEN ONLY BETWEEN HELLO AND GOODBYE (Brad, 2026-10-07): a paired computer's
-   * open session (btTransit), and nothing else. The radio's state is no guide: it
-   * said "connected" before any command (Windows keeps a link ~3 s after one, the
-   * OS makes its own), and it RACED - the next command's link and the last one's
-   * lingering link come from the same address, so the old one dropping told the
-   * phone "nothing connected, advertising again" while the new one talked
-   * ("yellow is winning the race", Brad). A link with no session - that lingering
-   * one, a browser's FIDO request - is yellow, and blinks purple on traffic.
-   * FALLBACK (Brad): a session silent for 15 s is yellow too - a command killed
-   * without its goodbye leaves its session open and Windows keeps its link.
+   * NO GREEN (2026-10-30): ⚿ was green only between a cli-paired computer's hello
+   * and goodbye (Brad, 2026-10-07) - its encrypted session, never the radio's
+   * "connected", which RACED (Windows keeps a link ~3 s after a command, and the
+   * next command's link shares its address). The cli pair went (Brad: "just remove
+   * ble pair and sync stuff"), and with it the session; a link with none - a
+   * browser's FIDO request, a lingering one - was always yellow, and blinks purple
+   * on traffic. So yellow while the service is offered, purple on traffic.
    */
-  const [inSession, setInSession] = useState(() => btTransit.openSessions(SESSION_QUIET_MS) > 0);
-  useEffect(() => {
-    const look = () => setInSession(btTransit.openSessions(SESSION_QUIET_MS) > 0);
-    const off = btTransit.subscribe(look);
-    const tick = setInterval(look, 1000); /* time alone turns a silent session yellow */
-    return () => { off(); clearInterval(tick); };
-  }, []);
   const keyColor = keyIo ? theme.io
-    : inSession ? theme.ok
     : fido.state === 'advertising' || fido.state === 'connected' ? stateColor('advertising')
     : theme.textDim;
 

@@ -6,15 +6,8 @@ import FidoGatt, {
 } from '../transport/FidoGatt';
 import OkEmu from '../transport/OkEmu';
 import {startFidoBridge} from '../fidoBridge';
-/* The vendor service, plugged in. Delete this import, the call below and
- * src/vendorBridge.ts to remove the feature; nothing else refers to it. */
-import {startVendorBridge} from '../vendorBridge';
-/* Edge (step 2): an agent's budget request is kept for the app; only on a build with the edge plugin */
-import {handleEdgeMessage} from '../edgeAgents';
-import {hasSoftKeyPlugin} from '../buildInfo';
 import type {OnlyKeyApp} from '../onlykey';
 import type {LogLevel} from './useLog';
-import {btTransit} from '../btTransit';
 
 /*
  * The "WebAuthn" switch - the FIDO door's gate.
@@ -25,18 +18,6 @@ import {btTransit} from '../btTransit';
  */
 const RELAY_KEY = 'ok-rn/bt/auto-authenticator';
 
-/*
- * The "API" switch - the vendor door's gate, new.
- *
- * Off is the safe default for a fresh install. But until now the one
- * Authenticator switch opened BOTH doors, so somebody with it on has been
- * using the vendor service (onlykey-js --ble) all along. When no API value
- * has ever been stored, it starts from the saved WebAuthn value - and is
- * written straight back, so from then on the two are independent and
- * changing one never moves the other.
- */
-const API_KEY = 'ok-rn/bt/auto-api';
-
 type Options = {
   log: (level: LogLevel, text: string) => void;
   /** The ACTIVE key, resolved per call - see the note in useFidoGatt. */
@@ -45,8 +26,6 @@ type Options = {
   getBackend: () => string;
   /** Whether the active key is unlocked; see the gate in fidoBridge. */
   isUnlocked?: () => boolean;
-  /** Whether the soft key has halted (CPU_RESTART); the vendor bridge then answers for it. */
-  isKeyHalted?: () => boolean;
 };
 
 export type FidoSession = ReturnType<typeof useFidoGatt>;
@@ -55,7 +34,7 @@ export type FidoSession = ReturnType<typeof useFidoGatt>;
  * The BLE authenticator session. Call this ONCE, at app scope - it owns the
  * GATT server's lifetime and the bridge that answers requests.
  */
-export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: Options) {
+export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
   /*
    * THE KEY GETTER IS PASSED IN, and it has to be.
    *
@@ -88,44 +67,40 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
     }
   });
   /*
-   * THE TWO DOORS' GATES, remembered across launches. "Each door has a gate,
-   * and a device must be targeted."
+   * THE WEBAUTHN DOOR'S GATE, remembered across launches. "Each door has a
+   * gate, and a device must be targeted."
    *
-   * Separate from `state`, which is presence. Both GATT services are offered
+   * Separate from `state`, which is presence. The GATT services are offered
    * for as long as Bluetooth is on - tearing one down is what taught Windows
-   * to stop trusting the node - so these are the controls that mean "let a
-   * request through", one per door: `webauthn` for the FIDO service (a
-   * browser), `api` for the vendor service (onlykey-js --ble, python-onlykey).
-   * They used to be one switch, `relaying`, which opened both at once.
+   * to stop trusting the node - so this is the control that means "let a
+   * browser's request through" on the FIDO service.
    *
-   * Neither means anything without a target: see `target` below.
+   * THE VENDOR DOOR IS SHUT, and has no switch (Brad, 2026-10-30: "just remove
+   * ble pair and sync stuff - we are using key3 to push and sync, so phones are
+   * free to become testing over mcp until we rework how ble comes back"). Its
+   * "API" switch let software on the target (onlykey-js --ble) operate the key
+   * through the vendor bridge, and only inside a cli-paired computer's sealed
+   * session; the bridge went with the cli pair. The native service is still
+   * offered (a host records a device's services once, when it bonds), and the
+   * radio is told api=false below, so a write to it never becomes an event.
+   *
+   * Nothing without a target: see `target` below.
    */
   const [webauthn, setWebAuthnState] = useState(false);
   const webauthnRef = useRef(false);
   webauthnRef.current = webauthn;
-  const [api, setApiState] = useState(false);
-  const apiRef = useRef(false);
-  apiRef.current = api;
   /*
    * False until storage has been read - the same rule as useBtAuto's `ready`.
-   * Pushing the in-memory defaults first would SHUT both doors on every JS
-   * reload for the moment it takes to read them back, and a request arriving
+   * Pushing the in-memory default first would SHUT the door on every JS
+   * reload for the moment it takes to read it back, and a request arriving
    * in that moment would be refused for no reason the owner could see.
    */
   const [gatesRead, setGatesRead] = useState(false);
 
   useEffect(() => {
-    Promise.all([AsyncStorage.getItem(RELAY_KEY), AsyncStorage.getItem(API_KEY)])
-      .then(([savedWebAuthn, savedApi]) => {
+    AsyncStorage.getItem(RELAY_KEY)
+      .then(savedWebAuthn => {
         setWebAuthnState(savedWebAuthn === '1');
-        if (savedApi === null) {
-          /* Never stored: inherit the old one-switch answer - see API_KEY. */
-          const inherited = savedWebAuthn === '1';
-          setApiState(inherited);
-          void AsyncStorage.setItem(API_KEY, inherited ? '1' : '0');
-        } else {
-          setApiState(savedApi === '1');
-        }
         setGatesRead(true);
       })
       .catch(() => setGatesRead(true));
@@ -134,11 +109,6 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
   const setWebAuthn = useCallback((next: boolean) => {
     setWebAuthnState(next);
     void AsyncStorage.setItem(RELAY_KEY, next ? '1' : '0');
-  }, []);
-
-  const setApi = useCallback((next: boolean) => {
-    setApiState(next);
-    void AsyncStorage.setItem(API_KEY, next ? '1' : '0');
   }, []);
 
   /*
@@ -168,11 +138,12 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
   useEffect(() => {
     if (!gatesRead) return;
     try {
-      FidoGatt.setIoPolicy(target, webauthn, api);
+      /* api false: the vendor door stays shut (see THE VENDOR DOOR IS SHUT above) */
+      FidoGatt.setIoPolicy(target, webauthn, false);
     } catch (error) {
       log('error', 'setIoPolicy: ' + String(error));
     }
-  }, [gatesRead, target, webauthn, api, log]);
+  }, [gatesRead, target, webauthn, log]);
 
   const [mtu, setMtu] = useState(0);
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -183,11 +154,6 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
     const offStatus = FidoGatt.on('status', event => {
       setState(event.state);
       setMtu(event.mtu);
-      /* no link left by the radio: a session whose computer went without its goodbye ends - now, and once more after its quiet time (btTransit.linkGone) */
-      if (event.state !== 'connected') {
-        btTransit.linkGone();
-        setTimeout(() => { if (FidoGatt.getState() !== 'connected') btTransit.linkGone(); }, 3100);
-      }
       const detail = event.message ? ' - ' + event.message : '';
       log(event.state === 'error' ? 'error' : 'info', '[ble] ' + event.state + detail);
     });
@@ -211,30 +177,6 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
       isUnlocked,
     });
 
-    /*
-     * The VENDOR interface, on its own GATT service.
-     *
-     * ITS OWN SWITCH. It used to share the relay switch with FIDO, on the
-     * theory that it was the same consent - "does the phone answer a host at
-     * all". It is not: letting a browser make a WebAuthn assertion is a much
-     * smaller thing than letting a computer read labels, set slots and load
-     * keys, so the owner gave each door its own gate. The same target
-     * applies to both. It does NOT share the unlocked check - a locked key is
-     * silent over FIDO because the firmware drops the packet, but plenty of
-     * vendor commands are exactly what a host sends to a locked key, OKSETPIN
-     * among them.
-     */
-    const offVendor = startVendorBridge({
-      getKey,
-      log,
-      isApi: () => apiRef.current,
-      getTarget,
-      /* the soft key says when it waits for a press; a hard key cannot, and ends on quiet */
-      isKeyWaiting: async () => (OkEmu.isRunning() ? (await OkEmu.waiting()) !== null : false),
-      onEdgeRequest: hasSoftKeyPlugin('edge') ? handleEdgeMessage : undefined,
-      isKeyHalted,
-    });
-
     FidoGatt.isSupported()
       .then(value => {
         setSupported(value);
@@ -247,7 +189,6 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
     return () => {
       offStatus();
       offBridge();
-      offVendor();
     };
   }, [getKey, getTarget, log]);
 
@@ -349,8 +290,6 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked, isKeyHalted}: 
     confirm,
     webauthn,
     setWebAuthn,
-    api,
-    setApi,
     target,
     setTarget,
   };

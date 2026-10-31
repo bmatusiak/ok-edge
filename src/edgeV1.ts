@@ -5,7 +5,7 @@
  * phone's Edge records once, on its first launch: every copy, seal, budget, agent,
  * alarm and sibling name - live and testnet - so nothing of the old chain is read
  * against the new one. What stays: the Key Chain list (the key's keys survive the
- * reset - R31 keeps every private key), cli pair, settings.
+ * reset - R31 keeps every private key) and settings.
  *
  * Runs at app start, before the login screen can start any soft key. Done once:
  * the mark is written last, so a launch cut short does it again.

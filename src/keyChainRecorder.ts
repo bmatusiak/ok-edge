@@ -1,7 +1,8 @@
 /**
  * THE PHONE RECORDS EVERY DERIVE ITS SOFT KEY ANSWERS (spec session + Brad,
- * 2026-10-03), on any transport - the vendor interface (this app, a computer
- * over Bluetooth) and FIDO (the web page path) alike - into the phone's Key
+ * 2026-10-03), on any transport - the vendor interface (this app; a computer
+ * over Bluetooth too, until that link went with the cli pair 2026-10-30) and FIDO
+ * (the web page path) alike - into the phone's Key
  * Chain list (the same storage the Key Chain tab shows).
  *
  * Only the firmware sees every transport in the clear (the FIDO derive is

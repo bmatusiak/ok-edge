@@ -8,7 +8,7 @@
  * electron/main.js registers them. The page reaches them only through electron/preload.js, whose
  * allowlists name the same channels. The page's half is src/desktop/specs.
  */
-const MODULES = [require('./rsagen'), require('./secrets'), require('./okemu'), require('./usbhid'), require('./hosting'), require('./sync')];
+const MODULES = [require('./rsagen'), require('./secrets'), require('./okemu'), require('./usbhid'), require('./hosting')];
 
 const handlers = Object.assign({}, ...MODULES.map((m) => m.handlers || {}));
 const syncHandlers = Object.assign({}, ...MODULES.map((m) => m.syncHandlers || {}));

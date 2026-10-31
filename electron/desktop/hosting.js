@@ -7,9 +7,9 @@
  * While the app runs, `onlykey-js --desktop` - and plain `onlykey-js` - reach the hard key through it:
  * node-onlykey-lib's desktop/serve.js listens on a local socket (trusted through ~/.onlykey-js/
  * desktop.json) and relays the key's reports. The CLI's Edge host messages go to the PAGE and are
- * answered there by the phone's own host (src/hooks/useDesktopHost.ts -> edgeAgents.handleEdgeMessage),
- * exactly as a computer's messages over Bluetooth are on the phone: the same request sheet, the same
- * key code (on the desktop the hard key).
+ * answered there by the phone's own host (src/features/channels/ipc.tsx -> edgeAgents.handleEdgeMessage),
+ * as a computer's messages over Bluetooth were on the phone until the cli pair went (2026-10-30): the
+ * same request sheet, the same key code (on the desktop the hard key).
  *
  * THE KEY is the page's own USB pipe, shared (usbhid.shared): one open interface for both.
  *
@@ -55,11 +55,10 @@ function hostFor() {
 
 /*
  * THE CLI'S KEY WRITES WAIT FOR THE PAGE TO STAND ASIDE (desktop, 2026-10-24: the Edge tab's own reads
- * landed in the middle of a CLI command and the CLI misread the key). On the phone every byte goes
- * through the app's bridge, which holds the key for a computer's conversation (vendorBridge
- * createComputerHold); here the CLI's bytes go through this process, so before each write the page
- * is asked to take that same hold (after any request of its own in flight) and the write goes once
- * it says so. Host messages are not key writes: they are answered by the page itself.
+ * landed in the middle of a CLI command and the CLI misread the key). The CLI's bytes go through this
+ * process, not through the page, so before each write the page is asked to take its hold for a
+ * computer's conversation (src/computerHold.ts - the phone's Bluetooth bridge held the key the same
+ * way while it had one), after any request of its own in flight, and the write goes once it says so. Host messages are not key writes: they are answered by the page itself.
  */
 const holdAcks = new Map(); /* id -> resolve */
 let nextHold = 1;

@@ -17,7 +17,7 @@
  *                                     Native, which the web export already holds compiled.
  *   resources/node-onlykey-emulator/  the soft key: the emulator's module, built from the recorded sources with the
  *                                     phone's plugins, where electron/okemu-host.js looks for it beside the app
- *   resources/node/                   the plain Node the soft key and the sync service run on (electron/node-binary.js)
+ *   resources/node/                   the plain Node the soft key runs on (electron/node-binary.js)
  *                                     - the very Node the soft key's native module was built with, so its ABI matches
  *                                     and the computer needs no Node of its own
  *

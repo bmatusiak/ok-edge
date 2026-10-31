@@ -21,8 +21,7 @@ import type {BtAuto} from '../hooks/useBtAuto';
  *   1. Bluetooth      - on or off; nothing below exists while it is off
  *   2. Target         - WHICH computer, chosen once
  *   3. Keyboard       - whether the key's typing crosses the link (OUT)
- *   4. Authenticator  - WebAuthn: whether a browser's request reaches the key
- *                       API: whether software's vendor requests do (IN)
+ *   4. Authenticator  - WebAuthn: whether a browser's request reaches the key (IN)
  *
  * The target is shared and comes FIRST because it is shared: a host is bonded
  * to the phone, not to a feature, and both of these type into the same chosen
@@ -34,8 +33,10 @@ import type {BtAuto} from '../hooks/useBtAuto';
  * The owner's model, and what the radio enforces (setIoPolicy in
  * NativeFidoGattModule.kt). The TARGET is the one computer approved for IO in
  * BOTH directions; None means nothing in and nothing out. Every channel is a
- * door with its own switch - Keyboard out, WebAuthn in, API in - and a
- * request passes only when its door is open AND it comes from the target.
+ * door with its own switch - Keyboard out, WebAuthn in - and a request
+ * passes only when its door is open AND it comes from the target. (The
+ * vendor service's "API" door went with the cli pair, 2026-10-30: it is
+ * shut, with no switch - useFidoGatt.)
  * Every other bonded computer in range can still connect, because the
  * services are published to all of them (below); it is refused at the gate,
  * and the Log tab says which gate and why.
@@ -65,11 +66,8 @@ export function BluetoothScreen({
   auto,
   canPress = false,
   testing = false,
-  onOpenSync,
 }: {
   fido: FidoSession;
-  /** Opens the Sync tab: the paired computers and pairing a new one live there. */
-  onOpenSync?: () => void;
   /**
    * Whether the ACTIVE key takes presses from the app.
    *
@@ -376,8 +374,11 @@ export function BluetoothScreen({
             * and it opened both GATT services at once - the FIDO one a browser
             * uses and the vendor one onlykey-js --ble uses. Those are not the
             * same consent: an assertion for a website is a far smaller thing
-            * than a computer reading labels and loading keys. So each door has
-            * its own row, and both answer only the target above.
+            * than a computer reading labels and loading keys. So each door had
+            * its own row, both answering only the target above. The API row
+            * went with the cli pair (Brad, 2026-10-30: "just remove ble pair
+            * and sync stuff"): the vendor door is shut, and WebAuthn is the
+            * one door here.
             */}
           <Section title="Authenticator">
             <AutoRow
@@ -386,13 +387,6 @@ export function BluetoothScreen({
               value={fido.webauthn}
               disabled={fido.supported === false}
               onChange={fido.setWebAuthn}
-            />
-            <AutoRow
-              label="API"
-              hint="Software on the target (onlykey-js --ble) can operate the key."
-              value={fido.api}
-              disabled={fido.supported === false}
-              onChange={fido.setApi}
             />
             <View style={styles.stateRow}>
               <StatusPill state={fido.state} />
@@ -468,17 +462,6 @@ export function BluetoothScreen({
               </View>
             ) : null}
           </Section>
-
-          {/*
-            Part T: who the API link answers - the paired computers moved to the Sync tab (Brad, 2026-10-25: "the cli
-            pair panel moved to sync tab - add a button to take us to sync panel in bluetooth panel")
-          */}
-          {onOpenSync ? (
-            <Section title="Paired devices">
-              <Text style={styles.note}>The computers this phone answers, and pairing a new one, are on the Sync tab.</Text>
-              <Btn title="Open Sync" tone="primary" onPress={onOpenSync} />
-            </Section>
-          ) : null}
         </>
       ) : null}
     </ScrollView>

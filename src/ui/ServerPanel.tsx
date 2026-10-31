@@ -17,8 +17,9 @@ const KIND: Record<string, string> = {webapp: 'web app', android: 'phone', deskt
 function statusText(s: RoomState): string {
   if (!s.url) {
     if (shell === 'webapp' && s.site) return `This page is ${location.host.split(":")[0]}, not your key's site ${s.site} - nothing syncs here. Open https://${s.site}.`;
-    if (!s.site) return "Your key names no server (ctap_bridge off, or no site set) - this device syncs only with the devices paired to it.";
-    return 'No server - this device syncs only with the devices paired to it.';
+    /* the room is the only sync since the cli pair's Bluetooth sync went (2026-10-30): no server, no sync */
+    if (!s.site) return "Your key names no server (ctap_bridge off, or no site set) - nothing syncs on this device.";
+    return 'No server - nothing syncs on this device.';
   }
   if (s.status === 'joined') return `In this key's room on ${new URL(s.url).host}.`;
   if (s.status === 'joining') return `Joining ${new URL(s.url).host}…`;

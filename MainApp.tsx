@@ -53,9 +53,7 @@ const SPLASH_SEEN: boolean = (() => {
 import {LoginScreen} from './src/screens/LoginScreen';
 import {PinScreen} from './src/screens/PinScreen';
 import {SetupScreen} from './src/screens/SetupScreen';
-import {sync, useSync} from './src/sync';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
-import {btTransit} from './src/btTransit';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
 import {endSession, keptSession} from './src/webSession';
@@ -192,22 +190,17 @@ function Shell() {
    */
   const unlockedRef = useRef(false);
   const isUnlocked = useCallback(() => unlockedRef.current, []);
-  /* the soft key halted (CPU_RESTART, e.g. its inactivity lockout): the vendor bridge answers for it */
-  const haltedRef = useRef(false);
-  const isKeyHalted = useCallback(() => haltedRef.current, []);
   const fido = useFidoGatt({
     log: fidoLog.log,
     getKey: getActiveKey,
     getBackend: getActiveBackend,
     isUnlocked,
-    isKeyHalted,
   });
   const keys = useKey({softLog: emuLog.log, hardLog: hardLog.log, fidoPending: fido.pending});
 
 
   backendRef.current = keys.backend;
   unlockedRef.current = keys.key.device === 'unlocked';
-  haltedRef.current = keys.backend === 'embedded' && keys.soft.state === 'halted';
   const emu = keys.key;
   /*
    * TESTING MODE's Login (Brad, 2026-10-07: "a login button that sends the passcode
@@ -582,8 +575,8 @@ function Shell() {
   useEffect(() => { setIdleRunning(phase === 'main' && passed); }, [phase, passed]);
   /*
    * THE IDENTITY'S ROOM ON THE USER'S SERVER (src/serverRoom.ts): joined once the bucket is open, left when it closes.
-   * The web app's server is the one that served it; the phone's, the one set in the Sync tab. (The desktop's bucket is
-   * its sync service's file: the room is that service's to join, and this finds no bucket open in the page.)
+   * The web app's server is the one that served it; the phone's and the desktop's, the key's site (or the Sync tab's
+   * Server panel). The room is THE sync (2026-10-30: the cli pair's Bluetooth sync and the desktop's sync service went).
    */
   useEffect(() => {
     if (passed) void joinServerRoom();
@@ -599,13 +592,6 @@ function Shell() {
     closeBucket();
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
   }, [doorKey]);
-  /*
-   * THE SYNC SERVICE RUNS WHILE THE BUCKET IS OPEN (src/sync.ts; the desktop hosts it): once the identity check let
-   * the person in, for this net; locked, it stops. A shell that hosts none ignores this.
-   */
-  const bucketOpen = phase === 'main' && passed;
-  useEffect(() => { void sync.setNet(bucketOpen ? net : null).catch(() => {}); }, [bucketOpen, net]);
-
   useEffect(() => {
     if (emu.device === 'unlocked') awaitingUnlock.current = false;
     /*
@@ -810,8 +796,8 @@ function Shell() {
             {/*
               THE STATUS ICONS, ONE GROUP (Brad, 2026-10-29: "a single activity panel, containing all icons so they're
               not spaced or separated - a press on any icon takes you to the same panel now"): the phone's radio icons
-              (no Bluetooth on the desktop, none needed on the web - BLUETOOTH_HERE, a platform value), then sync (⇄) and the MCP (🔗) on
-              every platform. Any of them opens the Activity tab, which leads on to each one's own tab.
+              (no Bluetooth on the desktop, none needed on the web - BLUETOOTH_HERE, a platform value), then the MCP (🔗, the server's
+              room - the sync) on every platform, and the desktop's pipe to the CLI (>_). Any of them opens the Activity tab, which leads on to each one's own tab.
             */}
             <View style={styles.barMid}>
               {pluginChannels().map(c => <Fragment key={c.name}>{c.icon({openTab: name => setTab(name), bt: tabContext.bt})}</Fragment>)}

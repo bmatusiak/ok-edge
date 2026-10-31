@@ -7,7 +7,7 @@ The xrdp desktop is display `:10`; the Pixel is on the box's adb (`ANDROID_SERIA
 | Script | Runs on | What |
 |---|---|---|
 | `sync-to-box.sh [lib] [edge] [emu]` | Windows | bring the box clones to the committed heads (git bundles, fast-forward only) |
-| `desktop-test.sh` | box | start the ok-edge desktop TEST build on `:10` (the sync service from the lib checkout) |
+| `desktop-test.sh` | box | start the ok-edge desktop TEST build on `:10` |
 | `dclick.sh x,y wait:N type:T key:K` | box | click / type in the desktop window by screenshot coordinates; saves `/tmp/okd.png` |
 | `pixel-tab.sh <Tab>` | box | open an ok-edge tab on the Pixel and prove it is on screen |
 | `press-watch.sh [seconds]` | box | TESTNET ONLY: tap the Pixel's press sheet whenever it shows |

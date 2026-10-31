@@ -11,7 +11,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, type EdgeKeyState, type EdgeRequest, type EdgeSource} from '../edge/types';
 import {SoftKeyEdge} from '../edgeSoftKey';
-import {onKeyFree} from '../vendorBridge';
+import {onKeyFree} from '../computerHold';
 import {hasSoftKeyPlugin} from '../buildInfo';
 import {useBackend} from './KeyContext';
 import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
@@ -285,7 +285,7 @@ export function useEdge() {
    * few seconds makes it unusable" - on Windows every read is two ceremonies, the silent check first, and a paid sign
    * took 90-105 s queued behind them; on the box the tab was never idle). The 4 s head poll (2026-10-03, bug 2: an
    * agent spends straight on the key over Bluetooth and the card said 0 spent) is gone. The tab reads the key when it
-   * opens, on pull-down, after each of its own actions (run), and once a paired computer lets the key go - its
+   * opens, on pull-down, after each of its own actions (run), and once a computer lets the key go - its
    * conversation is over, so whatever it spent is on the key now.
    */
   useEffect(() => {

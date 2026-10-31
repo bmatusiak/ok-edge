@@ -2,21 +2,24 @@
  * Bluetooth traffic, for the status icons in the top bar (Brad, 2026-10-07):
  * "when data is going over the wire, it switches to purple".
  *
- *   ⚿  the key service (computers, onlykey-js, FIDO): blinks purple
- *   ⌨  the keyboard (keystrokes sent):                 blinks purple
- *   ᛒ  any Bluetooth traffic:                          solid purple
+ *   ⚿  the key service (FIDO):         blinks purple
+ *   ⌨  the keyboard (keystrokes sent): blinks purple
+ *   ᛒ  any Bluetooth traffic:          solid purple
  *
  * A blink lasts a second - purple, its colour, purple, its colour, 250 ms each -
  * then the icon shows its state again; ᛒ stays purple the whole second instead.
  * More traffic while it lasts keeps it going until a second after the last.
  *
  * The places data crosses the wire call ioPulse (transport/FidoGatt.ts: requests
- * in, replies out; vendorBridge.ts: vendor frames out; hooks/useBtKeyboard.ts:
- * keystroke reports; src/sync.ts: the sync service trading, the desktop's 🔁). Nothing here is read back - it is only
- * for the eye.
+ * in, replies out; hooks/useBtKeyboard.ts: keystroke reports; src/serverRoom.ts: the room's trades and sealed copy,
+ * src/mcpAgents.ts: agents' messages - both the 🔗; features/channels/ipc.tsx: the desktop's CLI - the >_). Nothing
+ * here is read back - it is only for the eye.
  */
-/* sync: a bucket trade over any carrier (Bluetooth, the server's room, the desktop's file/IPC service) - the ⇄; mcp: an agent's message from the server's /mcp - the 🔗 (Brad, 2026-10-29) */
-export type IoChannel = 'key' | 'keyboard' | 'sync' | 'mcp' | 'ipc';
+/*
+ * mcp: the server's room - an agent's message from the server's /mcp (Brad, 2026-10-29) and, since the ⇄ went with the
+ * Bluetooth sync (2026-10-30: 🔗 is the sync's icon now), every trade message and sealed-copy round in it - the 🔗.
+ */
+export type IoChannel = 'key' | 'keyboard' | 'mcp' | 'ipc';
 
 export const IO_SHOW_MS = 1000;
 export const IO_STEP_MS = 250;

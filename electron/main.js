@@ -27,8 +27,8 @@ const { pathToFileURL } = require('url');
  * be turned off for release builds"). Every OKEDGE_* variable is a developer's: OKEDGE_WEB_URL loads any page into the
  * window that holds the key bridge, OKEDGE_FLAVOR=test brings back the menu and devtools, OKEDGE_CONSOLE copies the
  * page's log (which can carry key bytes) to stdout, OKEDGE_DRIVE runs a script in the page, OKEDGE_EMULATOR /
- * OKEDGE_CLI / OKEDGE_NODE swap in other code. The packaged app (tools/release/desktop-package.js) clears them all
- * before anything reads one - here, first, so the soft key's host and the sync service it starts inherit none either.
+ * OKEDGE_NODE swap in other code. The packaged app (tools/release/desktop-package.js) clears them all
+ * before anything reads one - here, first, so the soft key's host it starts inherits none either.
  */
 if (app.isPackaged) {
   for (const k of Object.keys(process.env)) if (k.startsWith('OKEDGE_')) delete process.env[k];

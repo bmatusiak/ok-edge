@@ -183,7 +183,7 @@ export function EdgeRequestSheet() {
             {a.kind === 'identity' ? (
               <>
                 <Text style={[styles.title, {color: theme.warn}]}>Agent identity</Text>
-                <Text style={styles.dim}>{`From ${a.computer ?? 'a paired computer'}: keep this as the agent's identity`}</Text>
+                <Text style={styles.dim}>{`From ${a.computer ?? 'a computer'}: keep this as the agent's identity`}</Text>
                 <IdentityRows record={a.record} />
                 {a.was && !identityLib.same(a.was, a.record) ? (
                   <Text style={[styles.dim, {color: theme.warn}]}>
@@ -200,8 +200,8 @@ export function EdgeRequestSheet() {
                   {a.view.continues !== null ? `Continues budget ${a.view.continues}` : 'An agent asks for a budget'}
                 </Text>
                 <Text style={styles.dim}>
-                  {/* who asks: the paired computer (Brad, 2026-10-08: no agent key - the pairing says who) */}
-                  {`From ${a.computer ?? 'a paired computer'}`}
+                  {/* who asks: the computer behind the link (Brad, 2026-10-08: no agent key - the link says who; edgeAgents computerOf) */}
+                  {`From ${a.computer ?? 'a computer'}`}
                 </Text>
                 {opened ? null : (<>
                 <View style={styles.reason}>

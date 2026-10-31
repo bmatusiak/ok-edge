@@ -1,27 +1,25 @@
 /*
- * THE PHONE ANSWERS A BUCKET TRADE (ok-edge plan S3; Brad, 2026-10-25: "the CLI pair is our hook to try and sync with -
- * those are the pre-set-up trusted devices, what we can replicate with").
+ * THIS DEVICE ANSWERS A BUCKET TRADE (ok-edge plan S3), and holds the proof material its trades and its room need.
  *
- * A computer this phone is cli-paired with (only those reach the phone's host over Bluetooth - btTransit) asks to
- * trade buckets after its log swap; this is the peer's side of node-onlykey-lib bucket/src/trade.js, answered from
- * the bucket the identity check opened. Nothing is shown before the computer has proven its bucket identity, and a
- * phone whose bucket is not open refuses the same plain way.
+ * Another device of the identity, in the identity's room on the user's server (src/serverRoom.ts), asks to trade
+ * buckets; this is the peer's side of node-onlykey-lib bucket/src/trade.js, answered from the bucket the identity check
+ * opened. Nothing is shown before the other device has proven its bucket identity, and a device whose bucket is not
+ * open refuses the same plain way. (A cli-paired computer asked the same over Bluetooth until the cli pair went - Brad,
+ * 2026-10-30: "just remove ble pair and sync stuff - we are using key3 to push and sync". The room is the sync now.)
  *
- * THIS PHONE'S PROOF MATERIAL - its bucket key and the certificate - is made once, at the first trade, through this
- * phone's key (its ECDH and its signature: the press sheet asks twice), and kept sealed in the Keystore
- * (NativeSecrets box), per identity and net. Not in the bucket: a bucket holds no secret, and the bucket key is one.
+ * THIS DEVICE'S PROOF MATERIAL - its bucket key and the certificate - is made once, at the first join, through this
+ * device's key (a derive and a signature: the press sheet asks twice), and kept sealed in the platform's box
+ * (NativeSecrets), per identity and net. Not in the bucket: a bucket holds no secret, and the bucket key is one.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {bytes as okbytes} from 'node-onlykey-lib';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
-import {phoneSyncAllowed, phoneSyncChecked, phoneSyncTraded} from './sync';
-import {RULES, storeItems} from './bucketRules';
+import {RULES} from './bucketRules';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {currentNet} from './net';
-import {ioPulse} from './btActivity';
 import {DEVICE_WORD} from './platform';
 import {challengeOpts} from './hostChallenge';
 
@@ -47,7 +45,7 @@ export async function proofKept(identity: string): Promise<boolean> {
   return Boolean(await AsyncStorage.getItem(KEY(identity.toLowerCase())));
 }
 
-/* this phone's bucket key and certificate for the open bucket's identity: kept sealed, or made once */
+/* this device's bucket key and certificate for the open bucket's identity: kept sealed, or made once */
 async function ensureMe(): Promise<void> {
   const open = tradeBucket();
   if (!open) { me = null; return; }
@@ -104,22 +102,16 @@ export async function proofMaterial(): Promise<Me | null> {
   return me;
 }
 
-/** Is this a bucket trade message (bucket/src/trade.js)? */
-export function isTradeMessage(msg: any): boolean {
-  return (Object.values(bucketLib.trade.TYPES) as string[]).includes(msg?.type);
-}
-
 /**
- * Answer one round of a trade from a paired computer.
- * allowed: whether this carrier may trade now - the phone's Bluetooth sync service by default; a room on the user's
- * server passes its own (it was joined with the key's proof, and is left when the bucket closes).
+ * Answer one round of a trade from another device of the identity.
+ * allowed: whether this carrier may trade now - the room on the user's server passes its own (it was joined with the
+ * key's proof, and is left when the bucket closes). What the round means for the Sync tab (each feature, the last
+ * trade) is the room's to keep (serverRoom.ts).
  */
-export async function handleTrade(msg: any, from: string, {allowed = phoneSyncAllowed}: {allowed?: () => boolean} = {}): Promise<unknown> {
+export async function handleTrade(msg: any, from: string, {allowed}: {allowed: () => boolean}): Promise<unknown> {
   console.log(`[bucket] ${msg.type} arrived (${JSON.stringify(msg).length} bytes)`);
-  /* the ⇄ flashes for every trade message this device answers - over Bluetooth or the server's room alike */
-  ioPulse('sync');
-  /* the Sync tab's switch off, or no bucket open: the same plain refusal as any other (no hint about the bucket) */
-  if (!allowed()) { console.log(`[bucket] ${msg.type}: refused (sync is off here)`); return {ok: false, refusal: 'no'}; }
+  /* not this carrier's to trade now (the bucket it joined for closed): the same plain refusal as any other (no hint about the bucket) */
+  if (!allowed()) { console.log(`[bucket] ${msg.type}: refused (no trade here now)`); return {ok: false, refusal: 'no'}; }
   if (msg.type === bucketLib.trade.TYPES.HELLO) await ensureMe().catch((e: unknown) => { me = null; console.log(`[bucket] no proof material: ${String((e as Error)?.message ?? e)}`); });
   let out: any;
   try {
@@ -127,25 +119,14 @@ export async function handleTrade(msg: any, from: string, {allowed = phoneSyncAl
     /* the trade's steps, in the app log (types and counts only - a GIVE's values are never logged) */
     console.log(`[bucket] ${msg.type}: ${out?.ok ? 'answered' : 'refused'}${out?.taken ? ` - took ${JSON.stringify(out.taken)}` : ''}`);
   } catch (e) {
-    /* said here: the computer only learns that no answer came (the box, 2026-10-25: a give that vanished silently) */
+    /* said here: the other device only learns that no answer came (the box, 2026-10-25: a give that vanished silently) */
     console.log(`[bucket] a trade message failed (${msg.type}): ${String((e as Error)?.stack ?? e).slice(0, 400)}`);
     throw e;
-  }
-  /* a check answered: the two states compared, and each feature as it is here - for the Sync tab (src/sync.ts) */
-  if (msg.type === bucketLib.trade.TYPES.PROVE && out?.ok && out.state && msg.state) {
-    const b = tradeBucket()?.bucket;
-    const differs: string[] = bucketLib.replicate.differs(out.state, msg.state);
-    const stores: Record<string, {items: number; same: boolean}> = {};
-    if (b) for (const [name, items] of Object.entries(storeItems(b))) stores[name] = {items, same: !differs.includes(name)};
-    phoneSyncChecked(out.state.hash === msg.state.hash, stores);
   }
   if (msg.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
     await saveTradedBucket().catch((e: unknown) => { console.log(`[bucket] the traded bucket was not stored: ${String((e as Error)?.message ?? e)}`); throw e; });
     const n = Object.values(out.taken || {}).reduce((a: number, b: any) => a + Number(b), 0);
-    console.log(`[bucket] traded with a paired computer: took ${n}`);
-    /* the Sync tab's state - and through it, a screen holding a decrypted copy of a changed store asks to decrypt again */
-    const b = tradeBucket()?.bucket;
-    phoneSyncTraded(out.taken || {}, b ? storeItems(b) : {});
+    console.log(`[bucket] traded with another device: took ${n}`);
   }
   if (out && out.ok === false) console.log(`[bucket] a trade was refused (${msg.type})`);
   return out;

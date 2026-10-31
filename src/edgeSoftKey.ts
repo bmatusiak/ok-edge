@@ -92,7 +92,7 @@ const takingShared = new Set<string>();
  * so the CLI, your other devices and the server's room see this app's budgets - the login's too.
  *
  * After a sync whose copy VERIFIED only: an unchecked link is never filed for others to take. The parts are the ones
- * this app hands a paired computer (edgeAgents GIVE): the links, the seals, the key's checkpoint with both halves (the
+ * this app hands a computer that asks (edgeAgents GIVE): the links, the seals, the key's checkpoint with both halves (the
  * one the sync just checked, else the newest seal that keeps its ML-DSA half), this device's nametag statement, the
  * budgets' opening words and the notes. No key request: all of it is already here. One filing at a time; a sync that
  * lands during one files once more after it.
@@ -223,7 +223,7 @@ type Kept = {
   endedAt?: number;
   /* 4.7a: an ended agent budget's card dismissed (nothing on the key changes) */
   dismissed?: boolean;
-  /* opened for an EDGE_REQUEST from a paired computer: its pairing id - a continue must come from the same computer (no agent key since 2026-10-08) */
+  /* opened for an EDGE_REQUEST from a computer: its id (edgeAgents computerOf) - a continue must come from the same computer (no agent key since 2026-10-08) */
   computer?: string;
 };
 const DEFAULT_LIFETIME_MINUTES = 12 * 60;
@@ -797,7 +797,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * 4.7a: the LIVE budgets that already cover what a request names - same op,
    * slot and identity - with uses left and when each ends ("this agent already
    * has N uses left on <identity> until <time>"). sameComputer: opened for the
-   * paired computer that asks.
+   * computer that asks.
    */
   async coverOf(msg: any, computer: string | null = null) {
     const live = await this.budgets();
@@ -839,7 +839,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
 
   /* ---- the inbox: requests waiting for the person ---- */
 
-  /** A budget request made on this phone (testing mode); a computer's requests come over Bluetooth to edgeAgents instead, and the Worker (E5) is later. */
+  /** A budget request made on this phone (testing mode); a computer's requests come to edgeAgents instead (the desktop's CLI socket), and the Worker (E5) is later. */
   request(from: string, reason: string, scopes: EdgeRequest['scopes']): number {
     const id = this.nextRequest++;
     this.requests.push({id, from, reason, scopes: scopes.map(sc => ({...sc}))});
@@ -996,8 +996,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   }
 
   /**
-   * An EDGE_REQUEST from a paired computer (APP.md), from the vendor
-   * bridge: the library's one implementation decides (approve.approveRequest - drop the
+   * An EDGE_REQUEST from a computer (APP.md), from the host (edgeAgents -
+   * the desktop's CLI socket): the library's one implementation decides (approve.approveRequest - drop the
    * malformed and replayed, check caps and lifetime, ask the person, labels
    * and the reason hash made HERE from the names and the text, R27 on this
    * phone's copy, GRANT_LABEL + GRANT_CREATE, the press). An opened budget is
@@ -1034,7 +1034,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     return r;
   }
 
-  /* the budgets this phone opened for a paired computer, for a continue: {from, scopes} by id (loaded by loadAgentBudgets) */
+  /* the budgets this device opened for a computer, for a continue: {from, scopes} by id (loaded by loadAgentBudgets) */
   private keptSync = new Map<number, {from: string; scopes: any[]}>();
   async loadAgentBudgets() {
     const prefix = REGISTRY() + toHex(this.deviceId) + '.';

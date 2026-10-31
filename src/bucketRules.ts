@@ -1,6 +1,6 @@
 /*
  * THE BUCKET'S STORE RULES IN THE APP - each feature's own merge (node-onlykey-lib bucket/src/rules.js), the same set the
- * CLI uses (bucket/cli/trade.js storeRules): one place, read by the phone's trade answers (src/bucketTrade.ts) and by
+ * CLI uses (bucket/cli/trade.js storeRules): one place, read by the room's trades (src/bucketTrade.ts, src/serverRoom.ts) and by
  * the Sync tab's per-feature summary (src/bucketStore.ts bucketSummary). A split store's parts (its items) come from
  * these rules.
  */

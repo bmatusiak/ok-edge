@@ -2,9 +2,9 @@
  * A SYNC BROUGHT CHANGES INTO THE BUCKET (Brad, 2026-10-25: "a banner in password tab to tell the user to decrypt the
  * incoming password data from sync, so it can merge into passwords properly").
  *
- * The bucket changes under a screen that already read it: on the phone the trade takes them in (src/bucketTrade.ts);
- * on the desktop the sync service the app hosts does (electron/desktop/sync.js, src/sync.ts). Either way this says
- * which stores changed, and a screen holding a decrypted copy of one - Passwords - asks the person to decrypt again.
+ * The bucket changes under a screen that already read it: a trade in the identity's room on the user's server takes
+ * them in (src/serverRoom.ts - the sync, on every shell, since 2026-10-30). This says which stores changed, and a screen
+ * holding a decrypted copy of one - Passwords - asks the person to decrypt again.
  */
 const listeners = new Set<(stores: string[]) => void>();
 

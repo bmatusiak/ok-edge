@@ -18,7 +18,7 @@ import {theme} from '../ui/theme';
 import {hasSoftKeyPlugin} from '../buildInfo';
 import {onOpenBudget} from '../edgeNav';
 import {onOpenKeyChainWizard} from '../keyChainNav';
-import {BT_SEQ_BASE, takeOpenedAlarm} from '../edgeAlerts';
+import {takeOpenedAlarm} from '../edgeAlerts';
 import {KeyScreen} from '../screens/KeyScreen';
 import {SlotsScreen} from '../screens/SlotsScreen';
 import {SlotEditorScreen} from '../screens/SlotEditorScreen';
@@ -144,8 +144,8 @@ export const slots = tabPlugin({name: 'Slots', order: ORDER.Slots, hidden: true,
  * carries the Edge firmware plugin, and a browser has no soft key) - or the soft key carries the plugin, or testing mode. On the desktop always - it hosts the hard key's Edge (useEdge), whatever its bundled
  * soft key has (list.desktop.ts: `always`).
  *
- * Its navigation is its own: a tapped Edge alarm opens it on that link (on launch and on every return to the app), a
- * cli pair alarm opens Sync, and the request sheet's budget card opens it on that budget (edgeNav.ts).
+ * Its navigation is its own: a tapped Edge alarm opens it on that link (on launch and on every return to the app), and
+ * the request sheet's budget card opens it on that budget (edgeNav.ts).
  */
 let edgeNav: {focus: number | null; budget: number | null} = {focus: null, budget: null};
 const edgeNavSeen = new Set<() => void>();
@@ -164,8 +164,7 @@ const edgeWatch = (always: boolean): AppWatch => function EdgeWatch({openTab}) {
   useEffect(() => {
     const look = () => {
       const s = takeOpenedAlarm();
-      if (s !== null && s >= BT_SEQ_BASE) openTab('Sync'); /* Part T: a cli pair alarm - the paired devices are on Sync */
-      else if (s !== null) { openTab('Edge'); setEdgeNav({focus: s}); }
+      if (s !== null) { openTab('Edge'); setEdgeNav({focus: s}); }
     };
     look();
     const sub = AppState.addEventListener('change', st => { if (st === 'active') look(); });
@@ -210,12 +209,12 @@ export const passkeys = tabPlugin({name: 'Passkeys', order: ORDER.Passkeys, rend
 export const bluetooth = tabPlugin({
   name: 'Bluetooth', order: ORDER.Bluetooth,
   render: ctx => ctx.bt ? (
-    <BluetoothScreen fido={ctx.bt.fido} on={ctx.bt.on} setOn={ctx.bt.setOn} auto={ctx.bt.auto} canPress={ctx.emu.canPress === true} testing={ctx.testing} onOpenSync={() => ctx.openTab('Sync')} />
+    <BluetoothScreen fido={ctx.bt.fido} on={ctx.bt.on} setOn={ctx.bt.setOn} auto={ctx.bt.auto} canPress={ctx.emu.canPress === true} testing={ctx.testing} />
   ) : null,
 });
 
-/* SYNC: the identity, the server, the sync service and the paired devices (SyncScreen picks per shell's services) */
-export const sync = tabPlugin({name: 'Sync', order: ORDER.Sync, render: ctx => <SyncScreen testing={ctx.testing} />});
+/* SYNC: the identity, the server (its room is the sync) and each feature's store - one page on every shell */
+export const sync = tabPlugin({name: 'Sync', order: ORDER.Sync, render: () => <SyncScreen />});
 
 /* ACTIVITY: the status icons' one tab (Brad, 2026-10-29) - reached by pressing any of them, so not in the menu; its cards are the channels' (src/features/channels) */
 export const activity = tabPlugin({

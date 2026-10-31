@@ -85,8 +85,9 @@ type Options = {
    * attached once and the answer changes under it.
    *
    * This is the "WebAuthn" switch on the Bluetooth tab - the FIDO door's
-   * gate. The vendor service has its own ("API"); one switch used to open
-   * both.
+   * gate. The vendor service had its own ("API") until it went with the cli
+   * pair (2026-10-30: its door is shut now, useFidoGatt); one switch used to
+   * open both.
    */
   isWebAuthn?: () => boolean;
 

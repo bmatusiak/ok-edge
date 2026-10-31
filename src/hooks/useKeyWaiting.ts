@@ -7,8 +7,7 @@
  *
  * READ FROM THE FIRMWARE ITSELF (OkEmu.waiting -> okemu_jni.cpp
  * nativeConfirmState), polled while it can matter: the soft key is the active
- * key and running, and the app is in front. The vendor bridge stays a plain
- * pipe - it never parses what passes through it.
+ * key and running, and the app is in front.
  */
 import {useEffect, useState} from 'react';
 import {AppState} from 'react-native';

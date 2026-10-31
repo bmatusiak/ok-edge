@@ -1,16 +1,18 @@
 /**
  * AGENTS ASKING FOR BUDGETS (onlykey-edge APP.md, step 2).
  *
- * A computer's agent service sends an EDGE_REQUEST over Bluetooth; the vendor
- * bridge KEEPS it for this file (it never reaches the key) and sends back what
- * this file answers. The key only ever sees hashes, so the person approves the
+ * A computer's agent service sends an EDGE_REQUEST to this device's host - on the
+ * desktop the CLI over the app's local socket (src/features/channels/ipc.tsx); it
+ * never reaches the key, and the host sends back what this file answers. The key only ever sees hashes, so the person approves the
  * TEXT and the NAMES here, on the sheet (EdgeRequestSheet), and the library's
  * one implementation makes every hash from them (approve.approveRequest).
  *
- * WHO ASKS is the cli pair (Brad, 2026-10-08: "so the claude key thing is
- * overkill"; "lets cut it out"): the vendor bridge hands over only what came inside a paired
- * computer's encrypted session, and `from` names that link - btTransit.computer() gives the
- * pairing's id and name. No agent key, no registration, no agent-add link.
+ * WHO ASKS is the link it came over (Brad, 2026-10-08: "so the claude key thing is
+ * overkill"; "lets cut it out"): no agent key, no registration, no agent-add link. It was
+ * the cli pair - a paired computer's encrypted Bluetooth session - until the cli pair went
+ * (Brad, 2026-10-30: "just remove ble pair and sync stuff - we are using key3 to push and
+ * sync"); now it is the desktop's CLI on this same computer (computerOf, below), and any
+ * other `from` gets no answer.
  *
  * What this phone keeps (AsyncStorage): the nonces already taken (a replay is dropped), and
  * the Requests switch.
@@ -23,8 +25,6 @@ import {addNote, loadMirror, sync as syncCopy, takeOwnLinks} from './edgeStore';
 import {ownStatement, receiveLog, loadHeld} from './edgeDevices';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
-import {btTransit} from './btTransit';
-import {handleTrade, isTradeMessage} from './bucketTrade';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 import {edgeKey} from './net';
 
@@ -192,24 +192,22 @@ function stepsDone(what: string) {
 }
 
 /**
- * The vendor bridge's hand-off: an assembled message from computer `from`.
+ * The host's hand-off: an assembled message from computer `from`.
  * -> the answer to send back, or null to answer nothing (dropped).
  */
 /*
- * WHO ASKS: the paired computer behind a Bluetooth link - or, on the desktop, the CLI on this same
- * computer (from = "desktop:<its name>"). The desktop needs no pairing (Brad, 2026-10-23: "the cli
- * will communicate with the desktop app without pair because its running on same machine"): its
+ * WHO ASKS: on the desktop, the CLI on this same computer (from = "desktop:<its name>") - the only
+ * asker since the phone's Bluetooth link went with the cli pair (2026-10-30); anything else, null.
+ * The desktop needs no pairing (Brad, 2026-10-23: "the cli will communicate with the desktop app without pair because its running on same machine"): its
  * socket is trusted through the file the app writes (node-onlykey-lib desktop/trust.js).
  */
 export const DESKTOP_FROM = 'desktop:';
 async function computerOf(from: string): Promise<{id: string; name: string} | null> {
   if (from.startsWith(DESKTOP_FROM)) return {id: 'desktop', name: from.slice(DESKTOP_FROM.length) || 'this computer'};
-  return btTransit.computer(from).catch(() => null);
+  return null;
 }
 
 export function handleEdgeMessage(msg: any, from: string): Promise<unknown | null> {
-  /* a paired computer trading buckets (src/bucketTrade.ts): no sheet - proven both ways, then the newer wins */
-  if (isTradeMessage(msg)) return handleTrade(msg, from).catch(() => null);
   /* B7 stage 2: a note changes nothing, so it never waits behind a sheet */
   if (msg?.type === noteLib.TYPE) return handleNote(msg, from).catch(() => null);
   /* a sheet the person answers: a budget, or the agent identity (a sync is held, never asked - 2026-10-08) */
@@ -237,8 +235,8 @@ export function handleEdgeMessage(msg: any, from: string): Promise<unknown | nul
 }
 
 /*
- * EDGE_NOTE (spec 2026-10-04): from a PAIRED computer, well formed, new; anything else is dropped
- * unanswered. Kept in the copy of this phone's key with that computer's pairing id; whether its
+ * EDGE_NOTE (spec 2026-10-04): from a computer that asks (computerOf), well formed, new; anything else is dropped
+ * unanswered. Kept in the copy of this device's key with that computer's id (computerOf); whether its
  * seq is a budget of that computer's is the tab's check. Answered at once - a note is never worth
  * a wait (the agent holds its key lane until the phone answers) - and the copy synced after, in
  * the background, so alarms still come within seconds.
@@ -263,8 +261,8 @@ async function handleNote(msg: any, from: string): Promise<unknown | null> {
 
 /*
  * onlykey-js edge sync phase 2 (Brad, 2026-10-05): a place that keeps copies fills this
- * phone's copy. Since 2026-10-08 the gate is the cli pair (the vendor bridge
- * hands over only a paired computer's encrypted traffic), not a place on the KEY's list
+ * phone's copy. Since 2026-10-08 the gate is who asks (computerOf: the cli pair until
+ * 2026-10-30, the desktop's own CLI since), not a place on the KEY's list
  * (R20). HAVE is a read (what this copy holds); LINKS parts are staged in memory,
  * changing nothing. COMMIT: this phone's OWN links are merged into a candidate, checked
  * (R27) and kept at once - no sheet, no press, no link on the key (until 2026-10-08 a
@@ -283,11 +281,11 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
   if (!soft) return {ok: false, refusal: 'invalid', detail: "this device's key has no Edge"};
   /*
    * WHICH COMPUTER IS THE PAIRING (Brad, 2026-10-11: "checking every field in a token means
-   * nothing if we never check the signature"): `computer` is the paired computer behind this
-   * Bluetooth link (its 6-digit code, its encrypted session) - that is what says who sent it,
+   * nothing if we never check the signature"): `computer` is who asks (computerOf - the CLI
+   * behind the desktop's trusted local socket) - that is what says who sent it,
    * and its name is the one the banner shows. The message's own signature is checked against a
    * key the message itself carries (msg.peer), so it proves only that the message is whole, not
-   * who sent it; a sync's parts must all come from one paired computer. What it brings of
+   * who sent it; a sync's parts must all come from one computer. What it brings of
    * another device is HELD.
    */
   const peer = String(msg.peer).toLowerCase();
@@ -389,13 +387,13 @@ async function handleSync(msg: any, seen: Set<string>, computer: {id: string; na
   syncStaged.delete(p.sid);
   if (st.links.size !== p.linkParts) return {ok: false, refusal: 'invalid', detail: `parts missing (links ${st.links.size}/${p.linkParts}) - sync again`};
   const offered = [...st.links.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, r]) => r);
-  /* the same rules wherever this copy is filled from (edgeStore.takeOwnLinks): here a computer over Bluetooth */
+  /* the same rules wherever this copy is filled from (edgeStore.takeOwnLinks): here a computer that asks */
   const t = await takeOwnLinks(soft, offered);
   return t.ok ? {ok: true, count: t.count, seq: null} : {ok: false, refusal: t.refusal, detail: t.detail};
 }
 /*
- * THE AGENT IDENTITY (SPEC H7; Brad, 2026-10-20: "computer sets, phone keeps"). From a PAIRED
- * computer only, well formed and new (the nonce, as a request's). GET is a read: the record
+ * THE AGENT IDENTITY (SPEC H7; Brad, 2026-10-20: "computer sets, phone keeps"). From a computer
+ * that asks (computerOf) only, well formed and new (the nonce, as a request's). GET is a read: the record
  * this phone keeps, or none - every agent's start asks it. SET goes on the Edge sheet: the
  * labels and the certificate's fingerprint, Approve or Decline, a tap and no press (the key
  * signed the certificate on the computer, with its own presses). Kept only on Approve.
@@ -423,7 +421,7 @@ async function handleIdentity(msg: any, seen: Set<string>, from: string): Promis
     return result;
   }
   await keepIdentity(msg.record, computer.name);
-  show({phase: 'done', ask: asked, result: {ok: true, text: 'Kept: every computer paired with this device uses this agent identity.'}});
+  show({phase: 'done', ask: asked, result: {ok: true, text: 'Kept: the agents asking this device use this agent identity.'}});
   return {ok: true};
 }
 
@@ -436,7 +434,7 @@ async function handle(msg: any, from: string): Promise<unknown | null> {
   try {
     /* the Key Chain list is not Edge's (Brad, 2026-10-08: "Move it out of Edge"): Edge's sync carries device logs only */
     if ([syncLib.HAVE_TYPE, syncLib.LINKS_TYPE, syncLib.COMMIT_TYPE, syncLib.GIVE_TYPE, syncLib.OFFER_TYPE].includes(msg?.type)) {
-      /* a sync is taken only from a paired computer - none behind this link, no answer (as a request below) */
+      /* a sync is taken only from a computer that asks (computerOf) - none behind this link, no answer (as a request below) */
       const pc = await computerOf(from);
       return pc ? await handleSync(msg, seen, {id: pc.id, name: pc.name}) : null;
     }
@@ -444,7 +442,7 @@ async function handle(msg: any, from: string): Promise<unknown | null> {
     if (msg?.type !== requestLib.TYPE) return null;
     /* the Requests switch is off: refused unread */
     if (!(await agentRequestsOn())) return null;
-    /* who asks: the paired computer behind this link - none, no answer (the bridge already took only encrypted traffic) */
+    /* who asks: the computer behind this link (computerOf) - none, no answer */
     const computer = await computerOf(from);
     if (!computer) return null;
     step('computer');

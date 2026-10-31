@@ -17,7 +17,7 @@ import {block, chain, codes, copy, grants, sync as syncLib, receipts} from 'node
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import type {EdgeCopyKey, EdgeLinkRecord, EdgeSource} from './edge/types';
 import {raiseAlarms} from './edgeAlerts';
-import {computerHeldMs} from './vendorBridge';
+import {computerHeldMs} from './computerHold';
 import {currentNet, edgeKey} from './net';
 
 const KEY_PREFIX = (): string => edgeKey('mirror.');
@@ -481,12 +481,12 @@ export function sync(source: EdgeSource, now = Date.now()): Promise<{mirror: Mir
 }
 
 /**
- * B7 stage 2: keep an EDGE_NOTE from a paired computer. A note is NOT signed: the pairing
- * behind the Bluetooth link (edgeAgents) says which computer sent it, and its text is shown only
+ * B7 stage 2: keep an EDGE_NOTE from a computer. A note is NOT signed: the link it came
+ * over (edgeAgents computerOf) says which computer sent it, and its text is shown only
  * when it hashes to what the chain holds (the intent welded into the use, the receipt's message
  * hash). In the sync queue, so a note and a sync never save over each other.
  */
-/* computer: the pairing id of the computer that sent it (no agent key since 2026-10-08) */
+/* computer: the id of the computer that sent it (edgeAgents computerOf; no agent key since 2026-10-08) */
 export type EdgeNote = {computer: string; seq: number; reason?: string; receiptMsg?: string; txRefused?: string};
 export function addNote(deviceId: Uint8Array, n: EdgeNote, now = Date.now()): Promise<void> {
   const run = syncing.then(() => addNoteNow(deviceId, n, now), () => addNoteNow(deviceId, n, now));
@@ -498,7 +498,7 @@ async function addNoteNow(deviceId: Uint8Array, n: EdgeNote, now: number): Promi
   const computer = n.computer;
   /*
    * A NOTE DOES NOT REPLACE ONE THAT MATCHES (Brad, 2026-10-11: "checking every field in a token
-   * means nothing if we never check the signature"). Notes are unsigned and any paired computer
+   * means nothing if we never check the signature"). Notes are unsigned and any computer that asks
    * may send one for any seq: the first stays, and a later one replaces it only when the stored
    * text does not hash to the chain and the new one does - so a matching intent or receipt
    * message cannot be turned red by another computer's note.
@@ -680,7 +680,7 @@ export async function mergeOffered(source: EdgeSource, offered: EdgeLinkRecord[]
 }
 
 /**
- * Take links offered for THIS key's own chain - from a computer over Bluetooth (edgeAgents), or
+ * Take links offered for THIS key's own chain - from a computer that asks (edgeAgents), or
  * on the desktop from this computer's shared records - by one set of rules: no fork, the copy
  * verifies with them, every added link checked against the key. Kept only then.
  */

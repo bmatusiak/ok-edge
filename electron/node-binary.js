@@ -1,8 +1,7 @@
 'use strict';
 /*
- * THE PLAIN NODE THE DESKTOP APP'S CHILDREN RUN ON - the soft key's host (desktop/okemu.js: the firmware's flash must sit
- * below 4 GB, which Chromium's own reservation takes in an Electron process) and the lib's CLI for the sync service
- * (desktop/sync.js: the Bluetooth stack is a native module built for Node).
+ * THE PLAIN NODE THE DESKTOP APP'S CHILD RUNS ON - the soft key's host (desktop/okemu.js: the firmware's flash must sit
+ * below 4 GB, which Chromium's own reservation takes in an Electron process).
  *
  *   OKEDGE_NODE         a developer's override
  *   the packaged app    the Node it carries, <resources>/node (tools/release/desktop-package.js puts it there) - a

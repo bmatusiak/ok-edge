@@ -1,26 +1,27 @@
 /*
- * THE DESKTOP'S PIPE TO THE CLI (>_) - a channel like Bluetooth, sync and the MCP (Brad, 2026-10-30: "the activity for
+ * THE DESKTOP'S PIPE TO THE CLI (>_) - a channel like Bluetooth and the MCP (Brad, 2026-10-30: "the activity for
  * desktop has IPC for its communication, and it's not listed as an activity icon or panel, so that needs to be added").
  * The CLI on this computer reaches the desktop app through its local pipe (node-onlykey-lib desktop/serve.js, in
- * electron/desktop/hosting.js), and the app answers it as the phone answers a computer over Bluetooth. This feature is in
- * the desktop's list only (src/features/list.desktop.ts), so nothing here asks which shell it is.
+ * electron/desktop/hosting.js), and the app answers it with the Edge host (edgeAgents). This feature is in the desktop's
+ * list only (src/features/list.desktop.ts), so nothing here asks which shell it is.
  *
  * Its icon: grey - no CLI connected; green - a CLI is connected (its whole conversation holds the key); purple flashing -
  * its requests crossing (btActivity 'ipc'). Its card: connected or not, the last request and from where.
  *
  * The host itself (below, as src/hooks/useDesktopHost.ts had it):
  *   THE CLI ON THIS COMPUTER, ANSWERED BY THE PHONE'S OWN HOST (Brad, 2026-10-24: "i need this to be a
- *   1 to 1 in how it works"; "cli -> mobile is the same as cli -> desktopapp"). On the phone a computer's
- *   Edge messages come over Bluetooth (useFidoGatt) to edgeAgents.handleEdgeMessage. On the desktop they
- *   come over the app's local socket (node-onlykey-lib desktop/serve.js, in electron/desktop/hosting.js)
- *   and the main process hands each one here - the same handler, the same request sheet, the same key
- *   code (SoftKeyEdge, which on the desktop is the hard key). Nothing on any other shell.
+ *   1 to 1 in how it works"; "cli -> mobile is the same as cli -> desktopapp"). The phone's Bluetooth
+ *   link to a computer went with the cli pair (2026-10-30, until Bluetooth comes back redesigned); the
+ *   Edge host it used is this one's: the CLI's messages come over the app's local socket (node-onlykey-lib
+ *   desktop/serve.js, in electron/desktop/hosting.js) and the main process hands each one here - to
+ *   edgeAgents.handleEdgeMessage, the request sheet and the key code (SoftKeyEdge, which on the desktop is
+ *   the hard key). Nothing on any other shell.
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, Text} from 'react-native';
 import {DESKTOP_FROM, handleEdgeMessage} from '../../edgeAgents';
 import {desktop} from '../../platform';
-import {createComputerHold} from '../../vendorBridge';
+import {createComputerHold} from '../../computerHold';
 import {getOnlyKey} from '../../onlykey';
 import {activeBackend} from '../../hooks/KeyContext';
 import {ioPulse} from '../../btActivity';
@@ -107,7 +108,7 @@ function useDesktopHost(): void {
     });
     /*
      * THE CLI IS ABOUT TO WRITE TO THE KEY: held already for its connection, said at once; otherwise taken
-     * first - after this app's own request in flight (vendorBridge createComputerHold) - then said.
+     * first - after this app's own request in flight (src/computerHold.ts) - then said.
      */
     const offTalks = bridge.on('okedge:computerTalks', ({id}: {id: number}) => {
       ioPulse('ipc');
