@@ -78,6 +78,12 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
    */
   private fun collect(v: View, lines: MutableList<String>, alpha: Float = 1f) {
     if (!v.isShown) return
+    /*
+     * a screen the navigator keeps attached but not shown is marked hidden from accessibility (react-native-screens'
+     * inactive screen) - what Android's own accessibility (uiautomator) leaves out, so does this (2026-10-31: the
+     * login screen's texts stayed in the tree under the Testing tab, and uiautomator did not list them)
+     */
+    if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) return
     val a = alpha * v.alpha
     if (a <= 0.01f) return
     if (v is EditText) return
