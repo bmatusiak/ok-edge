@@ -118,6 +118,29 @@ function pressWhenAsked(app) {
    * soon as the request sheet's twin came to the top (three presses for one approval, 2026-10-31).
    * An approval (" - approve") is the script's to give, not this presser's.
    */
+  /*
+   * A TOUCH THE KEY WAITS FOR, SEEN ON THE KEY (the web app's gadget, through its machine): a browser's WebAuthn request
+   * asks the key for a touch ("Insert your security key and touch it") and the app logs nothing of it - the request is
+   * the browser's. The key says it: its LED turns blue. One press per blue turn (blue after any other colour), button 1
+   * - any button is a touch. A testnet key only, by its machine's word.
+   */
+  let lastColour = null;
+  app.on('log', async (l) => {
+    const led = l.match(/^\[main\] \[gadget\] led (#[0-9a-f]{6})/);
+    if (!led) return;
+    const colour = led[1];
+    const blue = /^#0[0-9a-f]0[0-9a-f][8-9a-f][0-9a-f]$/.test(colour);
+    const turned = blue && lastColour !== 'blue';
+    lastColour = blue ? 'blue' : colour;
+    if (!turned || pressing) return;
+    pressing = true;
+    try {
+      const s = await proc('key-state', app.shell);
+      if (!(s.ok && /\btestnet\b/.test(String(s.what)))) { line(`[${app.shell}] its key waits for a touch - not pressed: not a testnet key`); return; }
+      const r = await proc('press', app.shell, { buttons: ['1'] });
+      line(r.ok ? `[${app.shell}] pressed: ${r.what} - the key waited for a touch (LED ${colour})` : `[${app.shell}] press refused: ${r.why}`);
+    } finally { pressing = false; }
+  });
   app.on('log', async (l) => {
     /*
      * A KEY OUTSIDE THE APP WAITS (src/hostChallenge.ts - the web app's key, a hard key): pressed by the machine that
