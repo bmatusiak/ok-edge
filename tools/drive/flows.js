@@ -11,6 +11,11 @@
  * unlock test does not know, 2026-10-31.)
  */
 const TEST_PIN = '1234561';
+/*
+ * A SOFT KEY WITH ANOTHER PIN (Brad, 2026-10-31: the box desktop's is the kit's 1111111 - each Login Bypass, which types
+ * TEST_PIN, was a wrong PIN attempt, and ten wipe a key): run.js login|budget --pin <pin> names it, and the login types
+ * it on the keypad - never the bypass. A bypass that leaves the key locked stops the run (no second wrong attempt).
+ */
 
 const LOGGED_IN = 'Slots — Soft Key';
 const NO_BUDGET = 'No budget. A budget lets an agent use the key a set number of times without a press; you approve it once.';
@@ -141,13 +146,19 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
       /* the web app's chain is its key's - the gadget is a testnet key: unlocked from its machine, then Log in */
       if (d.app.shell === 'webapp') { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
     }
+    else if (now === 'bypass' && pin !== TEST_PIN) {
+      /* the bypass types TEST_PIN, not this key's: the keypad with its own PIN */
+      if (d.app.flags.tab === 'This Key') { for (const n of pin) await d.tap(`Button ${n}`); } else await d.goto('This Key');
+    }
     else if (now === 'bypass') {
       /*
        * its end is the key unlocked - the bypass types seven digits, and while it does the key is still "locked" with
        * no button live (2026-10-31, the Pixel: judged "elsewhere" mid-bypass, a Menu tap found nothing)
        */
       await d.tap('Login Bypass');
-      await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] });
+      await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] }).catch(() => {
+        throw new Error(`login: the key stayed locked after Login Bypass (${TEST_PIN}) - one wrong PIN attempt; not tried again. Its PIN: --pin <pin>`);
+      });
       continue;
     }
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
