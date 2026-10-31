@@ -19,11 +19,15 @@ export CDP_PORT=9334
 say() { echo "== $(date +%T) $*"; }
 C() { timeout 120 node tools/box/page-click.js "$@" 2>&1 | tail -1 | cut -c1-200; }
 # the first line of `file` matching `re`, as it is written (tail -f, no polling); the reader ends with the match
+# with a writer pid, the reading also ends when the writer does - a writer that died before its line (the presser
+# when the page was not up: "fetch failed") left this waiting for good (2026-10-31); returns 1 then
 waitline() {
-  local file="$1" re="$2" tp
+  local file="$1" re="$2" writer="$3" tp
   tp=$(mktemp)
-  ( tail -n +1 -f "$file" & echo $! > "$tp"; wait ) | grep -m1 -E "$re"
+  ( tail -n +1 ${writer:+--pid=$writer} -f "$file" & echo $! > "$tp"; wait ) | grep -m1 -E "$re"
+  local found=${PIPESTATUS[1]}
   kill "$(cat "$tp")" 2>/dev/null; rm -f "$tp"
+  return "$found"
 }
 # step "<outcome regex>" <clicks...>: the presser listens first, then the clicks, then the outcome (or its failure)
 step() {
@@ -31,7 +35,7 @@ step() {
   local log; log=$(mktemp)
   node tools/box/page-presser.js --approve --until "$until" --idle 120 --show 'failed|refused|Not made|did not' > "$log" 2>&1 &
   local p=$!
-  waitline "$log" 'listening' > /dev/null
+  if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
   [ $# -gt 0 ] && C "$@"
   wait $p; local code=$?
   sed 's/^/   /' "$log"; rm -f "$log"
@@ -40,7 +44,8 @@ step() {
 # the app (re)started, and its page is up: the main process's own line, then the login screen's button
 appup() {
   bash tools/box/desktop-test.sh > /dev/null
-  waitline ../logs/desktop-test.log '\[hosting\] desktop: listening' > /dev/null
+  local line; line=$(waitline ../logs/desktop-test.log 'DevTools listening on ws://')
+  node tools/box/page-ready.js "${line##* }" || return 1
   C "Enter testing mode" > /dev/null
 }
 

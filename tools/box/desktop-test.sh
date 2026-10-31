@@ -11,6 +11,8 @@ export OKEDGE_NODE="$(which node)"
 export DISPLAY=:10
 # its window is driven like the web app's: CDP_PORT=9334 node tools/box/page-click.js ... (electron/main.js OKEDGE_DEVTOOLS_PORT)
 export OKEDGE_DEVTOOLS_PORT=9334
+# emptied HERE, before this returns: a caller waiting for the new app's lines must never read the last run's
+: > ../logs/desktop-test.log
 setsid nohup npm run electron:test -- --no-sandbox > ../logs/desktop-test.log 2>&1 < /dev/null &
 echo "$(date -Is) desktop-test.sh: started electron:test" >> ~/project/onlykey/steps.log
 echo started
