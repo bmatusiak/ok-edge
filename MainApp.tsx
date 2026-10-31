@@ -491,7 +491,6 @@ function Shell() {
   useEffect(() => setDriveFlag('phase', phase), [phase]);
   useEffect(() => setDriveFlag('tab', tab), [tab]);
   useEffect(() => setDriveFlag('key', emu.device), [emu.device]);
-  useEffect(() => setDriveFlag('passed', passed), [passed]);
   /*
    * A LOGIN THIS TAB KEPT (webSession.ts, chosen at the identity check): on a reload the login screen goes on by itself
    * - the key is asked (armWebKey), and the identity check opens the bucket with no press. Once a page load.
@@ -583,6 +582,8 @@ function Shell() {
   const [passed, setPassed] = useState(false);
   /* the idle timer runs while someone is in the app (src/idleTimer.ts; the web app only for now) */
   useEffect(() => { setIdleRunning(phase === 'main' && passed); }, [phase, passed]);
+  /* the identity check's verdict, for a drive: logged in is the app's word (src/drive/registry.tsx) */
+  useEffect(() => setDriveFlag('passed', passed), [passed]);
   /*
    * THE IDENTITY'S ROOM ON THE USER'S SERVER (src/serverRoom.ts): joined once the bucket is open, left when it closes.
    * The web app's server is the one that served it; the phone's and the desktop's, the key's site (or the Sync tab's
