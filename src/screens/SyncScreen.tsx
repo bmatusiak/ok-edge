@@ -22,7 +22,7 @@ import {activeBackend} from '../hooks/KeyContext';
 import {useRoom} from '../hooks/useRoom';
 import {readKeyIdentity, useKeyIdentity} from '../keyIdentity';
 import {netTag} from '../net';
-import type {SyncStore} from '../serverRoom';
+import type {RoomState, SyncStore} from '../serverRoom';
 
 /* a store's name, in the app's words (a testnet store is the same feature) */
 const FEATURE: Record<string, string> = {passwords: 'Passwords', guestbook: 'Guest Book', keychain: 'Key Chain', cryptobox: 'Cryptobox'};
@@ -37,19 +37,30 @@ function when(at: number | null | undefined): string {
   return new Date(at).toLocaleString();
 }
 
-function FeatureRow({name, s}: {name: string; s: SyncStore}) {
-  const mark = s.same === null ? '?' : s.same ? '✓' : '≠';
-  const color = s.same === null ? theme.textDim : s.same ? theme.ok : theme.warn;
+/*
+ * EACH FEATURE AGAINST THE MCP SERVER, and only that (Brad, 2026-10-30: "can it show that it has been synced to the mcp?
+ * so i know whats remote"; "no device comparing, just mcp comparing"): its items here, and the last round with the
+ * server's sealed copy (serverRoom RoomState.sealed) - on the server ✓, not checked ?, anything else ≠.
+ */
+function serverLine(name: string, items: number, sealed: RoomState['sealed']): {line: string; mark: '✓' | '?' | '≠'} {
+  if (sealed.status === 'unknown') return {line: 'not checked with the MCP server yet', mark: '?'};
+  if (sealed.status === 'none') return {line: 'the MCP server keeps no copy for this identity', mark: '≠'};
+  if (sealed.status === 'error') return {line: `not synced with the MCP server - ${sealed.why ?? 'the last round failed'} (${when(sealed.at)})`, mark: '≠'};
+  const x = sealed.stores[name];
+  if (!x || !items) return {line: 'not on the MCP server', mark: '≠'};
+  const moved = [x.put ? `sent ${x.put}` : '', x.got ? `took ${x.got}` : ''].filter(Boolean).join(', ');
+  return {line: `on the MCP server · checked ${when(sealed.at)}${moved ? ` · ${moved}` : ''}`, mark: '✓'};
+}
+
+function FeatureRow({name, s, sealed}: {name: string; s: SyncStore; sealed: RoomState['sealed']}) {
+  const server = serverLine(name, s.items, sealed);
+  const color = server.mark === '✓' ? theme.ok : server.mark === '?' ? theme.textDim : theme.warn;
   return (
     <View style={styles.feature}>
-      <Text style={[styles.mark, {color}]}>{mark}</Text>
+      <Text style={[styles.mark, {color}]}>{server.mark}</Text>
       <View style={styles.featureText}>
         <Text style={styles.name}>{featureName(name)}</Text>
-        <Text style={styles.sub}>
-          {s.same === null
-            ? `${s.items} item${s.items === 1 ? '' : 's'} here · not compared with another device yet`
-            : `${s.items} item${s.items === 1 ? '' : 's'} · ${s.same ? 'in sync' : 'differs'} · checked ${when(s.checkedAt)} · changed by a sync ${when(s.changedAt)}`}
-        </Text>
+        <Text style={styles.sub}>{`${s.items} item${s.items === 1 ? '' : 's'} here · ${server.line}`}</Text>
       </View>
     </View>
   );
@@ -88,14 +99,14 @@ export function SyncScreen() {
   const room = useRoom();
   /*
    * EACH FEATURE AS THIS DEVICE HOLDS IT, always (Brad: "it should show the status of itself") - its items from the
-   * bucket open here; a trade in the room adds whether it matches the other device, and when. Read again after each.
+   * bucket open here, beside the MCP server's copy (FeatureRow). Read again after each trade or round with the server.
    */
   const [own, setOwn] = useState<Record<string, number> | null>(null);
   useEffect(() => {
     let live = true;
     void bucketSummary().then(s => { if (live) setOwn(s); }).catch(() => {});
     return () => { live = false; };
-  }, [room.stores]);
+  }, [room.stores, room.sealed]);
   const merged: Record<string, SyncStore> = {};
   for (const [name, items] of Object.entries(own ?? {})) merged[name] = {items, same: null, checkedAt: 0, changedAt: null};
   for (const [name, s] of Object.entries(room.stores)) merged[name] = {...s, items: own?.[name] ?? s.items};
@@ -103,7 +114,7 @@ export function SyncScreen() {
   const features = (
     <Section title="Features">
       {stores.length ? (
-        stores.map(([name, s]) => <FeatureRow key={name} name={name} s={s} />)
+        stores.map(([name, s]) => <FeatureRow key={name} name={name} s={s} sealed={room.sealed} />)
       ) : (
         <Text style={styles.note}>No bucket is open on this device.</Text>
       )}

@@ -61,9 +61,16 @@ export type RoomState = {
   needsKey: boolean;
   /* each feature's store as the room's trades last left it (bucket store names: passwords, guestbook, keychain-test, ...) */
   stores: Record<string, SyncStore>;
+  /*
+   * WHAT IS REMOTE (Brad, 2026-10-30: "can it show that it has been synced to the mcp? so i know whats remote"): the
+   * server's sealed copy as the last round with it left it. 'synced': every unit of each store listed is on the server
+   * (the lib's sealedCopy.syncWith: what differed was sent, the rest matched); 'none': this server keeps no copy for the
+   * identity; 'error': the last round failed (why); 'unknown': no round yet in this session.
+   */
+  sealed: {status: 'unknown' | 'none' | 'synced' | 'error'; at: number | null; why: string | null; stores: Record<string, {units: number; got: number; put: number}>};
 };
 
-let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false, stores: {}};
+let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false, stores: {}, sealed: {status: 'unknown', at: null, why: null, stores: {}}};
 const listeners = new Set<(s: RoomState) => void>();
 const set = (patch: Partial<RoomState>) => {
   state = {...state, ...patch};
@@ -324,7 +331,11 @@ export function bucketChanged(): void {
  */
 let sealedSaid = '';
 function sealedSoon(why: string): void {
-  tradeChain = tradeChain.then(() => sealedSync(why)).catch((e: unknown) => console.log(`[room] the sealed copy: not synced - ${String((e as Error)?.message ?? e)}`));
+  tradeChain = tradeChain.then(() => sealedSync(why)).catch((e: unknown) => {
+    const msg = String((e as Error)?.message ?? e);
+    console.log(`[room] the sealed copy: not synced - ${msg}`);
+    set({sealed: {...state.sealed, status: 'error', at: Date.now(), why: msg}});
+  });
 }
 async function sealedSync(why: string): Promise<void> {
   const r = room;
@@ -334,6 +345,7 @@ async function sealedSync(why: string): Promise<void> {
   const store = r.sealedStore();
   if (!(await store.on())) {
     if (sealedSaid !== 'off') { sealedSaid = 'off'; console.log('[room] the sealed copy: this server keeps none for this identity'); }
+    set({sealed: {status: 'none', at: Date.now(), why: null, stores: {}}});
     markFirstSync();
     return;
   }
@@ -349,6 +361,7 @@ async function sealedSync(why: string): Promise<void> {
     storesTraded(res.taken, storeItems(open.bucket));
   }
   sealedSaid = 'on';
+  set({sealed: {status: 'synced', at: Date.now(), why: null, stores: res.stores ?? {}}});
   console.log(`[room] the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
   markFirstSync();
 }
