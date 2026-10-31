@@ -15,6 +15,8 @@ async function testingMode(d) {
   if (d.has('Enter testing mode')) {
     await d.step('testing mode', { goal: () => d.app.net === 'test', act: () => d.tap('Enter testing mode'), life: 30 });
   }
+  /* and the tab it remembers is in place - the app says so (2026-10-31: a goto just after testing mode was undone by the remembered tab) */
+  await d.until((app) => app.flags.tabSettled === 'main/testing' || app.flags.phase !== 'main', { life: 30, fail: [] });
 }
 
 /*

@@ -517,6 +517,8 @@ function Shell() {
     const valid: readonly string[] = shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed, keyHasEdge}).map(x => x.name);
     void takeResumeTab(valid).then(remembered => {
       if (remembered) setTab(remembered as Tab);
+      /* a drive moves only once the remembered tab is in place (src/drive/registry.tsx) */
+      setDriveFlag('tabSettled', `${phase}/${testing.enabled ? 'testing' : 'live'}`);
     });
   }, [phase, testing.enabled]);
   /*
