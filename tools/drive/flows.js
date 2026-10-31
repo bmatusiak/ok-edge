@@ -15,8 +15,16 @@ async function testingMode(d) {
   }
 }
 
+/* the screens a login can start from - one of them shows once the app has come up */
+const KNOWN = ['Enter testing mode', LOGGED_IN, 'Button 1', 'Try again', 'Decrypt Bucket', 'Create Bucket', 'Menu'];
+
 /* logged in to the soft key: from the login screen, the keypad, the identity check, or a failed try */
 async function login(d, { pin = '1111111' } = {}) {
+  /*
+   * NOT ON A SCREEN STILL COMING UP: a just-started app shows "Starting the key…" with nothing to press, and a flow that
+   * judged that moment went for a Menu that was not there yet (2026-10-31) - it waits, by event, for a screen it knows
+   */
+  await d.until((app) => KNOWN.some((s) => app.has(s)), { life: 60, fail: [] });
   await testingMode(d);
   if (d.has(LOGGED_IN)) { d.say('logged in already'); return; }
   if (!d.has('Try again') && !d.has('Decrypt Bucket') && !d.has('Create Bucket') && !d.has('Button 1')) await d.goto('This Key');
