@@ -142,7 +142,7 @@ function createTargets(line = () => {}) {
         const port = process.env.DRIVE_PORT || '8790';
         const rev = await run('adb', ['reverse', `tcp:${port}`, `tcp:${port}`]);
         if (!rev.ok) return `adb reverse: ${rev.out}`;
-        const r = await run('adb', ['shell', 'am', 'start', '-n', `${process.env.OKEDGE_APP_ID || 'com.okrn'}/.MainActivity`]);
+        const r = await run('adb', ['shell', 'am', 'start', '-n', `${process.env.OKEDGE_APP_ID || 'com.okrn'}/com.okedge.MainActivity`]);
         return r.ok ? 'started' : r.out;
       },
       async stop() {

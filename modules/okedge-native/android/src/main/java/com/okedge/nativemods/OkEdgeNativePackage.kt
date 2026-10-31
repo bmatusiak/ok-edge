@@ -35,6 +35,8 @@ import com.okrn.qr.NativeQrScannerModule
 import com.okrn.specs.NativeAppSignatureSpec
 import com.okrn.sig.NativeAppSignatureModule
 import com.okrn.usb.NativeUsbHidModule
+import com.okrn.specs.NativeDriveSpec
+import com.okedge.drive.NativeDriveModule
 
 /*
  * The modules this library holds, registered the way ok-rn's OkRnPackage registers them: the
@@ -60,6 +62,8 @@ class OkEdgeNativePackage : BaseReactPackage() {
       NativeCredProviderSpec.NAME -> NativeCredProviderModule(reactContext)
       NativeQrScannerSpec.NAME -> NativeQrScannerModule(reactContext)
       NativeAppSignatureSpec.NAME -> NativeAppSignatureModule(reactContext)
+      /* ok-edge's own: the drive's picture, screen text and screen events (src/drive, debugging gate only) */
+      NativeDriveSpec.NAME -> NativeDriveModule(reactContext)
       else -> null
     }
 
@@ -67,7 +71,7 @@ class OkEdgeNativePackage : BaseReactPackage() {
     listOf(NativeRandomSpec.NAME, NativeKdfSpec.NAME, NativeOkSslSpec.NAME, NativeRsaGenSpec.NAME, NativeSecretsSpec.NAME,
       NativeUsbHidSpec.NAME, NativeOkEmuSpec.NAME, NativeFidoGattSpec.NAME, NativeEdgeAlertSpec.NAME, NativeShareSpec.NAME,
       NativeBtKeyboardSpec.NAME, NativeContactLinkSpec.NAME, NativeCredProviderSpec.NAME, NativeQrScannerSpec.NAME,
-      NativeAppSignatureSpec.NAME)
+      NativeAppSignatureSpec.NAME, NativeDriveSpec.NAME)
       .associateWith { ReactModuleInfo(it, it, false, false, false, true) }
   }
 }

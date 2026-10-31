@@ -5,7 +5,7 @@
  *   events out:  hello {shell, net}           once a connection is up
  *                log {line, at}                every console line this app writes (what the box tools read)
  *                controls {list}               the top layer's controls, on every change (registry.tsx)
- *                screen {text}                 the screen's text, on every change (web shells; native: later)
+ *                screen {text}                 the screen's text, on every change (screen.ts: each shell reads its own)
  *   commands in: tap {label}                   the top layer's enabled control, pressed by calling it
  *                fill {field, value}           a registered text field, by its placeholder
  *                state {}                      controls + screen text now
@@ -26,6 +26,7 @@ import {shell} from '../platform';
 import {currentNet, onNet} from '../net';
 import {shot} from './shot';
 import {quit} from './quit';
+import {screenText, watchScreen} from './screen';
 
 const URL = process.env.EXPO_PUBLIC_OKEDGE_DRIVE_URL || 'ws://127.0.0.1:8790';
 
@@ -42,11 +43,8 @@ function send(msg: object): void {
   }
 }
 
-/* the screen's text: the web shells read their page; a native shell has none to read yet (Android: step 2) */
-function screenText(): string {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return '';
-  return document.body ? document.body.innerText : '';
-}
+/* the screen's text, read by the shell (screen.ts / screen.android.ts) and sent */
+const sendScreen = () => { void screenText().then(text => send({t: 'screen', text})); };
 
 /*
  * THE ONE TIMER, AN INACTIVITY CHECK (Brad: "the only thing for timers allowed is inactivity checking"): while there is
@@ -70,7 +68,7 @@ function dial(): void {
     ws = sock;
     send({t: 'hello', shell, net: currentNet(), os: Platform.OS});
     send(controlsMsg());
-    send({t: 'screen', text: screenText()});
+    sendScreen();
   };
   sock.onclose = () => { dialling = false; if (ws === sock) ws = null; idleRedial(); };
   sock.onerror = () => { dialling = false; idleRedial(); };
@@ -80,10 +78,10 @@ function dial(): void {
     const reply = (ok: boolean, extra: object = {}) => send({t: 'reply', id: m.id, ok, ...extra});
     if (m.t === 'tap') { const why = tapLabel(String(m.label)); reply(!why, why ? {why} : {}); }
     else if (m.t === 'fill') { const why = fillField(String(m.field), String(m.value ?? '')); reply(!why, why ? {why} : {}); }
-    else if (m.t === 'state') reply(true, {controls: liveControls(), text: screenText()});
+    else if (m.t === 'state') void screenText().then(text => reply(true, {controls: liveControls(), text}));
     /* introduce yourself again: a drive server that took over this connection (through a drive-remote) never had the
      * first hello (2026-10-31: a restarted server waited for an app that was connected all along) */
-    else if (m.t === 'hello') { send({t: 'hello', shell, net: currentNet(), os: Platform.OS}); send(controlsMsg()); send({t: 'screen', text: screenText()}); }
+    else if (m.t === 'hello') { send({t: 'hello', shell, net: currentNet(), os: Platform.OS}); send(controlsMsg()); sendScreen(); }
     else if (m.t === 'shot') void shot().then(r => reply('png' in r, r));
     else if (m.t === 'quit') void quit().then(r => reply('ok' in r, r));
     else reply(false, {why: `unknown command "${m.t}"`});
@@ -117,15 +115,8 @@ export function startDrive(): void {
     else dial();
   });
 
-  /* the screen's text on every change of the page, one message per frame at most (web shells) */
-  if (Platform.OS === 'web' && typeof document !== 'undefined' && typeof MutationObserver !== 'undefined') {
-    let queued = false;
-    new MutationObserver(() => {
-      if (!ws || queued) return;
-      queued = true;
-      requestAnimationFrame(() => { queued = false; send({t: 'screen', text: screenText()}); });
-    }).observe(document.body, {subtree: true, childList: true, characterData: true});
-  }
+  /* the screen's text on every change - the page's MutationObserver, Android's layout event - while connected */
+  watchScreen(() => { if (ws) sendScreen(); });
 
   /* the net decides what the server may press (the testnet only): told as it changes */
   onNet(net => send({t: 'net', net}));
