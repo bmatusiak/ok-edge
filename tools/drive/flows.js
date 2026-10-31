@@ -15,26 +15,39 @@ async function testingMode(d) {
   }
 }
 
-/* the screens a login can start from - one of them shows once the app has come up */
-const KNOWN = ['Enter testing mode', LOGGED_IN, 'Button 1', 'Try again', 'Decrypt Bucket', 'Create Bucket', 'Menu'];
+/*
+ * WHERE A LOGIN STANDS, as one name: the screen decides the next move. null = a screen still coming up ("Starting the
+ * key…"), or one the login does not know - nothing is pressed on it (2026-10-31: a Menu seen for a moment while the
+ * app started was gone by the time it was tapped).
+ */
+function loginState(app) {
+  if (app.has(LOGGED_IN)) return 'in';
+  if (app.has('Enter testing mode')) return 'login screen';
+  for (const b of ['Try again', 'Decrypt Bucket', 'Create Bucket']) if (app.has(b)) return b;
+  if (app.has('Button 1') && app.net === 'test') return 'keypad';
+  if (app.net === 'test' && app.has('Menu')) return 'elsewhere';
+  return null;
+}
 
-/* logged in to the soft key: from the login screen, the keypad, the identity check, or a failed try */
-async function login(d, { pin = '1111111' } = {}) {
-  /*
-   * NOT ON A SCREEN STILL COMING UP: a just-started app shows "Starting the key…" with nothing to press, and a flow that
-   * judged that moment went for a Menu that was not there yet (2026-10-31) - it waits, by event, for a screen it knows
-   */
-  await d.until((app) => KNOWN.some((s) => app.has(s)), { life: 60, fail: [] });
-  await testingMode(d);
-  if (d.has(LOGGED_IN)) { d.say('logged in already'); return; }
-  if (!d.has('Try again') && !d.has('Decrypt Bucket') && !d.has('Create Bucket') && !d.has('Button 1')) await d.goto('This Key');
-  for (const b of ['Try again', 'Decrypt Bucket', 'Create Bucket']) {
-    if (d.has(b)) { await d.step(`log in (${b})`, { goal: LOGGED_IN, act: () => d.tap(b) }); return; }
+/*
+ * logged in to the soft key, as a state machine: look, take the one move that state calls for, wait for the state to
+ * change, look again - from the login screen, the keypad, the identity check, a failed try, another tab
+ */
+async function login(d, { pin = '1111111', life = 180 } = {}) {
+  const until = Date.now() + life * 1000;
+  for (let moves = 0; moves < 12; moves++) {
+    const left = Math.max(5, Math.round((until - Date.now()) / 1000));
+    const now = await d.until((app) => loginState(app) !== null, { life: left, fail: [] }).then(() => loginState(d.app));
+    if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return; }
+    d.say(`login: ${now}`);
+    if (now === 'login screen') await d.tap('Enter testing mode');
+    else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
+    else if (now === 'elsewhere') await d.goto('This Key');
+    else await d.tap(now);
+    /* the move's effect: the state is another one (or the login is in) */
+    await d.until((app) => { const s = loginState(app); return s !== null && s !== now; }, { life: Math.max(5, Math.round((until - Date.now()) / 1000)), fail: [] });
   }
-  await d.step('log in (PIN)', {
-    goal: LOGGED_IN,
-    act: async () => { for (const n of pin) await d.tap(`Button ${n}`); },
-  });
+  throw new Error('login: twelve moves and not in');
 }
 
 /* one budget on the soft key: asked, approved (its press answered by the server), three signs it pays */
