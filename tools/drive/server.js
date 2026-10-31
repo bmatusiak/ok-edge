@@ -378,7 +378,9 @@ function control(ws) {
       /* a shell not connected yet gets a handle too: its script may start it (d.up(), d.start()) */
       const app = apps.get(shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true });
       shotApp = app;
-      delete require.cache[require.resolve(file)];
+      /* every run loads the scripts and what they require (flows.js) as they are now - a cached flows.js ran an old login
+       * for runs after it was changed (2026-10-31) */
+      for (const k of Object.keys(require.cache)) if (k.startsWith(__dirname) && k !== __filename && !/targets.js$/.test(k)) delete require.cache[k];
       const say = (t) => line(`[${m.script}] ${t}`);
       say(`start on ${app.shell} (${app.net})${m.args && m.args.length ? ` - ${m.args.join(' ')}` : ''}`);
       await require(file)(driveFor(app, say), m.args || []);
