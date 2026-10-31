@@ -447,7 +447,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
            * key 2 - a test-hex key restored from the testnet backup: its lock state read by the lib's CLI ("status", no
            * press), the way webapp-edge-budget.sh read it. Its PIN is the kit's (1111111), not the soft keys' testing one.
            */
-          const st = await runIn(ROOT, NODE, [path.join(ROOT, 'node-onlykey-lib', 'cli', 'index.js'), 'status'], 30000);
+          /* ok-edge's own copy of the lib: it has node-hid (the lib's clone keeps it optional) */
+          const st = await runIn(EDGE, NODE, [path.join(EDGE, 'node_modules', 'node-onlykey-lib', 'cli', 'index.js'), 'status'], 30000);
           const state = (st.out.split('\n').find((l) => /^\s*state\s/.test(l)) || '').trim().split(/\s+/)[1] || `unread (${st.out.split('\n').pop()})`;
           return `hard key 2, the testnet test key (kit PIN): ${state === 'unlocked' || state === 'locked' ? 'connected' : 'not connected'}; state ${state}${keys}`;
         }
