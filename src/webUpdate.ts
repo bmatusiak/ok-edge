@@ -50,6 +50,8 @@ export async function reloadFresh(): Promise<void> {
     for (const k of await caches.keys()) if (String(k).startsWith('okedge-web-')) await caches.delete(k);
     for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
   } catch { /* nothing cached */ }
+  /* said before it goes: a drive watching this page takes the reload as asked for, not a crash */
+  console.log('[web] reloading: a newer build is on the server');
   location.reload();
 }
 

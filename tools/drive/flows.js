@@ -95,7 +95,9 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
     if (now.startsWith('close:')) await d.tap(now.slice(6));
     else if (now.startsWith('Go to ')) {
       /* the key's site opens as a new page - a new connection: the drive goes on with it (its hello is the event) */
-      d = await d.restarted(() => d.tap(now));
+      /* the page may navigate before it answers the tap: its connection closing is the tap having worked */
+      const tap = now;
+      d = await d.restarted(() => d.tap(tap).catch((e) => { if (!/disconnected|went|gone/.test(e.message)) throw e; }));
       continue;
     }
     else if (now === 'login screen') {

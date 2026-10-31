@@ -446,6 +446,8 @@ function attachApp(sock) {
     }
     if (m.t === 'net') { app.net = String(m.net); line(`[${app.shell}] net: ${app.net}`); app.emit('screen'); return; }
     if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
+    /* the app says it reloads itself (a newer build): its going is expected */
+    if (m.t === 'log' && /^\[web\] reloading/.test(String(m.line))) expectGone(app.shell);
     if (m.t === 'log') { const l = `${stamp()} ${m.line}`; keep(app.recent, l); bus.emit('app-line', app.shell, l); app.emit('log', String(m.line)); return; }
     /*
      * AN ERROR IN THE APP (drive debugging #2): logged in its tab, the whole message kept in its lines, and a picture
@@ -472,6 +474,8 @@ function attachApp(sock) {
     const asked = expected.get(app.shell) > Date.now();
     expected.delete(app.shell);
     if (sock.remoteGone) line(`[${app.shell}] its drive-remote's link went - the app may still be running`);
+    /* a newer connection of the same app is already up: the page moved (a navigation, a new tab) - nothing died */
+    else if (apps.get(app.shell) && apps.get(app.shell) !== app) { /* replaced */ }
     else if (!asked) void lastWordsOf(app);
   });
 }
