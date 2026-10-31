@@ -25,6 +25,13 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
   await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
   let id = 0;
   const waiting = new Map();
+  /* the handler first: a call made before it was set never heard its answer (the presser hung before "listening") */
+  let onConsole = () => {};
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); return; }
+    if (m.method === 'Runtime.consoleAPICalled') onConsole(m);
+  };
   const call = (method, params = {}) => new Promise((resolve) => { waiting.set(++id, resolve); ws.send(JSON.stringify({ id, method, params })); });
   const evaluate = async (expr) => (await call('Runtime.evaluate', { expression: expr, returnByValue: true })).result.result.value;
   const click = async (x, y) => {
@@ -54,10 +61,7 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
   let chain = Promise.resolve();
   const act = (fn) => { chain = chain.then(fn).catch((e) => say(`failed: ${e.message || e}`)); };
 
-  ws.onmessage = (ev) => {
-    const m = JSON.parse(ev.data);
-    if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); return; }
-    if (m.method !== 'Runtime.consoleAPICalled') return;
+  onConsole = (m) => {
     const line = (m.params.args || []).map((a) => (a.value !== undefined ? String(a.value) : a.description || '')).join(' ');
     idle();
     if (SHOW && SHOW.test(line)) say(line.slice(0, 200));
