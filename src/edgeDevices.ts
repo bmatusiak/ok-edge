@@ -23,7 +23,7 @@
  * name per fingerprint and never 'unknown'.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {devices as devicesLib, grants as grantsLib, sync as syncLib} from 'node-onlykey-lib/edge';
+import {devices as devicesLib, forks as forksLib, grants as grantsLib, sync as syncLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import {keepMerged, loadMirror} from './edgeStore';
@@ -496,4 +496,22 @@ function notify(): void {
   for (const l of [...listeners]) {
     try { l(); } catch { /* a listener's own problem */ }
   }
+}
+
+/*
+ * ------------------------------------------------ forks (Brad, 2026-10-31: "when i restore a backup, it should be
+ * depicted as a fork"; "a fork on the same backup is a yellow flag")
+ *
+ * Every chain this device holds - its own copy and each merged one - through the lib's forkTree: which chain is the
+ * original, which began as a restore (a CONTINUE) of which parent at which seq, and which backup points more than one
+ * key continued. Device ids lowercase hex; the Edge tab's device filter draws it.
+ */
+export type ForkTree = ReturnType<typeof forksLib.forkTree>;
+export async function forkTreeOf(deviceIds: string[]): Promise<ForkTree> {
+  const chains = [];
+  for (const id of [...new Set(deviceIds.map(d => d.toLowerCase()))]) {
+    const m = await loadMirror(fromHex(id)).catch(() => null);
+    if (m && m.links.length) chains.push({deviceId: id, links: m.links.map(r => ({link: r.link, head: r.head}))});
+  }
+  return forksLib.forkTree(chains);
 }

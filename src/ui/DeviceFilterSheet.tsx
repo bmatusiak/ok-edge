@@ -7,7 +7,7 @@
  */
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {loadNew, onDevicesChanged, type NewItem} from '../edgeDevices';
+import {loadNew, onDevicesChanged, type ForkTree, type NewItem} from '../edgeDevices';
 import {onFilter, setShown, showAll, shown} from '../edgeFilter';
 import {netTag} from '../net';
 import {Btn} from './components';
@@ -17,7 +17,25 @@ import {theme} from './theme';
 export type FilterDevice = {deviceId: string; name: string; thisDevice?: boolean};
 const short = (id: string) => `${id.slice(0, 8)}…`;
 
-export function DeviceFilterSheet({visible, onClose, devices}: {visible: boolean; onClose: () => void; devices: FilterDevice[]}) {
+/*
+ * EACH DEVICE'S PLACE IN THE TREE (Brad, 2026-10-31: "when i restore a backup, it should be depicted as a fork"; "a fork
+ * on the same backup is a yellow flag"): the original chain, or a fork of its parent at the seq it continued from - and
+ * the flag when another key continued the same backup point.
+ */
+function originLine(id: string, forks: ForkTree | null, nameOf: (id: string) => string): {text: string; flag: boolean} | null {
+  const c = forks?.chains.find(x => x.deviceId === id);
+  if (!c) return null;
+  if (c.start === 'original') return {text: 'the original chain', flag: false};
+  if (c.start === 'partial') return {text: 'held here from a later link - where it began is not known here', flag: false};
+  const p = forks!.points.find(x => x.point === c.point);
+  const others = (p?.forks ?? []).filter(f => f !== id);
+  const from = c.parent ? `a restore of ${nameOf(c.parent)}'s backup` : 'a restore of a backup';
+  if (others.length) return {text: `${from}, forked at #${c.forkSeq} - the same backup as ${others.map(nameOf).join(', ')}: was each restore yours?`, flag: true};
+  return {text: `${from}, forked at #${c.forkSeq}`, flag: false};
+}
+
+export function DeviceFilterSheet({visible, onClose, devices, forks = null}: {visible: boolean; onClose: () => void; devices: FilterDevice[]; forks?: ForkTree | null}) {
+  const nameOf = (id: string) => devices.find(d => d.deviceId === id)?.name ?? `device ${short(id)}`;
   const [, setTick] = useState(0);
   const [failing, setFailing] = useState<NewItem[]>([]);
   useEffect(() => onFilter(() => setTick(t => t + 1)), []);
@@ -33,11 +51,13 @@ export function DeviceFilterSheet({visible, onClose, devices}: {visible: boolean
       <Text style={styles.dim}>Every use of your key from every device is in your log. Switch a device off to hide its budgets and presses here; switch it on to see them again.</Text>
       {devices.map(d => {
         const on = shown(d.deviceId);
+        const origin = originLine(d.deviceId, forks, nameOf);
         return (
           <View key={d.deviceId} style={styles.item}>
             <View style={styles.text}>
               <Text style={styles.op}>{d.name}{d.thisDevice ? ' (this key)' : ''}</Text>
               <Text style={styles.dim}>{`device ${short(d.deviceId)}`}</Text>
+              {origin ? <Text style={[styles.dim, origin.flag ? {color: theme.warn} : null]}>{`${origin.flag ? '⚠ ' : ''}${origin.text}`}</Text> : null}
             </View>
             <Btn title={on ? 'On' : 'Off'} tone={on ? 'primary' : undefined} onPress={() => setShown(d.deviceId, !on)} label={`${on ? "Hide" : "Show"} ${d.name}`} />
           </View>

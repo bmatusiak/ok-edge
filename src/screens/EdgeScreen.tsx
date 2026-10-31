@@ -29,7 +29,7 @@ import {YourDevicesCard} from '../ui/YourDevicesCard';
 import {DeviceFilterSheet, type FilterDevice} from '../ui/DeviceFilterSheet';
 import {onFilter, shown} from '../edgeFilter';
 import {useYourDevices, type DeviceLink, type YourDevice} from '../hooks/useYourDevices';
-import {currentDeviceId, nametagOr, onDevicesChanged, waitingCount} from '../edgeDevices';
+import {currentDeviceId, forkTreeOf, nametagOr, onDevicesChanged, waitingCount, type ForkTree} from '../edgeDevices';
 import {EdgeAgentsCard} from '../ui/EdgeAgentsCard';
 import {AgentsCard} from '../ui/AgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
@@ -737,6 +737,14 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
   /* logs whose chain did not check - listed in the filter sheet, never a gate (Brad, 2026-10-31) */
   const [waiting, setWaiting] = useState(0);
   const [filterOpen, setFilterOpen] = useState(false);
+  /* every chain held here as a tree of forks (edgeDevices.forkTreeOf): read again when the devices or this key's head move */
+  const [forks, setForks] = useState<ForkTree | null>(null);
+  const forkIds = [currentDeviceId(), ...devices.map(d => d.deviceId)].filter((x): x is string => !!x).map(x => x.toLowerCase()).sort().join(',');
+  useEffect(() => {
+    let live = true;
+    void forkTreeOf(forkIds ? forkIds.split(',') : []).then(t => { if (live) setForks(t); }).catch(() => { if (live) setForks(null); });
+    return () => { live = false; };
+  }, [forkIds, edge.view?.headSeq]);
   /* the device filter changed: draw the lists again */
   const [, setFilterTick] = useState(0);
   useEffect(() => onFilter(() => setFilterTick(t => t + 1)), []);
@@ -824,11 +832,18 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
     ...devices.filter(d => d.deviceId.toLowerCase() !== ownId).map(d => ({deviceId: d.deviceId.toLowerCase(), name: deviceName(d)})),
   ];
   const showing = filterDevices.filter(d => shown(d.deviceId));
+  const flagged = (forks?.points ?? []).filter(p => p.flag).length;
   items.push({key: 'device-filter', kind: 'row',
     title: showing.length === filterDevices.length
       ? `Showing all ${filterDevices.length} device${filterDevices.length === 1 ? '' : 's'}`
       : `Showing ${showing.length} of ${filterDevices.length} devices`,
-    subtitle: [showing.map(d => d.name).join(', ') || 'none', waiting ? `${waiting} log${waiting === 1 ? '' : 's'} that did not check` : ''].filter(Boolean).join(' · '),
+    subtitle: [
+      showing.map(d => d.name).join(', ') || 'none',
+      /* the yellow flag (Brad, 2026-10-31: "a fork on the same backup is a yellow flag") - here too, not only in the sheet */
+      flagged ? `⚠ ${flagged} backup${flagged === 1 ? '' : 's'} restored onto more than one key` : '',
+      waiting ? `${waiting} log${waiting === 1 ? '' : 's'} that did not check` : '',
+    ].filter(Boolean).join(' · '),
+    tone: flagged ? 'warn' : undefined,
     onPress: () => setFilterOpen(true), accessibilityLabel: 'Choose which devices to show'});
   /*
    * PAST ITS LIFETIME = NOT LIVE, whatever the key still lists (Brad, 2026-10-06:
@@ -1151,7 +1166,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
         items={items.filter(it => it.key === 'status' || it.key === 'merge-banner' || (pane === 'Presses') === (it.key === 's-history' || it.key === 'live-hold' || it.key === 'live-refused' || /^h\d/.test(it.key) || it.key.startsWith('dv-')))}
         bottomInset={DRAWER_HANDLE} refreshing={edge.busy} onRefresh={edge.sync}
       />
-      <DeviceFilterSheet visible={filterOpen} onClose={() => setFilterOpen(false)} devices={filterDevices} />
+      <DeviceFilterSheet visible={filterOpen} onClose={() => setFilterOpen(false)} devices={filterDevices} forks={forks} />
       {/* Brad, 2026-10-05: the drawer holds more than agents now */}
       <BottomDrawer title="Edge Management">
         {/* a hard key on the desktop: its nametag ("my device name"), its agent identity, its blocks - from its identity's records */}
