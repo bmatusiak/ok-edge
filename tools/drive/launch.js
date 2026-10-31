@@ -17,6 +17,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const http = require('http');
 
 const PIDFILE = path.join(os.homedir(), '.onlykey-drive.pid');
 const args = process.argv.slice(2);
@@ -61,6 +62,31 @@ async function start(mode, rest) {
   child.unref();
   fs.writeFileSync(PIDFILE, JSON.stringify({ pid: child.pid, mode }));
   console.log(`drive ${mode}: NW.js started (pid ${child.pid}) - its window shows every line; close it to stop`);
+  /*
+   * AND READY BEFORE THIS RETURNS (2026-10-31: a hand-made wait after a restart looked for its line in the log's last
+   * three lines, missed it and waited for good): the server answers /status, with its remotes connected; a remote
+   * listens on its control port. Asked every 500 ms - another process, not our event - under a 30 s watchdog.
+   */
+  const want = rest.includes('--remote');
+  const port = mode === 'server' ? 8790 : 8791;
+  const until = Date.now() + 30000;
+  for (;;) {
+    const ready = await new Promise((resolve) => {
+      const req = http.get({ host: '127.0.0.1', port, path: mode === 'server' ? '/status' : '/', timeout: 2000 }, (res) => {
+        let body = '';
+        res.on('data', (c) => { body += c; });
+        res.on('end', () => {
+          if (mode !== 'server') return resolve('listening');
+          try { const s = JSON.parse(body); resolve(!want || s.remotes.some((r) => r.up) ? `up${want ? ` - remote ${s.remotes.filter((r) => r.up).map((r) => r.machine).join(', ')} connected` : ''}` : null); } catch { resolve(null); }
+        });
+      });
+      req.on('error', () => resolve(mode !== 'server' ? null : null));
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+    });
+    if (ready) { console.log(`drive ${mode}: ready (${ready})`); return; }
+    if (Date.now() > until) { console.error(`drive ${mode}: not ready in 30 s - look at its window`); process.exitCode = 1; return; }
+    await new Promise((r) => setTimeout(r, 500));
+  }
 }
 
 (async () => {

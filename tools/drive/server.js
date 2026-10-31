@@ -409,6 +409,8 @@ function driveFor(app, say) {
 /* ------------------------------------------------------------------ the server */
 
 const server = http.createServer((req, res) => {
+  /* the server's state as JSON - launch.js waits on it: up, and its remotes connected */
+  if (req.url === '/status') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(status())); return; }
   res.writeHead(200, { 'content-type': 'text/plain' });
   res.end(`drive server: ${[...apps.values()].map((a) => `${a.shell} (${a.net})`).join(', ') || 'no app connected'}\n`);
 });

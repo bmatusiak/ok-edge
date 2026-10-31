@@ -43,7 +43,8 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
   const targets = createTargets(line, (shell, l) => toServer({ t: 'app-out', shell, line: l }), (name, ev) => toServer({ t: 'cmd', name, ev }));
 
   /* ---- the server's side */
-  const controlHttp = http.createServer();
+  /* a plain request (launch.js asking whether this remote is up) gets an answer; the port is for the server's socket */
+  const controlHttp = http.createServer((req, res) => { res.writeHead(204); res.end(); });
   controlHttp.on('error', (e) => line(`the server's port ${controlPort}: ${e.message}`));
   const control = new WebSocketServer({ server: controlHttp.listen(controlPort, '0.0.0.0') });
   control.on('connection', (ws, req) => {
