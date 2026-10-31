@@ -43,6 +43,8 @@ function loginState(app) {
    * a menu or drawer a stopped run left open goes nowhere by itself (2026-10-31, the Pixel: the menu stayed open and the
    * login waited out its watchdog): closing it is the move - never a sheet, which may be a press being answered
    */
+  /* the web app's "a newer build is out" sheet (Reload / Dismiss): in testing the newer build is the one wanted - reload into it */
+  if (app.top && !f.busy && app.has('Reload') && app.has('Dismiss')) return 'Reload';
   if (app.top && !f.busy) { const c = ['Close menu', 'Close Edge Management'].find((l) => app.has(l)); if (c) return `close:${c}`; }
   if (f.busy || app.top) return null;
   if (f.identityCheck) {
@@ -93,8 +95,8 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
     if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return d; }
     d.say(`login: ${now}`);
     if (now.startsWith('close:')) await d.tap(now.slice(6));
-    else if (now.startsWith('Go to ')) {
-      /* the key's site opens as a new page - a new connection: the drive goes on with it (its hello is the event) */
+    else if (now.startsWith('Go to ') || now === 'Reload') {
+      /* the key's site (or the newer build) loads in its place - a new connection: the drive goes on with it (its hello) */
       /* the page may navigate before it answers the tap: its connection closing is the tap having worked */
       const tap = now;
       d = await d.restarted(() => d.tap(tap).catch((e) => { if (!/disconnected|went|gone/.test(e.message)) throw e; }));
