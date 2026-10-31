@@ -224,7 +224,7 @@ const storedForm = new WeakMap<EdgeLinkRecord, StoredLink>();
 function storedOf(l: EdgeLinkRecord): StoredLink {
   let x = storedForm.get(l);
   if (!x) {
-    x = {link: toHex(l.link), head: toHex(l.head), ...(l.reveal ? {reveal: toHex(l.reveal)} : {})};
+    x = {link: toHex(l.link), head: l.head ? toHex(l.head) : '', ...(l.reveal ? {reveal: toHex(l.reveal)} : {})};
     storedForm.set(l, x);
   }
   return x;
@@ -1165,10 +1165,11 @@ function receiptsBySeq(mirror: Mirror) {
   return bySeq;
 }
 
+/* a link kept with no head (picked from the key's ring by a host that could not weld it - it held no copy) is a row all the same: no weld shown, not verified */
 function rowsOf(decoded: {r: EdgeLinkRecord; f: ReturnType<typeof chain.decodeLink>}[], unverified: Set<number>, mirror: Mirror): EdgeRow[] {
   const bySeq = receiptsBySeq(mirror);
   return decoded
-    .map(({r, f}) => ({seq: f.seq, fields: f, weld: toHex(r.head), verified: !unverified.has(f.seq), receipt: bySeq.get(f.seq), seenAt: mirror.seen[f.seq], note: mirror.reasons[f.seq]}))
+    .map(({r, f}) => ({seq: f.seq, fields: f, weld: r.head ? toHex(r.head) : '', verified: !!r.head && !unverified.has(f.seq), receipt: bySeq.get(f.seq), seenAt: mirror.seen[f.seq], note: mirror.reasons[f.seq]}))
     .reverse();
 }
 

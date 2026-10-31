@@ -352,7 +352,7 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
   if ((mirror.merged ?? []).some(m => m.seq > o.checkpoint.seq || (m.seq === o.checkpoint.seq && toHex(m.head).toLowerCase() === head))) return {held: false, count: 0};
   const entry: HeldLog = {
     deviceId: id, publicKey: toHex(o.publicKey), publicKeyPq: hexOf(o.publicKeyPq), from: o.from, at: now,
-    records: o.records.map(r => [toHex(r.link), toHex(r.head), r.reveal ? toHex(r.reveal) : null]),
+    records: o.records.map(r => [toHex(r.link), r.head ? toHex(r.head) : '', r.reveal ? toHex(r.reveal) : null]),
     checkpoint: {seq: o.checkpoint.seq, head: toHex(o.checkpoint.head), signature: toHex(o.checkpoint.signature), signaturePq: hexOf(o.checkpoint.signaturePq)},
     statement: o.statement ? store(o.statement) : null,
     ...(o.card ? {card: o.card} : {}),
