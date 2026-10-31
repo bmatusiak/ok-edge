@@ -110,8 +110,12 @@ export function startDrive(): void {
   /* a key request in flight: a drive waits it out before its next move */
   onKeyBusy(b => setDriveFlag('busy', !!b));
 
+  /*
+   * the controls changed: the screen did too - its text goes with them (2026-10-31, the Pixel: connected before its
+   * first screen was drawn, its text stayed empty at the server, and the layout event alone never refreshed it)
+   */
   onDriveChange(() => {
-    if (ws) send(controlsMsg());
+    if (ws) { send(controlsMsg()); sendScreen(); }
     else dial();
   });
 
