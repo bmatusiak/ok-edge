@@ -127,6 +127,8 @@ export function useEdge() {
       console.log(`[edge] run ${Date.now() - t0} ms: ${parts.join(', ')}${path ? ` (copy check: ${path})` : ''}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      /* the panel shows the message only; where it came from goes to the log (a TypeError says nothing without its stack) */
+      console.log(`[edge] refresh failed after ${parts.join(', ') || 'nothing'}: ${e instanceof Error ? e.stack : String(e)}`);
     } finally {
       const s = real;
       (s as unknown as {endRun?: () => void} | null)?.endRun?.();
