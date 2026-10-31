@@ -7580,6 +7580,7 @@ var require_bucket_identity = __commonJS({
     __name(readIdentity, "readIdentity");
     var BUCKET_KEY_VERSION = 2;
     var bucketKeyLabel = /* @__PURE__ */ __name((identityPublicKey) => `okedge/bucket-key/v2/${identityIdOf(identityPublicKey)}`, "bucketKeyLabel");
+    var bucketLabel = /* @__PURE__ */ __name((identityPublicKey) => `okedge/bucket/v2/${identityIdOf(identityPublicKey)}`, "bucketLabel");
     async function deriveBucketKeyAt(okcrypto, identityPublicKey, site, opts = {}) {
       if (typeof site !== "string" || !site) {
         throw Object.assign(new Error("bucket key: this key names no site (ctap_bridge) - its bucket key is bound to that site, and there is no other"), { code: "NO_KEY_SITE" });
@@ -7624,7 +7625,7 @@ var require_bucket_identity = __commonJS({
       }
     }
     __name(verify, "verify");
-    module.exports = { IDENTITY_LABEL, isBucketIdentityId, identityIdOf, readIdentity, deriveBucketKeyAt, BUCKET_KEY_VERSION, bucketKeyLabel, certify, verifyCertificate, sign, verify };
+    module.exports = { bucketLabel, IDENTITY_LABEL, isBucketIdentityId, identityIdOf, readIdentity, deriveBucketKeyAt, BUCKET_KEY_VERSION, bucketKeyLabel, certify, verifyCertificate, sign, verify };
   }
 });
 
@@ -8687,6 +8688,9 @@ var require_room_client = __commonJS({
                 p.reject(new Error(`the device ${m.to} is not in the room`));
               }
               return;
+            case "sealed-changed":
+              if (m.rows && typeof m.rows === "object") emit("sealed-changed", { from: m.from || null, rows: m.rows });
+              return;
             case "frame": {
               const body = room2.openFrame(key, { room: me.id, from: m.from, to: you }, m.body);
               if (!body) return;
@@ -8801,8 +8805,9 @@ var require_room_client = __commonJS({
           },
           /*
            * THE SERVER'S SEALED COPY OF THIS BUCKET (bucket/src/sealedcopy.js; Phase 3): the room's rows as a row store for
-           * sealedcopy.syncWith - ids and tags, sealed units the server cannot read. on: false when this server keeps no
-           * copy for the identity (its allowlist): the table is empty and a put is refused.
+           * sealedcopy.syncWith - ids and tags, sealed units the server cannot read. on: false only from a server older than
+           * the tiers (2026-10-30), which kept copies for an allow-list alone. tier(): what the last table answer said - {tier:
+           * 'free' | 'lifetime', purgeAt: ms | null} (free: dropped after its window without a touch) - or null before one.
            */
           sealed(op, fields = {}, { timeoutMs: t = 3e4 } = {}) {
             return new Promise((res, rej) => {
@@ -8830,12 +8835,21 @@ var require_room_client = __commonJS({
             });
           },
           sealedStore() {
+            let tier = null;
+            const table = /* @__PURE__ */ __name(async () => {
+              const r = await api.sealed("table");
+              if (r.tier) tier = { tier: r.tier, purgeAt: r.purgeAt ?? null };
+              return r;
+            }, "table");
             return {
               async on() {
-                return Boolean((await api.sealed("table")).on);
+                return Boolean((await table()).on);
               },
               async table() {
-                return (await api.sealed("table")).rows || {};
+                return (await table()).rows || {};
+              },
+              tier() {
+                return tier;
               },
               async get(ids) {
                 return ids.length ? (await api.sealed("get", { ids })).rows || {} : {};
@@ -8984,7 +8998,19 @@ var require_sealedcopy = __commonJS({
         if (theirs[h.id] !== h.tag) rows[h.id] = { tag: h.tag, blob: h.blob };
       }
       if (Object.keys(rows).length) await store.put(rows);
-      return { got: p.get.length, put: Object.keys(rows).length, taken, conflicts, refused };
+      const after = table(bucket, keys, { rules });
+      const stores = {};
+      const of = /* @__PURE__ */ __name((name) => stores[name] = stores[name] || { units: 0, got: 0, put: 0 }, "of");
+      for (const [name] of Object.values(after.where)) of(name).units += 1;
+      for (const id of p.get) {
+        const w = after.where[id];
+        if (w) of(w[0]).got += 1;
+      }
+      for (const id of put) {
+        const w = after.where[id];
+        if (w) of(w[0]).put += 1;
+      }
+      return { got: p.get.length, put: Object.keys(rows).length, taken, conflicts, refused, stores };
     }
     __name(syncWith, "syncWith");
     var OWNER = "\0owner";
@@ -9014,7 +9040,21 @@ var require_sealedcopy = __commonJS({
       return b;
     }
     __name(bucketFromRows, "bucketFromRows");
-    module.exports = { keysOf, headsId, table, plan, sealRows, openRows, sealHeads, openHeads, syncWith, ownerId, sealOwner, bucketFromRows };
+    function locate(bucket, keys, rows, { rules = {} } = {}) {
+      const t = table(bucket, keys, { rules });
+      const h = headsId(keys);
+      const stores = /* @__PURE__ */ new Set();
+      let unknown = 0;
+      for (const [id, tag] of Object.entries(rows || {})) {
+        if (id === h || t.rows[id] === tag) continue;
+        const w = t.where[id];
+        if (w) stores.add(w[0]);
+        else unknown += 1;
+      }
+      return { stores: [...stores].sort(), unknown };
+    }
+    __name(locate, "locate");
+    module.exports = { keysOf, headsId, table, plan, sealRows, openRows, sealHeads, openHeads, syncWith, locate, ownerId, sealOwner, bucketFromRows };
   }
 });
 
@@ -9489,7 +9529,8 @@ var IdentityRoom = class extends DurableObject2 {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ room: ROOM_PATH.exec(url.pathname)[1], host: url.host, nonce: import_bytes2.default.toHex(nonce), device: null, since: Date.now() });
     send(server, message);
-    if (await this.ctx.storage.getAlarm() === null) await this.ctx.storage.setAlarm(Date.now() + JOIN_WITHIN_MS);
+    const at = await this.ctx.storage.getAlarm();
+    if (at === null || at > Date.now() + JOIN_WITHIN_MS) await this.ctx.storage.setAlarm(Date.now() + JOIN_WITHIN_MS);
     return new Response(null, { status: 101, webSocket: client });
   }
   /*
@@ -9546,8 +9587,17 @@ var IdentityRoom = class extends DurableObject2 {
         const r = await this.fromOwner(me.room, msg);
         return send(ws, msg.re !== void 0 ? { ...r, re: msg.re } : r);
       }
-      case "sealed":
-        return send(ws, { t: "sealed", re: msg.re, ...this.sealedOp(me.room, msg) });
+      case "sealed": {
+        const r = this.sealedOp(me.room, msg);
+        await this.sealedTouch(me.room);
+        send(ws, { t: "sealed", re: msg.re, ...r });
+        if (msg.op === "put" && r.ok && r.n) {
+          const rows = {};
+          for (const [id, x] of Object.entries(msg.rows)) rows[id] = x.tag;
+          for (const [other] of this.joined()) if (other !== ws) send(other, { t: "sealed-changed", from: me.device.id, rows });
+        }
+        return;
+      }
       default:
         return send(ws, { t: "error", why: `unknown message ${JSON.stringify(msg && msg.t)}` });
     }
@@ -9556,27 +9606,65 @@ var IdentityRoom = class extends DurableObject2 {
   /*
    * THE IDENTITY'S SEALED COPY, IN THIS ROOM'S SQLITE (Phase 3; Brad, 2026-10-29: "the server's sealed copy will have a
    * hash table for changes"; the room's own SQLite, one row per unit). Rows the server cannot read: a keyed id, a keyed
-   * change tag, a sealed unit - written and read only by the identity's own joined devices (this is past the join). Kept
-   * only for identities this server is set to keep (SEALED_IDENTITIES: their ids, comma-separated, or * for all): any
-   * other gets an empty table and a refused put.
+   * change tag, a sealed unit - written and read only by the identity's own joined devices (this is past the join).
+   *
+   * TWO TIERS, AND EVERY IDENTITY SYNCS (Brad, 2026-10-30: "1 free (temp 7 day) and the lifetime (ones i choose)"; "they
+   * both sync, i should not have to enable a key to sync, you should have to enable a key to not get purged if it has
+   * not been touched"):
+   *   free      any identity: its copy is dropped once nothing of it has touched the copy (a table, get or put by any of
+   *             its devices) for SEALED_FREE_MS - 7 days unless set (a test server sets it short)
+   *   lifetime  the ids in LIFETIME_IDENTITIES (comma-separated; * for all - local dev): never dropped
+   * The drop is the room's alarm (alarm below) - an inactivity timer, nothing polls.
    */
-  sealedOn(identity) {
-    const list = String(this.env.SEALED_IDENTITIES || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  sealedLifetime(identity) {
+    const list = String(this.env.LIFETIME_IDENTITIES || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
     return list.includes("*") || list.includes(String(identity).toLowerCase());
+  }
+  sealedFreeMs() {
+    const ms = Number(this.env.SEALED_FREE_MS);
+    return Number.isFinite(ms) && ms > 0 ? ms : 7 * 24 * 3600 * 1e3;
   }
   sealedSql() {
     const sql = this.ctx.storage.sql;
     sql.exec("CREATE TABLE IF NOT EXISTS sealed (id TEXT PRIMARY KEY, tag TEXT NOT NULL, blob TEXT NOT NULL, at INTEGER NOT NULL)");
+    sql.exec("CREATE TABLE IF NOT EXISTS sealed_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
     return sql;
   }
-  sealedOp(identity, msg) {
-    if (!this.sealedOn(identity)) return msg.op === "table" ? { on: false, rows: {} } : { ok: false, why: "this server keeps no sealed copy for this identity" };
+  /* what the copy's tier is, and when a free copy is dropped if nothing touches it again (null: never) */
+  sealedTier(identity, touched) {
+    const lifetime = this.sealedLifetime(identity);
+    return { tier: lifetime ? "lifetime" : "free", purgeAt: lifetime ? null : touched + this.sealedFreeMs() };
+  }
+  /* a touch: the 7 days start again, and the room's alarm is set for the earlier of that and any join deadline */
+  async sealedTouch(identity) {
+    const now = Date.now();
+    const sql = this.sealedSql();
+    sql.exec("INSERT INTO sealed_meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", "touched", String(now));
+    sql.exec("INSERT INTO sealed_meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", "identity", String(identity));
+    const { purgeAt } = this.sealedTier(identity, now);
+    if (purgeAt === null) return;
+    const at = await this.ctx.storage.getAlarm();
+    if (at === null || at > purgeAt) await this.ctx.storage.setAlarm(purgeAt);
+  }
+  /* the alarm's half for the copy: a free copy nothing touched for its window is dropped; -> when to look again (or null) */
+  sealedPurgeDue(now) {
+    const sql = this.sealedSql();
+    const meta = Object.fromEntries(sql.exec("SELECT k, v FROM sealed_meta").toArray().map((r) => [r.k, r.v]));
+    if (!meta.identity || !meta.touched) return null;
+    const { purgeAt } = this.sealedTier(meta.identity, Number(meta.touched));
+    if (purgeAt === null) return null;
+    if (now < purgeAt) return purgeAt;
+    sql.exec("DELETE FROM sealed");
+    sql.exec("DELETE FROM sealed_meta");
+    return null;
+  }
+  sealedOp(identity, msg, touched = Date.now()) {
     const sql = this.sealedSql();
     const HEX = /^[0-9a-f]{32}$/;
     if (msg.op === "table") {
       const rows = {};
       for (const r of sql.exec("SELECT id, tag FROM sealed").toArray()) rows[r.id] = r.tag;
-      return { on: true, rows };
+      return { on: true, rows, ...this.sealedTier(identity, touched) };
     }
     if (msg.op === "get") {
       const ids = Array.isArray(msg.ids) ? msg.ids.filter((id) => typeof id === "string" && HEX.test(id)).slice(0, SEALED_MAX_IDS) : [];
@@ -9718,7 +9806,10 @@ var IdentityRoom = class extends DurableObject2 {
     }
     return { t: "error", why: `unknown mcp-re op ${JSON.stringify(msg.op)}` };
   }
-  /* close the sockets that never joined in time; come back while any are still waiting */
+  /*
+   * The room's one alarm, two jobs: close the sockets that never joined in time, and drop a free sealed copy nothing has
+   * touched for its window. Set again for whichever comes first.
+   */
   async alarm() {
     const now = Date.now();
     let waiting = false;
@@ -9728,7 +9819,9 @@ var IdentityRoom = class extends DurableObject2 {
       if (now - a.since >= JOIN_WITHIN_MS) ws.close(4408, "no join in time");
       else waiting = true;
     }
-    if (waiting) await this.ctx.storage.setAlarm(now + JOIN_WITHIN_MS);
+    const purge = this.sealedPurgeDue(now);
+    const next = [waiting ? now + JOIN_WITHIN_MS : null, purge].filter((x) => x !== null);
+    if (next.length) await this.ctx.storage.setAlarm(Math.min(...next));
   }
 };
 export {

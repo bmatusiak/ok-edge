@@ -8,8 +8,8 @@
  * deletes every older build's cache. Never cached: /version.json (how a page learns a newer build is out, src/webUpdate.ts),
  * this file, the rooms and /mcp (live), the firmware downloads (large, rarely asked).
  */
-const VERSION = "f49047a-mvugldjj";
-const FILES = ["/","/_expo/static/js/web/index-2171efd831ce6982b9e40a5f1e04a92f.js","/assets/assets/OKS1.f4ca6cefe8e7467ce6c0d1d87a72749e.png","/assets/assets/OKS2.2f5c44d1332e94349584f28e00f6485f.png","/assets/assets/duo-photo.4eb528d6cd229cfc075ac23585931877.png","/assets/assets/onlykey-logo.f70f39fd279ac1d6b7717821500a6f12.png","/assets/assets/onlykey-mark.574cd2e6df2327a6750510fcbd917cfa.png","/assets/assets/onlykey-photo.9096f91b4cb5068d34d30f26c6c83911.png","/favicon.ico","/metadata.json","/sounds/press_loud.mp3","/sounds/press_soft.mp3"];
+const VERSION = "62f69e3-mvvxr7an";
+const FILES = ["/","/_expo/static/js/web/index-d09a5b6781473c12fea95436aad64482.js","/assets/assets/OKS1.f4ca6cefe8e7467ce6c0d1d87a72749e.png","/assets/assets/OKS2.2f5c44d1332e94349584f28e00f6485f.png","/assets/assets/duo-photo.4eb528d6cd229cfc075ac23585931877.png","/assets/assets/onlykey-logo.f70f39fd279ac1d6b7717821500a6f12.png","/assets/assets/onlykey-mark.574cd2e6df2327a6750510fcbd917cfa.png","/assets/assets/onlykey-photo.9096f91b4cb5068d34d30f26c6c83911.png","/favicon.ico","/metadata.json","/sounds/press_loud.mp3","/sounds/press_soft.mp3"];
 const CACHE = `okedge-web-${VERSION}`;
 
 self.addEventListener('install', (e) => {

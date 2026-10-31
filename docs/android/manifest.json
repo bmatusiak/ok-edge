@@ -1,13 +1,13 @@
 {
   "appId": "com.okrn",
-  "version": "0.0.12",
-  "versionCode": 1347,
-  "file": "onlykey-edge-0.0.12-1347.apk",
-  "url": "https://github.com/bmatusiak/ok-edge/releases/download/v0.0.12-1347/onlykey-edge-0.0.12-1347.apk",
-  "sha256": "111148683dc1c62b290bd39d25a4b50d683a8569544c93988fa19318ba98b0cd",
-  "size": 97441517,
+  "version": "0.0.13",
+  "versionCode": 1395,
+  "file": "onlykey-edge-0.0.13-1395.apk",
+  "url": "https://github.com/bmatusiak/ok-edge/releases/download/v0.0.13-1395/onlykey-edge-0.0.13-1395.apk",
+  "sha256": "1d745095c430896d0773098efe75ca5989ac3ef03f62b59f21b87118a1bef933",
+  "size": 97431813,
   "certSha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
   "signedWith": "the repo debug keystore (signing/debug.keystore)",
-  "commit": "f49047a",
-  "builtAt": "2026-10-30T04:14:24.462Z"
+  "commit": "62f69e3",
+  "builtAt": "2026-10-31T05:02:48.637Z"
 }
