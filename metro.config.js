@@ -35,6 +35,11 @@ config.resolver.nodeModulesPaths = [path.join(__dirname, 'node_modules')];
  */
 config.resolver.blockList = [
   /android[/\\](?:[^/\\]+[/\\])?(?:build|\.cxx|\.openssl)[/\\]/,
+  /*
+   * nor the drive app's own install (tools/drive, PROPOSAL-drive.md): a whole NW.js runtime, never bundled - only a
+   * debug tool on the host that drives the app
+   */
+  /tools[/\\]drive[/\\]node_modules[/\\]/,
 ];
 
 /*

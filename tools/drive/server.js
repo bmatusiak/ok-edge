@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 'use strict';
 /*
  * THE DRIVE SERVER (PROPOSAL-drive.md; Brad, 2026-10-31: "1 server to drive from, 3 things to drive - webapp,
@@ -9,8 +8,9 @@
  *   ws /control   a caller (tools/drive/run.js) asks: {t: 'run', script, app, args}; every line of the run streams
  *                 back, and {t: 'end', code}
  *
- * Every line also goes to stdout and logs/drive-server.log - the box screen's window shows it as it happens (Brad:
- * "I hate being blind").
+ * Every line also goes to logs/drive-server.log and to this server's own window: it runs inside the drive app (NW.js,
+ * gui/), one instance per host, showing every line as it happens (Brad: "I hate being blind"; "run in nwjs so you're
+ * forced to have a single instance gui on the host the drive server runs on").
  *
  * THE RULES, from PROPOSAL-drive.md's table of 2026-10-31's mistakes (numbers there):
  *   taps are calls on a live control the app names, never screen positions (1, 21); events only - no polling, and the
@@ -19,7 +19,7 @@
  *   script (11); every press sheet is answered whenever it comes, by this server, on the testnet only (13); a run
  *   reads where things stand and goes on from there (22).
  *
- *   node tools/drive/server.js [--port 8790]
+ * Started by the drive app (gui/gui.js): node tools/drive/launch.js server [--remote ws://host:8791] [--port 8790]
  */
 const fs = require('fs');
 const path = require('path');
@@ -30,21 +30,29 @@ const WS = require('ws');
 const WebSocketServer = WS.WebSocketServer || WS.Server;
 const { createTargets } = require('./targets');
 
-const PORT = Number((process.argv.indexOf('--port') >= 0 && process.argv[process.argv.indexOf('--port') + 1]) || 8790);
+/* set by start() */
+let PORT = 8790;
+let REMOTES = [];
+/* every line, for the drive app's window */
+const bus = new EventEmitter();
 const SCRIPTS = path.join(__dirname, 'scripts');
 /* the app's pictures of itself, one file each, named by when and why - beside the log */
 const SHOTS = path.join(path.dirname(process.env.DRIVE_LOG || path.join(process.env.HOME || process.env.USERPROFILE || '.', 'project/onlykey/logs/drive-server.log')), 'drive-shots');
 const LOG = process.env.DRIVE_LOG || path.join(process.env.HOME || process.env.USERPROFILE || '.', 'project/onlykey/logs/drive-server.log');
-try { fs.mkdirSync(path.dirname(LOG), { recursive: true }); } catch { /* stdout still has it */ }
-const logFile = fs.createWriteStream(LOG, { flags: 'a' });
+let logFile = null;
 
 const stamp = () => new Date().toTimeString().slice(0, 8);
 /* one line, everywhere it is watched: stdout, the log file, and the callers of the runs that are going */
 const watchers = new Set();
+/* the last lines, for the log sample a picture asked from the window keeps beside it (shotNow) */
+const SAMPLE = 300;
+const recent = [];
+const keep = (list, l) => { list.push(l); if (list.length > SAMPLE) list.shift(); };
 function line(text) {
   const l = `${stamp()} ${text}`;
-  process.stdout.write(`${l}\n`);
-  logFile.write(`${l}\n`);
+  keep(recent, l);
+  if (logFile) logFile.write(`${l}\n`);
+  bus.emit('line', l);
   for (const w of watchers) w(l);
   /* and on the drive-remotes' screens: the machine the apps run on is where Brad watches */
   if (typeof remotes !== 'undefined') for (const r of remotes.values()) if (r.ws.readyState === 1) r.ws.send(JSON.stringify({ t: 'line', line: l }));
@@ -55,6 +63,8 @@ function line(text) {
 class App extends EventEmitter {
   constructor(ws, hello) {
     super();
+    /* its own last log lines, every one (not only during a run) - for a picture's log sample */
+    this.recent = [];
     this.ws = ws;
     this.shell = hello.shell;
     this.net = hello.net;
@@ -133,8 +143,31 @@ async function shotOf(app, name) {
     const file = path.join(SHOTS, `${new Date().toTimeString().slice(0, 8).replace(/:/g, '')}-${app.shell}-${String(name).replace(/[^a-z0-9-]/gi, '_')}.png`);
     fs.writeFileSync(file, Buffer.from(r.png, 'base64'));
     line(`[${app.shell}] picture: ${file}`);
+    bus.emit('shot', file);
     return file;
   } catch (e) { line(`[${app.shell}] no picture (${name}): ${e.message}`); return null; }
+}
+
+/*
+ * A PICTURE WHEN BRAD SEES SOMETHING (Brad, 2026-10-31: "needs a button so i can trigger a snapshot, so if i see
+ * something you can see it when i see it while you're moving"): the drive window's button - here, or on a remote's
+ * window - asks every connected app for a picture now, named for who asked, and logged with the time.
+ */
+async function shotNow(by) {
+  line(`picture asked from the ${by} window`);
+  /*
+   * and a sample of the log with it (Brad: "the picture now should take a sample of the log"): the drive's last lines
+   * and each app's own, up to this moment - written before the pictures are asked, so it is the moment he pressed
+   */
+  fs.mkdirSync(SHOTS, { recursive: true });
+  const file = path.join(SHOTS, `${stamp().replace(/:/g, '')}-seen-by-${String(by).replace(/[^a-z0-9-]/gi, '_')}.log`);
+  const parts = [`== picture asked from the ${by} window at ${new Date().toISOString()}`, '', `== the drive (last ${recent.length} lines)`, ...recent];
+  for (const a of apps.values()) parts.push('', `== ${a.shell}'s own log (last ${a.recent.length} lines)`, ...a.recent);
+  fs.writeFileSync(file, `${parts.join('\n')}\n`);
+  line(`log sample: ${file}`);
+  bus.emit('sample', file);
+  if (!apps.size) { line('no app connected - no picture'); return []; }
+  return Promise.all([...apps.values()].map((a) => shotOf(a, `seen-by-${by}`)));
 }
 
 function driveFor(app, say) {
@@ -316,7 +349,7 @@ function attachApp(sock) {
     }
     if (m.t === 'net') { app.net = String(m.net); line(`[${app.shell}] net: ${app.net}`); app.emit('screen'); return; }
     if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
-    if (m.t === 'log') { app.emit('log', String(m.line)); return; }
+    if (m.t === 'log') { keep(app.recent, `${stamp()} ${m.line}`); app.emit('log', String(m.line)); return; }
     if (m.t === 'controls') { app.controls = m.list || []; app.top = m.top || 0; app.flags = m.flags || {}; app.emit('controls'); return; }
     if (m.t === 'screen') { app.text = String(m.text || ''); app.emit('screen'); }
   });
@@ -339,12 +372,15 @@ wss.on('connection', (ws, req) => {
  * remote's machine needs an open port, this one none. Its apps arrive relayed; its targets are started, stopped and
  * restarted there. A remote that went is dialled again when the next run starts.
  */
-const REMOTES = process.argv.flatMap((x, i, all) => (x === '--remote' && all[i + 1] ? [all[i + 1]] : []));
 const TOKEN = (process.env.DRIVE_TOKEN || (() => { try { return fs.readFileSync(path.join(require('os').homedir(), '.onlykey-drive-token'), 'utf8'); } catch { return ''; } })()).trim();
 const remotes = new Map(); /* url -> {ws, machine, targets, waiting} */
-const localTargets = createTargets();
+const localTargets = createTargets((l) => line(l));
 
-function dialRemote(url) {
+/*
+ * dialRemote(url, again): a remote that went (restarted, the box rebooted) is dialed again every 5 s while it is gone -
+ * an inactivity redial, like the app's own (src/drive/client.ts) - with its failure logged once, not on every try.
+ */
+function dialRemote(url, again = false) {
   const known = remotes.get(url);
   if (known && known.ws.readyState <= 1) return;
   const ws = new WS(`${url}/?token=${encodeURIComponent(TOKEN)}`);
@@ -353,6 +389,7 @@ function dialRemote(url) {
   ws.on('message', (data) => {
     let m;
     try { m = JSON.parse(String(data)); } catch { return; }
+    if (m.t === 'shot-now') { shotNow(r.machine); return; }
     if (m.t === 'remote-hello') { r.machine = m.machine; r.targets = m.targets || []; line(`drive-remote ${r.machine} connected (${r.targets.join(', ')})`); remoteHellos.emit('hello', r); return; }
     if (m.t === 'app-open') {
       const sock = new EventEmitter();
@@ -372,14 +409,14 @@ function dialRemote(url) {
     if (m.t === 'app-close') { const s = r.socks.get(m.cid); if (s) { r.socks.delete(m.cid); s.readyState = 3; s.emit('close'); } return; }
     if (m.t === 'proc-reply') { const w = r.waiting.get(m.id); if (w) { r.waiting.delete(m.id); w(m); } }
   });
-  ws.on('error', (e) => line(`drive-remote ${url}: ${e.message}`));
+  ws.on('error', (e) => { if (!again) line(`drive-remote ${url}: ${e.message} - dialing it again every 5 s while it is gone`); });
   ws.on('close', () => {
     for (const s of r.socks.values()) { s.readyState = 3; s.emit('close'); }
     r.socks.clear();
-    if (remotes.get(url) === r) line(`drive-remote ${r.machine} gone`);
+    if (remotes.get(url) === r && r.targets.length) line(`drive-remote ${r.machine} gone - dialing it again every 5 s while it is gone`);
+    if (remotes.get(url) === r && REMOTES.includes(url)) setTimeout(() => dialRemote(url, true), 5000);
   });
 }
-for (const u of REMOTES) dialRemote(u);
 
 /*
  * start / stop / restart a target: on the remote that has it - and with remotes given, ONLY there (2026-10-31: the
@@ -451,4 +488,26 @@ function control(ws) {
   });
 }
 
-server.listen(PORT, '127.0.0.1', () => line(`drive server on ws://127.0.0.1:${PORT} (apps: /app, runs: /control) - log ${LOG}`));
+/*
+ * start({port, remotes}): listen for apps and runs, dial the remotes. One per host: the drive app (NW.js) is a
+ * single instance, and this is called once from it.
+ */
+function start({ port = 8790, remotes: urls = [] } = {}) {
+  PORT = port;
+  REMOTES = urls;
+  try { fs.mkdirSync(path.dirname(LOG), { recursive: true }); } catch { /* the window still has it */ }
+  logFile = fs.createWriteStream(LOG, { flags: 'a' });
+  server.on('error', (e) => line(`drive server: ${e.message}`));
+  server.listen(PORT, '127.0.0.1', () => line(`drive server on ws://127.0.0.1:${PORT} (apps: /app, runs: /control)${REMOTES.length ? ` - remotes ${REMOTES.join(', ')}` : ''} - log ${LOG}`));
+  for (const u of REMOTES) dialRemote(u);
+}
+
+/* what the window shows: the apps and remotes connected now */
+function status() {
+  return {
+    apps: [...apps.values()].map((a) => ({ shell: a.shell, net: a.net, via: a.ws && a.ws.via, flags: a.flags })),
+    remotes: [...remotes.values()].map((r) => ({ machine: r.machine, up: r.ws.readyState === 1, targets: r.targets })),
+  };
+}
+
+module.exports = { start, bus, status, shotNow, SHOTS };

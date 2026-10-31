@@ -1,0 +1,22 @@
+{
+  "name": "onlykey-drive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The drive app: the drive server or drive-remote in one window per host (PROPOSAL-drive.md). Debug only - never shipped.",
+  "main": "gui/index.html",
+  "single-instance": true,
+  "window": {
+    "title": "OnlyKey drive",
+    "width": 1100,
+    "height": 760,
+    "min_width": 600,
+    "min_height": 400
+  },
+  "dependencies": {
+    "nw": "0.118.0",
+    "ws": "8.22.0"
+  },
+  "allowScripts": {
+    "nw@0.118.0": true
+  }
+}
