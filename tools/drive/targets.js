@@ -285,7 +285,8 @@ function createTargets(line = () => {}, out = () => {}) {
         });
         if (!ready || /✘/.test(ready)) return `the local Worker did not start: ${ready || 'no "Ready on" in 3 minutes'} (logs/server-dev.log)`;
         const spki = fs.readFileSync(path.join(certs, 'apps.crp.to.spki'), 'utf8').trim();
-        const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333',
+        /* --disable-popup-blocking: a drive's tap is not a person's gesture, and "Go to <site>" opens a tab (window.open) - only this test profile */
+        const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333', '--disable-popup-blocking',
           `--host-resolver-rules=MAP apps.crp.to 127.0.0.1, MAP ${KEY_SITE} 127.0.0.1`,
           `--ignore-certificate-errors-spki-list=${spki}`, `--user-data-dir=${path.join(ROOT, 'webapp-chromium')}`, '--no-first-run', '--new-window', 'https://apps.crp.to/'],
         { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });
