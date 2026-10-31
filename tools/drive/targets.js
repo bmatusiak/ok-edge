@@ -271,6 +271,22 @@ function createTargets(line = () => {}, out = () => {}) {
     async webapp() { return sumUp(procs((c) => c.includes('webapp-chromium') || c.includes('serve-docs.js'))); },
   };
 
+  /*
+   * BLUETOOTH, CAPTURED BEFORE ANYTHING CURES IT (drive debugging #8; memory: capture Bluetooth before curing): ok-rn's
+   * btcapture.js, read-only, run where the phone's adb is - this machine's own Bluetooth view (bluetoothctl / Windows'
+   * services) and the phone's (GATT table, the app's [bt]/[ble] lines, never [fw]). Its watchdog: 3 minutes.
+   */
+  async function btCapture() {
+    const tool = path.join(ROOT, 'ok-rn', 'tools', 'btcapture.js');
+    if (!fs.existsSync(tool)) return { ok: false, why: `no ${tool} on this machine` };
+    const phone = process.env.DRIVE_BT_PHONE || 'Pixel 6a';
+    const mac = process.env.DRIVE_BT_MAC || '24:29:34:86:EA:AF';
+    return new Promise((resolve) => execFile(NODE, [tool, '--phone', phone, '--mac', mac], {
+      cwd: path.dirname(path.dirname(tool)), windowsHide: true, timeout: 180000,
+      env: { ...process.env, ANDROID_SERIAL: process.env.ANDROID_SERIAL || '26251JEGR09693', PATH: `${path.dirname(ADB)}${path.delimiter}${process.env.PATH}` },
+    }, (err, stdout, stderr) => resolve({ ok: true, what: `${stdout}${stderr}`.trim() || (err ? err.message : '(no output)') })));
+  }
+
   return {
     list: Object.keys(T),
     async act(action, target) {
@@ -281,6 +297,7 @@ function createTargets(line = () => {}, out = () => {}) {
       if (action === 'restart') { const s = await t.stop(); return { ok: true, what: `${s}; ${await t.start()}` }; }
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
+      if (action === 'bt-capture') return btCapture();
       return { ok: false, why: `no action "${action}"` };
     },
   };
