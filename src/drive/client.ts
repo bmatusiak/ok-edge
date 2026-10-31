@@ -78,9 +78,12 @@ export function startDrive(): void {
     const original = console[level].bind(console);
     console[level] = (...args: unknown[]) => {
       original(...args);
-      /* sent only while connected; a dropped connection is dialled on the next control change (below), not on every
-       * line - the app logs all the time, and a dial per line would hammer the server */
       if (ws) send({t: 'log', line: args.map(a => (typeof a === 'string' ? a : a instanceof Error ? a.stack ?? a.message : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' '), at: Date.now()});
+      /*
+       * not connected: the app's own activity is the event to dial again on (one attempt in flight) - a restarted
+       * server was never found by an idle app that waited for a control change (2026-10-31). Local only; never the key.
+       */
+      else dial();
     };
   }
 
