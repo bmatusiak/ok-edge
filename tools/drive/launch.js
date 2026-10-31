@@ -18,6 +18,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
+const net = require('net');
 
 const PIDFILE = path.join(os.homedir(), '.onlykey-drive.pid');
 const args = process.argv.slice(2);
@@ -30,6 +31,17 @@ const running = () => {
   } catch { return null; }
 };
 
+/* a port no longer answered on 127.0.0.1 - asked every 250 ms (another process's socket) until the watchdog's end */
+function portClosed(port, until) {
+  return new Promise((resolve) => {
+    const check = () => {
+      const s = net.connect({ host: '127.0.0.1', port }, () => { s.destroy(); if (Date.now() > until) resolve(false); else setTimeout(check, 250); });
+      s.on('error', () => resolve(true));
+    };
+    check();
+  });
+}
+
 /* the window closed: its process gone - not our child, so its end is checked (every 250 ms) under a 20 s watchdog */
 function stop() {
   const r = running();
@@ -38,7 +50,15 @@ function stop() {
   return new Promise((resolve) => {
     const until = Date.now() + 20000;
     const check = () => {
-      try { process.kill(r.pid, 0); } catch { try { fs.unlinkSync(PIDFILE); } catch { /* gone */ } resolve(`drive ${r.mode} stopped (pid ${r.pid})`); return; }
+      try { process.kill(r.pid, 0); } catch {
+        try { fs.unlinkSync(PIDFILE); } catch { /* gone */ }
+        /*
+         * and its port closed: on Windows the NW.js process holding it outlives the window's own for a moment, and a
+         * start's ready check answered by the old one returned "ready" for a server that then went (2026-10-31)
+         */
+        portClosed(r.mode === 'server' ? 8790 : 8791, until).then(() => resolve(`drive ${r.mode} stopped (pid ${r.pid})`));
+        return;
+      }
       if (Date.now() > until) { resolve(`drive ${r.mode} (pid ${r.pid}) did not stop in 20 s`); return; }
       setTimeout(check, 250);
     };
