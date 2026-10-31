@@ -127,8 +127,21 @@ export class IdentityRoom extends DurableObject {
         const r = await this.fromOwner(me.room, msg);
         return send(ws, msg.re !== undefined ? { ...r, re: msg.re } : r);
       }
-      case 'sealed':
-        return send(ws, { t: 'sealed', re: msg.re, ...this.sealedOp(me.room, msg) });
+      case 'sealed': {
+        const r = this.sealedOp(me.room, msg);
+        send(ws, { t: 'sealed', re: msg.re, ...r });
+        /*
+         * A PUT THE COPY TOOK IS NEWS TO THE IDENTITY'S OTHER DEVICES (Brad, 2026-10-30: "if the app becomes stale and mcp
+         * is newer, then it should reflect"): the ids and tags just written - keyed values the server cannot read - so each
+         * finds which of its stores are now older than the server's and syncs. An event, so nobody polls.
+         */
+        if (msg.op === 'put' && r.ok && r.n) {
+          const rows = {};
+          for (const [id, x] of Object.entries(msg.rows)) rows[id] = x.tag;
+          for (const [other] of this.joined()) if (other !== ws) send(other, { t: 'sealed-changed', from: me.device.id, rows });
+        }
+        return;
+      }
       default:
         return send(ws, { t: 'error', why: `unknown message ${JSON.stringify(msg && msg.t)}` });
     }

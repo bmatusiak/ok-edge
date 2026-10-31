@@ -65,12 +65,37 @@ export type RoomState = {
    * WHAT IS REMOTE (Brad, 2026-10-30: "can it show that it has been synced to the mcp? so i know whats remote"): the
    * server's sealed copy as the last round with it left it. 'synced': every unit of each store listed is on the server
    * (the lib's sealedCopy.syncWith: what differed was sent, the rest matched); 'none': this server keeps no copy for the
-   * identity; 'error': the last round failed (why); 'unknown': no round yet in this session.
+   * identity; 'error': the last round failed (why); 'unknown': no round yet in this session; 'syncing': a round runs.
+   * stale: the stores changed HERE since the last round ("if a change happens it is stale on the server, and needs to
+   * sync, and the panel should reflect") - not on the server until the next round sends them. newer: the reverse - stores
+   * another device changed on the server (the room's 'sealed-changed'), older here until the next round takes them;
+   * newerUnknown: units new there that this device cannot name before it fetches them.
    */
-  sealed: {status: 'unknown' | 'none' | 'synced' | 'error'; at: number | null; why: string | null; stores: Record<string, {units: number; got: number; put: number}>};
+  sealed: {status: 'unknown' | 'none' | 'synced' | 'error' | 'syncing'; at: number | null; why: string | null; stores: Record<string, {units: number; got: number; put: number}>; stale: string[]; newer: string[]; newerUnknown: number};
 };
 
-let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false, stores: {}, sealed: {status: 'unknown', at: null, why: null, stores: {}}};
+let state: RoomState = {url: null, site: null, status: 'off', why: null, you: null, peers: [], last: null, needsKey: false, stores: {}, sealed: {status: 'unknown', at: null, why: null, stores: {}, stale: [], newer: [], newerUnknown: 0}};
+
+/*
+ * EACH STORE AS THE SERVER GOT IT at the last round: its units' keys, hashes and times (the lib's replicate.summarize -
+ * the same HAVE a trade compares). A store whose print differs now changed here after that round.
+ */
+let sealedPrints: Record<string, string> = {};
+function storePrints(bucket: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  const have = bucketLib.replicate.summarize(bucket, {rules: RULES}) as Record<string, Record<string, {h: string; at?: string | null}>>;
+  for (const [name, units] of Object.entries(have)) out[name] = Object.keys(units).sort().map(k => `${k}:${units[k].h}:${units[k].at ?? ''}`).join('|');
+  return out;
+}
+/* what changed here since the server last had it - only once there was a round to compare with */
+function markStale(): void {
+  if (state.sealed.status === 'unknown' || state.sealed.status === 'none') return;
+  const open = tradeBucket();
+  if (!open) return;
+  const now = storePrints(open.bucket);
+  const stale = Object.keys({...now, ...sealedPrints}).filter(n => now[n] !== sealedPrints[n]).sort();
+  if (stale.join() !== state.sealed.stale.join()) set({sealed: {...state.sealed, stale}});
+}
 const listeners = new Set<(s: RoomState) => void>();
 const set = (patch: Partial<RoomState>) => {
   state = {...state, ...patch};
@@ -281,6 +306,23 @@ export async function joinServerRoom(): Promise<void> {
       console.log(`[room] ${p.up ? `${p.up.name} (${p.up.kind}) came online` : `${p.down} left`}`);
       if (p.up) tradeSoon(p.up);
     });
+    /*
+     * THE SERVER'S COPY GOT NEWER (another device's put, announced by the room as keyed ids and tags; Brad, 2026-10-30: "if
+     * the app becomes stale and mcp is newer, then it should reflect"): the stores it touches here are marked newer on the
+     * server - a unit this device has not got yet is counted - and a round fetches them.
+     */
+    r.on('sealed-changed', (e: {from: string | null; rows: Record<string, string>}) => {
+      void (async () => {
+        const open = tradeBucket();
+        const me2 = await proofMaterial();
+        if (!open || !me2) return;
+        const at = bucketLib.sealedCopy.locate(open.bucket, bucketLib.sealedCopy.keysOf(me2.bucketKey), e.rows, {rules: RULES});
+        if (!at.stores.length && !at.unknown) return;
+        console.log(`[room] the sealed copy changed on the server (${e.from ?? 'another device'}): newer there - ${[...at.stores, ...(at.unknown ? [`${at.unknown} new`] : [])].join(', ')}`);
+        set({sealed: {...state.sealed, newer: [...new Set([...state.sealed.newer, ...at.stores])].sort(), newerUnknown: state.sealed.newerUnknown + at.unknown}});
+        sealedSoon('the server copy changed');
+      })().catch(() => { /* not this device's bucket now: the next round compares anyway */ });
+    });
     r.on('close', () => {
       /* a room left for another (a new server, a new key site) closes a moment later: not this device's room */
       if (room !== r) { console.log('[room] the previous room\'s connection closed'); return; }
@@ -316,6 +358,8 @@ function rejoinLater(): void {
  * join (tradeSoon: one starter per pair; a CLI starts its own). Not joined: nothing - the next join trades.
  */
 export function bucketChanged(): void {
+  /* first, joined or not: what changed here is not on the server until a round sends it (the Sync tab's Features) */
+  markStale();
   if (!room) return;
   for (const p of room.peers()) tradeSoon(p);
   sealedSoon('this bucket changed');
@@ -335,6 +379,7 @@ function sealedSoon(why: string): void {
     const msg = String((e as Error)?.message ?? e);
     console.log(`[room] the sealed copy: not synced - ${msg}`);
     set({sealed: {...state.sealed, status: 'error', at: Date.now(), why: msg}});
+    markStale();
   });
 }
 async function sealedSync(why: string): Promise<void> {
@@ -345,13 +390,14 @@ async function sealedSync(why: string): Promise<void> {
   const store = r.sealedStore();
   if (!(await store.on())) {
     if (sealedSaid !== 'off') { sealedSaid = 'off'; console.log('[room] the sealed copy: this server keeps none for this identity'); }
-    set({sealed: {status: 'none', at: Date.now(), why: null, stores: {}}});
+    set({sealed: {status: 'none', at: Date.now(), why: null, stores: {}, stale: [], newer: [], newerUnknown: 0}});
     markFirstSync();
     return;
   }
   const {logblocks} = require('node-onlykey-lib/edge');
   const entries = (name: string) => Object.fromEntries(Object.entries((open.bucket.stores[name] ?? {}) as Record<string, {v: string | null; archived?: boolean}>).filter(([, x]) => x && !x.archived && x.v !== null).map(([k, x]) => [k, x.v as string]));
   const heads = {...logblocks.newestSeqs(entries('edge-logs')), ...logblocks.newestSeqs(entries('edge-logs-test'))};
+  set({sealed: {...state.sealed, status: 'syncing'}});
   /* the sealed copy's round trip is room traffic too: the 🔗 flashes */
   ioPulse('mcp');
   const res = await bucketLib.sealedCopy.syncWith(open.bucket, bucketLib.sealedCopy.keysOf(me.bucketKey), store, {rules: RULES, randomBytes, heads});
@@ -361,7 +407,9 @@ async function sealedSync(why: string): Promise<void> {
     storesTraded(res.taken, storeItems(open.bucket));
   }
   sealedSaid = 'on';
-  set({sealed: {status: 'synced', at: Date.now(), why: null, stores: res.stores ?? {}}});
+  /* the server holds this bucket as it is now: the prints a later change is compared with */
+  sealedPrints = storePrints(open.bucket);
+  set({sealed: {status: 'synced', at: Date.now(), why: null, stores: res.stores ?? {}, stale: [], newer: [], newerUnknown: 0}});
   console.log(`[room] the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
   markFirstSync();
 }

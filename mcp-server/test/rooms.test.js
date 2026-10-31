@@ -122,6 +122,14 @@ test('the sealed copy: a device puts its rows, a fresh device of the identity ca
   assert.deepEqual(bucketLib.sealedCopy.openHeads((await web.sealedStore().get([bucketLib.sealedCopy.headsId(keys)]))[bucketLib.sealedCopy.headsId(keys)], keys), { aaaaaaaaaaaaaaaa: 7 });
   const again = await bucketLib.sealedCopy.syncWith(fresh, keys, web.sealedStore(), { randomBytes, heads: { aaaaaaaaaaaaaaaa: 7 } });
   assert.deepEqual([again.got, again.put], [0, 0]);
+  /* a put is news to the identity's other devices: the room tells them its ids and tags, and they name the store it touches */
+  const phone2 = await open(dev('Pixel', 'android'));
+  const heard = new Promise((res) => web.on('sealed-changed', res));
+  bucketLib.kv(b, 'guestbook').setItem('myname', 'Pixel 6a');
+  await bucketLib.sealedCopy.syncWith(b, keys, phone2.sealedStore(), { randomBytes });
+  const news = await heard;
+  assert.deepEqual(bucketLib.sealedCopy.locate(fresh, keys, news.rows), { stores: ['guestbook'], unknown: 0 });
+  phone2.close();
   /* what the server holds names nothing */
   const table = JSON.stringify(await web.sealedStore().table());
   assert.ok(!/guestbook|myname/.test(table));
