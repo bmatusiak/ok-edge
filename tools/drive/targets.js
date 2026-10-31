@@ -292,7 +292,16 @@ function createTargets(line = () => {}, out = () => {}) {
         const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
         if (!b.length) b.push('1');
         if (KEY === 'gadget') {
-          if (!gadgetHost || !gadgetUp) return 'press failed: the gadget soft key is not connected to this machine';
+          if (!gadgetHost) return 'press failed: the gadget is not held here (start the web app through the drive)';
+          /* it redials its controller with a backoff (up to 5 s): its connect is the event, 15 s the watchdog */
+          if (!gadgetUp) {
+            await new Promise((resolve) => {
+              const dog = setTimeout(done, 15000);
+              function done() { clearTimeout(dog); gadgetHost.off('device-connect', done); resolve(); }
+              gadgetHost.once('device-connect', done);
+            });
+          }
+          if (!gadgetUp) return 'press failed: the gadget soft key did not connect to this machine in 15 s';
           for (const x of b) gadgetHost.press(Number(x), 'tap');
           return `pressed ${b.join(' ')} on the gadget soft key`;
         }
