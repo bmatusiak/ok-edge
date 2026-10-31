@@ -5,6 +5,13 @@
  * control (1, 21) and every wait an event with a watchdog (2, 6).
  */
 
+/*
+ * THE DRIVEN SOFT KEYS' PIN: the app's own testing PIN (src/screens/TestingScreen.tsx TEST_PIN) - the Pixel's, and what
+ * the in-app e2e suite unlocks with; a restore sets it. (The first desktop restores set 1111111, a PIN the e2e suite's
+ * unlock test does not know, 2026-10-31.)
+ */
+const TEST_PIN = '1234561';
+
 const LOGGED_IN = 'Slots — Soft Key';
 const NO_BUDGET = 'No budget. A budget lets an agent use the key a set number of times without a press; you approve it once.';
 
@@ -43,7 +50,7 @@ function loginState(app) {
  * logged in to the soft key, as a state machine: look, take the one move that state calls for, wait for the state to
  * change, look again - from the login screen, the keypad, the identity check, a failed try, another tab
  */
-async function login(d, { pin = '1111111', life = 180 } = {}) {
+async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
   const until = Date.now() + life * 1000;
   for (let moves = 0; moves < 12; moves++) {
     const left = Math.max(5, Math.round((until - Date.now()) / 1000));
@@ -99,7 +106,7 @@ async function budget(d) {
  * the soft key wiped, set up as a new device from a backup, logged in, its login card made. The backup and its
  * passphrase are read from files on the server's machine and never logged (19).
  */
-async function restore(d, { backup, passphraseFile, passphraseKey = 'passphrase', pin = '1111111' }) {
+async function restore(d, { backup, passphraseFile, passphraseKey = 'passphrase', pin = TEST_PIN }) {
   await testingMode(d);
   await d.goto('Testing');
   await d.tap('Factory reset');
