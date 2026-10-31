@@ -121,18 +121,26 @@ function pressWhenAsked(app) {
   /*
    * A TOUCH THE KEY WAITS FOR, SEEN ON THE KEY (the web app's gadget, through its machine): a browser's WebAuthn request
    * asks the key for a touch ("Insert your security key and touch it") and the app logs nothing of it - the request is
-   * the browser's. The key says it: its LED turns blue. One press per blue turn (blue after any other colour), button 1
-   * - any button is a touch. A testnet key only, by its machine's word.
+   * the browser's. The key says it: its LED blinks a waiting colour (yellow with green, or blue - 2026-10-31, both seen
+   * under that dialog). One touch per key request step - the app's own "[timeline] begin/end" lines mark the steps, so
+   * a blink is never pressed twice - and never while the app shows a code to enter ("[press] key waits" until "[press]
+   * key done"): a stray 1 there is a wrong digit. Button 1 - any button is a touch. A testnet key only, by its machine.
    */
-  let lastColour = null;
+  let touched = false;
+  let codeOpen = false;
+  const waiting = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return (b > 0x40 && b > r && b > g) || (r > 0x30 && g > 0x30 && b < 0x30);
+  };
   app.on('log', async (l) => {
+    if (/^\[timeline\] \d+ (begin|end) /.test(l)) { touched = false; return; }
+    if (/^\[press\] key waits: /.test(l)) { codeOpen = true; return; }
+    if (/^\[press\] key done/.test(l)) { codeOpen = false; return; }
     const led = l.match(/^\[main\] \[gadget\] led (#[0-9a-f]{6})/);
     if (!led) return;
     const colour = led[1];
-    const blue = /^#0[0-9a-f]0[0-9a-f][8-9a-f][0-9a-f]$/.test(colour);
-    const turned = blue && lastColour !== 'blue';
-    lastColour = blue ? 'blue' : colour;
-    if (!turned || pressing) return;
+    if (!waiting(colour) || touched || codeOpen || pressing) return;
+    touched = true;
     pressing = true;
     try {
       const s = await proc('key-state', app.shell);

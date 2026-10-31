@@ -25,6 +25,8 @@ function set(c: HostChallenge | null) {
    * sheet says its own ("[press] sheet up", PressSheet Locate) - the drive presses that key from the machine holding it
    */
   if (c) console.log(`[press] key waits: ${c.what} - buttons ${c.digits.length ? c.digits.join(' ') : 'any'}`);
+  /* and its end - a drive pressing a touch from the key's side must not press inside a code being entered */
+  else console.log('[press] key done');
   for (const l of [...listeners]) l(c);
 }
 
