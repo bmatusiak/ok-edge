@@ -48,6 +48,18 @@ function screenText(): string {
   return document.body ? document.body.innerText : '';
 }
 
+/*
+ * THE ONE TIMER, AN INACTIVITY CHECK (Brad: "the only thing for timers allowed is inactivity checking"): while there is
+ * no connection, and the app does nothing that would dial (an idle login screen logs nothing), it checks back every
+ * 5 s - a drive server or remote that came up has no event this app could hear (2026-10-31: after drive-remote
+ * restarted, the idle desktop app never came back). Connected, it does not run; it never touches the key.
+ */
+let idle: ReturnType<typeof setTimeout> | null = null;
+function idleRedial(): void {
+  if (idle) return;
+  idle = setTimeout(() => { idle = null; if (!ws) dial(); }, 5000);
+}
+
 function dial(): void {
   if (dialling || (ws && ws.readyState <= 1)) return;
   dialling = true;
@@ -60,8 +72,8 @@ function dial(): void {
     send(controlsMsg());
     send({t: 'screen', text: screenText()});
   };
-  sock.onclose = () => { dialling = false; if (ws === sock) ws = null; };
-  sock.onerror = () => { dialling = false; };
+  sock.onclose = () => { dialling = false; if (ws === sock) ws = null; idleRedial(); };
+  sock.onerror = () => { dialling = false; idleRedial(); };
   sock.onmessage = (ev: MessageEvent) => {
     let m: any;
     try { m = JSON.parse(String(ev.data)); } catch { return; }

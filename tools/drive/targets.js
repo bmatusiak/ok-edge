@@ -48,6 +48,10 @@ function createTargets() {
   const T = {
     desktop: {
       async start() {
+        /* one desktop app at a time: a second exits at once on Electron's single-instance lock, and was taken for a start */
+        const tracked = running.get('desktop');
+        if (tracked && tracked.exitCode === null) return 'already running';
+        if (LINUX && (await run('pgrep', ['-x', 'electron'])).ok) return 'already running';
         const env = LINUX
           ? { OKEDGE_NODE: nodeBin, DISPLAY: process.env.DRIVE_DISPLAY || ':10', OKEDGE_DEVTOOLS_PORT: '9334' }
           : { OKEDGE_DEVTOOLS_PORT: '9334' };

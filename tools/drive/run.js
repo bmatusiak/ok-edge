@@ -4,6 +4,8 @@
  * Ask the drive server to run a script (tools/drive/scripts/<name>.js) against a connected app, and show every line
  * of it as it comes. Exits with the run's code.
  *   node tools/drive/run.js <script> [--app desktop|webapp|android] [args...]
+ * From Git Bash, file arguments for another machine need MSYS_NO_PATHCONV=1 - else /home/... reaches node as
+ * C:/Program Files/Git/home/...
  */
 const WebSocket = require('ws');
 
