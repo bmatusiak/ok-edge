@@ -10,6 +10,8 @@ const NO_BUDGET = 'No budget. A budget lets an agent use the key a set number of
 
 /* into testing mode from the login screen; nothing to do when it is on already */
 async function testingMode(d) {
+  /* a screen still coming up is not judged: the login screen, or the app already on the testnet */
+  await d.until((app) => app.has('Enter testing mode') || app.net === 'test', { life: 60, fail: [] });
   if (d.has('Enter testing mode')) {
     await d.step('testing mode', { goal: () => d.app.net === 'test', act: () => d.tap('Enter testing mode'), life: 30 });
   }

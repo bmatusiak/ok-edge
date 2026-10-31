@@ -352,7 +352,7 @@ function dialRemote(url) {
   ws.on('message', (data) => {
     let m;
     try { m = JSON.parse(String(data)); } catch { return; }
-    if (m.t === 'remote-hello') { r.machine = m.machine; r.targets = m.targets || []; line(`drive-remote ${r.machine} connected (${r.targets.join(', ')})`); return; }
+    if (m.t === 'remote-hello') { r.machine = m.machine; r.targets = m.targets || []; line(`drive-remote ${r.machine} connected (${r.targets.join(', ')})`); remoteHellos.emit('hello', r); return; }
     if (m.t === 'app-open') {
       const sock = new EventEmitter();
       sock.via = r.machine;
@@ -380,8 +380,25 @@ function dialRemote(url) {
 }
 for (const u of REMOTES) dialRemote(u);
 
-/* start / stop / restart a target: on the remote that has it, else on this machine */
+/*
+ * start / stop / restart a target: on the remote that has it - and with remotes given, ONLY there (2026-10-31: the
+ * box's remote had not reconnected yet, the fallback "this machine" started an Electron app on Windows). Without
+ * --remote, this machine's own targets. A remote not connected yet is waited for, by its hello, under a watchdog.
+ */
+const remoteHellos = new EventEmitter();
 async function proc(action, target) {
+  if (REMOTES.length) {
+    for (const u of REMOTES) dialRemote(u);
+    const has = () => [...remotes.values()].find((r) => r.ws.readyState === 1 && r.targets.includes(target));
+    if (!has()) {
+      await new Promise((resolve) => {
+        const dog = setTimeout(() => { remoteHellos.off('hello', on); resolve(); }, 30000);
+        const on = () => { if (has()) { clearTimeout(dog); remoteHellos.off('hello', on); resolve(); } };
+        remoteHellos.on('hello', on);
+      });
+    }
+    if (!has()) return { ok: false, why: `no drive-remote with "${target}" connected (${REMOTES.join(', ')})`, where: 'no remote' };
+  }
   for (const r of remotes.values()) {
     if (r.ws.readyState !== 1 || !r.targets.includes(target)) continue;
     const id = r.nextId++;
