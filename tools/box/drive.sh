@@ -38,7 +38,8 @@ step() {
   local untilArgs=(--until "$until")
   [ "${until#\?}" != "$until" ] && untilArgs=(--done "${until#\?}")
   # a failure the page shows ends the step at once: "Try again" (FAIL=<label> for another)
-  node tools/box/page-presser.js --approve "${untilArgs[@]}" --fail "${FAIL:-Try again}" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
+  local pressArgs=(--approve); [ -n "$DRIVE_SESSION" ] && kill -0 "$DRIVE_SESSION" 2>/dev/null && pressArgs=(--no-press)
+  node tools/box/page-presser.js "${pressArgs[@]}" "${untilArgs[@]}" --fail "${FAIL:-Try again}" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
   local p=$!
   if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
   # a click that did not happen ends the step now, with page-click's reason - not after the watchdog
@@ -63,8 +64,24 @@ appup() {
   bash tools/box/desktop-test.sh > /dev/null
   local line; line=$(waitline ../logs/desktop-test.log 'DevTools listening on ws://')
   node tools/box/page-ready.js "${line##* }" || return 1
+  [ -n "$SESSION" ] && session_on
   C "Enter testing mode" > /dev/null
 }
+# THE SESSION PRESSER (Brad, 2026-10-31: a sign's click did nothing "during a derive of the bucket identity that requires
+# a press"): a person answers every press sheet whenever it comes, not only inside a step - a sheet that came up
+# between steps was never pressed, the key held its wait, and the next action queued behind it in silence. One presser
+# for the whole session answers every sheet and keeps the identity, bucket and derive lines in SESSION_LOG; steps then
+# only watch (--no-press), so nothing is pressed twice. It ends with its page (an app restart) - appup starts it again.
+session_on() {
+  SESSION=1
+  [ -n "$DRIVE_SESSION" ] && kill -0 "$DRIVE_SESSION" 2>/dev/null && return 0
+  SESSION_LOG=~/project/onlykey/logs/drive-session-$(date +%H%M%S).log
+  node tools/box/page-presser.js --approve --life 3600 --show '^\[(identity|bucket|room|card)\]|firmware record: a derive|Opening this identity' >> "$SESSION_LOG" 2>&1 &
+  DRIVE_SESSION=$!
+  waitline "$SESSION_LOG" 'listening' "$DRIVE_SESSION" > /dev/null
+  say "session presser on (pid $DRIVE_SESSION, $SESSION_LOG)"
+}
+session_off() { SESSION=""; [ -n "$DRIVE_SESSION" ] && kill "$DRIVE_SESSION" 2>/dev/null; DRIVE_SESSION=""; }
 # one budget on the open soft key: request, approve + its press, three signs it pays
 budget_demo() {
   C "Menu" "Edge" > /dev/null

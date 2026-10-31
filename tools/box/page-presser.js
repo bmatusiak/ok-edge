@@ -21,6 +21,8 @@ const all = (name) => args.flatMap((a, i) => (a === name && args[i + 1] !== unde
 const DONE = all('--done');
 const FAIL = all('--fail');
 const APPROVE = args.includes('--approve');
+/* --no-press: watch only (the states, the lines) - a session presser already answers every sheet; two would press twice */
+const NO_PRESS = args.includes('--no-press');
 const UNTIL = opt('--until', null) ? new RegExp(opt('--until')) : null;
 const LIFE_MS = Number(opt('--life', 90)) * 1000;
 const SHOW = opt('--show', null) ? new RegExp(opt('--show')) : null;
@@ -32,6 +34,8 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
   if (!page) throw new Error('no page open');
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
+  /* the page went (a restart, a reload): this presser's life is over - it does not wait on a socket nobody answers */
+  ws.onclose = () => { console.log(`${new Date().toTimeString().slice(0, 8)} the page closed - stopping`); process.exit(2); };
   let id = 0;
   const waiting = new Map();
   /* the handler first: a call made before it was set never heard its answer (the presser hung before "listening") */
@@ -88,7 +92,9 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
     recent.push(line.slice(0, 160)); if (recent.length > 8) recent.shift();
     if (SHOW && SHOW.test(line)) say(line.slice(0, 200));
     const up = line.match(/^\[press\] sheet up: (.*) - button at (\d+),(\d+)$/);
-    if (up) {
+    if (up && NO_PRESS) {
+      say(`sheet up: ${up[1]} (answered by the session presser)`);
+    } else if (up) {
       const [, what, x, y] = up;
       const code = what.match(/^derive code ([1-6]) ([1-6]) ([1-6])$/);
       if (/ - approve$/.test(what)) {
