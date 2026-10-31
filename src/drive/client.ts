@@ -30,6 +30,7 @@ import {shot} from './shot';
 import {quit} from './quit';
 import {screenText, watchScreen} from './screen';
 import {watchNativeLog} from './nativeLog';
+import {watchErrors} from './errors';
 
 /*
  * WHAT MAY LEAVE THE APP (memory: the app log carries key bytes - a new sink takes an allowlist, never "every line").
@@ -122,11 +123,6 @@ export function startDrive(): void {
       if (ws) {
         const line = args.map(a => (typeof a === 'string' ? a : a instanceof Error ? a.stack ?? a.message : (() => { try { return JSON.stringify(a); } catch { return String(a); } })())).join(' ');
         if (mayLeave(line, false)) send({t: 'log', line, at: Date.now()});
-        /*
-         * React Native says an unhandled rejection only this way - "Uncaught (in promise, id: N) ..." in 0.88 (older ones:
-         * "Possible Unhandled Promise Rejection"); the web shells have their own event
-         */
-        if (/unhandled promise rejection|uncaught \(in promise/i.test(line)) reportError('unhandled rejection', line);
       }
       /*
        * not connected: the app's own activity is the event to dial again on (one attempt in flight) - a restarted
@@ -137,22 +133,11 @@ export function startDrive(): void {
   }
 
   /*
-   * ERRORS ARE EVENTS (drive debugging #2): an exception (React Native's global handler - its red box is a fatal one -
-   * or the page's error event) and an unhandled rejection reach the drive as {t: 'error'}; the server logs it and
-   * takes a picture with a log sample, at the moment it happens. The app's own handling is unchanged.
+   * ERRORS ARE EVENTS (drive debugging #2): an exception and an unhandled rejection reach the drive as {t: 'error'},
+   * heard where each shell hears them (errors.ts: the page's events; errors.android.ts: React Native's exception
+   * manager); the server logs it and takes a picture with a log sample, at the moment it happens.
    */
-  const EU = (globalThis as any).ErrorUtils;
-  if (EU?.getGlobalHandler && EU?.setGlobalHandler) {
-    const previous = EU.getGlobalHandler();
-    EU.setGlobalHandler((e: unknown, isFatal?: boolean) => {
-      reportError(isFatal ? 'exception (fatal)' : 'exception', e);
-      previous?.(e, isFatal);
-    });
-  }
-  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function' && typeof document !== 'undefined') {
-    window.addEventListener('error', (ev: ErrorEvent) => reportError('exception', ev.error ?? ev.message));
-    window.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => reportError('unhandled rejection', ev.reason));
-  }
+  watchErrors(reportError);
 
   /* a key request in flight: a drive waits it out before its next move */
   onKeyBusy(b => setDriveFlag('busy', !!b));
