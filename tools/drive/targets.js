@@ -28,6 +28,15 @@ function run(cmd, args) {
   return new Promise((resolve) => execFile(cmd, args, { cwd: EDGE, windowsHide: true }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() })));
 }
 
+/* the phones (ok-edge runs as com.okrn on them - memory a13-runs-ok-edge-as-okrn) */
+const APP_ID = process.env.OKEDGE_APP_ID || 'com.okrn';
+const ADB = (() => {
+  const sdk = process.env.ANDROID_HOME || path.join(os.homedir(), LINUX ? 'Android/Sdk' : 'AppData/Local/Android/Sdk');
+  const bin = path.join(sdk, 'platform-tools', LINUX ? 'adb' : 'adb.exe');
+  return fs.existsSync(bin) ? bin : 'adb';
+})();
+const adb = (args) => run(ADB, ['-s', process.env.ANDROID_SERIAL || '26251JEGR09693', ...args]);
+
 /* a long-running child of ours: its own process group (Linux), its output in a log */
 function launch(name, cmd, args, env = {}) {
   try { fs.mkdirSync(LOGS, { recursive: true }); } catch { /* the log is a nicety */ }
@@ -137,16 +146,20 @@ function createTargets(line = () => {}) {
       },
     },
     android: {
-      /* the phone adb sees (ANDROID_SERIAL picks one); its app dials the drive port on the phone, reversed to this machine */
+      /*
+       * The bench phone: ANDROID_SERIAL, else the Pixel (the same default as tools/box/pixel-build.sh) - the box's adb
+       * lists it twice (USB and wireless) and a plain adb then refuses "more than one device". adb from the SDK, as the
+       * drive app's PATH may not have platform-tools. Its app dials the drive port on the phone, reversed to here.
+       */
       async start() {
         const port = process.env.DRIVE_PORT || '8790';
-        const rev = await run('adb', ['reverse', `tcp:${port}`, `tcp:${port}`]);
+        const rev = await adb(['reverse', `tcp:${port}`, `tcp:${port}`]);
         if (!rev.ok) return `adb reverse: ${rev.out}`;
-        const r = await run('adb', ['shell', 'am', 'start', '-n', `${process.env.OKEDGE_APP_ID || 'com.okrn'}/com.okedge.MainActivity`]);
+        const r = await adb(['shell', 'am', 'start', '-n', `${APP_ID}/com.okedge.MainActivity`]);
         return r.ok ? 'started' : r.out;
       },
       async stop() {
-        const r = await run('adb', ['shell', 'am', 'force-stop', process.env.OKEDGE_APP_ID || 'com.okrn']);
+        const r = await adb(['shell', 'am', 'force-stop', APP_ID]);
         return r.ok ? 'stopped' : r.out;
       },
     },
