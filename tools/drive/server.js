@@ -28,6 +28,7 @@ const EventEmitter = require('events');
 /* ws 7 (what ok-edge has) exports the server as WebSocket.Server; ws 8 as WebSocketServer */
 const WS = require('ws');
 const WebSocketServer = WS.WebSocketServer || WS.Server;
+const { createTargets } = require('./targets');
 
 const PORT = Number((process.argv.indexOf('--port') >= 0 && process.argv[process.argv.indexOf('--port') + 1]) || 8790);
 const SCRIPTS = path.join(__dirname, 'scripts');
@@ -45,6 +46,8 @@ function line(text) {
   process.stdout.write(`${l}\n`);
   logFile.write(`${l}\n`);
   for (const w of watchers) w(l);
+  /* and on the drive-remotes' screens: the machine the apps run on is where Brad watches */
+  if (typeof remotes !== 'undefined') for (const r of remotes.values()) if (r.ws.readyState === 1) r.ws.send(JSON.stringify({ t: 'line', line: l }));
 }
 
 /* ------------------------------------------------------------------ an app on the other end */
@@ -64,6 +67,7 @@ class App extends EventEmitter {
   }
   /* a command and its answer; the app answers at once, so its watchdog is short */
   call(msg, lifeMs = 10000) {
+    if (!this.ws || this.closed) return Promise.reject(new Error(`${this.shell} is not connected`));
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const dog = setTimeout(() => { this.waiting.delete(id); reject(new Error(`WATCHDOG: the app did not answer "${msg.t}" in ${lifeMs / 1000} s`)); }, lifeMs);
@@ -216,7 +220,28 @@ function driveFor(app, say) {
     return driveFor(next, say);
   }
 
-  return { app, say, until, tap, fill, fillFile, step, goto, restarted, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
+  /*
+   * THE TARGET'S PROCESS (Brad, 2026-10-31: "drive script can also start/stop/restart webapp/desktop/android on its
+   * expected target"): run on the drive-remote that has it, or on this machine (proc). start and restart end on the
+   * app's hello - its own event - and hand back the drive for that new connection; stop ends on its close.
+   */
+  async function procOrThrow(action, target) {
+    const r = await proc(action, target);
+    if (!r.ok) throw failure(`${action} ${target} (${r.where}): ${r.why}`);
+    say(`${action} ${target} on ${r.where}: ${r.what}`);
+  }
+  const start = (target = app.shell, opts) => restarted(() => procOrThrow('start', target), opts);
+  const restart = (target = app.shell, opts) => restarted(() => procOrThrow('restart', target), opts);
+  async function stop(target = app.shell) {
+    const gone = app.closed || !app.ws ? Promise.resolve() : new Promise((resolve) => app.once('close', resolve));
+    await procOrThrow('stop', target);
+    if (target === app.shell) await Promise.race([gone, new Promise((resolve) => setTimeout(resolve, 20000))]);
+  }
+  /* the app up: as it is when connected, else started */
+  const up = (opts) => (app.ws && !app.closed ? Promise.resolve(api) : start(app.shell, opts));
+
+  const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
+  return api;
 }
 
 /* ------------------------------------------------------------------ the server */
@@ -227,19 +252,21 @@ const server = http.createServer((req, res) => {
 });
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (ws, req) => {
-  if (req.url === '/control') return control(ws);
-  /* an app: the first message is its hello */
+/*
+ * AN APP'S CONNECTION, wherever it comes from - a socket of this machine, or one a drive-remote relays from its own
+ * (remote.js). sock: an EventEmitter of 'message' and 'close', with send(text). The first message is its hello.
+ */
+function attachApp(sock) {
   let app = null;
-  ws.on('message', (data) => {
+  sock.on('message', (data) => {
     let m;
     try { m = JSON.parse(String(data)); } catch { return; }
     if (!app) {
       if (m.t !== 'hello') return;
-      app = new App(ws, m);
+      app = new App(sock, m);
       apps.set(app.shell, app);
       pressWhenAsked(app);
-      line(`app connected: ${app.shell} (${app.os}, ${app.net})`);
+      line(`app connected: ${app.shell} (${app.os}, ${app.net})${sock.via ? ` via ${sock.via}` : ''}`);
       hellos.emit('hello', app);
       return;
     }
@@ -249,13 +276,77 @@ wss.on('connection', (ws, req) => {
     if (m.t === 'controls') { app.controls = m.list || []; app.emit('controls'); return; }
     if (m.t === 'screen') { app.text = String(m.text || ''); app.emit('screen'); }
   });
-  ws.on('close', () => {
+  sock.on('close', () => {
     if (!app) return;
     if (apps.get(app.shell) === app) apps.delete(app.shell);
     line(`app gone: ${app.shell}`);
+    app.closed = true;
     app.emit('close');
   });
+}
+
+wss.on('connection', (ws, req) => {
+  if (req.url === '/control') return control(ws);
+  attachApp(ws);
 });
+
+/*
+ * DRIVE-REMOTES (remote.js): this server dials each one given (--remote ws://host:8791), with the shared token - the
+ * remote's machine needs an open port, this one none. Its apps arrive relayed; its targets are started, stopped and
+ * restarted there. A remote that went is dialled again when the next run starts.
+ */
+const REMOTES = process.argv.flatMap((x, i, all) => (x === '--remote' && all[i + 1] ? [all[i + 1]] : []));
+const TOKEN = (process.env.DRIVE_TOKEN || (() => { try { return fs.readFileSync(path.join(require('os').homedir(), '.onlykey-drive-token'), 'utf8'); } catch { return ''; } })()).trim();
+const remotes = new Map(); /* url -> {ws, machine, targets, waiting} */
+const localTargets = createTargets();
+
+function dialRemote(url) {
+  const known = remotes.get(url);
+  if (known && known.ws.readyState <= 1) return;
+  const ws = new WS(`${url}/?token=${encodeURIComponent(TOKEN)}`);
+  const r = { ws, machine: url, targets: [], waiting: new Map(), nextId: 1, socks: new Map() };
+  remotes.set(url, r);
+  ws.on('message', (data) => {
+    let m;
+    try { m = JSON.parse(String(data)); } catch { return; }
+    if (m.t === 'remote-hello') { r.machine = m.machine; r.targets = m.targets || []; line(`drive-remote ${r.machine} connected (${r.targets.join(', ')})`); return; }
+    if (m.t === 'app-open') {
+      const sock = new EventEmitter();
+      sock.via = r.machine;
+      sock.readyState = 1;
+      sock.send = (text) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'app-msg', cid: m.cid, data: text })); };
+      sock.close = () => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'app-close', cid: m.cid })); };
+      r.socks.set(m.cid, sock);
+      attachApp(sock);
+      return;
+    }
+    if (m.t === 'app-msg') { const s = r.socks.get(m.cid); if (s) s.emit('message', m.data); return; }
+    if (m.t === 'app-close') { const s = r.socks.get(m.cid); if (s) { r.socks.delete(m.cid); s.readyState = 3; s.emit('close'); } return; }
+    if (m.t === 'proc-reply') { const w = r.waiting.get(m.id); if (w) { r.waiting.delete(m.id); w(m); } }
+  });
+  ws.on('error', (e) => line(`drive-remote ${url}: ${e.message}`));
+  ws.on('close', () => {
+    for (const s of r.socks.values()) { s.readyState = 3; s.emit('close'); }
+    r.socks.clear();
+    if (remotes.get(url) === r) line(`drive-remote ${r.machine} gone`);
+  });
+}
+for (const u of REMOTES) dialRemote(u);
+
+/* start / stop / restart a target: on the remote that has it, else on this machine */
+async function proc(action, target) {
+  for (const r of remotes.values()) {
+    if (r.ws.readyState !== 1 || !r.targets.includes(target)) continue;
+    const id = r.nextId++;
+    const reply = await new Promise((resolve) => {
+      const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${r.machine} did not answer "${action} ${target}" in 120 s` }); }, 120000);
+      r.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });
+      r.ws.send(JSON.stringify({ t: 'proc', id, action, target }));
+    });
+    return { ...reply, where: r.machine };
+  }
+  return { ...(await localTargets.act(action, target)), where: 'this machine' };
+}
 
 function control(ws) {
   ws.on('message', async (data) => {
@@ -270,10 +361,11 @@ function control(ws) {
     try {
       const file = path.join(SCRIPTS, `${String(m.script).replace(/[^a-z0-9-]/gi, '')}.js`);
       if (!fs.existsSync(file)) throw new Error(`no script "${m.script}" (${SCRIPTS})`);
-      const shell = m.app || [...apps.keys()][0];
-      const app = apps.get(shell);
+      for (const u of REMOTES) dialRemote(u);
+      const shell = m.app || [...apps.keys()][0] || 'desktop';
+      /* a shell not connected yet gets a handle too: its script may start it (d.up(), d.start()) */
+      const app = apps.get(shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true });
       shotApp = app;
-      if (!app) throw new Error(`no ${shell || 'app'} connected - start it in testing mode (it dials ws://127.0.0.1:${PORT})`);
       delete require.cache[require.resolve(file)];
       const say = (t) => line(`[${m.script}] ${t}`);
       say(`start on ${app.shell} (${app.net})${m.args && m.args.length ? ` - ${m.args.join(' ')}` : ''}`);

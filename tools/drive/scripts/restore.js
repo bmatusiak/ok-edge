@@ -7,6 +7,7 @@
 const { restore, budget } = require('../flows');
 module.exports = async (d, [backup, passphraseFile, passphraseKey]) => {
   if (!backup || !passphraseFile) throw new Error('restore <backup file> <passphrase json> [json key]');
+  d = await d.up();
   d = await restore(d, { backup, passphraseFile, passphraseKey: passphraseKey || 'passphrase' });
   await budget(d);
 };
