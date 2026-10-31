@@ -14,6 +14,7 @@ import {buildInfo} from '../buildInfo';
  */
 import type {LogLevel} from './useLog';
 import {currentNet, type Net} from '../net';
+import {testingModeOn} from '../debugGuard';
 
 /*
  * No protocol lives in this file any more.
@@ -217,7 +218,9 @@ export function useOkEmu({log, autoStart = false}: Options) {
         const text = okbytes.toPrintable(event.bytes).trim();
         if (text) {
           log('info', `[fw] ${text}`);
-          if (firmwareConsoleToLogcat) console.log(`[okemu-fw] ${text}`);
+          /* testing mode turns it on (the switch below had no caller: a DEBUG soft key's console never reached a log a
+           * driver could read - box, 2026-10-31, a swallowed press with no firmware trace) */
+          if (firmwareConsoleToLogcat || testingModeOn()) console.log(`[okemu-fw] ${text}`);
         }
         return;
       }
