@@ -38,7 +38,8 @@ step() {
 # the PIN on the soft key's keypad, and the login that follows - ends on the identity check's own verdict
 login() {
   C "Menu" "This Key" > /dev/null
-  step '\[identity\] .*(proven|a manual login)' "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1"
+  # the end of a login: the room joined (or why not) - a card login logs no [identity] verdict; a failure says "did not open"
+  step '\[room\] (joined|not joined)|\[identity\] .*(proven|a manual login)|did not open' "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1"
 }
 # the app (re)started and its page up (the browser's own target event), then into testing mode
 appup() {
