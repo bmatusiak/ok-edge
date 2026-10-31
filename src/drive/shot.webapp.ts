@@ -11,6 +11,8 @@ export async function shot(): Promise<{png: string} | {why: string}> {
     const h = document.documentElement.clientHeight;
     const clone = document.body.cloneNode(true) as HTMLElement;
     inline(document.body, clone);
+    /* what a page with JavaScript never shows (its noscript text) and what draws nothing */
+    for (const n of Array.from(clone.querySelectorAll('noscript, script, style'))) n.remove();
     for (const f of Array.from(clone.querySelectorAll('input, textarea')) as (HTMLInputElement | HTMLTextAreaElement)[]) {
       f.setAttribute('value', '');
       f.textContent = '';
