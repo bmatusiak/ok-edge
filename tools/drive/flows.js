@@ -45,6 +45,8 @@ function loginState(app) {
    */
   /* the web app's "a newer build is out" sheet (Reload / Dismiss): in testing the newer build is the one wanted - reload into it */
   if (app.top && !f.busy && app.has('Reload') && app.has('Dismiss')) return 'Reload';
+  /* the login card's sheet after a failed certify (Try again / Not now): the card again - its press is answered now */
+  if (app.top && !f.busy && app.has('Not now') && app.has('Try again')) return 'card again';
   if (app.top && !f.busy) { const c = ['Close menu', 'Close Edge Management'].find((l) => app.has(l)); if (c) return `close:${c}`; }
   if (f.busy || app.top) return null;
   if (f.identityCheck) {
@@ -127,6 +129,7 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
     }
     d.say(`login: ${now}`);
     if (now.startsWith('close:')) await d.tap(now.slice(6));
+    else if (now === 'card again') { await d.step('the login card', { goal: /\[card\] .*certified at/, act: () => d.tap('Try again') }); continue; }
     else if (now.startsWith('Go to ') || now === 'Reload') {
       /* the key's site (or the newer build) loads in its place - a new connection: the drive goes on with it (its hello) */
       /* the page may navigate before it answers the tap: its connection closing is the tap having worked */
