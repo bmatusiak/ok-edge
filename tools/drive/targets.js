@@ -89,6 +89,10 @@ function runIn(cwd, cmd, args, timeout) {
  * web app restart is a page reload, not a key unplugged.
  */
 const KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' ? 'hard' : 'gadget';
+/* the site the box's keys carry (ctap_bridge's default) - where "Go to <site>" sends the web app */
+const KEY_SITE = process.env.DRIVE_KEY_SITE || 'ok-edge.bmatusiak.workers.dev';
+/* the web app's processes, by their command lines: its browser profile, its local Worker (wrangler dev, workerd) */
+const webappProc = (cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js') || (cmd.includes('wrangler') && cmd.includes('\0dev\0')) || cmd.includes('workerd\0serve');
 const EMU = process.env.EMU || path.join(ROOT, 'node-onlykey-emulator', 'emulator');
 const GADGET_STORE = path.join(ROOT, 'webapp-softkey');
 const GADGET_SRC = path.join(os.homedir(), '.config/Electron-test/okemu/plugins-config.edge-test');
@@ -261,16 +265,32 @@ function createTargets(line = () => {}, out = () => {}) {
         const c = running.get('webapp');
         if (c && c.some((x) => !exited(x))) return `already running (${keyNote})`;
         /* started by a drive-remote before this one (its children outlive it): found by their command lines */
-        const found = procs((cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js'));
+        const found = procs(webappProc);
         if (found && found.length) return `already running, not started here (pids ${found.map((p) => p.pid).join(', ')}; ${keyNote})`;
-        const spki = fs.readFileSync(path.join(ROOT, 'devcert/apps.crp.to.spki'), 'utf8').trim();
-        const serve = launch('serve-docs', NODE, [path.join(EDGE, 'tools/box/serve-docs.js'), path.join(EDGE, 'docs'), path.join(ROOT, 'devcert'), '8443']);
-        const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333', '--host-resolver-rules=MAP apps.crp.to 127.0.0.1',
-          `--ignore-certificate-errors-spki-list=${spki}`, `--user-data-dir=${path.join(ROOT, 'webapp-chromium')}`, '--no-first-run', '--new-window', 'https://apps.crp.to:8443/'],
+        /*
+         * THE WEB APP AS IT IS DEPLOYED, ON THIS BOX (Brad, 2026-10-31: "go to apps.crp.to first and redirect to the set
+         * rpid the key provides"): the local Worker (mcp-server, wrangler dev - the --dev web app in docs/, its rooms and
+         * MCP) on 443 for BOTH names, with the dev certificate that names both; Chromium maps both to this box and starts
+         * at apps.crp.to. The app reads the key's site and its "Go to <site>" lands on the same Worker, as it lands on
+         * Cloudflare in production. 443 needs the box's unprivileged port floor at 443 (/etc/sysctl.d/60-okedge-443.conf).
+         */
+        const certs = path.join(ROOT, 'devcert');
+        const server = launch('server-dev', 'npx', ['--yes', 'wrangler@4.153.0', 'dev', '--ip', '0.0.0.0', '--port', '443', '--local-protocol', 'https',
+          '--var', 'SEALED_IDENTITIES:*', '--https-key-path', path.join(certs, 'apps.crp.to.key'), '--https-cert-path', path.join(certs, 'apps.crp.to.crt')]);
+        /* the browser once the Worker says it is ready - its own line, followed in its log (3 minutes: a first build) */
+        const ready = await new Promise((resolve) => {
+          const dog = setTimeout(() => { w && w.close(); resolve(null); }, 180000);
+          const w = follow('server-dev', (l) => { if (/Ready on|✘/.test(l)) { clearTimeout(dog); w && w.close(); resolve(l); } });
+        });
+        if (!ready || /✘/.test(ready)) return `the local Worker did not start: ${ready || 'no "Ready on" in 3 minutes'} (logs/server-dev.log)`;
+        const spki = fs.readFileSync(path.join(certs, 'apps.crp.to.spki'), 'utf8').trim();
+        const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333',
+          `--host-resolver-rules=MAP apps.crp.to 127.0.0.1, MAP ${KEY_SITE} 127.0.0.1`,
+          `--ignore-certificate-errors-spki-list=${spki}`, `--user-data-dir=${path.join(ROOT, 'webapp-chromium')}`, '--no-first-run', '--new-window', 'https://apps.crp.to/'],
         { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });
-        running.set('webapp', [serve, browser]);
+        running.set('webapp', [server, browser]);
         followOut('webapp', 'webapp-chromium');
-        return `started (${keyNote})`;
+        return `started at https://apps.crp.to/ (the key's site ${KEY_SITE} on the same local Worker; ${keyNote})`;
       },
       /*
        * THE BROWSER'S WINDOW, PICTURED BY ITS MACHINE (Brad, 2026-10-31: "the webapp screenshot does not see the security
@@ -324,7 +344,7 @@ function createTargets(line = () => {}, out = () => {}) {
          * and its browser and server if an earlier drive-remote started them (they outlive it): found by their own
          * command lines, ended by pid - the same watchdog as a stray desktop app's (endPids). Its key, the gadget, stays.
          */
-        const left = (procs((cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js')) || []).map((p) => p.pid);
+        const left = (procs(webappProc) || []).map((p) => p.pid);
         if (left.length) r.push(await endPids(left, line, 'webapp'));
         return r.join(', ') || 'not running';
       },
