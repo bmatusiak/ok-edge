@@ -33,6 +33,7 @@ import {watchNativeLog} from './nativeLog';
 import {watchErrors} from './errors';
 import {watchNet} from './net';
 import {storedKeys} from './storage';
+import {watchLogBox} from './logbox';
 
 /*
  * WHAT MAY LEAVE THE APP (memory: the app log carries key bytes - a new sink takes an allowlist, never "every line").
@@ -48,6 +49,8 @@ const URL = process.env.EXPO_PUBLIC_OKEDGE_DRIVE_URL || 'ws://127.0.0.1:8790';
 let ws: WebSocket | null = null;
 let dialling = false;
 let started = false;
+/* React Native's overlay, once hooked (startDrive) */
+let logBox: {connected(): void} | null = null;
 
 /* the top layer's controls, whether an overlay is open, and the app's own flags (phase, busy) */
 const controlsMsg = () => ({t: 'controls', list: liveControls(), top: topLayer(), flags: driveFlags()});
@@ -59,9 +62,14 @@ function send(msg: object): void {
 }
 
 /* an error, to the drive: on the live chain its kind only - the message stays on the device (mayLeave's rule) */
+let lastError = '';
 function reportError(kind: string, e: unknown): void {
   if (!ws) return;
   const message = e instanceof Error ? (e.stack ?? e.message) : String(e);
+  /* one error, heard twice in a row (React Native's exception manager, then LogBox showing it): reported once */
+  const head = (e instanceof Error ? e.message : message).split('\n')[0];
+  if (head && head === lastError) return;
+  lastError = head;
   send({t: 'error', kind, message: currentNet() === 'test' ? message.slice(0, 4000) : '(live chain: the message stays on the device)', at: Date.now()});
 }
 
@@ -91,6 +99,8 @@ function dial(): void {
     send({t: 'hello', shell, net: currentNet(), os: Platform.OS});
     send(controlsMsg());
     sendScreen();
+    /* LogBox's toasts already on screen: taken, and off the screen the drive drives */
+    logBox?.connected();
   };
   sock.onclose = () => { dialling = false; if (ws === sock) ws = null; idleRedial(); };
   sock.onerror = () => { dialling = false; idleRedial(); };
@@ -155,6 +165,16 @@ export function startDrive(): void {
    * manager); the server logs it and takes a picture with a log sample, at the moment it happens.
    */
   watchErrors(reportError);
+
+  /*
+   * React Native's debug overlay (logbox.android.ts): its errors are error events, its warnings "[logbox]" lines, and
+   * while a drive is connected each is dismissed once taken - the "Open debugger to view warnings." toast covered the
+   * bottom of the Pixel's screen (2026-10-31)
+   */
+  logBox = watchLogBox((level, message) => {
+    if (/error|fatal|syntax/.test(level)) reportError(`logbox ${level}`, message);
+    else { const line = `[logbox] ${level}: ${message}`; if (ws && mayLeave(line, false)) send({t: 'log', line, at: Date.now()}); }
+  }, () => !!ws);
 
   /* a key request in flight: a drive waits it out before its next move */
   onKeyBusy(b => setDriveFlag('busy', !!b));
