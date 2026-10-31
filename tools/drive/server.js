@@ -153,9 +153,12 @@ function pressWhenAsked(app) {
     /*
      * A KEY OUTSIDE THE APP WAITS (src/hostChallenge.ts - the web app's key, a hard key): pressed by the machine that
      * holds it (targets.js press), its buttons as the app shows them - one wait, one press. A testnet key only: the
-     * app on the testnet, or the key's machine naming it a testnet one (a web app says "live" until it has read its key)
+     * app on the testnet, or the key's machine naming it a testnet one (a web app says "live" until it has read its key).
+     * The web app's Edge requests that wait for a press say it their own way - "[keybusy] the key waits for its press:
+     * <what>" (keyBusy; 2026-10-31: the login card's certify waited out its 26 s) - one press, any button: the same
      */
-    const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/);
+    const edgeWait = app.shell === 'webapp' && l.match(/^\[keybusy\] the key waits for its press: (.*)$/);
+    const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']);
     if (outside) {
       if (pressing) return;
       pressing = true;
