@@ -5,49 +5,11 @@
 #   three signs it pays (Edge Management's Testing buttons).
 # A restore is a new device (a new salted id) forked from the backup's head: run it twice from one backup and the
 # Edge tab shows both forks of one point - the flag (2026-10-31).
-#
-# EVENT DRIVEN (Brad, 2026-10-31: "your script should be event based, not timer based ... if a timer is used you will
-# always fail"): no sleeps. A step starts page-presser.js BEFORE the click that sets it off; the presser presses each
-# sheet the moment the app logs it live, and ends on the app's own line for the step's outcome. page-click waits for a
-# control by the page's own changes (MutationObserver). The only timers are inactivity cutoffs.
+# Event driven: tools/box/drive.sh.
 #   bash tools/box/softkey-restore-demo.sh <backup.txt> <passphrase.json> [json key=passphrase]
-source ~/.nvm/nvm.sh >/dev/null
-cd ~/project/onlykey/ok-edge || exit 1
 BACKUP="$1"; PASS="$2"; KEY="${3:-passphrase}"
 [ -f "$BACKUP" ] && [ -f "$PASS" ] || { echo "usage: softkey-restore-demo.sh <backup.txt> <passphrase.json> [key]"; exit 2; }
-export CDP_PORT=9334
-say() { echo "== $(date +%T) $*"; }
-C() { timeout 120 node tools/box/page-click.js "$@" 2>&1 | tail -1 | cut -c1-200; }
-# the first line of `file` matching `re`, as it is written (tail -f, no polling); the reader ends with the match
-# with a writer pid, the reading also ends when the writer does - a writer that died before its line (the presser
-# when the page was not up: "fetch failed") left this waiting for good (2026-10-31); returns 1 then
-waitline() {
-  local file="$1" re="$2" writer="$3" tp
-  tp=$(mktemp)
-  ( tail -n +1 ${writer:+--pid=$writer} -f "$file" & echo $! > "$tp"; wait ) | grep -m1 -E "$re"
-  local found=${PIPESTATUS[1]}
-  kill "$(cat "$tp")" 2>/dev/null; rm -f "$tp"
-  return "$found"
-}
-# step "<outcome regex>" <clicks...>: the presser listens first, then the clicks, then the outcome (or its failure)
-step() {
-  local until="$1"; shift
-  local log; log=$(mktemp)
-  node tools/box/page-presser.js --approve --until "$until" --idle 120 --show 'failed|refused|Not made|did not' > "$log" 2>&1 &
-  local p=$!
-  if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
-  [ $# -gt 0 ] && C "$@"
-  wait $p; local code=$?
-  sed 's/^/   /' "$log"; rm -f "$log"
-  return $code
-}
-# the app (re)started, and its page is up: the main process's own line, then the login screen's button
-appup() {
-  bash tools/box/desktop-test.sh > /dev/null
-  local line; line=$(waitline ../logs/desktop-test.log 'DevTools listening on ws://')
-  node tools/box/page-ready.js "${line##* }" || return 1
-  C "Enter testing mode" > /dev/null
-}
+source "$(dirname "$0")/drive.sh" || exit 1
 
 say "1. wipe the soft key"
 appup
@@ -68,11 +30,5 @@ step '\[card\] .*(offered|taken from the bucket)' "Button 1" "Button 1" "Button 
 say "5. the card: one certify press"
 step '\[card\] .*certified at' "Make the card" || exit 1
 say "6. Edge: a budget (approve + press), three signs it pays"
-C "Menu" "Edge" "▲ Edge Management" "Agent: request a budget" "Close Edge Management" > /dev/null
-step 'end #[0-9]+ Edge: opening a budget .*ok' "Approve" || exit 1
-for i in 1 2 3; do
-  step 'end #[0-9]+ Edge: filing a receipt .*ok' "▲ Edge Management" "Agent: a sign the budget pays" || exit 1
-  C "Close Edge Management" > /dev/null
-done
-timeout 20 node tools/box/page-click.js --text 4000 | sed -n '/^Past budgets/,$p' | head -12
+budget_demo || exit 1
 say "done"

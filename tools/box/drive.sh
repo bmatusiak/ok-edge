@@ -1,0 +1,53 @@
+# Driving the box desktop app's TESTNET soft key, EVENT DRIVEN (Brad, 2026-10-31: "your script should be event based,
+# not timer based ... if a timer is used you will always fail"; timers only for inactivity). Sourced:
+#   source tools/box/drive.sh;  appup;  C "Menu" "Edge";  step '<outcome regex>' "<click>" ...
+# No sleeps: a step starts page-presser.js BEFORE the click that sets it off; the presser presses each sheet the moment
+# the app logs it live, and the step ends on the app's own console line for its outcome. page-click waits for a
+# control by the page's own changes (MutationObserver). The only timers are inactivity cutoffs.
+source ~/.nvm/nvm.sh >/dev/null
+cd ~/project/onlykey/ok-edge || return 1
+export CDP_PORT=9334
+say() { echo "== $(date +%T) $*"; }
+C() { timeout 120 node tools/box/page-click.js "$@" 2>&1 | tail -1 | cut -c1-200; }
+# the first line of `file` matching `re`, as it is written (tail -f, no polling); the reader ends with the match -
+# with a writer pid, also when the writer ends (a presser that died before its line - "fetch failed", the page not up
+# yet - left this waiting for good, 2026-10-31); returns 1 then
+waitline() {
+  local file="$1" re="$2" writer="$3" tp
+  tp=$(mktemp)
+  ( tail -n +1 ${writer:+--pid=$writer} -f "$file" & echo $! > "$tp"; wait ) | grep -m1 -E "$re"
+  local found=${PIPESTATUS[1]}
+  kill "$(cat "$tp")" 2>/dev/null; rm -f "$tp"
+  return "$found"
+}
+# step "<outcome regex>" <clicks...>: the presser listens first, then the clicks, then the outcome (or its failure).
+# SHOW='<regex>' prints the console lines that match as they come.
+step() {
+  local until="$1"; shift
+  local log; log=$(mktemp)
+  node tools/box/page-presser.js --approve --until "$until" --idle 120 --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
+  local p=$!
+  if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
+  [ $# -gt 0 ] && C "$@"
+  wait $p; local code=$?
+  sed 's/^/   /' "$log"; rm -f "$log"
+  return $code
+}
+# the app (re)started and its page up (the browser's own target event), then into testing mode
+appup() {
+  bash tools/box/desktop-test.sh > /dev/null
+  local line; line=$(waitline ../logs/desktop-test.log 'DevTools listening on ws://')
+  node tools/box/page-ready.js "${line##* }" || return 1
+  C "Enter testing mode" > /dev/null
+}
+# one budget on the open soft key: request, approve + its press, three signs it pays
+budget_demo() {
+  C "Menu" "Edge" "▲ Edge Management" "Agent: request a budget" "Close Edge Management" > /dev/null
+  step 'end #[0-9]+ Edge: opening a budget .*ok' "Approve" || return 1
+  local i
+  for i in 1 2 3; do
+    step 'end #[0-9]+ Edge: filing a receipt .*ok' "▲ Edge Management" "Agent: a sign the budget pays" || return 1
+    C "Close Edge Management" > /dev/null
+  done
+  timeout 20 node tools/box/page-click.js --text 4000 | sed -n '/^Past budgets/,$p' | head -12
+}
