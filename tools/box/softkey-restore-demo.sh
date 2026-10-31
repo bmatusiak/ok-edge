@@ -12,7 +12,9 @@ BACKUP="$1"; PASS="$2"; KEY="${3:-passphrase}"
 source "$(dirname "$0")/drive.sh" || exit 1
 
 # every move waits for the screen it belongs to (?label) and the run stops at the first one that does not happen
-fail() { say "STOPPED at: $*"; exit 1; }
+fail() { say "STOPPED at: $*"; session_off; exit 1; }
+# every press sheet answered whenever it comes, for the whole run (drive.sh session_on, restarted by appup)
+SESSION=1
 B="Button 1"
 say "1. wipe the soft key"
 appup || fail "the app did not come up"
@@ -36,4 +38,5 @@ C "?Make the card" || fail "the card offer"
 step '\[card\] .*certified at' "Make the card" || fail "the card"
 say "6. Edge: a budget (approve + press), three signs it pays"
 budget_demo || fail "the budget"
+session_off
 say "done"
