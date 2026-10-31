@@ -22,6 +22,12 @@ const os = require('os');
 const LINUX = process.platform === 'linux';
 const EDGE = path.resolve(__dirname, '..', '..');
 const ROOT = path.resolve(EDGE, '..');
+/*
+ * NODE ITSELF, for the processes started here that are Node programs (the soft key's host, the web app's server): inside
+ * the drive app process.execPath is NW.js's binary, not Node (2026-10-31: the soft key host was started as an NW app,
+ * "Cannot open ZIP archive okemu-host.js") - launch.js passes the Node that ran it as DRIVE_NODE.
+ */
+const NODE = process.env.DRIVE_NODE || process.execPath;
 const LOGS = process.env.DRIVE_LOGS || path.join(os.homedir(), 'project/onlykey/logs');
 
 function run(cmd, args) {
@@ -150,7 +156,7 @@ function createTargets(line = () => {}, out = () => {}) {
       async start() {
         const c = running.get('desktop');
         if ((c && !exited(c)) || strayElectrons().length) return 'already running';
-        const env = { ...(LINUX ? { OKEDGE_NODE: process.execPath, DISPLAY: process.env.DRIVE_DISPLAY || ':10' } : {}) };
+        const env = { ...(LINUX ? { OKEDGE_NODE: NODE, DISPLAY: process.env.DRIVE_DISPLAY || ':10' } : {}) };
         const child = launch('desktop-test', LINUX ? 'npm' : 'npm.cmd', ['run', 'electron:test', ...(LINUX ? ['--', '--no-sandbox'] : [])], env);
         /* kept after it exits: its exit code is its last words (lastWords); the next start replaces it */
         running.set('desktop', child);
@@ -170,7 +176,7 @@ function createTargets(line = () => {}, out = () => {}) {
         const c = running.get('webapp');
         if (c && c.some((x) => !exited(x))) return 'already running';
         const spki = fs.readFileSync(path.join(ROOT, 'devcert/apps.crp.to.spki'), 'utf8').trim();
-        const serve = launch('serve-docs', process.execPath, [path.join(EDGE, 'tools/box/serve-docs.js'), path.join(EDGE, 'docs'), path.join(ROOT, 'devcert'), '8443']);
+        const serve = launch('serve-docs', NODE, [path.join(EDGE, 'tools/box/serve-docs.js'), path.join(EDGE, 'docs'), path.join(ROOT, 'devcert'), '8443']);
         const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333', '--host-resolver-rules=MAP apps.crp.to 127.0.0.1',
           `--ignore-certificate-errors-spki-list=${spki}`, `--user-data-dir=${path.join(ROOT, 'webapp-chromium')}`, '--no-first-run', '--new-window', 'https://apps.crp.to:8443/'],
         { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });

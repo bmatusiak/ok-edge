@@ -23,7 +23,8 @@ if (!['server', 'remote'].includes(args[0])) {
     console.error(`no NW.js here (${e.message}) - run npm install in ${__dirname}`);
     process.exit(1);
   }
-  const env = { ...process.env };
+  /* the Node running this, for the Node programs the drive starts (targets.js NODE): NW.js's own binary is not one */
+  const env = { ...process.env, DRIVE_NODE: process.execPath };
   if (process.platform === 'linux') env.DISPLAY = process.env.DRIVE_DISPLAY || process.env.DISPLAY || ':10';
   const child = spawn(nwBin, [__dirname, ...args], { detached: true, stdio: 'ignore', env, windowsHide: false });
   child.unref();
