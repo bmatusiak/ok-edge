@@ -29,6 +29,7 @@ import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 import {Linking} from 'react-native';
+import {setDriveFlag} from '../drive/registry';
 
 /*
  * THE KEY NAMES ANOTHER SITE (Brad, 2026-10-29: "if i go to apps.crp.to, it reads my key and sees i use a private mcp, it
@@ -68,6 +69,8 @@ function loginReason(): string {
 }
 
 export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: string; onContinue: () => void; onPress?: () => void}) {
+  /* a drive waits for the identity check to end before its next move (src/drive/registry.tsx) */
+  React.useEffect(() => { setDriveFlag('identityCheck', true); return () => setDriveFlag('identityCheck', false); }, []);
   const [read, setRead] = useState<Read>({kind: 'checking'});
   const [open, setOpen] = useState<Open>({kind: 'idle'});
   /*

@@ -22,10 +22,12 @@ async function testingMode(d) {
  */
 function loginState(app) {
   /* in = the app says it is in its main phase, nothing open, no key request in flight - its own word, not its screen's */
-  if (app.flags.phase === 'main' && app.settled() && app.flags.tab === 'This Key') return 'in';
+  if (app.flags.phase === 'main' && app.settled() && app.flags.tab === 'This Key' && app.flags.key === 'unlocked' && !app.flags.identityCheck) return 'in';
   /* a new device's login ends with its card offered: in, and the flow decides about the card */
   if (app.flags.phase === 'main' && !app.flags.busy && app.has('Make the card')) return 'in';
   if (app.flags.phase === 'identity' || app.flags.busy || app.top) return null;
+  /* the identity check's own buttons are moves; while it works, nothing is pressed */
+  if (app.flags.identityCheck && !['Try again', 'Decrypt Bucket', 'Create Bucket'].some((b) => app.has(b))) return null;
   if (app.has('Enter testing mode')) return 'login screen';
   for (const b of ['Try again', 'Decrypt Bucket', 'Create Bucket']) if (app.has(b)) return b;
   if (app.has('Button 1') && app.net === 'test') return 'keypad';
