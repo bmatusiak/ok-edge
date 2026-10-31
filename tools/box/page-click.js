@@ -8,7 +8,11 @@
 //   node tools/box/page-click.js --text [chars=3000]                          the page's visible text
 //   node tools/box/page-click.js --eval 'EXPR'                                EXPR's value in the page, as JSON
 // A label not on screen fails, naming what is.
-const args = process.argv.slice(2);
+// --life N: each control's watchdog, seconds from the start of its wait (default 30)
+const argv = process.argv.slice(2);
+const lifeAt = argv.indexOf('--life');
+const LIFE = lifeAt < 0 ? 30 : Number(argv[lifeAt + 1]);
+const args = lifeAt < 0 ? argv : argv.filter((_, i) => i !== lifeAt && i !== lifeAt + 1);
 
 /*
  * in the page: the visible text controls, or the centre of the one saying `label` - and whether it is DISABLED (it or
@@ -97,25 +101,25 @@ const FIND = (label) => `(() => {
       /*
        * THERE AND LIVE, BY EVENT (Brad, 2026-10-31: "your script should be event based, not timer based"): a
        * MutationObserver in the page looks again on each change - the control appearing, waking from disabled, its
-       * cover (a sheet) going - instead of a poll every 200 ms. The 60 s is an inactivity cutoff: the page went quiet
-       * without it.
+       * cover (a sheet) going - instead of a poll every 200 ms.
+       * THE WATCHDOG (Brad, 2026-10-31: "an event has an expected end of life"): LIFE seconds from the start of the
+       * wait, not reset by changes - a "quiet" cutoff that each change reset never fired on a busy page, and a PIN
+       * click waited on a covered button for good.
        */
       let at = await evaluate(FIND(a));
       if (!at || at.x === undefined || at.disabled) {
         const r = await call('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `new Promise((resolve) => {
           const find = () => { const f = ${FIND(a)}; return f && f.x !== undefined && !f.disabled ? f : null; };
-          let quiet;
-          const done = (v) => { obs.disconnect(); clearTimeout(quiet); resolve(v); };
-          const rest = () => { clearTimeout(quiet); quiet = setTimeout(() => done(null), 60000); };
-          const obs = new MutationObserver(() => { rest(); const f = find(); if (f) done(f); });
+          const done = (v) => { obs.disconnect(); clearTimeout(life); resolve(v); };
+          const life = setTimeout(() => done(null), ${LIFE * 1000});
+          const obs = new MutationObserver(() => { const f = find(); if (f) done(f); });
           obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
-          rest();
           const f = find(); if (f) done(f);
         })` });
         at = r.result.result.value || await evaluate(FIND(a));
       }
-      if (!at || at.x === undefined) throw new Error(`"${a}" is not on screen; there: ${(at?.seen || []).join(' | ')}`);
-      if (at.disabled) throw new Error(`"${a}" stayed ${at.covered ? 'covered' : 'disabled'} while the page went quiet for 60 s - not clicked`);
+      if (!at || at.x === undefined) throw new Error(`WATCHDOG: "${a}" not on screen in ${LIFE} s; there: ${(at?.seen || []).join(' | ')}`);
+      if (at.disabled) throw new Error(`WATCHDOG: "${a}" still ${at.covered ? 'covered' : 'disabled'} after ${LIFE} s - not clicked`);
       if (only) { console.log(`there: "${a}"`); continue; }
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
         await call('Input.dispatchMouseEvent', { type, x: at.x, y: at.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });

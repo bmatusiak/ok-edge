@@ -7,13 +7,16 @@
 // An approval ("... - approve", the Edge request sheet) is answered only with --approve, and only on the TESTNET (the
 // page's TESTNET banner): automation is for TEST budgets alone.
 // Every console line it acts on, and every line matching --show, is printed as it comes. It ends on --until <regex>
-// (a console line), or after --idle seconds with no console line at all - the one timer, an inactivity cutoff.
-//   CDP_PORT=9334 node tools/box/page-presser.js [--approve] [--until 'REGEX'] [--idle 120] [--show 'REGEX']
+// (a console line) - or its WATCHDOG fires: --life seconds from its start is the step's expected end of life (Brad,
+// 2026-10-31: "you need a watch dog inactivity timer, so an event has an expected end of life"). Other lines do not
+// reset it - the app logs all the time, and an idle cutoff they reset never fired. On expiry it prints the last lines
+// it saw and the buttons on screen, and exits 1.
+//   CDP_PORT=9334 node tools/box/page-presser.js [--approve] [--until 'REGEX'] [--life 90] [--show 'REGEX']
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i < 0 ? dflt : args[i + 1]; };
 const APPROVE = args.includes('--approve');
 const UNTIL = opt('--until', null) ? new RegExp(opt('--until')) : null;
-const IDLE_MS = Number(opt('--idle', 120)) * 1000;
+const LIFE_MS = Number(opt('--life', 90)) * 1000;
 const SHOW = opt('--show', null) ? new RegExp(opt('--show')) : null;
 const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
 
@@ -52,10 +55,16 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
   })()`);
   const dpr = (await evaluate('window.devicePixelRatio')) || 1;
 
-  let quiet;
+  const recent = [];
   const finish = (code, why) => { say(why); ws.close(); process.exit(code); };
-  const idle = () => { clearTimeout(quiet); quiet = setTimeout(() => finish(1, `no console line for ${IDLE_MS / 1000} s - stopping`), IDLE_MS); };
-  idle();
+  /* the watchdog - the step's expected end of life, the one timer */
+  setTimeout(async () => {
+    say(`WATCHDOG: no outcome in ${LIFE_MS / 1000} s${UNTIL ? ` (waited for /${UNTIL.source}/)` : ''} - the last lines:`);
+    for (const l of recent) console.log(`  ${l}`);
+    const seen = await evaluate(`[...document.querySelectorAll('[role="button"], button')].map((b) => (b.getAttribute('aria-label') || b.innerText || '').trim()).filter(Boolean).slice(-12).join(' | ')`).catch(() => '?');
+    console.log(`  buttons now: ${seen}`);
+    finish(1, 'watchdog');
+  }, LIFE_MS);
 
   /* one sheet at a time, in the order the app announced them */
   let chain = Promise.resolve();
@@ -63,7 +72,7 @@ const say = (s) => console.log(`${new Date().toTimeString().slice(0, 8)} ${s}`);
 
   onConsole = (m) => {
     const line = (m.params.args || []).map((a) => (a.value !== undefined ? String(a.value) : a.description || '')).join(' ');
-    idle();
+    recent.push(line.slice(0, 160)); if (recent.length > 8) recent.shift();
     if (SHOW && SHOW.test(line)) say(line.slice(0, 200));
     const up = line.match(/^\[press\] sheet up: (.*) - button at (\d+),(\d+)$/);
     if (up) {

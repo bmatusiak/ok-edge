@@ -21,11 +21,11 @@ waitline() {
   return "$found"
 }
 # step "<outcome regex>" <clicks...>: the presser listens first, then the clicks, then the outcome (or its failure).
-# SHOW='<regex>' prints the console lines that match as they come.
+# SHOW='<regex>' prints the console lines that match as they come; LIFE=<s> is the step's watchdog (default 90).
 step() {
   local until="$1"; shift
   local log; log=$(mktemp)
-  node tools/box/page-presser.js --approve --until "$until" --idle 120 --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
+  node tools/box/page-presser.js --approve --until "$until" --life "${LIFE:-90}" --show "${SHOW:-failed|refused|Not made|did not}" > "$log" 2>&1 &
   local p=$!
   if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
   [ $# -gt 0 ] && C "$@"
