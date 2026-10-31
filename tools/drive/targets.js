@@ -273,9 +273,10 @@ function createTargets(line = () => {}, out = () => {}) {
          * MCP) on 443 for BOTH names, with the dev certificate that names both; Chromium maps both to this box and starts
          * at apps.crp.to. The app reads the key's site and its "Go to <site>" lands on the same Worker, as it lands on
          * Cloudflare in production. 443 needs the box's unprivileged port floor at 443 (/etc/sysctl.d/60-okedge-443.conf).
+         * Bound to 127.0.0.1: local-only testing - nothing on the LAN reaches it (the browser here maps both names to it).
          */
         const certs = path.join(ROOT, 'devcert');
-        const server = launch('server-dev', 'npx', ['--yes', 'wrangler@4.153.0', 'dev', '--ip', '0.0.0.0', '--port', '443', '--local-protocol', 'https',
+        const server = launch('server-dev', 'npx', ['--yes', 'wrangler@4.153.0', 'dev', '--ip', '127.0.0.1', '--port', '443', '--local-protocol', 'https',
           '--var', 'SEALED_IDENTITIES:*', '--https-key-path', path.join(certs, 'apps.crp.to.key'), '--https-cert-path', path.join(certs, 'apps.crp.to.crt')]);
         /* the browser once the Worker says it is ready - its own line, followed in its log (3 minutes: a first build) */
         const ready = await new Promise((resolve) => {
