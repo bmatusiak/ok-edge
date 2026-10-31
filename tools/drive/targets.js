@@ -123,7 +123,8 @@ function runIn(cwd, cmd, args, timeout) {
  * event to start it again on the same storage, so it comes back the way a hard key does. It outlives the browser: a
  * web app restart is a page reload, not a key unplugged.
  */
-const KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' ? 'hard' : 'gadget';
+/* which key the web app uses - switched at run time with useKey (run.js key use hard|gadget); DRIVE_WEBAPP_KEY sets the start */
+let KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' ? 'hard' : 'gadget';
 /* the site the box's keys carry (ctap_bridge's default) - where "Go to <site>" sends the web app */
 const KEY_SITE = process.env.DRIVE_KEY_SITE || 'ok-edge.bmatusiak.workers.dev';
 /* the web app's processes, by their command lines: its browser profile, its local Worker (wrangler dev, workerd) */
@@ -140,6 +141,30 @@ function gadgetElsewhere() {
     try { return fs.readFileSync(`/proc/${d}/cmdline`, 'utf8').includes(`bin/daemon.js\0--storage\0${GADGET_STORE}`); } catch { return false; }
   }).map(Number);
 }
+/*
+ * THE WEB APP'S KEY, SWITCHED (Brad, 2026-10-31: "so you need to flip on/off gadget"): one OnlyKey on the USB at a time
+ * - the browser asks every one it sees. "hard": the gadget stopped (ours, or one an earlier drive-remote started) and
+ * kept gone; key 2 is the web app's key. "gadget": the gadget started, held, and back after each exit.
+ */
+async function useKey(which, line, onOut) {
+  if (which === 'hard') {
+    KEY = 'hard';
+    gadgetStopping = true;
+    const r = [];
+    if (gadgetChild && !exited(gadgetChild)) r.push(await stopChild(gadgetChild, line, 'gadget'));
+    const left = gadgetElsewhere();
+    if (left.length) r.push(await endPids(left, line, 'gadget'));
+    return `the web app's key is hard key 2; the gadget is off${r.length ? ` (${r.join(', ')})` : ''}`;
+  }
+  if (which === 'gadget') {
+    KEY = 'gadget';
+    gadgetStopping = false;
+    const held = holdGadget(onOut);
+    return `the web app's key is the gadget soft key; ${gadget()}${held ? ` - ${held}` : ''}`;
+  }
+  return `no key "${which}" - hard or gadget`;
+}
+
 function gadget() {
   if (gadgetChild && !exited(gadgetChild)) return 'its gadget soft key already runs';
   const other = gadgetElsewhere();
@@ -182,6 +207,7 @@ function holdGadget(onOut) {
      * daemon an earlier drive-remote had started stayed gone - its respawn died with that remote): once no daemon is left
      * (checked every 250 ms, 5 s at most - not our child, its exit is no event here), this machine starts it again.
      */
+    if (KEY !== 'gadget' || gadgetStopping) return; /* switched off (useKey hard): it stays gone */
     if (gadgetChild && !exited(gadgetChild)) return; /* ours: its exit event starts it again (gadget()) */
     const until = Date.now() + 5000;
     const check = () => {
@@ -640,6 +666,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
+      if (action === 'use-key') return { ok: true, what: await useKey(args.key, line, (l) => out('webapp', l)) };
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
