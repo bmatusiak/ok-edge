@@ -63,6 +63,9 @@ function dial(): void {
     if (m.t === 'tap') { const why = tapLabel(String(m.label)); reply(!why, why ? {why} : {}); }
     else if (m.t === 'fill') { const why = fillField(String(m.field), String(m.value ?? '')); reply(!why, why ? {why} : {}); }
     else if (m.t === 'state') reply(true, {controls: liveControls(), text: screenText()});
+    /* introduce yourself again: a drive server that took over this connection (through a drive-remote) never had the
+     * first hello (2026-10-31: a restarted server waited for an app that was connected all along) */
+    else if (m.t === 'hello') { send({t: 'hello', shell, net: currentNet(), os: Platform.OS}); send({t: 'controls', list: liveControls()}); send({t: 'screen', text: screenText()}); }
     else if (m.t === 'shot') void shot().then(r => reply('png' in r, r));
     else reply(false, {why: `unknown command "${m.t}"`});
   };

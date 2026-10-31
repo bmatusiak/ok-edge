@@ -328,6 +328,8 @@ function dialRemote(url) {
       sock.close = () => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'app-close', cid: m.cid })); };
       r.socks.set(m.cid, sock);
       attachApp(sock);
+      /* an app the remote held before this server came: asked to introduce itself again (its first hello went elsewhere) */
+      sock.send(JSON.stringify({ t: 'hello' }));
       return;
     }
     if (m.t === 'app-msg') { const s = r.socks.get(m.cid); if (s) s.emit('message', m.data); return; }
