@@ -957,7 +957,12 @@ function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ring
   const td = Date.now();
   const decoded = mirror.links.map(r => ({r, f: chain.decodeLink(r.link)}));
   vlap('decode', td);
-  if (!head) {
+  /*
+   * NO HEAD BYTES (the key never reveals its head - the host welds it from its copy): a host that holds no copy of this
+   * chain yet (a new computer, 2026-10-31 the box with key 2) knows the seq and not the head - the same as not synced,
+   * until a copy arrives (the bucket's edge logs, or this host following the chain from its start).
+   */
+  if (!head || !head.head) {
     return {verdict: {kind: 'not-synced'}, headSeq: null, lastSync: mirror.lastSync, rows: rowsOf(decoded, new Set(), mirror), setAside: asideOf(mirror), refusals: mirror.refusals, continued: mirror.continued ?? null};
   }
   const id = toHex(mirror.deviceId);
