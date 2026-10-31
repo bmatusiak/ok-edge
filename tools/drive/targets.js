@@ -41,7 +41,21 @@ const ADB = (() => {
   const bin = path.join(sdk, 'platform-tools', LINUX ? 'adb' : 'adb.exe');
   return fs.existsSync(bin) ? bin : 'adb';
 })();
-const adb = (args) => run(ADB, ['-s', process.env.ANDROID_SERIAL || '26251JEGR09693', ...args]);
+/*
+ * THE PHONE AS ADB NAMES IT NOW (box, 2026-10-31: the Pixel's install failed "device '26251JEGR09693' not found" while
+ * adb listed it as adb-26251JEGR09693-Jcvd4B._adb-tls-connect._tcp - wireless debugging found by mdns carries the
+ * serial inside its name). The serial itself when it is listed so (USB, or adb connect ip:port), else the mdns name.
+ */
+const SERIAL = process.env.ANDROID_SERIAL || '26251JEGR09693';
+function phoneId() {
+  let ids = [];
+  try {
+    ids = require('child_process').execFileSync(ADB, ['devices'], { encoding: 'utf8', timeout: 10000, windowsHide: true })
+      .split('\n').map((l) => l.trim().split(/\s+/)).filter((p) => p[1] === 'device').map((p) => p[0]);
+  } catch { /* adb not answering: the serial, and adb says why */ }
+  return ids.find((id) => id === SERIAL) || ids.find((id) => id.startsWith(`adb-${SERIAL}-`)) || SERIAL;
+}
+const adb = (args) => run(ADB, ['-s', phoneId(), ...args]);
 
 /* a long-running child of ours: its own process group (Linux), its output in a log */
 function launch(name, cmd, args, env = {}) {
@@ -611,7 +625,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     const mac = process.env.DRIVE_BT_MAC || '24:29:34:86:EA:AF';
     return new Promise((resolve) => execFile(NODE, [tool, '--phone', phone, '--mac', mac], {
       cwd: path.dirname(path.dirname(tool)), windowsHide: true, timeout: 180000,
-      env: { ...process.env, ANDROID_SERIAL: process.env.ANDROID_SERIAL || '26251JEGR09693', PATH: `${path.dirname(ADB)}${path.delimiter}${process.env.PATH}` },
+      env: { ...process.env, ANDROID_SERIAL: phoneId(), PATH: `${path.dirname(ADB)}${path.delimiter}${process.env.PATH}` },
     }, (err, stdout, stderr) => resolve({ ok: true, what: `${stdout}${stderr}`.trim() || (err ? err.message : '(no output)') })));
   }
 
@@ -636,7 +650,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       });
       logBuild('android', g);
       if (!g.ok) return built('the debug APK', g);
-      const inst = await streamIn(EDGE, ADB, ['-s', process.env.ANDROID_SERIAL || '26251JEGR09693', 'install', '-r', path.join(EDGE, 'android/app/build/outputs/apk/debug/app-debug.apk')], { timeout: 5 * 60000, ...shown('install android') });
+      const inst = await streamIn(EDGE, ADB, ['-s', phoneId(), 'install', '-r', path.join(EDGE, 'android/app/build/outputs/apk/debug/app-debug.apk')], { timeout: 5 * 60000, ...shown('install android') });
       return inst.ok ? { ok: true, what: 'the debug APK built and installed (data kept)' } : { ok: false, why: `install: ${inst.out.split('\n').pop()}` };
     },
   };
