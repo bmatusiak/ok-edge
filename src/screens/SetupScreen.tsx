@@ -7,6 +7,8 @@ import {DuoPinForm} from '../ui/DuoPinForm';
 import {Btn, LedCircle} from '../ui/components';
 import {Keypad, QueueDots} from '../ui/Keypad';
 import {theme} from '../ui/theme';
+import NativeShare from 'okedge-native/specs/NativeShare';
+import {summarizeBackup} from '../backupFile';
 
 /** The firmware refuses anything outside this, and says so by name. */
 const MIN_PIN = 7;
@@ -76,6 +78,13 @@ const MIN_PASSPHRASE = 25;
  * allowed: OKSETPRIV is accepted in config mode OR on a device's first use
  * (okcore.cpp:452). During setup the second applies, so it can be set now
  * without the config-mode dance the Backup screen otherwise has to do.
+ *
+ * RESTORE GOES IN THE SAME WINDOW, for the same reason: OKRESTORE is accepted
+ * in config mode OR on first use (okcore.cpp:516, `!initcheck`). A new key
+ * that is meant to be a copy of a backup becomes that copy here, before it has
+ * an identity of its own - otherwise the identity check makes a bucket for a
+ * throwaway identity first, and the restore waits behind it. The backup
+ * carries its own passphrase, so the passphrase step is not needed after it.
  */
 
 type Stage =
@@ -83,6 +92,7 @@ type Stage =
   | 'confirm'
   | 'applying'
   | 'passphrase'
+  | 'restore'
   | 'done'
   | 'failed';
 
@@ -192,6 +202,12 @@ export function SetupScreen({
   const [again, setAgain] = useState('');
   const [steps, setSteps] = useState<string[]>([]);
   const [passphrase, setPassphrase] = useState('');
+  const [backupText, setBackupText] = useState('');
+  const [backupFrom, setBackupFrom] = useState<string | null>(null);
+  /* Set when the library refused to guess the passphrase's encoding. */
+  const [ambiguous, setAmbiguous] = useState(false);
+  /* What the closing view says was restored; null when nothing was. */
+  const [restored, setRestored] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   /** PIN kinds that have actually been committed, for the closing summary. */
@@ -364,6 +380,62 @@ export function SetupScreen({
     }
   }, [getKey, passphrase]);
 
+  const pickBackup = useCallback(async () => {
+    setError(null);
+    try {
+      const file = await NativeShare.pickTextFile('text/plain');
+      /* Cancelling is the commonest outcome of a picker, and says nothing. */
+      if (!file.picked) return;
+      setBackupText(file.content);
+      setBackupFrom(file.name);
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    }
+  }, []);
+
+  /*
+   * THE BACKUP SCREEN'S RESTORE, the same library call with the same
+   * encoding question - only the window differs (first use, not config mode).
+   * The file is checked here first so a bad paste is refused before the key
+   * is sent anything; summarizeBackup sends nothing.
+   */
+  const applyRestore = useCallback(async (encoding?: 'utf-8' | 'latin-1-legacy') => {
+    setError(null);
+    const summary = summarizeBackup(backupText);
+    if (!summary.ok) {
+      setError(`That is not a backup the key can take: ${summary.reason}`);
+      return;
+    }
+    setStage('applying');
+    setSteps([]);
+    try {
+      const {device} = await getKey();
+      const result = await device.restore(backupText, {
+        passphrase,
+        ...(encoding ? {passphraseEncoding: encoding} : {}),
+      });
+      setAmbiguous(false);
+      setPassphrase('');
+      setBackupText('');
+      setRestored(`Restored ${result.bytes} bytes from the backup.`);
+      setStage('done');
+    } catch (e) {
+      const message = String((e as Error)?.message ?? e);
+      /* The library refused to guess; nothing was sent, so asking is free. */
+      const twoForms = /cannot be told apart/.test(message);
+      setAmbiguous(twoForms);
+      setError(twoForms
+        ? 'This passphrase fits the backup in two forms, and the key cannot tell which is right. Nothing was sent. Which app made this backup?'
+        : message);
+      /*
+       * Back to the form, not to "Start over": the PIN is already set, and
+       * the key is still on its first use, so the restore can simply be tried
+       * again.
+       */
+      setStage('restore');
+    }
+  }, [backupText, getKey, passphrase]);
+
   /*
    * BACK TO THE BEGINNING, and that means the kind too.
    *
@@ -426,6 +498,87 @@ export function SetupScreen({
             />
           </View>
         </View>
+        <Text style={styles.hint}>
+          Or make this key a copy of one you already have: a restore brings back
+          everything the backup holds, its passphrase and its Edge keys too.
+        </Text>
+        <View style={styles.action}>
+          <Btn
+            title="Restore a backup"
+            onPress={() => {
+              setPassphrase('');
+              setError(null);
+              setStage('restore');
+            }}
+          />
+        </View>
+      </ScrollView>
+    );
+  }
+
+  /* ------------------------------------------------------------- restore */
+
+  if (stage === 'restore') {
+    return (
+      <ScrollView style={styles.root} contentContainerStyle={styles.progress}>
+        <Logo height={28} />
+        <Text style={styles.title}>Restore a backup</Text>
+        <Text style={styles.hint}>
+          Paste the backup, or open its file, and give the passphrase it was
+          made under. The key becomes a copy of the one that made it. Edge counts
+          it as a new device of yours, forked from where the backup was taken.
+        </Text>
+        <TextInput
+          value={backupText}
+          onChangeText={t => {
+            setBackupText(t);
+            setBackupFrom(null);
+          }}
+          multiline
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="-----BEGIN ONLYKEY BACKUP-----"
+          placeholderTextColor={theme.textDim}
+          style={[styles.input, styles.backupBox]}
+        />
+        {backupFrom ? <Text style={styles.step}>{backupFrom}</Text> : null}
+        <View style={styles.action}>
+          <Btn title="Open a file" onPress={pickBackup} />
+        </View>
+        <TextInput
+          value={passphrase}
+          onChangeText={setPassphrase}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="the backup's passphrase"
+          placeholderTextColor={theme.textDim}
+          style={styles.input}
+        />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {ambiguous ? (
+          <View style={styles.action}>
+            <View style={styles.cell}>
+              <Btn title="This app" onPress={() => applyRestore('utf-8')} />
+            </View>
+            <View style={styles.cell}>
+              <Btn title="The classic App" onPress={() => applyRestore('latin-1-legacy')} />
+            </View>
+          </View>
+        ) : null}
+        <View style={styles.action}>
+          <View style={styles.cell}>
+            <Btn title="Back" onPress={() => { setError(null); setAmbiguous(false); setStage('passphrase'); }} />
+          </View>
+          <View style={styles.cell}>
+            <Btn
+              title="Restore"
+              tone="primary"
+              disabled={!backupText.trim() || !passphrase}
+              onPress={() => applyRestore()}
+            />
+          </View>
+        </View>
       </ScrollView>
     );
   }
@@ -438,7 +591,7 @@ export function SetupScreen({
         <Logo height={28} />
         <Text style={styles.title}>
           {stage === 'applying'
-            ? 'Setting the PIN'
+            ? backupText ? 'Restoring the backup' : 'Setting the PIN'
             : stage === 'done'
               ? 'Done'
               : 'That did not work'}
@@ -462,6 +615,7 @@ export function SetupScreen({
               * "0 PINs are set: ." Kind names are spelled the way the screen
               * spelled them while asking, not as `selfDestruct`.
               */}
+            {restored ? <Text style={styles.hint}>{restored}</Text> : null}
             <Text style={styles.hint}>
               {set.length === 0
                 ? 'No PIN was changed.'
@@ -683,4 +837,5 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     backgroundColor: theme.inputBg,
   },
+  backupBox: {minHeight: 120, maxHeight: 200, fontFamily: theme.mono, fontSize: 11, textAlignVertical: 'top'},
 });
