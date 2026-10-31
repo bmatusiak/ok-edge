@@ -29,9 +29,16 @@ step() {
   local p=$!
   if ! waitline "$log" 'listening' "$p" > /dev/null; then sed 's/^/   /' "$log"; rm -f "$log"; return 1; fi
   [ $# -gt 0 ] && C "$@"
+  # its lines as they come (a cutoff from outside used to lose them all), ending with the presser
+  tail -n +1 --pid=$p -f "$log" | sed 's/^/   /'
   wait $p; local code=$?
-  sed 's/^/   /' "$log"; rm -f "$log"
+  rm -f "$log"
   return $code
+}
+# the PIN on the soft key's keypad, and the login that follows - ends on the identity check's own verdict
+login() {
+  C "Menu" "This Key" > /dev/null
+  step '\[identity\] .*(proven|a manual login)' "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1" "Button 1"
 }
 # the app (re)started and its page up (the browser's own target event), then into testing mode
 appup() {
