@@ -83,7 +83,10 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
      * inactive screen) - what Android's own accessibility (uiautomator) leaves out, so does this (2026-10-31: the
      * login screen's texts stayed in the tree under the Testing tab, and uiautomator did not list them)
      */
-    if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) return
+    if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) {
+      android.util.Log.d("okedge-drive", "hidden subtree: ${v.javaClass.name} ${v.width}x${v.height} children=${(v as? ViewGroup)?.childCount ?: 0} parent=${(v.parent as? View)?.javaClass?.name}")
+      return
+    }
     val a = alpha * v.alpha
     if (a <= 0.01f) return
     if (v is EditText) return
