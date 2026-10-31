@@ -193,10 +193,11 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         <View style={styles.elsewhere}>
           <Text style={[styles.hint, styles.press]}>{`This key belongs to ${read.site} - not this page (${location!.hostname}).`}</Text>
           <Text style={styles.hint}>Its Edge history and its bucket are bound to that site: here they cannot open, and nothing this page makes reaches them.</Text>
-          {/* the same tab, with the same query (Brad, 2026-10-31: "the button that takes you to the site should keep the
-              same tab" - "with same query"): a redirect, not a second tab left behind on the wrong site holding its own
-              requests; the query (?testing-mode=...) goes along */}
-          <Btn title={`Go to ${read.site}`} tone="primary" onPress={() => { location!.assign(`https://${read.site}/${location!.search}`); }} />
+          {/* the same tab (Brad, 2026-10-31: "the button that takes you to the site should keep the same tab"): a redirect,
+              not a second tab left behind on the wrong site holding its own requests. The query (?testing-mode=...) goes
+              along in a development build only ("with same query - only during debug testing dev mode"); a release
+              redirect carries none */}
+          <Btn title={`Go to ${read.site}`} tone="primary" onPress={() => { location!.assign(`https://${read.site}/${__DEV__ ? location!.search : ''}`); }} />
         </View>
       ) : null}
       <View style={styles.action}>
