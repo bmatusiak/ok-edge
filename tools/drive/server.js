@@ -119,22 +119,27 @@ function pressWhenAsked(app) {
    * An approval (" - approve") is the script's to give, not this presser's.
    */
   app.on('log', async (l) => {
-    if (app.net !== 'test') return;
     /*
      * A KEY OUTSIDE THE APP WAITS (src/hostChallenge.ts - the web app's key, a hard key): pressed by the machine that
-     * holds it (targets.js press), its buttons as the app shows them - one wait, one press
+     * holds it (targets.js press), its buttons as the app shows them - one wait, one press. A testnet key only: the
+     * app on the testnet, or the key's machine naming it a testnet one (a web app says "live" until it has read its key)
      */
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/);
     if (outside) {
       if (pressing) return;
       pressing = true;
       try {
+        if (app.net !== 'test') {
+          const s = await proc('key-state', app.shell);
+          if (!(s.ok && /\btestnet\b/.test(String(s.what)))) { line(`[${app.shell}] not pressed: its key is not a testnet one (${s.ok ? s.what : s.why})`); return; }
+        }
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
         const r = await proc('press', app.shell, { buttons });
         line(r.ok ? `[${app.shell}] pressed: ${r.what} - ${outside[1]}` : `[${app.shell}] press refused: ${r.why}`);
       } finally { pressing = false; }
       return;
     }
+    if (app.net !== 'test') return;
     const up = l.match(/^\[press\] sheet up: (.*) - button at /);
     if (!up || / - approve$/.test(up[1])) return;
     const code = up[1].match(/^derive code ([1-6]) ([1-6]) ([1-6])$/);
@@ -486,14 +491,14 @@ const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l
  * holds here too: on the testnet every line; otherwise - the live chain, or the app not connected yet - only a drive's
  * prefixes.
  */
-const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]', '[net]'];
+const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]', '[net]', '[gadget]'];
 /* lines a process wrote before its app connected (its start-up): held, then handed to the app's record when it does */
 const outBefore = new Map(); /* shell -> lines */
 function appOut(shell, l) {
   const a = apps.get(shell);
   if (!(a && a.net === 'test') && !LIVE_PREFIXES.some((p) => l.startsWith(p))) return;
   const s = `${stamp()} [main] ${l}`;
-  if (a) keep(a.recent, s);
+  if (a) { keep(a.recent, s); a.emit('log', `[main] ${l}`); }
   else { if (!outBefore.has(shell)) outBefore.set(shell, []); keep(outBefore.get(shell), s); }
   bus.emit('app-line', shell, s);
 }

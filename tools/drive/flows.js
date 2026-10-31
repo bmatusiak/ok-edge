@@ -45,7 +45,7 @@ function loginState(app) {
    */
   if (app.top && !f.busy) { const c = ['Close menu', 'Close Edge Management'].find((l) => app.has(l)); if (c) return `close:${c}`; }
   if (f.busy || app.top) return null;
-  if (f.identityCheck) return ['Try again', 'Decrypt Bucket', 'Create Bucket'].find((b) => app.has(b)) || null;
+  if (f.identityCheck) return ['Try again', 'Continue', 'Decrypt Bucket', 'Create Bucket'].find((b) => app.has(b)) || null;
   /*
    * a debug build's testing bar has Login Bypass (it types the testing PIN itself): the way a debug login goes (Brad,
    * 2026-10-07: "fix your way on logging in, now that we have the login bypass button") - the keypad only without it
@@ -54,6 +54,26 @@ function loginState(app) {
   if (f.key === 'locked') return f.tab === 'This Key' ? 'keypad' : 'elsewhere';
   if (f.key === 'uninitialized') return 'not set up';
   return null;
+}
+
+/*
+ * A KEY OUTSIDE THE APP, UNLOCKED FROM THE MACHINE THAT HOLDS IT (the web app's gadget soft key): a locked OnlyKey is
+ * dark, an unlocked one green, and the machine sees the LED (targets.js keyState, "[gadget] led" lines). Dark: its PIN
+ * on its buttons, ended by the LED's next colour. Never pressed on an unlocked key - a press there types a slot into
+ * whatever has the focus. Only a key its machine names a testnet one.
+ */
+async function unlockOutsideKey(d, pin) {
+  const s = await d.machine('key-state');
+  if (!s.ok) throw new Error(`the web app's key: ${s.why}`);
+  if (!/\btestnet\b/.test(s.what)) throw new Error(`the web app's key is not a testnet one (${s.what}) - the drive does not unlock it`);
+  if (!/ connected;/.test(s.what)) throw new Error(`the web app's key: ${s.what}`);
+  if (!/led #000000/.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
+  d.say('its key is locked (dark) - its PIN on its buttons');
+  const lit = d.until(/\[gadget\] led #(?!000000)/, { life: 20, fail: [] });
+  const r = await d.machine('press', d.app.shell, { buttons: pin.split('') });
+  if (!r.ok) throw new Error(`the web app's key: ${r.why}`);
+  await lit;
+  d.say('its key is unlocked');
 }
 
 /*
@@ -68,7 +88,10 @@ async function login(d, { pin = TEST_PIN, life = 180 } = {}) {
     if (now === 'in') { d.say(moves ? 'logged in' : 'logged in already'); return; }
     d.say(`login: ${now}`);
     if (now.startsWith('close:')) await d.tap(now.slice(6));
-    else if (now === 'login screen') await d.tap('Enter testing mode');
+    else if (now === 'login screen') {
+      /* the web app's chain is its key's - the gadget is a testnet key: unlocked from its machine, then Log in */
+      if (d.app.shell === 'webapp') { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
+    }
     else if (now === 'bypass') {
       /*
        * its end is the key unlocked - the bypass types seven digits, and while it does the key is still "locked" with
