@@ -195,20 +195,27 @@ function strayElectrons() {
   return out;
 }
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-async function endStrays(line) {
-  let pids = strayElectrons();
-  if (!pids.length) return null;
+/*
+ * processes this module did not start, ended by pid: first `grace` ms to close by themselves (an app asked to quit),
+ * then SIGTERM and 10 s, then SIGKILL. Not our children - their end is checked every 250 ms under each watchdog.
+ */
+async function endPids(pids, line, name, grace = 0) {
   const gone = (ms) => new Promise((resolve) => {
     const until = Date.now() + ms;
     const check = () => { pids = pids.filter(alive); if (!pids.length) return resolve(true); if (Date.now() > until) return resolve(false); setTimeout(check, 250); };
     check();
   });
-  if (await gone(20000)) return 'closed by itself';
-  line(`desktop: ${pids.length} process(es) not started here still running - ending them`);
+  if (grace && await gone(grace)) return 'closed by itself';
+  line(`${name}: ${pids.length} process(es) not started here still running - ending them`);
   for (const p of pids) { try { process.kill(p, 'SIGTERM'); } catch { /* gone */ } }
   if (await gone(10000)) return 'ended';
   for (const p of pids) { try { process.kill(p, 'SIGKILL'); } catch { /* gone */ } }
   return 'killed';
+}
+/* the desktop app's Electron processes not started here: it was asked to quit, so 20 s to close by itself first */
+async function endStrays(line) {
+  const pids = strayElectrons();
+  return pids.length ? endPids(pids, line, 'desktop', 20000) : null;
 }
 
 /*
@@ -313,6 +320,12 @@ function createTargets(line = () => {}, out = () => {}) {
         running.delete('webapp');
         const r = [];
         for (const x of c) r.push(await stopChild(x, line, 'webapp'));
+        /*
+         * and its browser and server if an earlier drive-remote started them (they outlive it): found by their own
+         * command lines, ended by pid - the same watchdog as a stray desktop app's (endPids). Its key, the gadget, stays.
+         */
+        const left = (procs((cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js')) || []).map((p) => p.pid);
+        if (left.length) r.push(await endPids(left, line, 'webapp'));
         return r.join(', ') || 'not running';
       },
     },
