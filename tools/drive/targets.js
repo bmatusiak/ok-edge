@@ -229,6 +229,42 @@ function createTargets(line = () => {}, out = () => {}) {
     },
   };
 
+  /*
+   * HEALTH (drive debugging #7): how big and how busy an app's processes are, read where they run - Android's own
+   * meminfo and top; on Linux every process of the app from /proc (resident memory, and CPU time used so far).
+   */
+  const procs = (test) => {
+    if (!LINUX) return null;
+    const tick = 100; /* USER_HZ on Linux */
+    const out = [];
+    for (const d of fs.readdirSync('/proc')) {
+      if (!/^\d+$/.test(d)) continue;
+      let cmd = '';
+      try { cmd = fs.readFileSync(`/proc/${d}/cmdline`, 'utf8'); } catch { continue; }
+      if (!test(cmd)) continue;
+      try {
+        const rss = Number((/VmRSS:\s+(\d+)/.exec(fs.readFileSync(`/proc/${d}/status`, 'utf8')) || [])[1] || 0);
+        const stat = fs.readFileSync(`/proc/${d}/stat`, 'utf8').split(') ')[1].split(' ');
+        out.push({ pid: Number(d), rssKb: rss, cpuS: (Number(stat[11]) + Number(stat[12])) / tick, name: cmd.split('\0')[0].split('/').pop() });
+      } catch { /* gone while read */ }
+    }
+    return out;
+  };
+  const sumUp = (list) => (!list ? 'measured on Linux only' : !list.length ? 'no process running'
+    : `${list.length} process(es), ${Math.round(list.reduce((n, p) => n + p.rssKb, 0) / 1024)} MB resident, ${list.reduce((n, p) => n + p.cpuS, 0).toFixed(1)} s of CPU so far\n${list.map((p) => `  ${p.pid} ${p.name}: ${Math.round(p.rssKb / 1024)} MB, ${p.cpuS.toFixed(1)} s`).join('\n')}`);
+  const health = {
+    async android() {
+      const mem = await adb(['shell', 'dumpsys', 'meminfo', APP_ID]);
+      const pid = (await adb(['shell', 'pidof', APP_ID])).out.trim();
+      const top = pid ? await adb(['shell', 'top', '-b', '-n', '1', '-p', pid]) : { out: '' };
+      const total = mem.out.split('\n').filter((l) => /TOTAL PSS|TOTAL RSS|^\s*TOTAL\s/.test(l)).slice(0, 2).join('\n');
+      const cpu = top.out.split('\n').filter((l) => l.includes(pid) && pid).slice(0, 1).join('\n');
+      return `pid ${pid || '(not running)'}\n${total || '(no meminfo)'}\n${cpu ? `top: ${cpu.trim()}` : ''}`;
+    },
+    async desktop() { return sumUp(procs((c) => c.includes(`${EDGE}/node_modules/electron`) || c.startsWith('node\0electron/start.js') || c.includes('okemu-host'))); },
+    async webapp() { return sumUp(procs((c) => c.includes('webapp-chromium') || c.includes('serve-docs.js'))); },
+  };
+
   return {
     list: Object.keys(T),
     async act(action, target) {
@@ -238,6 +274,7 @@ function createTargets(line = () => {}, out = () => {}) {
       if (action === 'stop') return { ok: true, what: await t.stop() };
       if (action === 'restart') { const s = await t.stop(); return { ok: true, what: `${s}; ${await t.start()}` }; }
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
+      if (action === 'health') return { ok: true, what: await health[target]() };
       return { ok: false, why: `no action "${action}"` };
     },
   };

@@ -339,7 +339,9 @@ function driveFor(app, say) {
   /* the app up: as it is when connected, else started */
   const up = (opts) => (app.ws && !app.closed ? Promise.resolve(api) : start(app.shell, opts));
 
-  const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
+  /* a target's machine, asked directly (#7 health, #1 last words): proc's answer, {ok, what, where} */
+  const machine = (action, target = app.shell) => proc(action, target);
+  const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
   return api;
 }
 
@@ -584,9 +586,13 @@ function control(ws) {
     const onFile = (file) => runFiles.push(file);
     bus.on('shot', onFile);
     bus.on('sample', onFile);
-    /* its key requests (#6), counted from the app's own "[key]" lines - how hard a run leaned on the key */
+    /*
+     * its key requests (#6), counted from the app's own "[key]" lines - how hard a run leaned on the key - and its
+     * presses from this server's own "pressed:" lines (a request that waits for a press shows its press sheet, not the
+     * keyBusy that writes "[key]": the app's lines cannot count those)
+     */
     const keys = { requests: 0, presses: 0 };
-    const onAppLine = (shell, l) => { if (shell === (m.app || shell) && / \[key\] /.test(l)) { keys.requests++; if (/\(press\)$/.test(l)) keys.presses++; } };
+    const onAppLine = (shell, l) => { if (shell === (m.app || shell) && / \[key\] /.test(l)) keys.requests++; };
     bus.on('app-line', onAppLine);
     const started = new Date();
     let reason = '';
@@ -618,7 +624,8 @@ function control(ws) {
       if (now) await shotOf(now, `${m.script}-stopped`);
     } finally {
       bus.off('app-line', onAppLine);
-      if (keys.requests) line(`[${m.script}] ${keys.requests} key request(s), ${keys.presses} with a press`);
+      keys.presses = runLines.filter((l) => /\] pressed: /.test(l)).length;
+      if (keys.requests || keys.presses) line(`[${m.script}] ${keys.requests} key request(s) without a press, ${keys.presses} press(es)`);
       watchers.delete(watch);
       bus.off('shot', onFile);
       bus.off('sample', onFile);

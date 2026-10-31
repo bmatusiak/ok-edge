@@ -32,6 +32,7 @@ import {screenText, watchScreen} from './screen';
 import {watchNativeLog} from './nativeLog';
 import {watchErrors} from './errors';
 import {watchNet} from './net';
+import {storedKeys} from './storage';
 
 /*
  * WHAT MAY LEAVE THE APP (memory: the app log carries key bytes - a new sink takes an allowlist, never "every line").
@@ -107,6 +108,19 @@ function dial(): void {
     else if (m.t === 'quit') void quit().then(r => reply('ok' in r, r));
     /* the proof of #2 (errors are events): a rejection nothing handles, as a real bug would leave one */
     else if (m.t === 'raise') { reply(true); void Promise.reject(new Error('drive: a test rejection (run.js raise)')); }
+    /*
+     * #7 health: what the app keeps - each key and its size on the testnet; on the live chain only how many and how
+     * much (a key's name can say what is kept). A value is never sent.
+     */
+    else if (m.t === 'health') {
+      void storedKeys().then(
+        s => {
+          const total = s.keys.reduce((n, k) => n + k.bytes, 0);
+          reply(true, currentNet() === 'test' ? {keys: s.keys, databases: s.databases, total} : {count: s.keys.length, total, databases: s.databases.length});
+        },
+        (e: unknown) => reply(false, {why: String((e as Error)?.message ?? e)}),
+      );
+    }
     /* the proof of #4 (the network trace): a request to the drive server's own address, which must come back as [net] */
     else if (m.t === 'net-check') { reply(true); void fetch(URL.replace(/^ws/, 'http')).catch(() => {}); }
     else reply(false, {why: `unknown command "${m.t}"`});
