@@ -7,27 +7,34 @@
   :root { --bg: #111418; --panel: #1a1f26; --text: #d8dee6; --dim: #7d8794; --ok: #4cc38a; --bad: #e5534b; --warn: #d8a43a; --accent: #5aa9e6; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 Consolas, "DejaVu Sans Mono", monospace; }
-  body { display: grid; grid-template-rows: auto 1fr; }
+  body { display: grid; grid-template-rows: auto auto 1fr; }
   header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid #2a313b; }
   header h1 { margin: 0; font-size: 14px; }
   .chip { padding: 2px 8px; border-radius: 10px; background: #252c36; white-space: nowrap; }
   .chip.ok { color: var(--ok); } .chip.bad { color: var(--bad); }
+  /* one tab per connected app, beside the drive's own */
+  nav { display: flex; gap: 2px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid #2a313b; overflow-x: auto; }
+  nav button { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--dim); padding: 6px 14px; }
+  nav button.on { color: var(--text); border-bottom-color: var(--accent); }
+  nav button .dot { margin-right: 6px; color: var(--dim); }
+  nav button .dot.up { color: var(--ok); }
   main { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
-  #log { overflow-y: auto; padding: 6px 12px; white-space: pre-wrap; word-break: break-word; }
-  #log .fail { color: var(--bad); } #log .pass { color: var(--ok); } #log .press { color: var(--warn); } #log .run { color: var(--accent); }
+  .log { overflow-y: auto; padding: 6px 12px; white-space: pre-wrap; word-break: break-word; min-height: 0; }
+  .log .fail { color: var(--bad); } .log .pass { color: var(--ok); } .log .press { color: var(--warn); } .log .run { color: var(--accent); }
   /* the picture bar: the button stays at its top, only the list under it scrolls */
   aside { border-left: 1px solid #2a313b; display: flex; flex-direction: column; min-height: 0; }
   aside .bar { padding: 8px; border-bottom: 1px solid #2a313b; }
   aside .bar button { width: 100%; padding: 6px 12px; }
-  #shots { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
   aside h2 { font-size: 12px; color: var(--dim); margin: 4px 0; font-weight: normal; }
-  aside img { width: 100%; min-height: 60px; border: 1px solid #2a313b; cursor: pointer; display: block; }
+  .shots { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; }
+  .shots img { width: 100%; min-height: 60px; border: 1px solid #2a313b; cursor: pointer; display: block; }
   .item { margin: 0 0 12px; }
   .item .name { color: var(--dim); font-size: 11px; word-break: break-all; margin-bottom: 2px; }
   .item.sample .name { color: var(--accent); cursor: pointer; text-decoration: underline; }
   .item.new .name { color: var(--warn); }
   button { font: inherit; color: var(--text); background: #2b4a66; border: 1px solid var(--accent); border-radius: 4px; padding: 3px 12px; cursor: pointer; }
   button:active { background: var(--accent); }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
@@ -36,14 +43,15 @@
   <span id="chips"></span>
   <span class="chip" id="follow" title="click to pause or follow">following</span>
 </header>
+<nav id="tabs"></nav>
 <main>
-  <div id="log"></div>
+  <div id="logs" style="display: contents"></div>
   <aside>
     <div class="bar">
-      <button id="shotNow" title="a picture of every connected app and a sample of the log, now">Picture now</button>
+      <button id="shotNow">Picture now</button>
       <h2 id="shotsHead">pictures, newest first</h2>
     </div>
-    <div id="shots"></div>
+    <div id="shotLists" style="display: contents"></div>
   </aside>
 </main>
 <script src="gui.js"></script>

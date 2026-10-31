@@ -4,9 +4,14 @@
  * in package.json): a second launch only brings this window forward. Closing it stops the server or remote with it -
  * nothing of the drive runs where it cannot be seen (the box's bash windows duplicated themselves, 2026-10-31).
  *
+ * ONE TAB PER APP (Brad: "each connected app is a tab, so logs can be separated, and the per-app picture button solves
+ * itself"): the drive's own tab holds the drive's lines and every picture; each app's tab holds that app's own log and
+ * its pictures, and its Picture now asks only that app. A tab stays after its app goes (its dot greys), so what it
+ * said last is still there.
+ *
  * The mode comes from the launch (launch.js): `server [--port N] [--remote ws://host:8791 ...]` or
- * `remote [--port N] [--control-port N]`. Everything shown arrives as an event from the module's bus: each line, each
- * picture. Nothing here polls.
+ * `remote [--port N] [--control-port N]` (a remote relays apps but does not read them: its window has the drive tab
+ * only). Everything shown arrives as an event from the module's bus: each line, each picture. Nothing here polls.
  */
 const path = require('path');
 const fs = require('fs');
@@ -20,67 +25,91 @@ const many = (name) => argv.flatMap((x, i) => (x === name && argv[i + 1] ? [argv
 const mod = require(path.join(nw.__dirname, mode === 'remote' ? 'remote.js' : 'server.js'));
 
 const $ = (id) => document.getElementById(id);
-const logEl = $('log');
 const MAX_LINES = 5000;
+const DRIVE = 'drive';
 let follow = true;
 
 $('mode').textContent = `drive ${mode} - ${require('os').hostname()}`;
 document.title = `OnlyKey drive ${mode}`;
-/* Brad's button: a picture of what he sees, at the moment he sees it */
-$('shotNow').onclick = () => mod.shotNow(mode === 'remote' ? undefined : 'host');
-$('follow').onclick = () => { follow = !follow; $('follow').textContent = follow ? 'following' : 'paused'; if (follow) logEl.scrollTop = logEl.scrollHeight; };
 
 function classOf(l) {
-  if (/FAIL|failed|refused|stalled|no picture|wrong token/i.test(l)) return 'fail';
-  if (/PASS|passed|\bdone\b/i.test(l)) return 'pass';
+  if (/FAIL|failed|refused|stalled|STOPPED|no picture|wrong token/i.test(l)) return 'fail';
+  if (/PASS|passed|\bdone\b|FINISHED/i.test(l)) return 'pass';
   if (/\[press\]|press(ed)?\b/i.test(l)) return 'press';
   if (/^\S+ (run|=>|<=)/.test(l)) return 'run';
   return '';
 }
 
-function addLine(l) {
+/* ---------------------------------------------------------------- tabs: the drive's, then one per app */
+
+const tabs = new Map(); /* name -> {button, dot, log, shots, lazy, seen} */
+let current = DRIVE;
+
+function tabOf(name) {
+  if (tabs.has(name)) return tabs.get(name);
+  const button = document.createElement('button');
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  dot.textContent = '●';
+  button.append(dot, document.createTextNode(name));
+  button.onclick = () => show(name);
+  $('tabs').appendChild(button);
+  const log = document.createElement('div');
+  log.className = 'log hidden';
+  $('logs').appendChild(log);
+  const shots = document.createElement('div');
+  shots.className = 'shots hidden';
+  $('shotLists').appendChild(shots);
+  /* an image is read only when it scrolls into view: a long history costs nothing until looked at */
+  const lazy = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      lazy.unobserve(e.target);
+      try { e.target.src = `data:image/png;base64,${fs.readFileSync(e.target.dataset.file).toString('base64')}`; } catch { e.target.alt = 'gone'; }
+    }
+  }, { root: shots, rootMargin: '400px' });
+  const t = { button, dot, log, shots, lazy, seen: new Set() };
+  tabs.set(name, t);
+  /* an app's tab opens with what it said before the window saw it (the server keeps its last 300 lines) */
+  if (name !== DRIVE && mod.recentOf) for (const l of mod.recentOf(name)) addLine(name, l);
+  /* and with its saved pictures */
+  if (name !== DRIVE) for (const p of past) if (p.shell === name) addShotTo(name, p.f, false);
+  if (name === current) show(name);
+  return t;
+}
+
+function show(name) {
+  current = name;
+  for (const [n, t] of tabs) {
+    t.button.classList.toggle('on', n === name);
+    t.log.classList.toggle('hidden', n !== name);
+    t.shots.classList.toggle('hidden', n !== name);
+  }
+  const t = tabs.get(name);
+  if (follow) t.log.scrollTop = t.log.scrollHeight;
+  $('shotNow').title = name === DRIVE ? 'a picture of every connected app and a sample of the log, now' : `a picture of ${name} and a sample of its log, now`;
+  $('shotsHead').textContent = name === DRIVE ? 'every picture, newest first' : `${name}'s pictures, newest first`;
+}
+
+function addLine(name, l) {
+  const t = tabOf(name);
   const div = document.createElement('div');
   div.textContent = l;
   div.className = classOf(l);
-  logEl.appendChild(div);
-  while (logEl.childElementCount > MAX_LINES) logEl.firstChild.remove();
-  if (follow) logEl.scrollTop = logEl.scrollHeight;
-  showStatus();
+  t.log.appendChild(div);
+  while (t.log.childElementCount > MAX_LINES) t.log.firstChild.remove();
+  if (follow && name === current) t.log.scrollTop = t.log.scrollHeight;
 }
 
-/* the status chips, redrawn on each line: a connect or disconnect always logs one */
-function showStatus() {
-  const s = mod.status();
-  const chips = [];
-  if (mode === 'remote') {
-    chips.push([s.server ? 'ok' : 'bad', s.server ? 'server connected' : 'no server']);
-    chips.push(['', `${s.apps} app(s)`]);
-  } else {
-    for (const r of s.remotes) chips.push([r.up ? 'ok' : 'bad', `remote ${r.machine || '?'}${r.up ? '' : ' (down)'}`]);
-    if (!s.apps.length) chips.push(['bad', 'no app connected']);
-    for (const a of s.apps) chips.push(['ok', `${a.shell}${a.via ? ` via ${a.via}` : ''}${a.flags && a.flags.phase ? ` - ${a.flags.phase}` : ''}`]);
-  }
-  $('chips').replaceChildren(...chips.map(([c, t]) => { const e = document.createElement('span'); e.className = `chip ${c}`; e.textContent = t; return e; }));
-}
+$('follow').onclick = () => {
+  follow = !follow;
+  $('follow').textContent = follow ? 'following' : 'paused';
+  if (follow) { const t = tabs.get(current); t.log.scrollTop = t.log.scrollHeight; }
+};
 
-/*
- * THE PICTURES, ALL OF THEM (Brad: "side bar should be scrolling with all past pictures, so i can scroll and view
- * them"): newest on top, the ones already in the shots folder listed at open. An image is read only when it scrolls
- * into view (IntersectionObserver), so a long history costs nothing until looked at. The log samples a "Picture now"
- * keeps are in the list too; a click opens either one with the system's viewer.
- */
-const shotsEl = $('shots');
-const seen = new Set();
-const lazy = new IntersectionObserver((entries) => {
-  for (const e of entries) {
-    if (!e.isIntersecting) continue;
-    const img = e.target;
-    lazy.unobserve(img);
-    try { img.src = `data:image/png;base64,${fs.readFileSync(img.dataset.file).toString('base64')}`; } catch { img.alt = 'gone'; }
-  }
-}, { root: shotsEl, rootMargin: '400px' });
+/* ---------------------------------------------------------------- pictures */
 
-function itemOf(file, fresh) {
+function itemOf(t, file, fresh) {
   const div = document.createElement('div');
   const sample = file.endsWith('.log');
   div.className = `item${sample ? ' sample' : ''}${fresh ? ' new' : ''}`;
@@ -94,33 +123,84 @@ function itemOf(file, fresh) {
     img.dataset.file = file;
     img.onclick = () => nw.Shell.openItem(file);
     div.appendChild(img);
-    lazy.observe(img);
+    t.lazy.observe(img);
   }
   return div;
 }
 
-function addShot(file, fresh = true) {
-  if (seen.has(file)) return;
-  seen.add(file);
-  shotsEl.prepend(itemOf(file, fresh));
-  if (fresh) shotsEl.scrollTop = 0;
+function addShotTo(name, file, fresh) {
+  const t = tabOf(name);
+  if (t.seen.has(file)) return;
+  t.seen.add(file);
+  t.shots.prepend(itemOf(t, file, fresh));
+  if (fresh && name === current) t.shots.scrollTop = 0;
+}
+
+/* a picture goes to the drive's tab (every picture) and to its app's */
+function addShot(file, shell, fresh = true) {
+  addShotTo(DRIVE, file, fresh);
+  if (shell) addShotTo(shell, file, fresh);
+}
+
+/* whose a saved file is, from its name: <hhmmss>-<shell>-<name>.png, or a sample ending -<shell>.log */
+const SHELLS = ['desktop', 'android', 'webapp'];
+function shellOfFile(n) {
+  const png = /^\d{6}-([a-z]+)-/.exec(n);
+  if (png && SHELLS.includes(png[1])) return png[1];
+  const log = /-([a-z]+)\.log$/.exec(n);
+  return log && SHELLS.includes(log[1]) ? log[1] : null;
 }
 
 function listPast() {
   if (!mod.SHOTS) { $('shotsHead').textContent = 'pictures are saved on the drive server\'s host'; return; }
   let names = [];
   try { names = fs.readdirSync(mod.SHOTS).filter((n) => /\.(png|log)$/.test(n)); } catch { return; }
-  const files = names.map((n) => path.join(mod.SHOTS, n)).map((f) => ({ f, t: fs.statSync(f).mtimeMs })).sort((a, b) => a.t - b.t);
-  for (const { f } of files) addShot(f, false);
+  const files = names.map((n) => ({ n, f: path.join(mod.SHOTS, n) })).map((x) => ({ ...x, t: fs.statSync(x.f).mtimeMs })).sort((a, b) => a.t - b.t);
+  past = files.map(({ n, f }) => ({ f, shell: shellOfFile(n) }));
+  for (const { f, shell } of past) { addShotTo(DRIVE, f, false); if (shell && tabs.has(shell)) addShotTo(shell, f, false); }
+}
+/* the saved pictures, for an app's tab opened later (tabOf) */
+let past = [];
+
+/* Brad's button: a picture of what he sees, at the moment he sees it - of the open tab's app, or of every app */
+$('shotNow').onclick = () => (mode === 'remote' ? mod.shotNow() : mod.shotNow('host', current === DRIVE ? undefined : current));
+
+/* ---------------------------------------------------------------- status: the chips and the tabs' dots */
+
+function showStatus() {
+  const s = mod.status();
+  const chips = [];
+  if (mode === 'remote') {
+    chips.push([s.server ? 'ok' : 'bad', s.server ? 'server connected' : 'no server']);
+    chips.push(['', `${s.apps} app(s)`]);
+  } else {
+    for (const r of s.remotes) chips.push([r.up ? 'ok' : 'bad', `remote ${r.machine || '?'}${r.up ? '' : ' (down)'}`]);
+    if (!s.apps.length) chips.push(['bad', 'no app connected']);
+    const up = new Set();
+    for (const a of s.apps) {
+      up.add(a.shell);
+      tabOf(a.shell);
+      chips.push(['ok', `${a.shell}${a.via ? ` via ${a.via}` : ''}${a.flags && a.flags.phase ? ` - ${a.flags.phase}` : ''}`]);
+    }
+    for (const [n, t] of tabs) if (n !== DRIVE) t.dot.classList.toggle('up', up.has(n));
+  }
+  tabs.get(DRIVE).dot.classList.add('up');
+  $('chips').replaceChildren(...chips.map(([c, t]) => { const e = document.createElement('span'); e.className = `chip ${c}`; e.textContent = t; return e; }));
 }
 
-mod.bus.on('line', addLine);
-mod.bus.on('shot', (file) => addShot(file));
-mod.bus.on('sample', (file) => addShot(file));
+/* ---------------------------------------------------------------- events */
+
+tabOf(DRIVE);
+show(DRIVE);
+/* a connect or disconnect always logs a drive line: the status is redrawn on each */
+mod.bus.on('line', (l) => { addLine(DRIVE, l); showStatus(); });
+mod.bus.on('app-line', (shell, l) => addLine(shell, l));
+mod.bus.on('shot', (file, shell) => addShot(file, shell));
+mod.bus.on('sample', (file, shell) => addShot(file, shell));
 listPast();
 
 /* a second launch lands here (single instance): its arguments are ignored, the window comes forward */
-nw.App.on('open', () => { const w = nw.Window.get(); w.restore(); w.focus(); addLine(`${new Date().toTimeString().slice(0, 8)} a second launch: this window is the one drive ${mode} on this host`); });
+nw.App.on('open', () => { const w = nw.Window.get(); w.restore(); w.focus(); addLine(DRIVE, `${new Date().toTimeString().slice(0, 8)} a second launch: this window is the one drive ${mode} on this host`); });
 
 if (mode === 'remote') mod.start({ appPort: Number(opt('--port') || 8790), controlPort: Number(opt('--control-port') || 8791) });
 else mod.start({ port: Number(opt('--port') || 8790), remotes: many('--remote') });

@@ -143,7 +143,7 @@ async function shotOf(app, name) {
     const file = path.join(SHOTS, `${new Date().toTimeString().slice(0, 8).replace(/:/g, '')}-${app.shell}-${String(name).replace(/[^a-z0-9-]/gi, '_')}.png`);
     fs.writeFileSync(file, Buffer.from(r.png, 'base64'));
     line(`[${app.shell}] picture: ${file}`);
-    bus.emit('shot', file);
+    bus.emit('shot', file, app.shell);
     return file;
   } catch (e) { line(`[${app.shell}] no picture (${name}): ${e.message}`); return null; }
 }
@@ -151,24 +151,31 @@ async function shotOf(app, name) {
 /*
  * A PICTURE WHEN BRAD SEES SOMETHING (Brad, 2026-10-31: "needs a button so i can trigger a snapshot, so if i see
  * something you can see it when i see it while you're moving"): the drive window's button - here, or on a remote's
- * window - asks every connected app for a picture now, named for who asked, and logged with the time.
+ * window - asks for a picture now, named for who asked, and logged with the time. From an app's tab (Brad: "each
+ * connected app is a tab, so logs can be separated, and the per-app picture button solves itself") only that app
+ * (shell); from the drive's own tab, or a remote's window, every connected app.
  */
-async function shotNow(by) {
-  line(`picture asked from the ${by} window`);
+async function shotNow(by, shell) {
+  const targets = [...apps.values()].filter((a) => !shell || a.shell === shell);
+  line(`picture asked from the ${by} window${shell ? ` (${shell})` : ''}`);
   /*
    * and a sample of the log with it (Brad: "the picture now should take a sample of the log"): the drive's last lines
    * and each app's own, up to this moment - written before the pictures are asked, so it is the moment he pressed
    */
   fs.mkdirSync(SHOTS, { recursive: true });
-  const file = path.join(SHOTS, `${stamp().replace(/:/g, '')}-seen-by-${String(by).replace(/[^a-z0-9-]/gi, '_')}.log`);
-  const parts = [`== picture asked from the ${by} window at ${new Date().toISOString()}`, '', `== the drive (last ${recent.length} lines)`, ...recent];
-  for (const a of apps.values()) parts.push('', `== ${a.shell}'s own log (last ${a.recent.length} lines)`, ...a.recent);
+  const tag = `${String(by).replace(/[^a-z0-9-]/gi, '_')}${shell ? `-${shell}` : ''}`;
+  const file = path.join(SHOTS, `${stamp().replace(/:/g, '')}-seen-by-${tag}.log`);
+  const parts = [`== picture asked from the ${by} window${shell ? ` (${shell})` : ''} at ${new Date().toISOString()}`, '', `== the drive (last ${recent.length} lines)`, ...recent];
+  for (const a of targets) parts.push('', `== ${a.shell}'s own log (last ${a.recent.length} lines)`, ...a.recent);
   fs.writeFileSync(file, `${parts.join('\n')}\n`);
   line(`log sample: ${file}`);
-  bus.emit('sample', file);
-  if (!apps.size) { line('no app connected - no picture'); return []; }
-  return Promise.all([...apps.values()].map((a) => shotOf(a, `seen-by-${by}`)));
+  bus.emit('sample', file, shell);
+  if (!targets.length) { line(`${shell ? `${shell} is not connected` : 'no app connected'} - no picture`); return []; }
+  return Promise.all(targets.map((a) => shotOf(a, `seen-by-${by}`)));
 }
+
+/* an app's kept lines, for its tab when the window opens it */
+const recentOf = (shell) => (apps.get(shell) ? apps.get(shell).recent.slice() : []);
 
 function driveFor(app, say) {
   const lastLines = [];
@@ -349,7 +356,7 @@ function attachApp(sock) {
     }
     if (m.t === 'net') { app.net = String(m.net); line(`[${app.shell}] net: ${app.net}`); app.emit('screen'); return; }
     if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
-    if (m.t === 'log') { keep(app.recent, `${stamp()} ${m.line}`); app.emit('log', String(m.line)); return; }
+    if (m.t === 'log') { const l = `${stamp()} ${m.line}`; keep(app.recent, l); bus.emit('app-line', app.shell, l); app.emit('log', String(m.line)); return; }
     if (m.t === 'controls') { app.controls = m.list || []; app.top = m.top || 0; app.flags = m.flags || {}; app.emit('controls'); return; }
     if (m.t === 'screen') { app.text = String(m.text || ''); app.emit('screen'); }
   });
@@ -510,4 +517,4 @@ function status() {
   };
 }
 
-module.exports = { start, bus, status, shotNow, SHOTS };
+module.exports = { start, bus, status, shotNow, recentOf, SHOTS };
