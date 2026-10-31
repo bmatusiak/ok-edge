@@ -32,18 +32,33 @@ const FIND = (label) => `(() => {
     const covered = !hit || !(control.contains(hit) || hit.contains(control));
     return {x, y, disabled: off(el) || covered, covered};
   };
+  /*
+   * EVERY MATCH, THE FIRST LIVE ONE WINS. Two controls can say the same thing - "Press the soft key" on the request
+   * card and on the press sheet above it (2026-10-31). Taking the first in the page took the card's, covered by the
+   * sheet, and waited for it until the key gave up at 20 s and the sheet went - the press then landed after the
+   * window and the key said "button press was not accepted", every time. A match that is covered or disabled is
+   * used only when no other is live (and then waited on, as before).
+   */
+  let first = null;
   for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') continue;
     /* an icon button says what it is only in its aria-label (React Native's accessibilityLabel) */
     const aria = el.getAttribute('aria-label');
-    if (aria && want !== null && aria === want) return at(el);
+    let hit = aria && want !== null && aria === want;
     if (aria) seen.push('[' + aria + ']');
     const t = (el.innerText || '').trim();
-    if (!t || [...el.children].some((c) => (c.innerText || '').trim() === t)) continue;
-    if (want !== null && t === want) return at(el);
+    if (!hit && (!t || [...el.children].some((c) => (c.innerText || '').trim() === t))) continue;
+    if (!hit && want !== null && t === want) hit = true;
+    if (hit) {
+      const a = at(el);
+      if (!a.disabled) return a;
+      first = first || el;
+      continue;
+    }
     if (t.length <= 40 && !t.includes('\\n')) seen.push(t);
   }
+  if (first) return at(first);
   return {seen: [...new Set(seen)]};
 })()`;
 
