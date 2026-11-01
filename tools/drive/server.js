@@ -191,7 +191,14 @@ function pressWhenAsked(app) {
       pressing = true;
       try {
         /* a testnet key, or a hard key whose DEBUG console answers - a test hex; a production key has none and is never pressed */
+        /*
+         * A HARD KEY IS PRESSED ONLY WHEN THE APP SAYS ITS CONSOLE ANSWERS (2026-11-01: red-key, a production key, was
+         * sent console presses during Brad's login - the machine's listing showed a console interface, which a production
+         * key also has; its firmware just never reads it). The app's own probe (useHardKey consoleAnswers: an inert byte
+         * echoed back - only a DEBUG build echoes) is the test hex's proof; without it nothing is pressed.
+         */
         if (app.net !== 'test') {
+          if (app.flags.consoleAnswers !== true) { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
           const s = await procFor(app, 'key-state');
           if (!(s.ok && /\btestnet\b|debug console answers/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
         }
