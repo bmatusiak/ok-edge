@@ -282,7 +282,13 @@ async function shotNow(by, shell) {
 /* an app's kept lines, for its tab when the window opens it */
 const recentOf = (shell) => (apps.get(shell) ? apps.get(shell).recent.slice() : []);
 
-function driveFor(app, say) {
+/*
+ * say: a line for everyone watching (each drive window, its log, every remote's screen, the caller). answer: what a
+ * query hands back (a log, the screen text) - to the caller only, in one message when the run ends (Brad, 2026-11-01:
+ * "instead of being done and sending the result, it's streaming it to the gui" - a 300-line answer drawn line by line
+ * in every window held the run's end until the last was written).
+ */
+function driveFor(app, say, answer = () => {}) {
   const lastLines = [];
   const remember = (l) => { lastLines.push(l); if (lastLines.length > 8) lastLines.shift(); };
   app.on('log', remember);
@@ -458,7 +464,7 @@ function driveFor(app, say) {
   const machine = (action, target = app.shell, args = {}) => (target === app.shell && app.ws ? procFor(app, action, args) : proc(action, target, args));
   /* every machine at once - this one and each connected remote (run.js doctor) */
   const everywhere = (action, args = {}) => procAll(action, args);
-  const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
+  const api = { app, say, answer, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
   return api;
 }
 
@@ -809,6 +815,7 @@ function control(ws) {
     watchers.add(watch);
     let code = 1;
     let shotApp = null;
+    const answered = [];
     try {
       const file = path.join(SCRIPTS, `${String(m.script).replace(/[^a-z0-9-]/gi, '')}.js`);
       if (!fs.existsSync(file)) throw new Error(`no script "${m.script}" (${SCRIPTS})`);
@@ -824,7 +831,7 @@ function control(ws) {
       for (const k of Object.keys(require.cache)) if (k.startsWith(__dirname) && k !== __filename && !/targets.js$/.test(k)) delete require.cache[k];
       const say = (t) => line(`[${m.script}] ${t}`);
       say(`start on ${app.shell} (${app.net})${m.args && m.args.length ? ` - ${m.args.join(' ')}` : ''}`);
-      await require(file)(driveFor(app, say), m.args || []);
+      await require(file)(driveFor(app, say, (t) => answered.push(String(t))), m.args || []);
       say('FINISHED');
       code = 0;
     } catch (e) {
@@ -842,6 +849,7 @@ function control(ws) {
       bus.off('shot', onFile);
       bus.off('sample', onFile);
       saveRun({ script: String(m.script), app: (shotApp && shotApp.shell) || m.app || '?', args: m.args || [], code, reason, started, lines: runLines, files: runFiles, keys });
+      if (answered.length) send({ t: 'answer', lines: answered });
       send({ t: 'end', code });
     }
   });

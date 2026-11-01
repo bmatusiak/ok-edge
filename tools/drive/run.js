@@ -26,6 +26,8 @@ ws.on('open', () => ws.send(JSON.stringify({ t: 'run', script, app, args })));
 ws.on('message', (data) => {
   const m = JSON.parse(String(data));
   if (m.t === 'line') console.log(m.line);
+  /* a query's answer: to this caller only, never drawn in the drive windows (server.js driveFor) */
+  if (m.t === 'answer') for (const l of m.lines) console.log(l);
   if (m.t === 'end') { ws.close(); process.exit(m.code); }
 });
 ws.on('error', (e) => { console.error(`drive: no server (${e.message}) - start the drive app: node tools/drive/launch.js server [--remote ws://<box>:8791]`); process.exit(1); });

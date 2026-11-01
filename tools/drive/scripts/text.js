@@ -7,5 +7,6 @@ module.exports = async (d) => {
   const r = await d.app.call({ t: 'state' }, 20000);
   const text = String((r && r.text) || '');
   d.say(`${text ? text.split('\n').length : 0} line(s) read now; the server's copy has ${d.app.text ? d.app.text.split('\n').length : 0}`);
-  for (const l of text.split('\n').filter(Boolean).slice(0, 30)) d.say(`  ${l}`);
+  /* the screen's lines are the caller's answer, not said to the drive windows (server.js driveFor) */
+  for (const l of text.split('\n').filter(Boolean)) d.answer(`  ${l}`);
 };
