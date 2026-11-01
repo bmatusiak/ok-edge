@@ -38,6 +38,7 @@ import {theme} from './theme';
 import {useQuietMotion} from './CountdownBar';
 import {DEVICE_WORD} from '../platform';
 import {usePressSound} from './pressSound';
+import {PressIcon} from './PressIcon';
 
 /* the core firmware closes every wait at 20 s (okcore.cpp Usertimeout) */
 const WAIT_MS = 20_000;
@@ -202,6 +203,7 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
               <VendorBody w={wait!.w} fw={fw} named={fw?.label && named?.label === fw.label ? named : undefined} />
             )}
 
+            {pressed ? null : <PressIcon />}
             {pressed ? (
               <Text style={[styles.op, {color: theme.warn}]}>Pressed - the key is answering…</Text>
             ) : (

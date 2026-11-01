@@ -17,6 +17,7 @@ import {Logo} from '../ui/Logo';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
 import type {Kind} from './SetupScreen';
+import {PressIcon} from '../ui/PressIcon';
 
 /* each PIN's name on this page */
 const NAME: Record<Kind, string> = {primary: 'PIN', secondary: 'second-profile PIN', selfDestruct: 'self-destruct PIN'};
@@ -75,12 +76,14 @@ export function HardKeySetupScreen({onDone, onBack, kinds = ['primary'], more = 
       ) : null}
       {stage === 'first' ? (
         <View style={styles.actions}>
+          <PressIcon />
           <Text style={styles.say}>{`Press your new ${NAME[kind]} on the OnlyKey's buttons now: 7 to 10 presses.`}</Text>
           <Btn title="Done - I pressed it" tone="primary" onPress={() => run([['stored'], ['confirming']], 'again')} />
         </View>
       ) : null}
       {stage === 'again' ? (
         <View style={styles.actions}>
+          <PressIcon />
           <Text style={styles.say}>{`Press the same ${NAME[kind]} on the OnlyKey again.`}</Text>
           <Btn title="Done - I pressed it again" tone="primary" onPress={() => run([['matched'], ['committed', 30000]], 'done')} />
         </View>
