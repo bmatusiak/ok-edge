@@ -275,7 +275,7 @@ function Shell() {
   }, [testing.enabled]);
 
   /*
-   * A HARD KEY TURNS TESTING MODE ON, in a debug build.
+   * A DEBUG HARD KEY TURNS TESTING MODE ON (a test hex - never a prod one).
    *
    * "Enter testing mode" lives only on the login screen, and a hard key can
    * walk straight past that screen: the door opens on the device's own state,
@@ -287,21 +287,25 @@ function Shell() {
    * button and then found no Testing item to open.
    *
    * So plugging one in turns the mode on. The bench owner's rule, 2026-09-24:
-   * "if its a hardkey, enable testing mode IF build is debug". The debug half
-   * needs no check here - useTestingMode's setEnabled is a no-op unless
-   * __DEV__ (useTestingMode.ts:53), so a release build cannot reach this.
+   * "if its a hardkey, enable testing mode IF build is debug" - the KEY's build
+   * (Brad, 2026-10-31, his live key with the prod hex put in testing mode by a
+   * test build of the app: "its prod hex"). A debug hex takes presses through
+   * its console (useHardKey canPress === true); a prod hex has none, so its PIN
+   * goes in on its own buttons and nothing here turns testing mode on. The app's
+   * build is a second gate: setEnabled is a no-op unless __DEV__
+   * (useTestingMode.ts:53).
    *
-   * Keyed on the BACKEND CHANGING, not on every render, so it fires once when
-   * the hard key becomes the active one and then leaves the switch alone:
-   * someone who turns testing mode off with the key still plugged in keeps it
-   * off. It is not turned back off when the key leaves, either - the mode is
-   * unpersisted already, and switching it off under a running suite would
-   * pull its tab away mid-run.
+   * Keyed on the hard key becoming the active one with its answer in, not on
+   * every render, so it fires once and then leaves the switch alone: someone who
+   * turns testing mode off with the key still plugged in keeps it off. It is not
+   * turned back off when the key leaves, either - the mode is unpersisted
+   * already, and switching it off under a running suite would pull its tab away
+   * mid-run.
    */
   useEffect(() => {
-    if (keys.backend === 'usb') testing.setEnabled(true);
+    if (keys.backend === 'usb' && emu.canPress === true) testing.setEnabled(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keys.backend]);
+  }, [keys.backend, emu.canPress]);
 
   /*
    * CONFIG MODE — step one of putting it back, and it is the APP'S OWN FLAG.

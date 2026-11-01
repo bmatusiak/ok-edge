@@ -6,6 +6,7 @@ import {theme} from '../ui/theme';
 import OkEmu from '../transport/OkEmu';
 import {PinScreen} from './PinScreen';
 import {SetupScreen} from './SetupScreen';
+import {HardKeySetupScreen} from './HardKeySetupScreen';
 import type {EmuSession} from '../hooks/useOkEmu';
 import type {KeyControl} from '../hooks/useKey';
 import {useActiveKey} from '../hooks/KeyContext';
@@ -149,6 +150,12 @@ export function KeyScreen({emu, keys, configMode = false, onCheckConfig, checkin
    * mode can land here without ever passing the login flow.
    */
   if (emu.device === 'uninitialized') {
+    /*
+     * A HARD KEY'S PIN GOES IN ON ITS OWN BUTTONS (Brad, 2026-10-31, a new prod hard key on this tab: "hardkey + prod =
+     * no pin entry ... it has no debug interface to even enter the pin"): no keypad here - the same hard-key setup the
+     * login's setup shows (MainApp). When it is done the key reports locked, and this tab shows its PIN screen.
+     */
+    if (keys.backend === 'usb') return <HardKeySetupScreen onDone={() => {}} />;
     /*
      * `model` is not optional here even though the prop is. It defaults to
      * 'classic', and omitting it put a DUO - which has no six-button keypad
