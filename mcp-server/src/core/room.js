@@ -88,6 +88,11 @@ export class RoomCore {
     try { msg = JSON.parse(data); } catch { return ws.close(1007, 'not JSON'); }
     const me = ws.deserializeAttachment();
 
+    /* an agent's socket (agentHello below): its key messages to the device it names, only while the owner accepts it */
+    if (me.agent) return this.fromAgent(ws, me, msg);
+    /* an agent introduces itself instead of joining - never over Bluetooth (what comes over the radio is a device) */
+    if (!me.device && msg && msg.t === 'agent' && me.origin !== 'ble') return this.agentHello(ws, me, msg);
+
     if (!me.device) {
       /* one try: the join, checked against this connection's own challenge and this server's host */
       /* REQUIRE_LOGIN ('1'): only a login proof for THIS challenge enters - the key was present at this join */
@@ -126,6 +131,14 @@ export class RoomCore {
       }
       case 'peers':
         return send(ws, { t: 'peers', peers: this.joined().filter(([s]) => s !== ws).map(([, a]) => a.device) });
+      case 'key-re': {
+        /* the key session's answer to an agent (the device holds the key): to that agent's sockets */
+        if (typeof msg.to !== 'string' || !msg.m || typeof msg.m !== 'object') return send(ws, { t: 'error', why: 'a key-re is {to, m}' });
+        const to = this.agents(msg.to);
+        if (!to.length) return send(ws, { t: 'key-gone', from: msg.to });
+        for (const [s] of to) send(s, { t: 'key', from: me.device.id, m: msg.m });
+        return;
+      }
       case 'mcp-re': {
         /* the reply carries the device's own id for it (re): the room's broadcasts reach the sender too, before it */
         const r = await this.fromOwner(me.room, msg);
@@ -255,7 +268,14 @@ export class RoomCore {
   /* a joined device left: the others hear it - unless this was a replaced socket and a newer one holds the device */
   left(ws) {
     const a = ws.deserializeAttachment();
+    /* an agent left: the devices it talked to end its key session */
+    if (a && a.agent) {
+      if (!this.agents(a.agent.id).some(([s]) => s !== ws)) for (const [d] of this.joined()) send(d, { t: 'key-gone', from: a.agent.id });
+      return;
+    }
     if (!a || !a.device) return;
+    /* its agents hear it too: a key session with it is over */
+    for (const [s] of this.agents()) send(s, { t: 'peer', down: a.device.id });
     const others = this.joined().filter(([s]) => s !== ws);
     if (others.some(([, b]) => b.device.id === a.device.id)) return;
     for (const [other] of others) send(other, { t: 'peer', down: a.device.id });
@@ -265,6 +285,69 @@ export class RoomCore {
 
   /* to every joined device of this identity - the owner's web app, phone, desktop */
   tell(msg) { for (const [ws] of this.joined()) send(ws, { t: 'mcp', ...msg }); }
+
+  /* ------------------------------------------------------------------ an agent on the identity's key (plan B4) */
+
+  /*
+   * THE CLI REACHES A DEVICE'S KEY THROUGH THE ROOM (ok-edge plan B4; Brad, 2026-11-01: "the app authorizes/approves ble
+   * over to the host using the same mechanism ... re-use code we already have"): a computer's onlykey-js is an AGENT of
+   * this identity - the same agent record the MCP keeps (agent:<id>, id = sha256 of its agent_key), accepted, blocked or
+   * removed only by the owner's own devices (fromOwner). It opens a socket to the room and introduces itself
+   * ({t:'agent', agent_key, name}) instead of joining; while accepted, its {t:'key', to, m} goes to the device it names -
+   * the device runs the lib's key session (desktop/session.js) on its key and answers {t:'key-re', to, m}. A new agent is
+   * entered as pending and the owner told, as a plan's agent is; nothing reaches a key until the owner accepts it.
+   */
+  agents(id = null) {
+    const out = [];
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (a && a.agent && (id === null || a.agent.id === id)) out.push([ws, a]);
+    }
+    return out;
+  }
+
+  async agentHello(ws, me, msg) {
+    const key = typeof msg.agent_key === 'string' ? msg.agent_key.toLowerCase() : '';
+    const name = typeof msg.name === 'string' ? msg.name.slice(0, 60) : '';
+    if (!/^[0-9a-f]{64}$/.test(key) || !name) {
+      send(ws, { t: 'refused', why: 'an agent is {agent_key: 64 hex, name}' });
+      return ws.close(4400, 'not an agent');
+    }
+    const id = bytes.toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes.fromHex(key))));
+    let a = await this.agentOf(id);
+    if (!a) {
+      a = { id, name, state: 'pending', first: Date.now() };
+      this.tell({ ev: 'agent', agent: a });
+    }
+    a = { ...a, name, last: Date.now() };
+    await this.ctx.storage.put(`agent:${id}`, a);
+    if (a.state === 'blocked') {
+      send(ws, { t: 'agent', you: id, state: 'blocked' });
+      return ws.close(4403, 'blocked');
+    }
+    ws.serializeAttachment({ ...me, agent: { id, name }, nonce: null });
+    send(ws, { t: 'agent', you: id, state: a.state, devices: this.joined().map(([, d]) => d.device) });
+  }
+
+  async fromAgent(ws, me, msg) {
+    switch (msg && msg.t) {
+      case 'key': {
+        /* the owner's word now, not at hello: a block takes effect at once */
+        const a = await this.agentOf(me.agent.id);
+        if (!a || a.state !== 'accepted') return send(ws, { t: 'key-refused', why: `the owner has not accepted this computer (${a ? a.state : 'removed'}) - they accept it in the app's Agents list` });
+        if (typeof msg.to !== 'string' || !msg.m || typeof msg.m !== 'object') return send(ws, { t: 'error', why: 'a key is {to, m}' });
+        const to = this.joined().find(([, d]) => d.device.id === msg.to);
+        if (!to) return send(ws, { t: 'gone', to: msg.to });
+        return send(to[0], { t: 'key', from: me.agent.id, name: me.agent.name, m: msg.m });
+      }
+      case 'devices': {
+        const a = await this.agentOf(me.agent.id);
+        return send(ws, { t: 'devices', state: a ? a.state : 'removed', devices: this.joined().map(([, d]) => d.device) });
+      }
+      default:
+        return send(ws, { t: 'error', why: `an agent sends key or devices, not ${JSON.stringify(msg && msg.t)}` });
+    }
+  }
   async agentOf(id) { return this.ctx.storage.get(`agent:${id}`); }
   async plans() { return [...(await this.ctx.storage.list({ prefix: 'plan:' })).values()]; }
 
@@ -352,6 +435,12 @@ export class RoomCore {
         }
       }
       this.tell({ ev: 'agent', agent: { ...a, state: msg.state } });
+      /* the agent's own sockets hear it; blocked or removed, they close - and the devices end its key session */
+      for (const [s] of this.agents(a.id)) {
+        send(s, { t: 'agent', you: a.id, state: msg.state });
+        if (msg.state !== 'accepted') s.close(4403, msg.state);
+      }
+      if (msg.state !== 'accepted') for (const [d] of this.joined()) send(d, { t: 'key-gone', from: a.id });
       return { t: 'mcp', ev: 'ok', op: 'agent' };
     }
     if (msg.op === 'plan') {
@@ -377,7 +466,7 @@ export class RoomCore {
     let waiting = false;
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
-      if (!a || a.device) continue;
+      if (!a || a.device || a.agent) continue;
       if (now - a.since >= JOIN_WITHIN_MS) ws.close(4408, 'no join in time');
       else waiting = true;
     }
