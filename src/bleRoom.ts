@@ -78,6 +78,8 @@ const link = bleSocket.createSocketLink({sendFrame});
 let room: any = null;
 let joining = false;
 let started = false;
+/* a WHERE asked before startBleRoom listened (bleTargetSet) */
+let whereWanted = false;
 
 /**
  * Listen for the computer's socket messages - once, where the vendor door opens (useFidoGatt). The computer's name
@@ -101,6 +103,8 @@ export function startBleRoom(): void {
     set({host, status: room ? state.status : 'linked', why: null});
     void joinBleRoom();
   });
+  /* the target was told before this listened (a JS reload: the gates are read at once) - its WHERE goes now */
+  if (whereWanted) { whereWanted = false; link.where(); }
 }
 
 /*
@@ -109,7 +113,7 @@ export function startBleRoom(): void {
  * at 12:41:04, targeted at 12:41:45, never joined). Also the app restarted while the link stayed up.
  */
 export function bleTargetSet(): void {
-  if (!started) return;
+  if (!started) { whereWanted = true; return; }
   link.where();
 }
 
