@@ -133,6 +133,13 @@ export async function makeCard(): Promise<void> {
     const rec = await (identity as any).certifyLoginCard({onPress: () => setOffer({...o, state: 'pressing'})});
     await fileCard(o.identity, rec);
     console.log(`[card] this device's login card certified at #${rec.certification.seq} and filed`);
+    /* its link into this copy now, while the session still welds it (as after a card login - IdentityCheckScreen) */
+    try {
+      const s = await require('./edgeSoftKey').SoftKeyEdge.open();
+      if (s) await require('./edgeStore').sync(s);
+    } catch (e: unknown) {
+      console.log(`[card] the card's link is NOT in this copy yet - ${String((e as Error)?.message ?? e)}`);
+    }
     setOffer(null);
   } catch (e: unknown) {
     setOffer({...o, state: 'failed', why: String((e as Error)?.message ?? e)});

@@ -125,6 +125,20 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
         if (!logged?.budget) {
           console.log(`[identity] ${read.identity.slice(0, 12)}: a manual login - ${logged?.manual ?? 'no budget'}`);
           if (card) void afterLogin(read.identity, card.device).catch((e: unknown) => console.log(`[card] ${String((e as Error)?.message ?? e)}`));
+        } else {
+          /*
+           * THE LOGIN'S LINKS INTO THIS COPY, NOW (box, 2026-11-01: blue-key's copy at #19, the key at #29 - each card
+           * login wrote its budget's links, only the session knew their heads, and a restart lost them past the ring:
+           * red-key's lost #1069 the same way). Synced before the app opens, while the session still welds them - the
+           * copy, the bucket's log and the card's top all reach the key's head. A failure is said, not hidden.
+           */
+          try {
+            const s = await SoftKeyEdge.open();
+            if (s) await require('../edgeStore').sync(s);
+            console.log(`[identity] ${read.identity.slice(0, 12)}: the login's links are in this ${DEVICE_WORD}'s copy`);
+          } catch (e: unknown) {
+            console.log(`[identity] ${read.identity.slice(0, 12)}: the login's links are NOT in this copy yet - ${String((e as Error)?.message ?? e)}`);
+          }
         }
       }
       /* chosen: this login kept for the tab's next load (the bucket's secret, encrypted - webSession.ts) */
