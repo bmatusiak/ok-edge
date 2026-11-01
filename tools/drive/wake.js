@@ -23,8 +23,9 @@ const KINDS = {
   keys: /\[keys\] [^:]+: (no OnlyKey|[a-z]+ \((usb|OnlyKey) )/,
   run: /\[[a-z-]+\] (STOPPED|FINISHED)\b/,                                       /* a drive script ending */
   press: /\] pressed: /,                                                         /* a press the drive made */
+  user: /USER DOES NOT SEE ACTIVITY/,                                            /* Brad's "I see no activity" button */
 };
-const DEFAULT = ['picture', 'bootloader', 'error', 'app'];
+const DEFAULT = ['picture', 'bootloader', 'error', 'app', 'user'];
 
 const args = process.argv.slice(2);
 if (args.includes('--list')) { for (const [k, re] of Object.entries(KINDS)) console.log(`${k.padEnd(11)} ${re}`); process.exit(0); }
