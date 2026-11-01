@@ -104,11 +104,32 @@ async function unlockOutsideKey(d, pin) {
   }
   if (!/led #000000/.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
   d.say('its key is locked (dark) - its PIN on its buttons');
-  const lit = d.until(/\[gadget\] led #(?!000000)/, { life: 20, fail: [] });
+  /* the web app's stream carries the gadget's "[gadget] led" lines; the desktop's does not - it reads the LED its machine holds */
+  const lit = d.app.shell === 'webapp' ? d.until(/\[gadget\] led #(?!000000)/, { life: 20, fail: [] }) : null;
   const r = await d.machine('press', d.app.shell, { buttons: pin.split('') });
   if (!r.ok) throw new Error(`the web app's key: ${r.why}`);
-  await lit;
+  if (lit) await lit;
+  else {
+    /* the machine's last LED seen, read every second - its own record, never a request to the key - 20 s at most */
+    for (let i = 0; ; i++) {
+      const n = await d.machine('key-state');
+      if (n.ok && /led #(?!000000)/.test(n.what)) break;
+      if (i >= 20) throw new Error(`the gadget stayed dark 20 s after its PIN - one wrong attempt; not tried again`);
+      await new Promise((ok) => setTimeout(ok, 1000));
+    }
+  }
   d.say('its key is unlocked');
+}
+
+/*
+ * THE DESKTOP ON THE GADGET (box, 2026-11-01: blue-key unplugged so the desktop, the web app and the phone hold one
+ * identity): the gadget is a soft key's firmware, with no debug console - the desktop's keypad, which presses a hard key
+ * through its console, never comes live for it. So it is unlocked as the web app's is: from its machine (unlockOutsideKey).
+ */
+async function onGadget(d) {
+  if (d.app.shell !== 'desktop') return false;
+  const s = await d.machine('key-state');
+  return s.ok && /\(gadget\): connected;/.test(String(s.what));
 }
 
 /*
@@ -144,7 +165,7 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
     }
     else if (now === 'login screen') {
       /* the web app's chain is its key's - the gadget is a testnet key: unlocked from its machine, then Log in */
-      if (d.app.shell === 'webapp') { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
+      if (d.app.shell === 'webapp' || await onGadget(d)) { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
     }
     else if (now === 'bypass' && pin !== TEST_PIN) {
       /* the bypass types TEST_PIN, not this key's: the keypad with its own PIN */
@@ -167,6 +188,7 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
       });
       continue;
     }
+    else if (now === 'keypad' && await onGadget(d)) await unlockOutsideKey(d, pin);
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
     else if (now === 'not set up') throw new Error('login: the soft key is not set up (a restore or setup comes first)');

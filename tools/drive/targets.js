@@ -454,12 +454,19 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
        * press fails on a key without one.
        */
       async keyState() {
+        /*
+         * THE GADGET AS THE DESKTOP'S KEY (box, 2026-11-01: blue-key unplugged, so the desktop, the web app and the phone
+         * hold one identity): the desktop sees the gadget as a hard key, and it is the same key the web app's machine
+         * holds - its state and its presses are the web app's (the LED, the emulator's socket), as it has no console
+         */
+        if (KEY === 'gadget' && gadgetUp) return T.webapp.keyState();
         /* the console's echo, never its listing: a production key lists the interface too (hardkey-press.js --probe) */
         const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), '--probe'], 20000);
         const consoleUp = r.ok && /debug console answers/.test(r.out);
         return consoleUp ? 'hard key: debug console answers (a test hex)' : `hard key: no debug console (a production key, or none) - ${r.out.split('\n').pop() || 'nothing listed'}`;
       },
       async press({ buttons = ['1'] } = {}) {
+        if (KEY === 'gadget' && gadgetUp) return T.webapp.press({ buttons });
         const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
         if (!b.length) b.push('1');
         /*
