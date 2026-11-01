@@ -734,8 +734,10 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   }
 
   async acceptLoss(from: number, to: number, onPress?: () => void) {
-    await this.edge.loss({from, to, onPress: this.pressing(onPress)});
+    const r = await this.edge.loss({from, to, onPress: this.pressing(onPress)});
     this.pressWanted = null;
+    /* the key showed the head after the LOSS (LOSS_ANCHOR): this copy goes on from it (edgeStore anchorAfterLoss) */
+    if (r?.checkpoint && r.head) await require('./edgeStore').anchorAfterLoss(this, {seq: r.seq, head: r.head});
   }
 
   /**

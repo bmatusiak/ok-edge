@@ -272,6 +272,25 @@ async function readMirror(deviceId: Uint8Array): Promise<Mirror> {
   };
 }
 
+/*
+ * A LOST LINK NEVER STRANDS THE KEY (Brad, 2026-10-31: "we certify that we know about the missing block so we can
+ * continue"; "so a lost link never strands a key again: yes, using loss"). The person's LOSS of what this copy cannot
+ * reach was answered with the key's checkpoint after it, the head shown and both halves verified (lib edge.loss,
+ * LOSS_ANCHOR): the copy keeps its history, takes the LOSS link with that head, and is checked from it on - the same
+ * anchored check a new device's copy gets (anchorOf). The next sync reads on from the LOSS.
+ */
+export async function anchorAfterLoss(source: EdgeSource, at: {seq: number; head: Uint8Array}): Promise<void> {
+  const mirror = await loadMirror(source.deviceId);
+  const [r] = await source.read(at.seq, 1);
+  if (!r || seqOf(r) !== at.seq || chain.decodeLink(r.link).op !== codes.OP.LOSS) throw new Error(`edge: the key's #${at.seq} is not the LOSS it just answered`);
+  const last = mirror.links[mirror.links.length - 1];
+  if (!last || seqOf(last) < at.seq) mirror.links.push({link: r.link, head: at.head, reveal: r.reveal ?? null});
+  mirror.anchor = {seq: at.seq, head: at.head};
+  mirror.lastSeen = {seq: at.seq, head: at.head};
+  await saveMirror(mirror);
+  console.log(`[edge] copy ${toHex(source.deviceId).slice(0, 8)}: the LOSS at #${at.seq} accepted the unreachable links - the copy goes on from its head`);
+}
+
 export async function saveMirror(m: Mirror): Promise<void> {
   const id = toHex(m.deviceId);
   const s: StoredMirror = {
@@ -324,6 +343,9 @@ const seqOf = (r: EdgeLinkRecord) => chain.decodeLink(r.link).seq;
  */
 function anchorOf(mirror: Mirror): {seq: number; head: Uint8Array} | null {
   if (!mirror.anchor) return null;
+  /* re-anchored at a LOSS this copy holds (anchorAfterLoss): nothing before the lost range welds to what follows - checked from the LOSS */
+  const at = mirror.anchor.seq;
+  if (mirror.links.some(l => seqOf(l) === at && chain.decodeLink(l.link).op === codes.OP.LOSS)) return mirror.anchor;
   const first = mirror.links[0];
   if (!first) return mirror.anchor;
   const f = chain.decodeLink(first.link);

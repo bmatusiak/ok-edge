@@ -968,6 +968,31 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
   items.push({key: 'budgets', kind: 'node', render: () => (
     <>
           {edge.error ? <Text style={[styles.dim, {color: theme.error}]}>{edge.error}</Text> : null}
+          {/*
+            * OUT OF REACH: this computer's copy ends before the key's ring - the links between hold heads no host can
+            * weld. Accepting them as lost (a LOSS, at a press) records that in the chain and the key shows the head after
+            * it: the copy goes on (Brad, 2026-10-31: "so a lost link never strands a key again: yes, using loss").
+            */}
+          {edge.outOfReach ? (() => {
+            const o = edge.outOfReach;
+            const range = o.from === o.to ? `#${o.from}` : `#${o.from}–#${o.to}`;
+            return (
+              <View style={styles.mismatch}>
+                <Text style={[styles.receiptTitle, {color: theme.error}]}>{`This ${DEVICE_WORD} cannot reach the key's newest links (${range})`}</Text>
+                <Text style={styles.dim}>No copy holds them, so nothing after them can be checked here. Accepting them as lost records it in the chain with a press, and this copy goes on from there. The history before them stays.</Text>
+                {edge.pressFor === 'loss' ? (
+                  <Text style={[styles.op, {color: theme.warn}]}>Press the key to accept the loss</Text>
+                ) : confirmLoss ? (
+                  <View style={styles.row}>
+                    <Btn title={`Yes, accept loss of ${range}`} tone="danger" onPress={() => { if (consentRefusal()) return; setConfirmLoss(false); void edge.acceptLoss(o.from, o.to); }} disabled={edge.busy} />
+                    <Btn title="Cancel" onPress={() => setConfirmLoss(false)} disabled={edge.busy} />
+                  </View>
+                ) : (
+                  <View style={styles.row}><Btn title={`Accept loss of ${range}…`} onPress={() => setConfirmLoss(true)} disabled={edge.busy} /></View>
+                )}
+              </View>
+            );
+          })() : null}
           {edge.requests.map(r => (
             <PendingCard
               key={`r${r.id}`}

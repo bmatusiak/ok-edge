@@ -41,6 +41,8 @@ export function useEdge() {
   const [requests, setRequests] = useState<EdgeRequest[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* the links this computer's copy cannot reach (the warm-up's top ends before the key's ring): accepting them as lost goes on */
+  const [outOfReach, setOutOfReach] = useState<{from: number; to: number} | null>(null);
   /*
    * What the key is waiting for a PHYSICAL press on: a request ('r<id>'), a
    * resume ('resume:<id>') or a settle ('settle').
@@ -101,10 +103,12 @@ export function useEdge() {
       let cold = false;
       try {
         setView(await work(s));
+        setOutOfReach(null);
       } catch (e: any) {
         if (e?.code !== 'EDGE_NO_CHECKPOINT') throw e;
         cold = true;
         setError(e.message);
+        setOutOfReach(e.why === 'top-ends-before-the-ring' && Number.isInteger(e.copyEnds) && Number.isInteger(e.keySeq) ? {from: e.copyEnds + 1, to: e.keySeq} : null);
         console.log(`[edge] this key's copy is out of reach (${e.why}${e.copyEnds != null ? `: copy ends #${e.copyEnds}, key #${e.keySeq}, ring from #${e.ringFrom}` : ''}) - showing what this computer holds`);
       }
       const orNone = <T,>(p: Promise<T>, none: T): Promise<T> => (cold ? p.catch(() => none) : p);
@@ -316,6 +320,6 @@ export function useEdge() {
   return {
     view, budgets, past, others, ownName, deviceViews, requests, busy, stopping, error, pressFor, copyCheck, keyState, ended, available: wantReal, fullSync,
     sync, verify, tamper, request, revoke, approve, press, decline,
-    hold, resume, settle, agentSign, budgetSign, continueBudget, dismissEnded, acceptLoss, exportBlocks,
+    hold, resume, settle, agentSign, budgetSign, continueBudget, dismissEnded, acceptLoss, outOfReach, exportBlocks,
   };
 }
