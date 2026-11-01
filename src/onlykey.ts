@@ -23,6 +23,7 @@ import okcryptoPlugin from 'node-onlykey-lib/plugins/okcrypto';
 import edgePlugin from 'node-onlykey-lib/plugins/edge';
 import identityPlugin from 'node-onlykey-lib/plugins/identity';
 import {createWebAuthnCtap} from 'node-onlykey-lib/transport/webauthn';
+import {createVendorBridgeCtap} from 'node-onlykey-lib/transport/vendor-bridge';
 
 import OkEmu, {type Iface} from './transport/OkEmu';
 import UsbPipe from './transport/UsbPipe';
@@ -142,6 +143,9 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
      * by the service name each plugin provides. An array with a property is
      * unusual enough that the type has to say so explicitly.
      */
+    /* the desktop's vendor-bridge ctap: its transport is the lib's own, known once the app has started (bound below) */
+    const late: {ctap?: ReturnType<typeof createVendorBridgeCtap>} = {};
+    const vendorCtap = {vendorBridge: true, getAssertion: (p: any, o?: any) => late.ctap!.getAssertion(p, o)};
     const plugins: any[] & {config?: Record<string, unknown>} = [
       hostPlugin,
       /* the webapp has no USB: its key is the WebAuthn tunnel (a transport with no vendor interface, lib plugins/transport/tunnel) */
@@ -189,12 +193,14 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
         ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname]}}
         : {}),
       /*
-       * the Windows desktop, as the web app: the page's own host for both rpIds. It runs at the key's site once the key
-       * named one (electron/main.js) - apps.crp.to before that - and a tunnel naming apps.crp.to from the key's site was
-       * refused by WebAuthn ("will not assert rpId apps.crp.to from this page's origin", 2026-10-30).
+       * THE DESKTOP TALKS VENDOR ONLY (Brad, 2026-10-31: "i need to use vendor api instead of ctap for desktop, so i need
+       * to bridge the vendor api to use ctap"): the tunnel's requests - the derives, the transit key, the derived-key
+       * signs - go over the vendor interface through the firmware plugin vendor_bridge (lib transport/vendor-bridge), on
+       * Windows and Linux alike: the key's own answers, no Windows WebAuthn, no CTAPHID. Its rpId is the KEY's -
+       * ctap_bridge's configurable site; rpIds names the page's host, the key's site the derives were bound to.
        */
-      ...(backend === 'usb' && shell === 'desktop' && /Windows/.test(navigator.userAgent)
-        ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname]}}
+      ...(backend === 'usb' && shell === 'desktop'
+        ? {okcrypto: {ctap: vendorCtap, rpIds: [location.hostname]}}
         : {}),
     };
 
@@ -205,6 +211,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
         reject(err);
         return;
       }
+      late.ctap = createVendorBridgeCtap(started.services.transport);
       /* each WebAuthn operation's progress, for the sheet that says to wait for the key (src/keyBusy.ts) */
       started.services.okcrypto?.on?.('tunnel', noteTunnel);
       /* and each Edge request that goes straight to the key (the phone's soft key, a USB key): the same sheet */
