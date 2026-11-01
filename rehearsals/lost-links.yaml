@@ -1,0 +1,54 @@
+# A LOST LINK NEVER STRANDS A KEY (Brad, 2026-10-31: "so a lost link never strands a key again: yes, using loss";
+# 2026-11-01: "drive desktop app with blue hard key, sabotage the blockchain, and see how it reacts").
+# A test hard key, Edge wiped; this computer follows its chain; then links are made with the app closed, past the key's
+# ring - nothing holds them. The app must say so, offer the loss, take the press and go on: a budget opens after it.
+# Runs on the box (its firmware target: the wipe and the links over the key's debug console).
+appId: com.okrn
+name: A lost link never strands a key
+tags:
+  - edge
+  - hard-key
+  - sabotage
+env:
+  PIN: "1111111"
+  LINKS: "10"
+---
+# a test key only: its debug console answers (a production key has none - the rehearsal stops here)
+- runScript: scripts/require-test-key.js
+
+# a fresh chain, and a copy this computer follows from its start
+- stopApp
+- machine:
+    action: tool
+    target: firmware
+    args:
+      name: hardkey-edge-wipe.js
+- runFlow: login.yaml
+- goto: Edge
+- waitForLog: '-> verified #\d+'
+
+# the sabotage: links made with the app closed - its copy falls behind the key's ring
+- stopApp
+- machine:
+    action: tool
+    target: firmware
+    args:
+      name: hardkey-edge-links.js
+      argv:
+        - ${LINKS}
+- runFlow: login.yaml
+- goto: Edge
+
+# the app says what it cannot reach, and offers the loss
+- extendedWaitUntil:
+    visible: "This computer cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+    timeout: 60000
+- copyTextFrom: "This computer cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+- evalScript: '${output.range = maestro.copiedText.match(/\((#\d+–#\d+)\)/)[1]}'
+- tapOn: "Accept loss of ${output.range}…"
+- tapOn: "Yes, accept loss of ${output.range}"
+
+# the press (the drive's, on the press icon), the LOSS, and the copy going on
+- waitForLog: 'the LOSS at #\d+ accepted the unreachable links'
+- waitForLog: '-> verified #\d+ \(full\)'
+- budget

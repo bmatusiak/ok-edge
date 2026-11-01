@@ -13,6 +13,7 @@
     "min_height": 400
   },
   "dependencies": {
+    "js-yaml": "4.1.0",
     "nw": "0.118.0",
     "ws": "8.22.0"
   },

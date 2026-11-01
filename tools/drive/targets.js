@@ -718,6 +718,18 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     const sha256 = require('crypto').createHash('sha256').update(fs.readFileSync(full)).digest('hex');
     return { ok: true, what: JSON.stringify({ flavor, file: full, sha256, commit: head.slice(0, 7), built, at: fs.statSync(full).mtime.toISOString() }) };
   }
+  /*
+   * A BOX TOOL FOR A REHEARSAL (tools/drive/maestro: `machine: {action: tool, target: firmware, args: {name, argv}}`):
+   * only these - each refuses a production key by itself (they work through the kit's debug-console unlock and the
+   * test hex's Edge requests). Its output live in its own tab; the last lines come back.
+   */
+  const BOX_TOOLS = ['hardkey-edge-links.js', 'hardkey-edge-wipe.js', 'owner-key.js'];
+  async function boxTool({ name, argv = [] } = {}) {
+    if (!BOX_TOOLS.includes(name)) return { ok: false, why: `"${name}" is not a rehearsal tool (${BOX_TOOLS.join(', ')})` };
+    const r = await streamIn(EDGE, NODE, [path.join(EDGE, 'tools/box', name), ...argv.map(String)], { timeout: 10 * 60000, ...shown(`tool ${name}`) });
+    const tail = r.out.split(/\r?\n/).filter(Boolean).slice(-4).join(' | ');
+    return r.ok ? { ok: true, what: tail } : { ok: false, why: `${name}: ${tail}` };
+  }
   /* onto a key waiting in its bootloader (HalfKay - never OKFWUPDATE): the hex for these sources, its SHA-256 said */
   async function flashKey({ flavor } = {}) {
     const keys = await keysOnUsb();
@@ -809,6 +821,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
+      if (action === 'tool') return target === 'firmware' ? boxTool(args) : { ok: false, why: 'tool belongs to the firmware target' };
       if (action === 'hex') return target === 'firmware' ? hexFor(args) : { ok: false, why: 'hex belongs to the firmware target' };
       if (action === 'flash') return target === 'firmware' ? flashKey(args) : { ok: false, why: 'flash belongs to the firmware target' };
       if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }

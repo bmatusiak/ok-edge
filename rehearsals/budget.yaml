@@ -1,0 +1,11 @@
+# One budget, approved (a press - the drive's, on a test key), and the three signs it pays.
+appId: com.okrn
+name: One budget and its three signs
+tags:
+  - edge
+  - budget
+env:
+  PIN: "1111111"
+---
+- runFlow: login.yaml
+- budget

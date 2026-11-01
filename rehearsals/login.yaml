@@ -1,0 +1,11 @@
+# Log in - from wherever the app stands to inside, the login card made when it is offered (the drive's login).
+appId: com.okrn
+name: Log in
+tags:
+  - login
+env:
+  PIN: "1111111"
+---
+- launchApp
+- login:
+    pin: ${PIN}
