@@ -1,0 +1,49 @@
+# A LOGIN'S LINKS SURVIVE A RESTART (box, 2026-11-01: each card login wrote its budget's links, only the session knew
+# their heads, and a restart lost them past the key's ring - red-key's lost #1069, blue-key's #20-#29). The login now
+# syncs this computer's copy before going in; a restart after it must find the copy still reaching the key's head.
+# A test hard key (the drive presses through its debug console).
+appId: com.okrn
+name: A login's links survive a restart
+tags:
+  - edge
+  - login
+  - hard-key
+env:
+  PIN: "1111111"
+---
+- runScript: scripts/require-test-key.js
+
+# start from a copy that reaches the head - a copy left out of reach by an earlier build is accepted as lost first
+- runFlow: login.yaml
+# another tab first: the Edge tab refreshes when it opens
+- goto: This Key
+- goto: Edge
+- waitForLog: "\\[edge\\] (sync .*->|this key's copy is out of reach)"
+# the screen drawn before what it shows is read
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "This computer cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+    commands:
+      - copyTextFrom: "This computer cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+      - evalScript: '${output.range = maestro.copiedText.match(/\((#\d+–#\d+)\)/)[1]}'
+      - tapOn: "Accept loss of ${output.range}…"
+      - tapOn: "Yes, accept loss of ${output.range}"
+      - waitForLog: 'the LOSS at #\d+ accepted the unreachable links'
+- waitForLog: '-> verified #\d+'
+
+# a login with the card writes links - and puts them in this copy before going in
+- stopApp
+- runFlow: login.yaml
+- waitForLog: "the login's links are in this"
+
+# the restart that used to lose them
+- stopApp
+- runFlow: login.yaml
+# another tab first: the Edge tab refreshes when it opens
+- goto: This Key
+- goto: Edge
+# the copy reaches the key's head: verified, and no "cannot reach"
+- waitForLog: '\[edge\] sync .*-> verified #\d+'
+- waitForAnimationToEnd
+- assertNotVisible: "This computer cannot reach the key's newest links.*"
