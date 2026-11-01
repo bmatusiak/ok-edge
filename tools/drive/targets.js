@@ -477,7 +477,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
          * same rooms, MCP and sealed copy as the Worker, docs/ as its assets, no Cloudflare runtime to build first.
          */
         const certs = path.join(ROOT, 'devcert');
-        const server = launch('server-dev', process.execPath, [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--host', '127.0.0.1', '--port', '443',
+        const server = launch('server-dev', NODE, [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--host', '127.0.0.1', '--port', '443',
           '--assets', path.join(EDGE, 'docs'), '--sealed', '--tls-key', path.join(certs, 'apps.crp.to.key'), '--tls-cert', path.join(certs, 'apps.crp.to.crt'),
           ...(process.env.DRIVE_REQUIRE_LOGIN ? ['--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN}`] : [])]);
         /* the browser once the server says it is ready - its own line, followed in its log */
