@@ -206,8 +206,18 @@ function stepsDone(what: string) {
  * socket is trusted through the file the app writes (node-onlykey-lib desktop/trust.js).
  */
 export const DESKTOP_FROM = 'desktop:';
+/*
+ * AND A COMPUTER'S onlykey-js AS AN ACCEPTED AGENT OF THIS IDENTITY'S ROOM (plan B4, keyAgents.ts; from =
+ * "agent:<agent id>|<its name>"): the room passes its key session only while the owner accepts it in the Agents list,
+ * so reaching here is the owner's acceptance - named on the Edge sheet as the agent it is.
+ */
+export const AGENT_FROM = 'agent:';
 async function computerOf(from: string): Promise<{id: string; name: string} | null> {
   if (from.startsWith(DESKTOP_FROM)) return {id: 'desktop', name: from.slice(DESKTOP_FROM.length) || 'this computer'};
+  if (from.startsWith(AGENT_FROM)) {
+    const [id, ...name] = from.slice(AGENT_FROM.length).split('|');
+    return {id: `agent:${id}`, name: name.join('|') || `agent ${id.slice(0, 8)}`};
+  }
   return null;
 }
 

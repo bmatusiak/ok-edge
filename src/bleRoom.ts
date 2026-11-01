@@ -28,6 +28,7 @@ import {detachAgents} from './mcpAgents';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {challengeOpts} from './hostChallenge';
+import {serveKeyAgents} from './keyAgents';
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
@@ -139,12 +140,15 @@ export async function joinBleRoom(): Promise<void> {
     r.on('close', () => {
       if (room !== r) return;
       room = null;
+      endKeyAgents();
       detachAgents('ble');
       /* the proof was that connection's: the key is asked again only by the person */
       console.log('[room ble] the room closed - Try again logs in to it again');
       set({status: state.host ? 'error' : 'off', why: state.host ? 'the room closed - Try again asks the key to log in to it again' : null, peers: [], needsKey: Boolean(state.host)});
     });
     wireRoom(r, me, HOOKS);
+    /* the computer's own onlykey-js reaches this key through the room, once the owner accepts it (keyAgents.ts) */
+    stopKeyAgents = serveKeyAgents(r);
   } catch (e) {
     const why = String((e as Error)?.message ?? e);
     console.log(`[room ble] not joined: ${why}`);
@@ -160,6 +164,13 @@ export async function joinBleRoom(): Promise<void> {
  * computer's room and joins none; on, it joins when a computer is linked and a bucket is open.
  */
 let enabled = false;
+/* the joined room's key session for computers; ended with the room */
+let stopKeyAgents: (() => void) | null = null;
+function endKeyAgents(): void {
+  const stop = stopKeyAgents;
+  stopKeyAgents = null;
+  if (stop) stop();
+}
 export function setBleMcp(on: boolean): void {
   if (on === enabled) return;
   enabled = on;
@@ -177,6 +188,7 @@ export function retryBleRoom(): void {
 export function leaveBleRoom(): void {
   const r = room;
   room = null;
+  endKeyAgents();
   if (r) r.close();
   detachAgents('ble');
   set({status: state.host ? 'linked' : 'off', why: null, peers: [], needsKey: false, sealed: NO_SEALED});
