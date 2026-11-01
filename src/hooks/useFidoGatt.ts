@@ -6,7 +6,7 @@ import FidoGatt, {
 } from '../transport/FidoGatt';
 import OkEmu from '../transport/OkEmu';
 import {startFidoBridge} from '../fidoBridge';
-import {startBleRoom} from '../bleRoom';
+import {bleTargetSet, startBleRoom} from '../bleRoom';
 import type {OnlyKeyApp} from '../onlykey';
 import type {LogLevel} from './useLog';
 
@@ -140,6 +140,8 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
     try {
       /* api true: the target's writes become events - bleRoom.ts hears 0x86 only (THE VENDOR DOOR above) */
       FidoGatt.setIoPolicy(target, webauthn, true);
+      /* a computer targeted: its mcp-server's name asked (again) - bleRoom.ts */
+      if (target) bleTargetSet();
     } catch (error) {
       log('error', 'setIoPolicy: ' + String(error));
     }

@@ -100,7 +100,15 @@ export function startBleRoom(): void {
     set({host, status: room ? state.status : 'linked', why: null});
     void joinBleRoom();
   });
-  /* the app restarted while the link stayed up: ask the computer its name again */
+}
+
+/*
+ * THE TARGET IS SET (useFidoGatt, after the radio is told): the computer's name is asked again - its HERE came when the
+ * link came up, and the native gate dropped it if this computer was not the target yet (the Pixel, 2026-11-01: linked
+ * at 12:41:04, targeted at 12:41:45, never joined). Also the app restarted while the link stayed up.
+ */
+export function bleTargetSet(): void {
+  if (!started) return;
   link.where();
 }
 
