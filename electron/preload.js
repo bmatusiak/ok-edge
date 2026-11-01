@@ -35,7 +35,7 @@ const CHANNELS = new Set([
 ]);
 /* a spec's synchronous methods - answered in place by the main process (cheap questions only) */
 const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning', 'NativeOkEmu:debuggingOn',
-  'NativeUsbHid:isConnected']);
+  'NativeUsbHid:isConnected', 'okedge:localMcp']);
 /* what the main process may push to the page: the native modules' events (src/desktop/specs) */
 const EVENTS = new Set(['NativeOkEmu:onStream', 'NativeOkEmu:onLed', 'NativeOkEmu:onPluginEvent', 'NativeOkEmu:onRestartRequested',
   'NativeUsbHid:onStatus', 'NativeUsbHid:onData',
