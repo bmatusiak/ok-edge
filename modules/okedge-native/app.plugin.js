@@ -239,4 +239,21 @@ const withOkRnLook = (config) => {
   });
 };
 
-module.exports = (config) => withOkRnLook(withAppGradle(withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config))))));
+/*
+ * NOTHING LEAVES THE PHONE BY BACKUP OR TRANSFER (onlykey-edge features/APP-HYGIENE-SPEC.md rule 2; the 2026-11-01 review:
+ * prebuild wrote android:allowBackup="true" and no extraction rules - ok-rn had both right). allowBackup="false" stops
+ * cloud and adb backup; the extraction rules (app-res/xml/data_extraction_rules.xml, copied by withOkRnLook) stop the
+ * device-to-device transfer an Android 12+ app still gets without them - which would copy the soft key's flash and its
+ * per-device salt, and the sealed bucket, to a second phone.
+ */
+const { withAndroidManifest } = require('expo/config-plugins');
+const withNoBackup = (config) => withAndroidManifest(config, (c) => {
+  const app = c.modResults.manifest.application && c.modResults.manifest.application[0];
+  if (app) {
+    app.$['android:allowBackup'] = 'false';
+    app.$['android:dataExtractionRules'] = '@xml/data_extraction_rules';
+  }
+  return c;
+});
+
+module.exports = (config) => withNoBackup(withOkRnLook(withAppGradle(withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config)))))));
