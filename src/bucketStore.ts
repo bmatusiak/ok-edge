@@ -287,7 +287,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   }
   /* nothing kept: proven (to a server, or a fresh challenge here), then a new bucket - the server's copy fills it */
   await proveHere();
-  console.log(`[identity] ${id.slice(0, 12)}: proven - the key signed a fresh challenge with the identity key; a new bucket`);
+  console.log(`[identity] ${id.slice(0, 12)}: proven ${proven ? `to ${proven === 'server' ? 'the server' : 'the local MCP'}` : '- the key signed a fresh challenge with the identity key'}; a new bucket`);
   const key = storage.needsKey ? await bucketKey(id, okcrypto, onPress) : null;
   const created = await storage.create(id, key);
   open = {identity: id, opened: created, key, savedClock: clockOf(created.bucket)};

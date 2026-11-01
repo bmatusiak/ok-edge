@@ -257,6 +257,7 @@ export async function logIn(identity: string, onPress?: () => void): Promise<'se
   }
   const device = await thisDevice();
   const why: string[] = [];
+  let anyRefused = false;
   for (const {url, kind} of urls) {
     let asked: {host: string; nonce: Uint8Array} | null = null;
     let proof: Uint8Array | null = null;
@@ -287,8 +288,15 @@ export async function logIn(identity: string, onPress?: () => void): Promise<'se
       }
       return kind;
     } catch (e) {
-      /* the server answered (its challenge came, the key was asked): its refusal is the login's - no other server is tried */
-      if (asked) { bucketKey.secretKey.fill(0); throw e; }
+      /*
+       * THE SERVER ANSWERED AND REFUSED THE PROOF: the next one is asked (the desktop's local MCP checks the same proof, so
+       * a key that is not the identity is refused there too). A server older than the login proof refuses every one
+       * (2026-11-01: the deployed Worker, closed 4401) - the login goes on locally until it is deployed. The key's own
+       * failure (no sign, a wrong code) is the login's: thrown.
+       */
+      const refused = /refused the join/.test(String((e as Error)?.message ?? e));
+      if (asked && !refused) { bucketKey.secretKey.fill(0); throw e; }
+      if (refused) anyRefused = true;
       why.push(`${new URL(url).host}: ${String((e as Error)?.message ?? e)}`);
       console.log(`[login] ${new URL(url).host} did not answer - ${why[why.length - 1]}`);
     } finally {
@@ -296,6 +304,8 @@ export async function logIn(identity: string, onPress?: () => void): Promise<'se
     }
   }
   bucketKey.secretKey.fill(0);
+  /* refused and proven nowhere: the login fails - never the app's own check in its place */
+  if (anyRefused) throw new Error(`no server took this key's login proof (${why.join('; ')})`);
   if (shell === 'webapp') throw new Error(`the server that serves this page did not answer (${why.join('; ')})`);
   return null;
 }
