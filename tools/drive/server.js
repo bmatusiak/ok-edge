@@ -98,6 +98,21 @@ class App extends EventEmitter {
 }
 
 let apps = new Map(); /* shell -> App: the newest connection of each shell */
+/*
+ * EVERY CONNECTION, BY ITS MACHINE (2026-11-01: red-key's desktop on Windows and blue-key's on the box, both "desktop" -
+ * the newest took the name, and a run for the box would have driven the live key's app). --app <shell>@<machine>
+ * picks one: @windows / @local / @here = this machine's, @linux / @box / @remote = a drive-remote's, any other word a
+ * part of the remote's host name. A bare shell is the newest, as before.
+ */
+const everyApp = new Set();
+function pickApp(name) {
+  if (!name || !String(name).includes('@')) return apps.get(name);
+  const [shell, where] = String(name).toLowerCase().split('@');
+  const here = ['windows', 'local', 'here'].includes(where);
+  const remote = ['linux', 'box', 'remote'].includes(where);
+  const hits = [...everyApp].filter((a) => a.shell === shell && !a.closed && (here ? !(a.ws && a.ws.via) : remote ? !!(a.ws && a.ws.via) : String((a.ws && a.ws.via) || '').toLowerCase().includes(where)));
+  return hits[hits.length - 1];
+}
 /* every hello, for a script waiting on an app to come back after a restart */
 const hellos = new EventEmitter();
 
@@ -428,7 +443,8 @@ function driveFor(app, say) {
   const up = (opts) => (app.ws && !app.closed ? Promise.resolve(api) : start(app.shell, opts));
 
   /* a target's machine, asked directly (#7 health, #1 last words): proc's answer, {ok, what, where} */
-  const machine = (action, target = app.shell, args = {}) => proc(action, target, args);
+  /* the app's own target is asked on the app's own machine (procFor); another target, where it is */
+  const machine = (action, target = app.shell, args = {}) => (target === app.shell && app.ws ? procFor(app, action, args) : proc(action, target, args));
   /* every machine at once - this one and each connected remote (run.js doctor) */
   const everywhere = (action, args = {}) => procAll(action, args);
   const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
@@ -468,6 +484,7 @@ function attachApp(sock) {
       app.text = String(m.text || '');
       app.ready = true;
       apps.set(app.shell, app);
+      everyApp.add(app);
       /* what its process said while it started (#3) begins its record */
       if (outBefore.has(app.shell)) { app.recent.unshift(...outBefore.get(app.shell)); outBefore.delete(app.shell); }
       pressWhenAsked(app);
@@ -498,6 +515,7 @@ function attachApp(sock) {
   sock.on('close', () => {
     if (!app) return;
     if (apps.get(app.shell) === app) apps.delete(app.shell);
+    everyApp.delete(app);
     line(`app gone: ${app.shell}`);
     app.closed = true;
     app.emit('close');
@@ -784,9 +802,11 @@ function control(ws) {
       const file = path.join(SCRIPTS, `${String(m.script).replace(/[^a-z0-9-]/gi, '')}.js`);
       if (!fs.existsSync(file)) throw new Error(`no script "${m.script}" (${SCRIPTS})`);
       for (const u of REMOTES) dialRemote(u);
-      const shell = m.app || [...apps.keys()][0] || 'desktop';
+      const shell = String(m.app || [...apps.keys()][0] || 'desktop').split('@')[0];
+      /* desktop@linux: that machine's app only - never another machine's with the same name (pickApp) */
+      if (m.app && String(m.app).includes('@') && !pickApp(m.app)) throw new Error(`no ${m.app} connected - its app must be up (a run for one machine never starts or drives another's)`);
       /* a shell not connected yet gets a handle too: its script may start it (d.up(), d.start()) */
-      const app = apps.get(shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true });
+      const app = pickApp(m.app || shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true });
       shotApp = app;
       /* every run loads the scripts and what they require (flows.js) as they are now - a cached flows.js ran an old login
        * for runs after it was changed (2026-10-31) */
