@@ -53,11 +53,29 @@ export type PlanEvent =
 let state: AgentsState = {online: false, identityPublicKey: null, agents: [], plans: []};
 const listeners = new Set<(s: AgentsState) => void>();
 const planListeners = new Set<(e: PlanEvent) => void>();
-let room: any = null;
+
+/*
+ * TWO ROOMS ON THE DESKTOP (Brad, 2026-11-01: "the local mcp has no auth, but it still will communicate with the desktop
+ * app for the planner and budget calls"): the user's server's room (its agents anywhere) and the local MCP's (agents on
+ * this computer). Each room's agents and plans are kept apart; the picture is all of them, and an answer goes back to
+ * the room that holds its agent or plan. Elsewhere there is one room, the server's.
+ */
+export type RoomWhere = 'server' | 'local';
+type Held = {where: RoomWhere; agents: Agent[]; plans: Plan[]};
+const rooms = new Map<any, Held>();
 
 const set = (patch: Partial<AgentsState>) => {
   state = {...state, ...patch};
   for (const l of [...listeners]) l(state);
+};
+/* the picture again from every room's own lists */
+const show = () => {
+  const all = [...rooms.values()];
+  set({
+    online: rooms.size > 0,
+    agents: all.flatMap(h => h.agents).sort((x, y) => (x.first ?? 0) - (y.first ?? 0)),
+    plans: all.flatMap(h => h.plans),
+  });
 };
 export const agentsState = () => state;
 export function onAgents(l: (s: AgentsState) => void): () => void {
@@ -69,32 +87,31 @@ export function onPlanEvent(l: (e: PlanEvent) => void): () => void {
   return () => { planListeners.delete(l); };
 }
 
-const upsertAgent = (a: Omit<Agent, 'state'> & {state: AgentState | 'removed'}) => {
-  const others = state.agents.filter(x => x.id !== a.id);
-  set({agents: a.state === 'removed' ? others : [...others, a as Agent].sort((x, y) => (x.first ?? 0) - (y.first ?? 0))});
-};
-const upsertPlan = (p: Plan) => set({plans: [...state.plans.filter(x => x.id !== p.id), p]});
-
-/* what the room tells every device of the identity (mcp-server/src/core/room.js `tell`) */
-function heard(m: any): void {
+/* what a room tells every device of the identity (mcp-server/src/core/room.js `tell`), into that room's lists */
+function heard(h: Held, m: any): void {
+  const upsertPlan = (p: Plan) => { h.plans = [...h.plans.filter(x => x.id !== p.id), p]; };
   switch (m && m.ev) {
-    case 'agent':
-      upsertAgent(m.agent);
-      if (m.agent.state === 'blocked' || m.agent.state === 'removed') set({plans: state.plans.filter(p => p.agent.id !== m.agent.id || p.state === 'running' || p.state === 'paused')});
-      return;
+    case 'agent': {
+      const others = h.agents.filter(x => x.id !== m.agent.id);
+      h.agents = m.agent.state === 'removed' ? others : [...others, m.agent as Agent];
+      if (m.agent.state === 'blocked' || m.agent.state === 'removed') h.plans = h.plans.filter(p => p.agent.id !== m.agent.id || p.state === 'running' || p.state === 'paused');
+      break;
+    }
     case 'plan':
       upsertPlan(m.plan);
-      return;
+      break;
     case 'plan-gone':
-      set({plans: state.plans.filter(p => p.id !== m.plan)});
-      return;
+      h.plans = h.plans.filter(p => p.id !== m.plan);
+      break;
     case 'submit':
       upsertPlan(m.plan);
+      show();
       for (const l of [...planListeners]) l({ev: 'submit', plan: m.plan});
       return;
     case 'fill': {
-      const p = state.plans.find(x => x.id === m.plan);
+      const p = h.plans.find(x => x.id === m.plan);
       if (p) upsertPlan({...p, items: p.items.map(it => (it.item === m.item ? {...it, data: m.data, encoding: m.encoding} : it))});
+      show();
       for (const l of [...planListeners]) l({ev: 'fill', plan: m.plan, item: m.item, data: m.data, encoding: m.encoding});
       return;
     }
@@ -102,36 +119,43 @@ function heard(m: any): void {
       for (const l of [...planListeners]) l({ev: 'finish', plan: m.plan});
       return;
     default:
+      return;
   }
+  show();
 }
 
-/** The room was joined (serverRoom.ts): follow its agents, and read what it already holds. */
-export function attachAgents(r: any, identityPublicKey: string): void {
-  room = r;
-  set({online: true, identityPublicKey});
-  r.on('mcp', (m: any) => { if (room === r) { ioPulse('mcp'); heard(m); } });
-  r.on('close', () => { if (room === r) { room = null; set({online: false}); } });
+/** A room was joined (serverRoom.ts the server's, localMcp.ts this computer's): follow its agents, read what it holds. */
+export function attachAgents(r: any, identityPublicKey: string, where: RoomWhere = 'server'): void {
+  for (const [x, h] of [...rooms]) if (h.where === where) rooms.delete(x);
+  const h: Held = {where, agents: [], plans: []};
+  rooms.set(r, h);
+  set({identityPublicKey});
+  show();
+  r.on('mcp', (m: any) => { if (rooms.get(r) === h) { ioPulse('mcp'); heard(h, m); } });
+  r.on('close', () => { if (rooms.get(r) === h) { rooms.delete(r); show(); } });
   void r.agents().then(
-    (x: {agents: Agent[]; plans: Plan[]}) => { if (room === r) set({agents: x.agents, plans: x.plans}); },
-    (e: Error) => console.log(`[agents] the room's list did not come: ${e.message}`),
+    (x: {agents: Agent[]; plans: Plan[]}) => { if (rooms.get(r) === h) { h.agents = x.agents; h.plans = x.plans; show(); } },
+    (e: Error) => console.log(`[agents] the ${where} room's list did not come: ${e.message}`),
   );
 }
 
-/** The room was left (the bucket closed, another server): nothing is shown that this device cannot answer. */
-export function detachAgents(): void {
-  room = null;
-  set({online: false, identityPublicKey: null, agents: [], plans: []});
+/** A room was left (the bucket closed, another server; no `where`: every room): nothing shown that it alone could answer. */
+export function detachAgents(where?: RoomWhere): void {
+  for (const [x, h] of [...rooms]) if (!where || h.where === where) rooms.delete(x);
+  if (!rooms.size) set({identityPublicKey: null});
+  show();
 }
 
-const need = () => {
-  if (!room) throw new Error('not in the room - the server is not reachable from here now');
-  return room;
+/* the room that holds this agent or plan - the one its answer goes to */
+const need = (id: string, kind: 'agent' | 'plan') => {
+  for (const [r, h] of rooms) if (kind === 'agent' ? h.agents.some(a => a.id === id) : h.plans.some(p => p.id === id)) return r;
+  throw new Error(`no room here holds that ${kind} - the server is not reachable from here now`);
 };
 /** The owner's word on an agent (the room broadcasts it to every device of the identity). */
 export async function setAgent(id: string, s: 'accepted' | 'blocked' | 'removed'): Promise<void> {
-  await need().setAgent(id, s);
+  await need(id, 'agent').setAgent(id, s);
 }
 /** A plan's progress, back to its agent (plan_wait): its state, results by item, receipts. */
 export async function planUpdate(id: string, u: {state?: PlanState; results?: PlanResult[]; receipts?: {seq: number; code: string}[]; why?: string}): Promise<void> {
-  await need().planUpdate(id, u);
+  await need(id, 'plan').planUpdate(id, u);
 }

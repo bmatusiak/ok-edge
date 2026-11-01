@@ -222,23 +222,18 @@ let loggedIn: {identity: string; url: string; room: any} | null = null;
  * can connect, i want to sync remote to local, authenticating with mcp instead of itself"; the web app "does not need
  * this special auth with itself if it cant connect to the mcp, because its hosted by the remote mcp").
  *
- * The key derives the bucket key once (okedge/bucket-key/v2 under its own site), then the first server that answers
- * gives its room's challenge and the key signs the login proof over it (identity.proveLogin) - the room checks it. Two
- * requests whichever answers: the login card's list does not change with the server.
- *   the web app   the server that serves it, only - no answer, no login
- *   the desktop   the user's server; when it cannot be reached, its own local MCP (localMcp.ts)
- *   the phone     the user's server
- * The user's server's room is this session's room (joinServerRoom takes it: the sealed copy syncs into this bucket);
- * the local one is kept for the local agents. -> 'server' | 'local', or null when none answered (the caller proves the
- * key its own way - never the web app). A server that answered and refused, or a key that did not sign, throws.
+ * The key derives the bucket key once (okedge/bucket-key/v2 under its own site), then the user's server gives its room's
+ * challenge and the key signs the login proof over it (identity.proveLogin) - the room checks it. Two requests: the
+ * login card's list.
+ *   the web app   the server that serves it - no answer, no login (it is hosted there; nothing to check itself against)
+ *   the desktop   the user's server ("if remote mcp server is alive, auth with that, not with local"); when it cannot be
+ *   the phone     reached, null: the app checks the key itself (bucketStore). The local MCP asks no proof (localMcp.ts).
+ * The room joined is this session's room (joinServerRoom takes it: the sealed copy syncs into this bucket). A server
+ * that answered and refused the proof, or a key that did not sign, throws - the login fails, nothing checks in its place.
  */
-export async function logIn(identity: string, onPress?: () => void): Promise<'server' | 'local' | null> {
-  const server = await serverUrl();
-  const local = shell === 'desktop' ? require('./localMcp').localMcpUrl() : null;
-  const urls: {url: string; kind: 'server' | 'local'}[] = [];
-  if (server) urls.push({url: server, kind: 'server'});
-  if (local) urls.push({url: local, kind: 'local'});
-  if (!urls.length) {
+export async function logIn(identity: string, onPress?: () => void): Promise<'server' | null> {
+  const url = await serverUrl();
+  if (!url) {
     if (shell === 'webapp') throw new Error('this page is not on the key\'s site - its server is the one to log in to');
     return null;
   }
@@ -249,65 +244,45 @@ export async function logIn(identity: string, onPress?: () => void): Promise<'se
   let bucketKey: {secretKey: Uint8Array; publicKey: Uint8Array};
   try {
     bucketKey = await bucketLib.bucketIdentity.deriveBucketKeyAt(app.okcrypto, held.publicKey, held.site, {
-      confirm: (a: {digits?: number[]}) => { onPress?.(); derive.opts.confirm(a); },
+      confirm: (c: {digits?: number[]}) => { onPress?.(); derive.opts.confirm(c); },
       timeoutMs: 40000,
     });
   } finally {
     derive.done();
   }
   const device = await thisDevice();
-  const why: string[] = [];
-  let anyRefused = false;
-  for (const {url, kind} of urls) {
-    let asked: {host: string; nonce: Uint8Array} | null = null;
-    let proof: Uint8Array | null = null;
-    const prove = challengeOpts('Proving this key holds the identity');
-    try {
-      const r = await bucketLib.roomClient.connectRoom({
-        url, device, WebSocket: (globalThis as any).WebSocket, randomBytes,
-        /* no kept certificate: the join carries the login proof in its place (connectRoom's login) */
-        me: {id: held.id, identityPublicKey: held.publicKey, bucketKey, certificate: new Uint8Array(0)},
-        login: async (a: {host: string; nonce: Uint8Array}) => {
-          asked = a;
-          const p: Uint8Array = await app.identity.proveLogin(a, bucketKey.publicKey, {
-            confirm: (c: {digits?: number[]}) => { onPress?.(); prove.opts.confirm(c); },
-          });
-          proof = p;
-          return p;
-        },
-      });
-      console.log(`[login] ${held.id.slice(0, 12)}: proven to ${kind === 'server' ? 'the server' : 'the local MCP'} (${new URL(url).host}) - the key signed its challenge`);
-      if (kind === 'server') {
-        const me: Me = {id: held.id, identityPublicKey: held.publicKey, bucketKey, certificate: proof as unknown as Uint8Array, login: asked as unknown as {host: string; nonce: Uint8Array}};
-        adoptProof(me);
-        if (loggedIn) { try { loggedIn.room.close(); } catch { /* closed */ } }
-        loggedIn = {identity: held.id, url, room: r};
-      } else {
-        require('./localMcp').keepLocalRoom(r);
-        bucketKey.secretKey.fill(0);
-      }
-      return kind;
-    } catch (e) {
-      /*
-       * THE SERVER ANSWERED AND REFUSED THE PROOF: the next one is asked (the desktop's local MCP checks the same proof, so
-       * a key that is not the identity is refused there too). A server older than the login proof refuses every one
-       * (2026-11-01: the deployed Worker, closed 4401) - the login goes on locally until it is deployed. The key's own
-       * failure (no sign, a wrong code) is the login's: thrown.
-       */
-      const refused = /refused the join/.test(String((e as Error)?.message ?? e));
-      if (asked && !refused) { bucketKey.secretKey.fill(0); throw e; }
-      if (refused) anyRefused = true;
-      why.push(`${new URL(url).host}: ${String((e as Error)?.message ?? e)}`);
-      console.log(`[login] ${new URL(url).host} did not answer - ${why[why.length - 1]}`);
-    } finally {
-      prove.done();
-    }
+  let asked: {host: string; nonce: Uint8Array} | null = null;
+  let proof: Uint8Array | null = null;
+  const prove = challengeOpts('Proving this key holds the identity');
+  try {
+    const r = await bucketLib.roomClient.connectRoom({
+      url, device, WebSocket: (globalThis as any).WebSocket, randomBytes,
+      /* no kept certificate: the join carries the login proof in its place (connectRoom's login) */
+      me: {id: held.id, identityPublicKey: held.publicKey, bucketKey, certificate: new Uint8Array(0)},
+      login: async (q: {host: string; nonce: Uint8Array}) => {
+        asked = q;
+        const p: Uint8Array = await app.identity.proveLogin(q, bucketKey.publicKey, {
+          confirm: (c: {digits?: number[]}) => { onPress?.(); prove.opts.confirm(c); },
+        });
+        proof = p;
+        return p;
+      },
+    });
+    console.log(`[login] ${held.id.slice(0, 12)}: proven to the server (${new URL(url).host}) - the key signed its challenge`);
+    adoptProof({id: held.id, identityPublicKey: held.publicKey, bucketKey, certificate: proof as unknown as Uint8Array, login: asked as unknown as {host: string; nonce: Uint8Array}});
+    if (loggedIn) { try { loggedIn.room.close(); } catch { /* closed */ } }
+    loggedIn = {identity: held.id, url, room: r};
+    return 'server';
+  } catch (e) {
+    const why = String((e as Error)?.message ?? e);
+    /* the server answered (its challenge came, the key was asked): its refusal, or the key's, is the login's */
+    if (asked || shell === 'webapp') { bucketKey.secretKey.fill(0); throw e; }
+    console.log(`[login] ${new URL(url).host} did not answer - ${why}; this app checks the key itself`);
+    bucketKey.secretKey.fill(0);
+    return null;
+  } finally {
+    prove.done();
   }
-  bucketKey.secretKey.fill(0);
-  /* refused and proven nowhere: the login fails - never the app's own check in its place */
-  if (anyRefused) throw new Error(`no server took this key's login proof (${why.join('; ')})`);
-  if (shell === 'webapp') throw new Error(`the server that serves this page did not answer (${why.join('; ')})`);
-  return null;
 }
 let joinedFor: string | null = null;
 let tradeChain: Promise<void> = Promise.resolve();
@@ -339,13 +314,15 @@ export function leaveServerRoom(): void {
   joinedFor = null;
   firstSynced = false;
   if (r) r.close();
-  detachAgents();
+  detachAgents('server');
   set({status: 'off', why: null, you: null, peers: []});
 }
 
 /** Join the open bucket's room on this device's server, once; nothing when no bucket is open, no server, or joined. */
 export async function joinServerRoom(): Promise<void> {
   const open = tradeBucket();
+  /* this computer's agents, beside the server's: the local MCP's room (the desktop; no proof - localMcp.ts) */
+  if (open) void require('./localMcp').joinLocalRoom(open.identity);
   const url = await serverUrl();
   set({url});
   if (!open || !url || joining || (room && joinedFor === open.identity)) return;

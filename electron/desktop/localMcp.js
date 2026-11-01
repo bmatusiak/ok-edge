@@ -7,8 +7,8 @@
  *
  * The mcp-server Rectify app (mcp-server/src: mcp-core + mcp-localhost) in this main process, on http:// and ws:// at
  * 127.0.0.1 - a free port, never another interface. The same routes and the same logic as the hosted one: /mcp for agents
- * on this machine, /ws/<identity> where this app joins with the login proof (required here). It keeps no sealed copy -
- * the bucket stays in its file (hosting.js).
+ * on this machine, /ws/<identity> where this app joins - with no proof (below) - to hear their plans and answer them. It
+ * keeps no sealed copy - the bucket stays in its file (hosting.js).
  *
  *   okedge:localMcp (sync)  -> the server's base URL (http://127.0.0.1:<port>), or null while it is not up
  */
@@ -24,7 +24,12 @@ async function start() {
     const localhost = (await import('../../mcp-server/src/localhost/plugin.js')).default;
     const app = Rectify.build([core, localhost]);
     await app.start();
-    server = await app.services.mcpLocalhost.start({ host: '127.0.0.1', port: 0 });
+    /*
+     * NO AUTH HERE (Brad, 2026-11-01: "the local mcp has no auth, but it still will communicate with the desktop app for
+     * the planner and budget calls"): the login proves the key to the user's server, or the app checks it itself; this
+     * room only carries this computer's agents to this app - any well-formed join for the identity enters (OPEN_JOIN).
+     */
+    server = await app.services.mcpLocalhost.start({ host: '127.0.0.1', port: 0, env: { REQUIRE_LOGIN: '0', OPEN_JOIN: '1' } });
     console.log(`[local-mcp] ready on ${server.url}`);
   })().catch((e) => {
     /* the app runs without it (no local agents, no local self-auth) - said once, not hidden */

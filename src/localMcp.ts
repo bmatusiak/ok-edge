@@ -1,30 +1,58 @@
 /*
- * THE DESKTOP'S LOCAL MCP (Brad, 2026-11-01: "the desktop checks itself over its local mcp"; "if it can connect, i want
- * to sync remote to local, authenticating with mcp instead of itself").
+ * THE DESKTOP'S LOCAL MCP (Brad, 2026-11-01: "if remote mcp server is alive, auth with that, not with local - the local
+ * mcp has no auth, but it still will communicate with the desktop app for the planner and budget calls").
  *
  * The local MCP runs in the desktop's main process (electron/desktop/localMcp.js - mcp-server's core + localhost, on
- * 127.0.0.1). The login (serverRoom logIn) proves the key to the user's server first; only when that cannot be reached
- * does it join this one's room instead, with the same derive and the same login proof - the desktop checking itself.
- * The room joined then is kept here for the session (the local agents' room) and goes at logout or with the key.
+ * 127.0.0.1, OPEN_JOIN). The login never goes through it: the key proves itself to the user's server, or to this app
+ * (serverRoom logIn, bucketStore). Once the bucket is open, the app joins this room with no proof and nothing of the key
+ * (lib connectRoom: no bucket key - a throwaway one) - only to hear this computer's agents (their plans, their budget
+ * calls) and answer them (mcpAgents.ts). It goes at logout or with the key.
  */
+import * as bucketLib from 'node-onlykey-lib/bucket';
 import {invokeSync} from './desktop/specs/module';
 import {shell} from './platform';
+import {getOnlyKey} from './onlykey';
+import {activeBackend} from './hooks/KeyContext';
+import {attachAgents, detachAgents} from './mcpAgents';
 
+const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 let room: any = null;
+let roomFor: string | null = null;
+let joining = false;
 
 /* the local MCP's base URL - the desktop only, and only once it is up (null: not here, or it did not start) */
 export function localMcpUrl(): string | null {
   return shell === 'desktop' ? invokeSync<string>('okedge:localMcp') : null;
 }
 
-/* the room the login joined on the local MCP: kept until the logout or the key goes */
-export function keepLocalRoom(r: any): void {
-  leaveLocalMcp();
-  room = r;
+/** Join the local MCP's room for this identity, once (no proof, nothing asked of the key); its agents shown and answered. */
+export async function joinLocalRoom(identity: string): Promise<void> {
+  const url = localMcpUrl();
+  const id = identity.toLowerCase();
+  if (!url || joining || (room && roomFor === id)) return;
+  joining = true;
+  try {
+    const held = await (await getOnlyKey(activeBackend())).identity.load();
+    if (held.id !== id) return;
+    const device = await require('./serverRoom').thisDevice();
+    leaveLocalMcp();
+    const r = await bucketLib.roomClient.connectRoom({url, device, WebSocket: (globalThis as any).WebSocket, randomBytes, me: {id, identityPublicKey: held.publicKey, bucketKey: null}});
+    room = r;
+    roomFor = id;
+    attachAgents(r, Array.from(held.publicKey as Uint8Array, (b: number) => b.toString(16).padStart(2, '0')).join(''), 'local');
+    r.on('close', () => { if (room === r) { room = null; roomFor = null; } });
+    console.log(`[local-mcp] joined this computer's room for ${id.slice(0, 12)} (${new URL(url).host}) - its agents' plans come here`);
+  } catch (e) {
+    console.log(`[local-mcp] not joined: ${String((e as Error)?.message ?? e)}`);
+  } finally {
+    joining = false;
+  }
 }
 
 /* the local room left: at logout, at a lock, with the key */
 export function leaveLocalMcp(): void {
   if (room) { try { room.close(); } catch { /* closed already */ } }
   room = null;
+  roomFor = null;
+  detachAgents('local');
 }

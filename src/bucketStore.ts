@@ -255,10 +255,10 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   const identityService = (await getOnlyKey(activeBackend())).identity;
   const state = await storage.state(id);
   /*
-   * THE KEY PROVES ITSELF TO A SERVER FIRST (serverRoom logIn; Brad, 2026-11-01: "authenticating with mcp instead of
-   * itself"): the user's server - the web app's own - or, on the desktop when that cannot be reached, its local MCP.
-   * Proven there, nothing below asks for another proof; none answered (a phone or a desktop off line), the key signs a
-   * challenge this app makes. The web app has no such fallback: logIn throws.
+   * THE KEY PROVES ITSELF TO THE USER'S SERVER FIRST (serverRoom logIn; Brad, 2026-11-01: "authenticating with mcp
+   * instead of itself"; "if remote mcp server is alive, auth with that, not with local"): proven there, nothing below
+   * asks for another proof. The server not reachable (a phone or a desktop off line): the key signs a challenge this app
+   * makes. The web app has no such fallback: logIn throws.
    */
   const proven = await require('./serverRoom').logIn(id, onPress);
   const proveHere = async () => {
@@ -287,7 +287,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   }
   /* nothing kept: proven (to a server, or a fresh challenge here), then a new bucket - the server's copy fills it */
   await proveHere();
-  console.log(`[identity] ${id.slice(0, 12)}: proven ${proven ? `to ${proven === 'server' ? 'the server' : 'the local MCP'}` : '- the key signed a fresh challenge with the identity key'}; a new bucket`);
+  console.log(`[identity] ${id.slice(0, 12)}: proven ${proven ? 'to the server' : '- the key signed a fresh challenge with the identity key'}; a new bucket`);
   const key = storage.needsKey ? await bucketKey(id, okcrypto, onPress) : null;
   const created = await storage.create(id, key);
   open = {identity: id, opened: created, key, savedClock: clockOf(created.bucket)};

@@ -88,7 +88,8 @@ export class RoomCore {
     if (!me.device) {
       /* one try: the join, checked against this connection's own challenge and this server's host */
       /* REQUIRE_LOGIN ('1'): only a login proof for THIS challenge enters - the key was present at this join */
-      const check = room.checkJoin(me.room, msg, { nonce: bytes.fromHex(me.nonce), host: me.host }, { requireLogin: this.env.REQUIRE_LOGIN === '1' });
+      /* OPEN_JOIN ('1'): no proof at all - the desktop's own local MCP on 127.0.0.1 (lib room.js checkJoin open) */
+      const check = room.checkJoin(me.room, msg, { nonce: bytes.fromHex(me.nonce), host: me.host }, { requireLogin: this.env.REQUIRE_LOGIN === '1', open: this.env.OPEN_JOIN === '1' });
       if (!check.ok) {
         send(ws, { t: 'refused' });
         return ws.close(4401, 'refused');
