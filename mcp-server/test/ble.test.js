@@ -9,6 +9,7 @@
  *     proof for this connection's challenge enters
  *   - with one, the phone is in the identity's room beside a websocket device, and frames pass both ways; this computer
  *     learns which room the phone is in (/ble)
+ *   - the phone's app starting over under a link that stays up (WHERE, no socket open) closes its dead socket
  *   - onlykey-js --ble (node-onlykey-lib cli/ble-room.js): this computer comes into that room as an agent, waits for the
  *     owner's accept on the phone, and its pipe reaches the phone's key session - a report there and back over Bluetooth
  */
@@ -54,7 +55,9 @@ function fakeBluetooth() {
     if (made === 1) return link;
     return { open: () => new Promise(() => {}), on: () => () => {}, close: async () => {}, send: async () => {} };
   };
-  return { createLink, phone, drop() { up = false; for (const l of listeners.down) l('dropped'); phone.down('dropped'); } };
+  /* a payload as the phone's side sends it (a WHERE from an app whose JS started over: a new socket link, none open) */
+  const fromPhone = (payload) => setImmediate(() => { for (const l of listeners.message) l({ command: bleSocket.CMD_SOCKET, bytes: Uint8Array.from(payload) }); });
+  return { createLink, phone, fromPhone, drop() { up = false; for (const l of listeners.down) l('dropped'); phone.down('dropped'); } };
 }
 
 async function server(t, bt) {
@@ -111,6 +114,28 @@ test('Bluetooth: with a login proof the phone joins its room beside a websocket 
   desk.serve(async (from, m) => ({ len: m.big.length }));
   assert.deepEqual(await phone.request(desk.you, { big }, { timeoutMs: 5000 }), { len: 20000 });
   phone.close();
+  desk.close();
+});
+
+test('Bluetooth: the phone\'s app started over (WHERE, no socket open) - its dead socket closes, a WHERE with one open keeps it', async (t) => {
+  const bt = fakeBluetooth();
+  const { s } = await server(t, bt);
+  const host = await hereFrom(bt.phone);
+  const seed = 'ble-where';
+  const me = await identity(seed);
+  const key = keyOf(seed);
+  const login = (asked) => bid.signLogin(key, me.identityPublicKey, me.bucketKey.publicKey, asked);
+  const phone = await connectRoom({ url: `ble://${host}`, me, device: dev('Phone', 'android'), WebSocket: bt.phone.WebSocket, randomBytes, login, timeoutMs: 5000 });
+  const desk = await connectRoom({ url: s.url, me, device: dev('Desktop', 'desktop'), WebSocket: globalThis.WebSocket, randomBytes, timeoutMs: 5000 });
+  /* the target set again while joined: the phone's socket is open, nothing closes */
+  bt.phone.where();
+  await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(desk.peers().map((p) => p.name), ['Phone']);
+  /* the app's JS started over: a new socket link with nothing open asks WHERE */
+  const left = new Promise((resolve) => desk.on('peer', (e) => { if (e.down === phone.you) resolve(); }));
+  bt.fromPhone(bleSocket.encodeWhere({ open: false }));
+  await left;
+  assert.deepEqual((await (await fetch(`${s.url}/ble`)).json()).phones, []);
   desk.close();
 });
 

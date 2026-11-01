@@ -95,7 +95,16 @@ export function startBle({ attach, addresses = [], host = defaultHost(), log = (
       if ((m.command & 0x7f) !== (CMD_SOCKET & 0x7f)) return;
       const ev = dec.push(m.bytes);
       if (!ev) return;
-      if (ev.kind === 'where') { here(); return; }
+      if (ev.kind === 'where') {
+        /*
+         * THE PHONE HAS NO SOCKET OPEN, THIS SIDE STILL HOLDS ONE (the Pixel, 2026-11-01: a Metro reload restarted the
+         * app's JS under a link that stayed up - the room kept the dead socket as the phone, and a computer's onlykey-js
+         * waited on it): that socket is gone, as a dropped websocket is.
+         */
+        if (!ev.open && socket) socket.gone(1006, 'the phone has no socket open (its app started over)');
+        here();
+        return;
+      }
       if (ev.kind === 'open') {
         if (socket) socket.gone(1000, 'replaced');
         const s = new BleServerSocket(link);
