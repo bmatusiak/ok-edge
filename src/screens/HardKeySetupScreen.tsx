@@ -16,17 +16,34 @@ import {activeBackend} from '../hooks/KeyContext';
 import {Logo} from '../ui/Logo';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
+import type {Kind} from './SetupScreen';
+
+/* each PIN's name on this page */
+const NAME: Record<Kind, string> = {primary: 'PIN', secondary: 'second-profile PIN', selfDestruct: 'self-destruct PIN'};
 
 type Stage = 'start' | 'first' | 'again' | 'working' | 'done' | 'error';
 
-/* onBack: back to the login screen (Brad, 2026-10-31: "i need a back button on this page") - not while the key is asked */
-export function HardKeySetupScreen({onDone, onBack}: {onDone: () => void; onBack?: () => void}) {
+/*
+ * onBack: back a page (Brad, 2026-10-31: "i need a back button on this page") - not while the key is asked.
+ * kinds: the PINs the setup tab's checkboxes asked for, set one after another on the key's own buttons (primary first).
+ * more: steps follow (backup passphrase / restore - the key stays in its first-use config mode until unplugged), so the
+ * last PIN hands on instead of saying to unplug the key.
+ */
+export function HardKeySetupScreen({onDone, onBack, kinds = ['primary'], more = false}: {
+  onDone: () => void;
+  onBack?: () => void;
+  kinds?: Kind[];
+  more?: boolean;
+}) {
   const [stage, setStage] = useState<Stage>('start');
+  const [at, setAt] = useState(0);
+  const kind = kinds[at] ?? 'primary';
+  const last = at >= kinds.length - 1;
   const [error, setError] = useState<string | null>(null);
 
   const step = async (label: string, timeoutMs?: number) => {
     const {device} = await getOnlyKey(activeBackend());
-    return device.pinStep(label, {kind: 'primary', ...(timeoutMs ? {timeoutMs} : {})});
+    return device.pinStep(label, {kind, ...(timeoutMs ? {timeoutMs} : {})});
   };
   /* one or more steps, then the next stage; any refusal (a mismatch included) is said, and setup starts over */
   const run = (labels: Array<[string, number?]>, next: Stage) => {
@@ -46,7 +63,7 @@ export function HardKeySetupScreen({onDone, onBack}: {onDone: () => void; onBack
   return (
     <ScrollView contentContainerStyle={styles.centre}>
       <Logo height={44} />
-      <Text style={styles.title}>Choose a PIN</Text>
+      <Text style={styles.title}>{`Choose a ${NAME[kind]}`}</Text>
       <Text style={styles.hint}>
         On this key's own buttons: 7 to 10 presses. The app never sees it, and it cannot be recovered - there is no reset
         that keeps what is on the key.
@@ -58,21 +75,25 @@ export function HardKeySetupScreen({onDone, onBack}: {onDone: () => void; onBack
       ) : null}
       {stage === 'first' ? (
         <View style={styles.actions}>
-          <Text style={styles.say}>Press your new PIN on the OnlyKey's buttons now: 7 to 10 presses.</Text>
+          <Text style={styles.say}>{`Press your new ${NAME[kind]} on the OnlyKey's buttons now: 7 to 10 presses.`}</Text>
           <Btn title="Done - I pressed it" tone="primary" onPress={() => run([['stored'], ['confirming']], 'again')} />
         </View>
       ) : null}
       {stage === 'again' ? (
         <View style={styles.actions}>
-          <Text style={styles.say}>Press the same PIN on the OnlyKey again.</Text>
+          <Text style={styles.say}>{`Press the same ${NAME[kind]} on the OnlyKey again.`}</Text>
           <Btn title="Done - I pressed it again" tone="primary" onPress={() => run([['matched'], ['committed', 30000]], 'done')} />
         </View>
       ) : null}
       {stage === 'working' ? <Text style={styles.hint}>Asking the key…</Text> : null}
       {stage === 'done' ? (
         <View style={styles.actions}>
-          <Text style={styles.say}>The PIN is set. Unplug the key and plug it back in: it starts locked, and the PIN unlocks it.</Text>
-          <Btn title="Continue" tone="primary" onPress={onDone} />
+          <Text style={styles.say}>
+            {!last || more
+              ? `The ${NAME[kind]} is set.`
+              : `The ${NAME[kind]} is set. Unplug the key and plug it back in: it starts locked, and the PIN unlocks it.`}
+          </Text>
+          <Btn title="Continue" tone="primary" onPress={() => (last ? onDone() : (setAt(at + 1), setStage('start')))} />
         </View>
       ) : null}
       {stage === 'error' ? (

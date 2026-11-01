@@ -98,7 +98,12 @@ type Stage =
   | 'failed';
 
 /** Which PIN is being collected. Order is the order they are offered in. */
-type Kind = 'primary' | 'secondary' | 'selfDestruct';
+export type Kind = 'primary' | 'secondary' | 'selfDestruct';
+/*
+ * THE SETUP TAB'S PLAN (SetupFlowScreen's checkboxes - Brad, 2026-10-31: "can i have checkboxes on the first screen for
+ * this?"): which PINs, then whether the backup passphrase and a restore follow. Without one, the wizard asks as before.
+ */
+export type SetupPlan = {kinds: Kind[]; passphrase: boolean; restore: boolean};
 
 const KINDS: Kind[] = ['primary', 'secondary', 'selfDestruct'];
 
@@ -152,10 +157,16 @@ export function SetupScreen({
   onProvision,
   led,
   onBack,
+  plan,
+  startAt,
 }: {
   onDone?: () => void;
   /** Back to the login screen, before anything is set (Brad, 2026-10-31: "i need a back button on this page"). */
   onBack?: () => void;
+  /** the setup tab's checkboxes: these PINs, then passphrase / restore as ticked (no Just-this-one / All-three toggle) */
+  plan?: SetupPlan;
+  /** start past the PINs - a hard key set its PINs on its own buttons (HardKeySetupScreen) */
+  startAt?: 'passphrase' | 'restore';
   model?: 'classic' | 'duo';
   mode?: 'setup' | 'change';
   /** In change mode, which PIN. */
@@ -187,7 +198,7 @@ export function SetupScreen({
   const getKey = useActiveKey();
 
   const [kind, setKind] = useState<Kind>(mode === 'change' ? (only ?? 'primary') : 'primary');
-  const [stage, setStage] = useState<Stage>('choose');
+  const [stage, setStage] = useState<Stage>(startAt ?? 'choose');
   /*
    * JUST THE PRIMARY PIN, which is the desktop's "advanced setup" toggle
    * inverted (app.html:68 hides the second-profile and self-destruct PINs
@@ -287,14 +298,15 @@ export function SetupScreen({
       setStage('done');
       return;
     }
-    const next = simple ? undefined : KINDS[KINDS.indexOf(from) + 1];
+    const order = plan ? plan.kinds : simple ? [] : KINDS;
+    const next = order[order.indexOf(from) + 1];
     if (next) {
       setKind(next);
       setStage('choose');
     } else {
-      setStage('passphrase');
+      setStage(plan ? (plan.passphrase ? 'passphrase' : plan.restore ? 'restore' : 'done') : 'passphrase');
     }
-  }, [mode, simple]);
+  }, [mode, simple, plan]);
 
   const apply = useCallback(
     async (digits: string) => {
@@ -381,12 +393,12 @@ export function SetupScreen({
       const {device} = await getKey();
       await device.setBackupPassphrase(passphrase);
       setPassphrase('');
-      setStage('done');
+      setStage(plan?.restore ? 'restore' : 'done');
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
       setStage('failed');
     }
-  }, [getKey, passphrase]);
+  }, [getKey, passphrase, plan]);
 
   const pickBackup = useCallback(async () => {
     setError(null);
@@ -495,7 +507,7 @@ export function SetupScreen({
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <View style={styles.action}>
           <View style={styles.cell}>
-            <Btn title="Skip" onPress={() => setStage('done')} />
+            <Btn title="Skip" onPress={() => setStage(plan?.restore ? 'restore' : 'done')} />
           </View>
           <View style={styles.cell}>
             <Btn
@@ -705,7 +717,7 @@ export function SetupScreen({
           <Text style={styles.blurb}>{BLURB[kind]}</Text>
         ) : null}
 
-        {stage === 'choose' && mode === 'setup' && kind === 'primary' ? (
+        {stage === 'choose' && mode === 'setup' && kind === 'primary' && !plan ? (
           <View style={styles.action}>
             <View style={styles.cell}>
               <Btn
@@ -723,7 +735,7 @@ export function SetupScreen({
             </View>
           </View>
         ) : null}
-        {stage === 'choose' && mode === 'setup' && kind === 'primary' ? (
+        {stage === 'choose' && mode === 'setup' && kind === 'primary' && !plan ? (
           <Text style={styles.blurb}>
             {simple
               ? 'A second profile and a self-destruct PIN can be added later from Settings. Most keys never need either.'
