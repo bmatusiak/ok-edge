@@ -28,7 +28,7 @@ import {createVendorBridgeCtap} from 'node-onlykey-lib/transport/vendor-bridge';
 import OkEmu, {type Iface} from './transport/OkEmu';
 import UsbPipe from './transport/UsbPipe';
 import {shell} from './platform';
-import {noteEdgeRequest, noteSettle, noteTunnel} from './keyBusy';
+import {keyGone, noteEdgeRequest, noteSettle, noteTunnel} from './keyBusy';
 
 /**
  * The pipe contract, as `plugins/transport/embedded` defines it.
@@ -213,7 +213,8 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       }
       late.ctap = createVendorBridgeCtap(started.services.transport);
       /* each WebAuthn operation's progress, for the sheet that says to wait for the key (src/keyBusy.ts) */
-      started.services.okcrypto?.on?.('tunnel', noteTunnel);
+      /* only the web app's requests are browser windows; every other host asks its key itself (the sheet's words) */
+      started.services.okcrypto?.on?.('tunnel', shell === 'webapp' ? noteTunnel : (e: any) => noteTunnel({...e, via: 'direct'}));
       /* and each Edge request that goes straight to the key (the phone's soft key, a USB key): the same sheet */
       if (started.services.edge) started.services.edge.onRequest = noteEdgeRequest;
       /* and the lib's waits between them, for the timeline (debug builds) */
@@ -224,7 +225,8 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
         edge: started.services.edge,
         identity: started.services.identity,
         transport: started.services.transport,
-        destroy: () => started.destroy(),
+        /* a request waiting on the vendor bridge ends now, not at its timeout: the key it waits on is gone */
+        destroy: () => { late.ctap?.cancel(); return started.destroy(); },
       });
     });
 
@@ -243,6 +245,8 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
  */
 export async function resetOnlyKey(backend?: Backend): Promise<void> {
   const targets: Backend[] = backend ? [backend] : ['embedded', 'usb'];
+  /* the busy sheet was about this key (a hard key stops the soft key): it closes with it */
+  keyGone();
 
   for (const target of targets) {
     const pending = booting.get(target);

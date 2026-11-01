@@ -103,6 +103,20 @@ export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: bo
   noteTunnel({phase: e.phase, id: edgeOp, msg: OKEDGE, slot: e.sub, step: e.phase === 'end' ? 1 : 0, steps: 1, ok: e.ok, waiting: e.waiting, via: 'direct'});
 }
 
+/*
+ * THE KEY WENT AWAY (Brad, 2026-10-31: "i unplugged the key, but this sheet never closed"): a request in progress ends
+ * with no answer - the sheet, the run's counts and its timers go with the key, at once.
+ */
+export function keyGone() {
+  if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  inFlight = false;
+  ops = 0;
+  opsDone = 0;
+  latest = null;
+  if (current) set(null);
+}
+
 export function noteTunnel(e: TunnelEvent) {
   if (e.phase === 'begin') timeline(`begin #${e.id} ${whatOf(e.msg, e.slot)}`);
   if (e.phase === 'end') timeline(`end #${e.id} ${whatOf(e.msg, e.slot)} steps=${e.step} ${e.ok ? 'ok' : 'failed'}`);
