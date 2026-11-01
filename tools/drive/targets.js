@@ -619,6 +619,14 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         const rev = await adb(['reverse', `tcp:${port}`, `tcp:${port}`]);
         if (!rev.ok) return `adb reverse: ${rev.out}`;
         /*
+         * THE PIXEL'S CODE COMES FROM THIS MACHINE'S METRO (Brad, 2026-11-01: "linux box and pixel work together (does
+         * android build and debugging)"): the debug app asks 127.0.0.1:8082 (app.plugin.js reactNativeDevServerPort), so
+         * the box's own ok-edge-metro (pm2) is reversed to it here - never a Windows Metro over wireless adb.
+         */
+        const metro = process.env.DRIVE_METRO_PORT || '8082';
+        const mr = await adb(['reverse', `tcp:${metro}`, `tcp:${metro}`]);
+        if (!mr.ok) return `adb reverse (Metro ${metro}): ${mr.out}`;
+        /*
          * on the box: the phone's server is the stand-in too, on its plain port - the app is pointed at it once with
          * `run.js server http://127.0.0.1:${STANDIN_PLAIN} --app android` (kept in the app's storage)
          */
