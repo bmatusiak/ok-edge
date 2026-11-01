@@ -5,8 +5,7 @@ import {Keypad} from '../ui/Keypad';
 import {theme} from '../ui/theme';
 import OkEmu from '../transport/OkEmu';
 import {PinScreen} from './PinScreen';
-import {SetupScreen} from './SetupScreen';
-import {HardKeySetupScreen} from './HardKeySetupScreen';
+import {SetupFlowScreen} from './SetupFlowScreen';
 import type {EmuSession} from '../hooks/useOkEmu';
 import type {KeyControl} from '../hooks/useKey';
 import {useActiveKey} from '../hooks/KeyContext';
@@ -151,24 +150,11 @@ export function KeyScreen({emu, keys, configMode = false, onCheckConfig, checkin
    */
   if (emu.device === 'uninitialized') {
     /*
-     * A HARD KEY'S PIN GOES IN ON ITS OWN BUTTONS (Brad, 2026-10-31, a new prod hard key on this tab: "hardkey + prod =
-     * no pin entry ... it has no debug interface to even enter the pin"): no keypad here - the same hard-key setup the
-     * login's setup shows (MainApp). When it is done the key reports locked, and this tab shows its PIN screen.
+     * THE SETUP FLOW, the one place a blank key is set up (Brad, 2026-10-31: the Setup tab "will replace the 'this key'
+     * setup flow"): MainApp opens the Setup tab instead of this one while the key is blank, so this is only met in the
+     * moment before it does - the same flow, not a second copy.
      */
-    if (keys.backend === 'usb') return <HardKeySetupScreen onDone={() => {}} />;
-    /*
-     * `model` is not optional here even though the prop is. It defaults to
-     * 'classic', and omitting it put a DUO - which has no six-button keypad
-     * and takes its whole PIN set in one OKSETPIN body - in front of the
-     * classic pad on its first run.
-     */
-    return (
-      <SetupScreen
-        onProvision={emu.provision}
-        model={emu.model}
-        led={emu.led}
-      />
-    );
+    return <SetupFlowScreen keys={keys} onDone={() => {}} />;
   }
 
   /*

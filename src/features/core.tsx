@@ -20,6 +20,7 @@ import {onOpenBudget} from '../edgeNav';
 import {onOpenKeyChainWizard} from '../keyChainNav';
 import {takeOpenedAlarm} from '../edgeAlerts';
 import {KeyScreen} from '../screens/KeyScreen';
+import {SetupFlowScreen} from '../screens/SetupFlowScreen';
 import {SlotsScreen} from '../screens/SlotsScreen';
 import {SlotEditorScreen} from '../screens/SlotEditorScreen';
 import {KeysScreen} from '../screens/KeysScreen';
@@ -89,7 +90,7 @@ export function tabPlugin(tab: AppTab, watch?: AppWatch) {
  * should be 2nd"); the rest in the order the drawer always had. Plugin tabs place themselves `after` one of these.
  */
 const ORDER = {
-  'This Key': 10, Edge: 20, 'PIN Setup': 30, 'Encrypt/Decrypt': 40, Encrypt: 41, Decrypt: 42, Slots: 50, 'Key Chain': 60,
+  'This Key': 10, Setup: 10, Edge: 20, 'PIN Setup': 30, 'Encrypt/Decrypt': 40, Encrypt: 41, Decrypt: 42, Slots: 50, 'Key Chain': 60,
   Keys: 70, Passkeys: 80, 'Backup/Restore': 90, Firmware: 100, Preferences: 110, Bluetooth: 120, Sync: 130, Activity: 140,
   Advanced: 150, Log: 160, 'In-Development': 900, Testing: 910, Settings: 1000,
 } as const;
@@ -128,7 +129,13 @@ function ThisKeyTab({ctx, slots}: {ctx: TabContext; slots: boolean}) {
       slots={slots ? <SlotsScreen panel onOpen={setOpen} /> : undefined} />
   );
 }
-export const thisKey = ({slots}: {slots: boolean}) => tabPlugin({name: 'This Key', order: ORDER['This Key'], inLockedTesting: true, render: ctx => <ThisKeyTab ctx={ctx} slots={slots} />});
+export const thisKey = ({slots}: {slots: boolean}) => tabPlugin({name: 'This Key', order: ORDER['This Key'], inLockedTesting: true, when: s => !s.keyBlank, render: ctx => <ThisKeyTab ctx={ctx} slots={slots} />});
+
+/*
+ * SETUP, IN THIS KEY'S PLACE WHILE THE KEY IS BLANK (Brad, 2026-10-31: "if a key is uninitialized, it gives us the 'setup'
+ * tab instead of the 'this key' tab"): the setup flow - which key (the only place it is chosen), then its PIN.
+ */
+export const setupTab = tabPlugin({name: 'Setup', order: ORDER.Setup, inLockedTesting: true, when: s => !!s.keyBlank, render: ctx => <SetupFlowScreen keys={ctx.keys} onDone={() => {}} />});
 
 /* SLOTS (kept, not in the drawer: a panel on This Key now) */
 function SlotsTab({ctx}: {ctx: TabContext}) {

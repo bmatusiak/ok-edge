@@ -4,7 +4,7 @@ import OkEmu from '../transport/OkEmu';
 import {Keypad} from '../ui/Keypad';
 import {usePressQueue} from '../hooks/usePressQueue';
 import {Logo} from '../ui/Logo';
-import {Btn, LedCircle, Segmented} from '../ui/components';
+import {Btn, LedCircle} from '../ui/components';
 import * as biometrics from '../biometrics';
 import {DuoPinForm} from '../ui/DuoPinForm';
 import {useActiveKey} from '../hooks/KeyContext';
@@ -42,27 +42,6 @@ import {armWebKey} from '../hooks/useWebKey';
  * unlock() a promise that resolves when the user finishes would be the same
  * queue with a worse shape.
  */
-/**
- * The two keys, by the names they are called everywhere else in the app.
- *
- * Literal strings rather than a code/label pair because `Segmented` renders
- * the option itself - one place to read, one place to change.
- */
-export type KeyPick = 'Hard key' | 'Soft Key';
-const PICK_OPTIONS: readonly KeyPick[] = ['Hard key', 'Soft Key'];
-
-/*
- * THE SWITCH ITSELF, for this screen and the two setup screens (Brad, 2026-10-31, walking a new prod hard key's setup on
- * the desktop: the soft key was blank, so Log in went straight to its setup and the switch - drawn only here - was never
- * shown; a remembered soft-key pick hid the attached hard key for good).
- */
-export function KeyPickBar({keyPick}: {keyPick: {value: KeyPick; onChange: (next: KeyPick) => void}}) {
-  return (
-    <View style={styles.pick}>
-      <Segmented options={PICK_OPTIONS} value={keyPick.value} onChange={keyPick.onChange} />
-    </View>
-  );
-}
 
 export function PinScreen({
   onPress,
@@ -77,7 +56,6 @@ export function PinScreen({
   model = 'classic',
   settling = null,
   led,
-  keyPick = null,
 }: {
   /**
    * Whether the app believes the key is in config mode.
@@ -88,12 +66,6 @@ export function PinScreen({
    * Asking is the only way to find out, and THIS is where someone is standing
    * when they need to - not on Keys or Backup, where the panel lives.
    */
-  /**
-   * Which key this screen is talking to, and how to change it - or null to
-   * offer no choice at all, which is the honest state when nothing is plugged
-   * in: there is no second key to pick.
-   */
-  keyPick?: {value: KeyPick; onChange: (next: KeyPick) => void} | null;
   /** Why a press would be dropped right now (useKey / useOkEmu.settling), or null. */
   settling?: string | null;
   onPress: (button: number) => Promise<void> | void;
@@ -265,17 +237,6 @@ export function PinScreen({
     <View style={styles.root}>
       <Logo height={30} />
 
-      {/*
-        * WHICH KEY, before anything that depends on which key it is.
-        *
-        * Everything below this row differs between the two: the soft key draws
-        * an LED and a keypad because the app drives both, and the hard key
-        * draws neither - its light is on the desk and its buttons are under
-        * your finger. Choosing after seeing a keypad that is about to vanish
-        * would be the wrong order.
-        */}
-      {keyPick ? <KeyPickBar keyPick={keyPick} /> : null}
-
       {led ? (
         <View style={styles.ledRow}>
           <LedCircle pixels={led} />
@@ -428,7 +389,6 @@ const styles = StyleSheet.create({
   root: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
   title: {color: theme.text, fontSize: 22, fontWeight: '700', marginTop: 28},
   hint: {color: theme.textDim, fontSize: 13, marginTop: 4},
-  pick: {marginTop: 20, width: '100%', maxWidth: 320},
   ledRow: {marginTop: 18, marginBottom: 10},
   pad: {width: '100%', maxWidth: 320},
   footer: {flexDirection: 'row', gap: 10, marginTop: 22, width: '100%', maxWidth: 320},

@@ -9,7 +9,6 @@ import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import type {DeviceState} from '../hooks/useOkEmu';
 import {DownloadsPage} from './DownloadsPage';
 import {shell} from '../platform';
-import {KeyPickBar, type KeyPick} from './PinScreen';
 
 /**
  * The first thing you see, and a provenance screen as much as a door.
@@ -26,7 +25,6 @@ export function LoginScreen({
   onContinue,
   onTesting,
   picked = null,
-  keyPick = null,
 }: {
   device: DeviceState;
   attached?: boolean | null;
@@ -35,11 +33,6 @@ export function LoginScreen({
   onContinue: () => void;
   /** Turns testing mode on from outside the door. Debug builds only. */
   onTesting?: () => void;
-  /*
-   * WHICH KEY, CHOSEN BEFORE LOGIN (Brad, 2026-10-31: "that should be chosen during pre login" - not inside setup): the
-   * Soft Key / Hard key switch, shown only when there is something to choose between (MainApp keyPick).
-   */
-  keyPick?: {value: KeyPick; onChange: (next: KeyPick) => void} | null;
   /*
    * THE MODE ALREADY PICKED (Brad, 2026-10-11: "after selecting a mode,, diable the button that
    * cant be activated,, so a app restart is forced"): the net the soft key's firmware already runs
@@ -120,7 +113,6 @@ export function LoginScreen({
       {attached === true && shell !== 'webapp' ? (
         <Text style={styles.attached}>Hard key attached</Text>
       ) : null}
-      {keyPick ? <KeyPickBar keyPick={keyPick} /> : null}
 
       <View style={styles.action}>
         <Btn

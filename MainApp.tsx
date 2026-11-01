@@ -51,9 +51,8 @@ const SPLASH_SEEN: boolean = (() => {
   }
 })();
 import {LoginScreen} from './src/screens/LoginScreen';
-import {PinScreen, type KeyPick} from './src/screens/PinScreen';
-import {SetupScreen} from './src/screens/SetupScreen';
-import {HardKeySetupScreen} from './src/screens/HardKeySetupScreen';
+import {PinScreen} from './src/screens/PinScreen';
+import {SetupFlowScreen} from './src/screens/SetupFlowScreen';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
 import {IdentityCheckScreen} from './src/screens/IdentityCheckScreen';
 import {closeBucket} from './src/bucketStore';
@@ -213,21 +212,13 @@ function Shell() {
     isUnlocked,
   });
   const keys = useKey({softLog: emuLog.log, hardLog: hardLog.log, fidoPending: fido.pending});
-  /*
-   * THE SOFT KEY / HARD KEY SWITCH, wherever a key is chosen: the login screen (before login - Brad, 2026-10-31) and the PIN screen. OFFERED ONLY WHEN
-   * THERE IS SOMETHING TO CHOOSE BETWEEN - no hard key on the bus, or no soft key here (the web app), no row. Picking
-   * writes the OVERRIDE rather than the mode: the mode is a standing preference ("prefer the hard key when one is
-   * attached"), and this is someone saying which key they mean right now, for this login.
-   */
-  const keyPick: {value: KeyPick; onChange: (next: KeyPick) => void} | null =
-    keys.attached === true && SOFT_KEY_HERE
-      ? {value: keys.backend === 'usb' ? 'Hard key' : 'Soft Key', onChange: next => keys.setOverride(next === 'Hard key' ? 'usb' : 'embedded')}
-      : null;
 
 
   backendRef.current = keys.backend;
   unlockedRef.current = keys.key.device === 'unlocked';
   const emu = keys.key;
+  /* the key in use has no PIN yet: the Setup tab in This Key's place (features/core.tsx setupTab) */
+  const keyBlank = emu.device === 'uninitialized';
   /*
    * TESTING MODE's Login (Brad, 2026-10-07: "a login button that sends the passcode
    * 1234561", hidden once unlocked): the dev keys' passcode, pressed on the soft key
@@ -443,6 +434,11 @@ function Shell() {
   }, [getActiveKey, emu]);
 
   const [tab, setTab] = useState<Tab>('This Key');
+  /* the open tab follows the key: Setup while it is blank, This Key once it has a PIN (the two share one place) */
+  useEffect(() => {
+    if (keyBlank && tab === 'This Key') setTab('Setup');
+    else if (!keyBlank && tab === 'Setup') setTab('This Key');
+  }, [keyBlank, tab]);
   /* the app plugins start a moment after launch; their tabs appear then */
   usePluginsStarted();
   const currentTab = pluginTabs().find(t => t.name === tab);
@@ -539,7 +535,7 @@ function Shell() {
      * must not come back through here - the render's last branch IS the
      * Testing screen, and this would walk round its gate.
      */
-    const valid: readonly string[] = shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed, keyHasEdge}).map(x => x.name);
+    const valid: readonly string[] = shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed, keyHasEdge, keyBlank}).map(x => x.name);
     void takeResumeTab(valid).then(remembered => {
       if (remembered) setTab(remembered as Tab);
       /* a drive moves only once the remembered tab is in place (src/drive/registry.tsx) */
@@ -727,7 +723,7 @@ function Shell() {
 
   /* testing mode before the identity check: only This Key and Testing are shown - any other tab goes to Testing */
   useEffect(() => {
-    if (testing.enabled && !passed && phase === 'main' && !shownTabs({testing: true, testingLocked: true, keyHasEdge}).some(x => x.name === tab)) setTab('Testing');
+    if (testing.enabled && !passed && phase === 'main' && !shownTabs({testing: true, testingLocked: true, keyHasEdge, keyBlank}).some(x => x.name === tab)) setTab('Testing');
   }, [testing.enabled, passed, phase, tab]);
 
   const ready = phase === 'main';
@@ -891,7 +887,6 @@ function Shell() {
             <LoginScreen
               device={emu.device}
               attached={keys.attached}
-              keyPick={keyPick}
               keyVersion={keys.hard.version}
               picked={keys.backend === 'embedded' && keys.soft.state === 'running' ? net : null}
               /*
@@ -922,17 +917,9 @@ function Shell() {
                 setPhase(emu.device === 'uninitialized' ? 'setup' : 'pin');
               }}
             />
-          ) : phase === 'setup' && keys.backend === 'usb' ? (
-            /* a hard key's PIN goes in on its own buttons - nothing here can press them */
-            <HardKeySetupScreen onDone={() => setPhase('login')} onBack={() => setPhase('login')} />
           ) : phase === 'setup' ? (
-            <SetupScreen
-              onDone={() => setPhase('login')}
-              onBack={() => setPhase('login')}
-              model={emu.model}
-              onProvision={emu.provision}
-              led={keys.backend === 'embedded' ? emu.led : undefined}
-            />
+            /* a blank key: the setup flow - which key (the only place it is chosen), then its PIN (SetupFlowScreen) */
+            <SetupFlowScreen keys={keys} onDone={() => setPhase('login')} onBack={() => setPhase('login')} />
           ) : phase === 'identity' ? (
             <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => { setPassed(true); setPhase('main'); }} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
           ) : phase === 'pin' ? (
@@ -944,8 +931,6 @@ function Shell() {
               model={emu.model}
               settling={emu.settling}
               led={keys.backend === 'embedded' ? emu.led : undefined}
-              keyPick={keyPick
-              }
               onBack={() => setPhase('login')}
               /*
                 The door is where someone stands when config mode has locked
@@ -964,7 +949,7 @@ function Shell() {
 
         <Drawer
           open={drawer && ready}
-          tabs={shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed, keyHasEdge}).map(x => x.name)}
+          tabs={shownTabs({testing: testing.enabled, testingLocked: testing.enabled && !passed, keyHasEdge, keyBlank}).map(x => x.name)}
           value={tab}
           onChange={setTab}
           onClose={() => setDrawer(false)}

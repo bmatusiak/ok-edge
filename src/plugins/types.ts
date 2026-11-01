@@ -68,6 +68,8 @@ export type TabState = {
   testingLocked: boolean;
   /** the key in use answered as an Edge key at the identity check (its Edge identity read) - hard or soft, on any platform */
   keyHasEdge: boolean;
+  /** the key in use has no PIN yet (uninitialized): the Setup tab instead of This Key */
+  keyBlank?: boolean;
 };
 
 /** Given to a plugin's watch, mounted once with the app whether its tab is shown or not. */

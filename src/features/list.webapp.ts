@@ -4,8 +4,8 @@
  * interface"): no Settings (PIN, preferences, backup/restore, firmware, advanced), no Passkeys (CTAPHID's credential
  * management), no slots on This Key; no Bluetooth tab (a browser is not a Bluetooth keyboard or authenticator).
  */
-import {common, edge, thisKey} from './core';
+import {common, edge, thisKey, setupTab} from './core';
 import {mcpChannel} from './channels/mcp';
 import {commonBanners, otherTabsBanner} from './banners';
 
-export const coreFeatures = [thisKey({slots: false}), edge({always: false}), ...common, mcpChannel, otherTabsBanner, ...commonBanners];
+export const coreFeatures = [thisKey({slots: false}), setupTab, edge({always: false}), ...common, mcpChannel, otherTabsBanner, ...commonBanners];
