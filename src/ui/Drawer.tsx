@@ -45,7 +45,7 @@ export function Drawer<T extends string>({
   }
 
   return (
-    <DriveLayer open={open}>
+    <DriveLayer open={open} name="drawer">
     <DriveTap label="Close menu" onPress={onClose} />
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       {/* Tapping anywhere off the panel closes it - the usual escape. */}

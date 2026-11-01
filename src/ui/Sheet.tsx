@@ -74,7 +74,7 @@ export function Sheet({
       navigationBarTranslucent
       onRequestClose={onClose ?? (() => undefined)}>
       {/* an open sheet is the drive's top layer: what is beneath it is covered (src/drive/registry.tsx) */}
-      <DriveLayer open={visible}>
+      <DriveLayer open={visible} name={typeof title === 'string' ? title : 'sheet'}>
       <View style={styles.backdrop}>
         {onClose ? <Pressable style={styles.dismiss} onPress={onClose} accessibilityLabel="Close" /> : null}
         {onClose ? <DriveTap label="Close" onPress={onClose} /> : null}

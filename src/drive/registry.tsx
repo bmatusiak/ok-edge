@@ -20,6 +20,11 @@ type Control = {id: number; label: string; enabled: boolean; layer: number; pres
 const controls = new Map<number, Control>();
 /* the open layers, in the order they opened: the last is on top */
 const layers: number[] = [];
+/*
+ * each layer's name (a sheet's title, 'drawer'), so a drive can say WHICH sheet is on top (2026-10-31, the live key on
+ * the Windows desktop: an empty top layer ate every click on the login-card sheet, and nothing could say whose it was)
+ */
+const layerNames = new Map<number, string>();
 /* text fields a drive may fill, by their placeholder */
 const fields = new Map<string, (value: string) => void>();
 let nextId = 1;
@@ -34,6 +39,8 @@ function changed(): void {
 }
 
 export const topLayer = (): number => (layers.length ? layers[layers.length - 1] : 0);
+/** the open layers, bottom to top, by name */
+export const layerStack = (): string[] => layers.map((l) => `${l}:${layerNames.get(l) ?? '?'}`);
 
 /** The controls on the top layer, as a person sees them: label and whether it takes a press now. */
 export function liveControls(): {label: string; enabled: boolean}[] {
@@ -89,18 +96,20 @@ export function useDriveField(placeholder: string, set: (value: string) => void)
 }
 
 /** An overlay: while `open`, what is inside it is the top layer and everything beneath is covered. */
-export function DriveLayer({open, children}: {open: boolean; children: React.ReactNode}) {
+export function DriveLayer({open, name = '', children}: {open: boolean; name?: string; children: React.ReactNode}) {
   const [id] = useState(() => nextId++);
   useEffect(() => {
     if (!open || !driveGate()) return;
     layers.push(id);
+    layerNames.set(id, name);
     changed();
     return () => {
       const at = layers.lastIndexOf(id);
       if (at >= 0) layers.splice(at, 1);
+      layerNames.delete(id);
       changed();
     };
-  }, [open, id]);
+  }, [open, id, name]);
   return <LayerContext.Provider value={id}>{children}</LayerContext.Provider>;
 }
 

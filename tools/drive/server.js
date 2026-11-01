@@ -477,7 +477,7 @@ function attachApp(sock) {
       if (!app.picturing) { app.picturing = true; shotNow('error', app.shell).finally(() => { app.picturing = false; }); }
       return;
     }
-    if (m.t === 'controls') { app.controls = m.list || []; app.top = m.top || 0; app.flags = m.flags || {}; app.emit('controls'); return; }
+    if (m.t === 'controls') { app.controls = m.list || []; app.top = m.top || 0; app.layers = m.layers || []; app.flags = m.flags || {}; app.emit('controls'); return; }
     if (m.t === 'screen') { app.text = String(m.text || ''); app.emit('screen'); }
   });
   sock.on('close', () => {

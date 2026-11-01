@@ -22,7 +22,7 @@
  * able to enter testing mode - and says which net it is on as that changes; the server presses only on the testnet.
  */
 import {Platform} from 'react-native';
-import {driveFlags, driveGate, fillField, liveControls, onDriveChange, setDriveFlag, tapLabel, topLayer} from './registry';
+import {driveFlags, driveGate, fillField, liveControls, onDriveChange, setDriveFlag, layerStack, tapLabel, topLayer} from './registry';
 import {onKeyBusy} from '../keyBusy';
 import {shell} from '../platform';
 import {currentNet, onNet} from '../net';
@@ -53,7 +53,7 @@ let started = false;
 let logBox: {connected(): void} | null = null;
 
 /* the top layer's controls, whether an overlay is open, and the app's own flags (phase, busy) */
-const controlsMsg = () => ({t: 'controls', list: liveControls(), top: topLayer(), flags: driveFlags()});
+const controlsMsg = () => ({t: 'controls', list: liveControls(), top: topLayer(), layers: layerStack(), flags: driveFlags()});
 
 function send(msg: object): void {
   if (ws && ws.readyState === 1) {
