@@ -7,14 +7,24 @@
  *   /mcp       the MCP face, for agents on this machine
  *   /ws/<id>   an identity's room: the same challenge and join (the login proof required - REQUIRE_LOGIN '1'), frames,
  *              peers, the agents' room side
- *   /          a plain page naming the server
+ *   /          the web app's files when `assets` names them (the Worker's ASSETS: docs/, a single-page app), else a
+ *              plain page naming the server
  * What Cloudflare gives a Durable Object, given here: storage per room / session / agent (in memory), its sockets with
- * their attachments, its alarm as a timer. No SQLite: this server keeps no sealed copy (the desktop's bucket stays in its
- * own file), and the room says so ({on: false}).
+ * their attachments, its alarm as a timer - and, with `sealed`, each room's SQLite (node:sqlite, in memory) for the
+ * sealed copy. Without it the room keeps none and says so ({on: false}): the desktop's bucket stays in its own file.
  *
- *   mcpLocalhost.start({host = '127.0.0.1', port = 0, env = {}}) -> {url, port, close()}
+ * THE WEB APP ON IT (Brad, 2026-11-01: "test webapp with local mcp + websocket embedded, localhost plugin will host the
+ * webapp files"): a page reaches a key over FIDO2 only from a secure origin on the key's site, so `tls` serves it as
+ * https with the box's dev certificate, under the site's name mapped to this machine - the deployed path, one process.
+ *
+ *   mcpLocalhost.start({host = '127.0.0.1', port = 0, env = {}, assets = null, tls = null, sealed = false})
+ *     assets: a directory to serve;  tls: {key, cert} (PEM);  sealed: true for the sealed copy (needs node:sqlite)
+ *     -> {url, port, close()}
  */
 import http from 'node:http';
+import https from 'node:https';
+import fs from 'node:fs';
+import pathOf from 'node:path';
 import WS from 'ws';
 
 /* ws 7 (React Native's, in this repo) names it Server; ws 8 WebSocketServer - and neither has ESM named exports */
@@ -22,13 +32,32 @@ const WebSocketServer = WS.WebSocketServer || WS.Server;
 
 const clone = (v) => (v === undefined ? undefined : structuredClone(v));
 
+/*
+ * A DURABLE OBJECT'S SQL, AS THE CORE USES IT: exec(query, ...bindings) -> a cursor with toArray(). One in-memory
+ * database per room (node:sqlite's DatabaseSync, Node 22.5+) - gone with the process, as the copy is only a carrier: the
+ * devices keep their buckets.
+ */
+function memorySql(DatabaseSync) {
+  const db = new DatabaseSync(':memory:');
+  return {
+    exec(query, ...bindings) {
+      const st = db.prepare(query);
+      const rows = /^\s*SELECT\b/i.test(query) ? st.all(...bindings) : (st.run(...bindings), []);
+      return { toArray: () => rows.map((r) => ({ ...r })) };
+    },
+    close: () => db.close(),
+  };
+}
+
 /* what Cloudflare's ctx.storage gives the core: key-value, and one alarm (fire is set by the namespace) */
-function memoryStorage() {
+function memoryStorage(DatabaseSync) {
   const kv = new Map();
   let alarmAt = null;
   let timer = null;
+  const sql = DatabaseSync ? memorySql(DatabaseSync) : null;
   const storage = {
     fire: null,
+    sql: sql || undefined,
     async get(k) { return clone(kv.get(k)); },
     async put(k, v) { kv.set(k, clone(v)); },
     async delete(k) { return kv.delete(k); },
@@ -41,19 +70,19 @@ function memoryStorage() {
       timer = setTimeout(() => { alarmAt = null; if (storage.fire) storage.fire(); }, Math.max(0, at - Date.now()));
       if (timer.unref) timer.unref();
     },
-    stop() { clearTimeout(timer); },
+    stop() { clearTimeout(timer); if (sql) sql.close(); },
   };
   return storage;
 }
 
 /* a namespace of instances by name, as env.ROOMS / AGENTS / MCP_SESSIONS - each with a ctx of its own */
-function namespace(Core, env, all) {
+function namespace(Core, env, all, DatabaseSync = null) {
   const made = new Map();
   return {
     idFromName: (name) => String(name),
     get(id) {
       if (!made.has(id)) {
-        const storage = memoryStorage();
+        const storage = memoryStorage(DatabaseSync);
         const sockets = new Set();
         const ctx = { storage, sockets, acceptWebSocket: (ws) => sockets.add(ws), getWebSockets: () => [...sockets] };
         const core = new Core(ctx, env);
@@ -81,6 +110,18 @@ async function asRequest(req) {
   const body = chunks.length ? Buffer.concat(chunks) : null;
   return new Request(`http://${req.headers.host}${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? null : body });
 }
+/* a file of the web app, or its index.html for any other path (a single-page app, as the Worker's not_found_handling) */
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.map': 'application/json', '.wasm': 'application/wasm', '.webmanifest': 'application/manifest+json' };
+function serveAsset(dir, urlPath, res) {
+  const root = pathOf.resolve(dir);
+  let f = pathOf.join(root, decodeURIComponent(urlPath));
+  if (f !== root && !f.startsWith(root + pathOf.sep)) { res.writeHead(403); return res.end(); }
+  if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) f = pathOf.join(root, 'index.html');
+  /* no-store: a --dev export names its bundle the same every build, so a cached copy would not be the new one */
+  res.writeHead(200, { 'content-type': TYPES[pathOf.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
+  fs.createReadStream(f).pipe(res);
+}
+
 async function writeResponse(res, response) {
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
@@ -90,25 +131,29 @@ export default function setup(imports, register) {
   const { mcpCore } = imports;
   register(null, {
     mcpLocalhost: {
-      start({ host = '127.0.0.1', port = 0, env: settings = {} } = {}) {
+      async start({ host = '127.0.0.1', port = 0, env: settings = {}, assets = null, tls = null, sealed = false } = {}) {
         const storages = [];
         const env = { REQUIRE_LOGIN: '1', LIFETIME_IDENTITIES: '*', ...settings };
-        env.ROOMS = namespace(mcpCore.RoomCore, env, storages);
+        /* node:sqlite only when asked: Electron's Node may not have it, and the desktop keeps no sealed copy */
+        const DatabaseSync = sealed ? (await import('node:sqlite')).DatabaseSync : null;
+        env.ROOMS = namespace(mcpCore.RoomCore, env, storages, DatabaseSync);
         env.AGENTS = namespace(mcpCore.AgentSessionCore, env, storages);
         env.MCP_SESSIONS = namespace(mcpCore.McpSessionCore, env, storages);
         const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 + 1024 });
-        const server = http.createServer(async (req, res) => {
+        const handler = async (req, res) => {
           try {
             const path = new URL(req.url, 'http://x').pathname;
             if (path === '/mcp') return writeResponse(res, await mcpCore.handleMcp(await asRequest(req), env));
             if (mcpCore.ROOM_PATH.test(path)) { res.writeHead(426); return res.end('a websocket only'); }
+            if (assets) return serveAsset(assets, path, res);
             res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
             return res.end('<!doctype html><title>ok-edge</title><p>The local MCP: /mcp for agents, /ws/&lt;identity&gt; for this computer\'s app.</p>');
           } catch (e) {
             res.writeHead(500);
             res.end(String(e && e.message || e));
           }
-        });
+        };
+        const server = tls ? https.createServer({ key: tls.key, cert: tls.cert }, handler) : http.createServer(handler);
         server.on('upgrade', (req, socket, head) => {
           const url = new URL(req.url, `http://${req.headers.host}`);
           const m = mcpCore.ROOM_PATH.exec(url.pathname);
@@ -133,7 +178,7 @@ export default function setup(imports, register) {
           server.listen(port, host, () => {
             const p = server.address().port;
             resolve({
-              url: `http://${host}:${p}`,
+              url: `${tls ? 'https' : 'http'}://${host}:${p}`,
               port: p,
               close: () => new Promise((done) => {
                 for (const s of storages) s.stop();

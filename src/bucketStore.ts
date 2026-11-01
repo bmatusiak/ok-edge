@@ -254,17 +254,21 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   const id = identity.toLowerCase();
   const identityService = (await getOnlyKey(activeBackend())).identity;
   const state = await storage.state(id);
+  /*
+   * THE KEY PROVES ITSELF TO A SERVER FIRST (serverRoom logIn; Brad, 2026-11-01: "authenticating with mcp instead of
+   * itself"): the user's server - the web app's own - or, on the desktop when that cannot be reached, its local MCP.
+   * Proven there, nothing below asks for another proof; none answered (a phone or a desktop off line), the key signs a
+   * challenge this app makes. The web app has no such fallback: logIn throws.
+   */
+  const proven = await require('./serverRoom').logIn(id, onPress);
+  const proveHere = async () => {
+    if (proven) return;
+    const prove = challengeOpts('Proving this key holds the identity');
+    try { await identityService.verify(prove.opts); } finally { prove.done(); }
+  };
   if (state === 'kept') {
-    /*
-     * KEPT OPENED HERE - AND THE KEY PROVES ITSELF TO THE LOCAL MCP FIRST (Brad, 2026-11-01: "every time i login it should
-     * still make me press 2 times"; "the desktop checks itself over its local mcp"): the bucket key derived and the local
-     * room's challenge signed (localMcp.ts) - two requests, the login card's list. The file itself opens with no key, as
-     * before. With no local MCP (it did not start), the key signs a challenge this app makes instead - still proven.
-     */
-    if (!(await require('./localMcp').loginToLocalMcp(id, onPress))) {
-      const prove = challengeOpts('Proving this key holds the identity');
-      try { await identityService.verify(prove.opts); } finally { prove.done(); }
-    }
+    /* kept opened here (the desktop's file, shared with the CLI): it opens with no key once the key is proven */
+    await proveHere();
     const opened = await storage.open(id, null, () => { throw new Error('kept opened: no rows to prove'); });
     if (opened) {
       console.log(`[bucket] ${id.slice(0, 12)}: proven; kept opened on this computer (shared with the CLI)`);
@@ -281,9 +285,8 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
       return {created: false, pressed: true};
     }
   }
-  /* nothing kept: the key signs a fresh challenge with the identity's key, then a new bucket */
-  const ask = challengeOpts('Proving this key holds the identity');
-  try { await identityService.verify(ask.opts); } finally { ask.done(); }
+  /* nothing kept: proven (to a server, or a fresh challenge here), then a new bucket - the server's copy fills it */
+  await proveHere();
   console.log(`[identity] ${id.slice(0, 12)}: proven - the key signed a fresh challenge with the identity key; a new bucket`);
   const key = storage.needsKey ? await bucketKey(id, okcrypto, onPress) : null;
   const created = await storage.create(id, key);

@@ -142,7 +142,7 @@ let KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' ? 'hard' : 'gadget';
 /* the site the box's keys carry (ctap_bridge's default) - where "Go to <site>" sends the web app */
 const KEY_SITE = process.env.DRIVE_KEY_SITE || 'ok-edge.bmatusiak.workers.dev';
 /* the web app's processes, by their command lines: its browser profile, its local Worker (wrangler dev, workerd) */
-const webappProc = (cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js') || (cmd.includes('wrangler') && cmd.includes('\0dev\0')) || cmd.includes('workerd\0serve');
+const webappProc = (cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js') || cmd.includes('localhost/main.js') || (cmd.includes('wrangler') && cmd.includes('\0dev\0')) || cmd.includes('workerd\0serve');
 const EMU = process.env.EMU || path.join(ROOT, 'node-onlykey-emulator', 'emulator');
 const GADGET_STORE = path.join(ROOT, 'webapp-softkey');
 const GADGET_SRC = path.join(os.homedir(), '.config/Electron-test/okemu/plugins-config.edge-test');
@@ -471,15 +471,21 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
          * Cloudflare in production. 443 needs the box's unprivileged port floor at 443 (/etc/sysctl.d/60-okedge-443.conf).
          * Bound to 127.0.0.1: local-only testing - nothing on the LAN reaches it (the browser here maps both names to it).
          */
+        /*
+         * THE LOCALHOST SERVICE, NOT wrangler dev (Brad, 2026-11-01: "test webapp with local mcp + websocket embedded,
+         * localhost plugin will host the webapp files"): mcp-server's core in plain Node (mcp-server/src/localhost) - the
+         * same rooms, MCP and sealed copy as the Worker, docs/ as its assets, no Cloudflare runtime to build first.
+         */
         const certs = path.join(ROOT, 'devcert');
-        const server = launch('server-dev', 'npx', ['--yes', 'wrangler@4.153.0', 'dev', '--ip', '127.0.0.1', '--port', '443', '--local-protocol', 'https',
-          '--var', 'SEALED_IDENTITIES:*', '--https-key-path', path.join(certs, 'apps.crp.to.key'), '--https-cert-path', path.join(certs, 'apps.crp.to.crt')]);
-        /* the browser once the Worker says it is ready - its own line, followed in its log (3 minutes: a first build) */
+        const server = launch('server-dev', process.execPath, [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--host', '127.0.0.1', '--port', '443',
+          '--assets', path.join(EDGE, 'docs'), '--sealed', '--tls-key', path.join(certs, 'apps.crp.to.key'), '--tls-cert', path.join(certs, 'apps.crp.to.crt'),
+          ...(process.env.DRIVE_REQUIRE_LOGIN ? ['--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN}`] : [])]);
+        /* the browser once the server says it is ready - its own line, followed in its log */
         const ready = await new Promise((resolve) => {
-          const dog = setTimeout(() => { w && w.close(); resolve(null); }, 180000);
-          const w = follow('server-dev', (l) => { if (/Ready on|✘/.test(l)) { clearTimeout(dog); w && w.close(); resolve(l); } });
+          const dog = setTimeout(() => { w && w.close(); resolve(null); }, 30000);
+          const w = follow('server-dev', (l) => { if (/ready on|Error/.test(l)) { clearTimeout(dog); w && w.close(); resolve(l); } });
         });
-        if (!ready || /✘/.test(ready)) return `the local Worker did not start: ${ready || 'no "Ready on" in 3 minutes'} (logs/server-dev.log)`;
+        if (!ready || /Error/.test(ready)) return `the local server did not start: ${ready || 'no "ready on" in 30 s'} (logs/server-dev.log)`;
         const spki = fs.readFileSync(path.join(certs, 'apps.crp.to.spki'), 'utf8').trim();
         /* --disable-popup-blocking: a drive's tap is not a person's gesture, and "Go to <site>" opens a tab (window.open) - only this test profile */
         const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333', '--disable-popup-blocking',
@@ -605,7 +611,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     },
     async webapp() {
       const [serve, browser] = running.get('webapp') || [];
-      return `== the server: ${exitOf_(serve)}\n== the browser: ${exitOf_(browser)}\n\n== the browser's output (logs/webapp-chromium.log)\n${tail('webapp-chromium', 40)}\n\n== the server's output (logs/serve-docs.log)\n${tail('serve-docs', 20)}`;
+      return `== the server: ${exitOf_(serve)}\n== the browser: ${exitOf_(browser)}\n\n== the browser's output (logs/webapp-chromium.log)\n${tail('webapp-chromium', 40)}\n\n== the server's output (logs/server-dev.log)\n${tail('server-dev', 20)}`;
     },
   };
 
@@ -642,7 +648,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       return `pid ${pid || '(not running)'}\n${total || '(no meminfo)'}\n${cpu ? `top: ${cpu.trim()}` : ''}`;
     },
     async desktop() { return sumUp(procs((c) => c.includes(`${EDGE}/node_modules/electron`) || c.startsWith('node\0electron/start.js') || c.includes('okemu-host'))); },
-    async webapp() { return sumUp(procs((c) => c.includes('webapp-chromium') || c.includes('serve-docs.js'))); },
+    async webapp() { return sumUp(procs((c) => c.includes('webapp-chromium') || c.includes('serve-docs.js') || c.includes('localhost/main.js'))); },
   };
 
   /*
@@ -796,7 +802,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     const apps = {
       desktop: pick((c) => c.includes('ok-edge/node_modules/electron') && !c.includes('--type=')),
       'desktop soft key': pick((c) => c.includes('okemu-host')),
-      webapp: pick((c) => c.includes('serve-docs.js') || (c.includes('webapp-chromium') && !c.includes('--type='))),
+      webapp: pick((c) => c.includes('serve-docs.js') || c.includes('localhost/main.js') || (c.includes('webapp-chromium') && !c.includes('--type='))),
       metro: pick((c) => /expo(\.js)? start|metro|react-native start/.test(c) && !c.includes('jest-worker')),
       'drive (NW.js)': pick((c) => c.includes('tools/drive') && /nw(\.exe)?\b/.test(c) && !c.includes('--type=')),
     };

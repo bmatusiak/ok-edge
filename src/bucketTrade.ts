@@ -29,7 +29,8 @@ const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 /* the store rules the computer uses too (lib bucket/cli/trade.js storeRules) */
 
-type Me = {id: string; identityPublicKey: Uint8Array; bucketKey: {secretKey: Uint8Array; publicKey: Uint8Array}; certificate: Uint8Array};
+/* login: set when the certificate is a login proof (serverRoom logIn) - signed over that connection's host and nonce */
+export type Me = {id: string; identityPublicKey: Uint8Array; bucketKey: {secretKey: Uint8Array; publicKey: Uint8Array}; certificate: Uint8Array; login?: {host: string; nonce: Uint8Array}};
 const ALIAS = 'bucketkey';
 /*
  * THE KEPT COPY NAMES ITS VERSION (lib bucket-identity BUCKET_KEY_VERSION): v2 is derive_secret's derive under the site the
@@ -100,6 +101,15 @@ const answer = bucketLib.trade.peerSide({
 export async function proofMaterial(): Promise<Me | null> {
   await ensureMe();
   return me;
+}
+
+/*
+ * THE LOGIN'S PROOF IS THIS SESSION'S (serverRoom logIn): the bucket key it derived and the login proof the server took -
+ * the trades and the sealed copy use them, and nothing more is asked of the key for them. Held in memory only (no kept
+ * copy is made from it); the unplug or the next login replaces it.
+ */
+export function adoptProof(m: Me): void {
+  me = m;
 }
 
 /**

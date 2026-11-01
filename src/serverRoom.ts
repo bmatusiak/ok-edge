@@ -23,7 +23,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as bucketLib from 'node-onlykey-lib/bucket';
-import {handleTrade, proofMaterial} from './bucketTrade';
+import {adoptProof, handleTrade, proofMaterial, type Me} from './bucketTrade';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {RULES, storeItems} from './bucketRules';
 import {bucketTraded} from './bucketEvents';
@@ -31,6 +31,8 @@ import {deviceName, shell} from './platform';
 import {activeBackend} from './hooks/KeyContext';
 import {attachAgents, detachAgents} from './mcpAgents';
 import {ioPulse} from './btActivity';
+import {getOnlyKey} from './onlykey';
+import {challengeOpts} from './hostChallenge';
 
 declare const crypto: {getRandomValues<T extends Uint8Array>(array: T): T};
 declare const location: {origin: string; host: string} | undefined;
@@ -212,6 +214,91 @@ export async function thisDevice(): Promise<RoomPeer> {
 
 let room: any = null;
 let joining = false;
+/* the room the login joined (logIn), until the open bucket's join takes it */
+let loggedIn: {identity: string; url: string; room: any} | null = null;
+
+/*
+ * THE LOGIN, PROVEN TO A SERVER (Brad, 2026-11-01: "the login plan needs to check mcp to challenge the identity"; "if it
+ * can connect, i want to sync remote to local, authenticating with mcp instead of itself"; the web app "does not need
+ * this special auth with itself if it cant connect to the mcp, because its hosted by the remote mcp").
+ *
+ * The key derives the bucket key once (okedge/bucket-key/v2 under its own site), then the first server that answers
+ * gives its room's challenge and the key signs the login proof over it (identity.proveLogin) - the room checks it. Two
+ * requests whichever answers: the login card's list does not change with the server.
+ *   the web app   the server that serves it, only - no answer, no login
+ *   the desktop   the user's server; when it cannot be reached, its own local MCP (localMcp.ts)
+ *   the phone     the user's server
+ * The user's server's room is this session's room (joinServerRoom takes it: the sealed copy syncs into this bucket);
+ * the local one is kept for the local agents. -> 'server' | 'local', or null when none answered (the caller proves the
+ * key its own way - never the web app). A server that answered and refused, or a key that did not sign, throws.
+ */
+export async function logIn(identity: string, onPress?: () => void): Promise<'server' | 'local' | null> {
+  const server = await serverUrl();
+  const local = shell === 'desktop' ? require('./localMcp').localMcpUrl() : null;
+  const urls: {url: string; kind: 'server' | 'local'}[] = [];
+  if (server) urls.push({url: server, kind: 'server'});
+  if (local) urls.push({url: local, kind: 'local'});
+  if (!urls.length) {
+    if (shell === 'webapp') throw new Error('this page is not on the key\'s site - its server is the one to log in to');
+    return null;
+  }
+  const app = await getOnlyKey(activeBackend());
+  const held = await app.identity.load();
+  if (held.id !== identity.toLowerCase()) throw new Error(`the key's identity is ${held.id.slice(0, 12)}, not ${identity.slice(0, 12)}`);
+  const derive = challengeOpts("Making this login's bucket key");
+  let bucketKey: {secretKey: Uint8Array; publicKey: Uint8Array};
+  try {
+    bucketKey = await bucketLib.bucketIdentity.deriveBucketKeyAt(app.okcrypto, held.publicKey, held.site, {
+      confirm: (a: {digits?: number[]}) => { onPress?.(); derive.opts.confirm(a); },
+      timeoutMs: 40000,
+    });
+  } finally {
+    derive.done();
+  }
+  const device = await thisDevice();
+  const why: string[] = [];
+  for (const {url, kind} of urls) {
+    let asked: {host: string; nonce: Uint8Array} | null = null;
+    let proof: Uint8Array | null = null;
+    const prove = challengeOpts('Proving this key holds the identity');
+    try {
+      const r = await bucketLib.roomClient.connectRoom({
+        url, device, WebSocket: (globalThis as any).WebSocket, randomBytes,
+        /* no kept certificate: the join carries the login proof in its place (connectRoom's login) */
+        me: {id: held.id, identityPublicKey: held.publicKey, bucketKey, certificate: new Uint8Array(0)},
+        login: async (a: {host: string; nonce: Uint8Array}) => {
+          asked = a;
+          const p: Uint8Array = await app.identity.proveLogin(a, bucketKey.publicKey, {
+            confirm: (c: {digits?: number[]}) => { onPress?.(); prove.opts.confirm(c); },
+          });
+          proof = p;
+          return p;
+        },
+      });
+      console.log(`[login] ${held.id.slice(0, 12)}: proven to ${kind === 'server' ? 'the server' : 'the local MCP'} (${new URL(url).host}) - the key signed its challenge`);
+      if (kind === 'server') {
+        const me: Me = {id: held.id, identityPublicKey: held.publicKey, bucketKey, certificate: proof as unknown as Uint8Array, login: asked as unknown as {host: string; nonce: Uint8Array}};
+        adoptProof(me);
+        if (loggedIn) { try { loggedIn.room.close(); } catch { /* closed */ } }
+        loggedIn = {identity: held.id, url, room: r};
+      } else {
+        require('./localMcp').keepLocalRoom(r);
+        bucketKey.secretKey.fill(0);
+      }
+      return kind;
+    } catch (e) {
+      /* the server answered (its challenge came, the key was asked): its refusal is the login's - no other server is tried */
+      if (asked) { bucketKey.secretKey.fill(0); throw e; }
+      why.push(`${new URL(url).host}: ${String((e as Error)?.message ?? e)}`);
+      console.log(`[login] ${new URL(url).host} did not answer - ${why[why.length - 1]}`);
+    } finally {
+      prove.done();
+    }
+  }
+  bucketKey.secretKey.fill(0);
+  if (shell === 'webapp') throw new Error(`the server that serves this page did not answer (${why.join('; ')})`);
+  return null;
+}
 let joinedFor: string | null = null;
 let tradeChain: Promise<void> = Promise.resolve();
 
@@ -236,6 +323,7 @@ export function afterFirstSync(): Promise<void> {
 
 /** Leave the room (the address changed, or the bucket closed). */
 export function leaveServerRoom(): void {
+  if (loggedIn) { try { loggedIn.room.close(); } catch { /* closed */ } loggedIn = null; }
   const r = room;
   room = null;
   joinedFor = null;
@@ -259,6 +347,9 @@ export async function joinServerRoom(): Promise<void> {
    * A failure there waits for the person (the Server panel's Try again); only a connection that drops is retried, and
    * that needs no key: the proof material is kept once made.
    */
+  /* the room the login joined, for this identity on this server: taken as it is - no second join, nothing asked */
+  const pre = loggedIn && loggedIn.identity === open.identity && loggedIn.url === url ? loggedIn : null;
+  loggedIn = null;
   let me: Awaited<ReturnType<typeof proofMaterial>> = null;
   try {
     me = await proofMaterial();
@@ -270,9 +361,18 @@ export async function joinServerRoom(): Promise<void> {
     return;
   }
   if (!me) { set({status: 'error', why: 'no proof material for the open bucket (its key is another identity)', needsKey: true}); joining = false; return; }
+  /*
+   * A LOGIN PROOF IS ONE CONNECTION'S (signed over that challenge's nonce): a dropped connection is joined again only
+   * with the key - never on a timer (above) - so it waits for the person's Try again, which logs in again.
+   */
+  if (!pre && me.login) {
+    set({status: 'error', why: 'the connection closed - Try again asks the key to log in to the server again', needsKey: true});
+    joining = false;
+    return;
+  }
   try {
     const device = await thisDevice();
-    const r = await bucketLib.roomClient.connectRoom({url, me, device, WebSocket: (globalThis as any).WebSocket, randomBytes});
+    const r = pre ? pre.room : await bucketLib.roomClient.connectRoom({url, me, device, WebSocket: (globalThis as any).WebSocket, randomBytes});
     room = r;
     joinedFor = me.id;
     retries = 0;
@@ -327,9 +427,14 @@ export async function joinServerRoom(): Promise<void> {
     r.on('close', () => {
       /* a room left for another (a new server, a new key site) closes a moment later: not this device's room */
       if (room !== r) { console.log('[room] the previous room\'s connection closed'); return; }
-      console.log('[room] the connection closed - joining again shortly');
       room = null;
       joinedFor = null;
+      if (me.login) {
+        console.log('[room] the connection closed - the login proof was this connection\'s: Try again logs in again');
+        set({status: 'error', why: 'the connection closed - Try again asks the key to log in to the server again', peers: [], needsKey: true});
+        return;
+      }
+      console.log('[room] the connection closed - joining again shortly');
       set({status: 'error', why: 'the connection closed - joining again shortly', peers: []});
       rejoinLater();
     });
