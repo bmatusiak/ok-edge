@@ -21,16 +21,22 @@
  * dev certificate and reaches this machine only through `adb reverse` to a port of its own 127.0.0.1 - so `plain` is a
  * second listener, plain http on this host, with the same routes and the same rooms (one process, one sealed copy).
  *
- *   mcpLocalhost.start({host = '127.0.0.1', port = 0, env = {}, assets = null, tls = null, sealed = false, plain = null})
+ * THE PHONE OVER BLUETOOTH (ok-edge plan B2; Brad, 2026-11-01: "the mcp server should make communication with ble
+ * transparent"): with `ble`, ble.js holds a Bluetooth link to the phone and hands each socket the phone opens to the
+ * room here, as an upgrade is - the same attach(), origin 'ble' (the room then asks it for the login proof).
+ *
+ *   mcpLocalhost.start({host = '127.0.0.1', port = 0, env = {}, assets = null, tls = null, sealed = false, plain = null, ble = null})
  *     assets: a directory to serve;  tls: {key, cert} (PEM);  sealed: true for the sealed copy (needs node:sqlite)
  *     plain: a port for a second, plain http listener beside the tls one
- *     -> {url, port, plainUrl, close()}
+ *     ble: {addresses?, host?, log?, createLink?} - ble.js startBle's options
+ *     -> {url, port, plainUrl, ble: {host, phones()} | null, close()}
  */
 import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import pathOf from 'node:path';
 import WS from 'ws';
+import { startBle } from './ble.js';
 
 /* ws 7 (React Native's, in this repo) names it Server; ws 8 WebSocketServer - and neither has ESM named exports */
 const WebSocketServer = WS.WebSocketServer || WS.Server;
@@ -136,7 +142,7 @@ export default function setup(imports, register) {
   const { mcpCore } = imports;
   register(null, {
     mcpLocalhost: {
-      async start({ host = '127.0.0.1', port = 0, env: settings = {}, assets = null, tls = null, sealed = false, plain = null } = {}) {
+      async start({ host = '127.0.0.1', port = 0, env: settings = {}, assets = null, tls = null, sealed = false, plain = null, ble = null } = {}) {
         const storages = [];
         const env = { REQUIRE_LOGIN: '1', LIFETIME_IDENTITIES: '*', ...settings };
         /* node:sqlite only when asked: Electron's Node may not have it, and the desktop keeps no sealed copy */
@@ -159,24 +165,28 @@ export default function setup(imports, register) {
           }
         };
         const server = tls ? https.createServer({ key: tls.key, cert: tls.cert }, handler) : http.createServer(handler);
+        /* a socket into its room - a websocket's, or a phone's over Bluetooth (ble.js): the same room either way */
+        const attach = (raw, roomId, url, origin = null) => {
+          if (!mcpCore.ROOM_PATH.test(`/ws/${roomId}`)) return false;
+          const ws = attachable(raw);
+          const room = env.ROOMS.get(roomId);
+          ws.on('message', (data, isBinary) => {
+            const text = isBinary ? null : data.toString('utf8');
+            /* pings answered here, as Cloudflare's auto-response does - the room is not asked */
+            if (text === '{"t":"ping"}') { ws.send('{"t":"pong"}'); return; }
+            room.webSocketMessage(ws, isBinary ? data : text).catch(() => undefined);
+          });
+          const gone = () => { room.webSocketClose(ws).catch(() => undefined).finally(() => room.ctx.sockets.delete(ws)); };
+          ws.on('close', gone);
+          ws.on('error', gone);
+          room.accept(ws, url, { origin }).catch(() => ws.close(1011, 'not accepted'));
+          return true;
+        };
         const onUpgrade = (req, socket, head) => {
           const url = new URL(req.url, `http://${req.headers.host}`);
           const m = mcpCore.ROOM_PATH.exec(url.pathname);
           if (!m) { socket.destroy(); return; }
-          wss.handleUpgrade(req, socket, head, (raw) => {
-            const ws = attachable(raw);
-            const room = env.ROOMS.get(m[1]);
-            ws.on('message', (data, isBinary) => {
-              const text = isBinary ? null : data.toString('utf8');
-              /* pings answered here, as Cloudflare's auto-response does - the room is not asked */
-              if (text === '{"t":"ping"}') { ws.send('{"t":"pong"}'); return; }
-              room.webSocketMessage(ws, isBinary ? data : text).catch(() => undefined);
-            });
-            const gone = () => { room.webSocketClose(ws).catch(() => undefined).finally(() => room.ctx.sockets.delete(ws)); };
-            ws.on('close', gone);
-            ws.on('error', gone);
-            room.accept(ws, url).catch(() => ws.close(1011, 'not accepted'));
-          });
+          wss.handleUpgrade(req, socket, head, (raw) => attach(raw, m[1], url));
         };
         server.on('upgrade', onUpgrade);
         const second = plain && tls ? http.createServer(handler) : null;
@@ -187,16 +197,21 @@ export default function setup(imports, register) {
         });
         const p = await listen(server, port);
         const p2 = second ? await listen(second, plain) : null;
+        const bt = ble ? startBle({ ...ble, attach: (raw, roomId, url) => attach(raw, roomId, url, 'ble') }) : null;
         return {
           url: `${tls ? 'https' : 'http'}://${host}:${p}`,
           port: p,
           plainUrl: second ? `http://${host}:${p2}` : null,
-          close: () => new Promise((done) => {
-            for (const s of storages) s.stop();
-            for (const c of wss.clients) c.terminate();
-            if (second) second.close();
-            server.close(() => done());
-          }),
+          ble: bt ? { host: bt.host, phones: bt.phones } : null,
+          close: async () => {
+            if (bt) await bt.stop();
+            await new Promise((done) => {
+              for (const s of storages) s.stop();
+              for (const c of wss.clients) c.terminate();
+              if (second) second.close();
+              server.close(() => done());
+            });
+          },
         };
       },
     },

@@ -52,11 +52,14 @@ export class RoomCore {
     this.env = env;
   }
 
-  /* one connection's socket (the websocket API): accept it, give it this connection's challenge, JOIN_WITHIN_MS to answer */
-  async accept(server, url) {
+  /*
+   * one connection's socket (the websocket API): accept it, give it this connection's challenge, JOIN_WITHIN_MS to answer.
+   * origin 'ble': a phone over Bluetooth (localhost/ble.js) - the same socket, kept in its attachment for the join's rule.
+   */
+  async accept(server, url, { origin = null } = {}) {
     const { nonce, message } = room.challenge((n) => crypto.getRandomValues(new Uint8Array(n)));
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ room: ROOM_PATH.exec(url.pathname)[1], host: url.host, nonce: bytes.toHex(nonce), device: null, since: Date.now() });
+    server.serializeAttachment({ room: ROOM_PATH.exec(url.pathname)[1], host: url.host, nonce: bytes.toHex(nonce), device: null, since: Date.now(), origin });
     send(server, message);
     /* the join deadline comes first - an alarm set for a free sealed copy's drop is days away (alarm() sets it again) */
     const at = await this.ctx.storage.getAlarm();
@@ -89,7 +92,14 @@ export class RoomCore {
       /* one try: the join, checked against this connection's own challenge and this server's host */
       /* REQUIRE_LOGIN ('1'): only a login proof for THIS challenge enters - the key was present at this join */
       /* OPEN_JOIN ('1'): no proof at all - the desktop's own local MCP on 127.0.0.1 (lib room.js checkJoin open) */
-      const check = room.checkJoin(me.room, msg, { nonce: bytes.fromHex(me.nonce), host: me.host }, { requireLogin: this.env.REQUIRE_LOGIN === '1', open: this.env.OPEN_JOIN === '1' });
+      /*
+       * A BLUETOOTH SOCKET ALWAYS PROVES THE LOGIN (Brad, 2026-11-01: "the app authorizes/approves ble over to the host
+       * using the same mechanism"): the open join is for this computer's own 127.0.0.1 joins only - anything in radio
+       * range enters with a login proof for this connection's challenge, whatever OPEN_JOIN says.
+       */
+      const ble = me.origin === 'ble';
+      const check = room.checkJoin(me.room, msg, { nonce: bytes.fromHex(me.nonce), host: me.host },
+        { requireLogin: ble || this.env.REQUIRE_LOGIN === '1', open: !ble && this.env.OPEN_JOIN === '1' });
       if (!check.ok) {
         send(ws, { t: 'refused' });
         return ws.close(4401, 'refused');

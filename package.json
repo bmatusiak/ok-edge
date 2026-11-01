@@ -13,7 +13,7 @@
     "build:webapp": "node tools/web-build.js --dev",
     "build:webapp:release": "node tools/web-build.js",
     "server:dev": "npx --yes wrangler@4.153.0 dev --ip 0.0.0.0 --port 8787 --var LIFETIME_IDENTITIES:*",
-    "server:test": "node --test mcp-server/test/rooms.test.js mcp-server/test/mcp.test.js",
+    "server:test": "node --test mcp-server/test/rooms.test.js mcp-server/test/mcp.test.js mcp-server/test/ble.test.js",
     "electron": "node electron/start.js",
     "electron:dev": "cross-env OKEDGE_WEB_URL=http://localhost:8091 node electron/start.js",
     "electron:test": "cross-env OKEDGE_FLAVOR=test node electron/start.js",
