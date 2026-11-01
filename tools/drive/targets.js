@@ -643,6 +643,57 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
   }
 
   /*
+   * THE HEADLESS MCP-SERVER WITH BLUETOOTH (ok-edge plan B2; Brad, 2026-11-01: "headless cli mcp-server and android, on
+   * linux box first - nodejs server, no desktop hosting mcp server - android ble connecting to linux box"):
+   * mcp-server/src/localhost/main.js --ble on the box - the phone's room over Bluetooth, the sealed copy kept, no desktop.
+   * Its own pid file (it outlives a drive-remote restart, as the stand-in does). dbus-next from ~/project/onlykey/ble-deps
+   * by NODE_PATH: an npm install inside a repo would prune the noble fork. The phone: DRIVE_BLE_PHONE (the Pixel's
+   * address by default). Its lines (logs/mcp-ble.log) - "[ble] ...", one per change of state - stream to the drive.
+   *   run.js mcpble start|stop|status
+   */
+  if (LINUX) {
+    const MCP_BLE_PID = path.join(ROOT, 'mcp-ble.pid');
+    /* its pid, only while that pid is still this server (never another process that reused the number) */
+    const mcpBlePid = () => {
+      try {
+        const pid = Number(fs.readFileSync(MCP_BLE_PID, 'utf8'));
+        return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('mcp-server/src/localhost/main.js') ? pid : null;
+      } catch { return null; }
+    };
+    T['mcp-ble'] = {
+      async start() {
+        const up = mcpBlePid();
+        if (up) return `already running (pid ${up})`;
+        const args = [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--port', process.env.DRIVE_MCP_BLE_PORT || '8792', '--sealed', '--ble'];
+        for (const a of (process.env.DRIVE_BLE_PHONE || '24:29:34:86:EA:AF').split(',').filter(Boolean)) args.push('--ble-address', a);
+        const child = launch('mcp-ble', NODE, args, { NODE_PATH: path.join(ROOT, 'ble-deps', 'node_modules') });
+        child.unref();
+        fs.writeFileSync(MCP_BLE_PID, String(child.pid));
+        const ready = await new Promise((resolve) => {
+          const dog = setTimeout(() => { w && w.close(); resolve(null); }, 30000);
+          const w = follow('mcp-ble', (l) => { if (/ready on|Error|^\[ble\] /.test(l)) { clearTimeout(dog); w && w.close(); resolve(l); } });
+        });
+        followOut('mcp-ble', 'mcp-ble');
+        return ready ? `started (pid ${child.pid}): ${ready}` : `started (pid ${child.pid}), but nothing in 30 s - logs/mcp-ble.log`;
+      },
+      async stop() {
+        const pid = mcpBlePid();
+        if (!pid) return 'not running';
+        /* SIGTERM: main.js closes its Bluetooth links first, so the phone advertises again at once */
+        process.kill(pid, 'SIGTERM');
+        for (let i = 0; i < 50 && mcpBlePid() === pid; i++) await new Promise((r) => setTimeout(r, 100));
+        if (mcpBlePid() === pid) process.kill(pid, 'SIGKILL');
+        if (followers.get('mcp-ble')) { followers.get('mcp-ble').close(); followers.delete('mcp-ble'); }
+        return `stopped (pid ${pid})`;
+      },
+      async status() {
+        const pid = mcpBlePid();
+        return pid ? `running (pid ${pid})\n${tail('mcp-ble', 12)}` : `not running\n${tail('mcp-ble', 6)}`;
+      },
+    };
+  }
+
+  /*
    * LAST WORDS (drive debugging #1, Brad 2026-10-31: "yes i like it all"): an app that went without being asked cannot
    * say why - the machine it ran on can. Android keeps a crash buffer and its own record of why each process ended
    * (ApplicationExitInfo: crash, native crash, low memory, killed); a desktop or web app here is our child, so its exit
@@ -874,6 +925,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (!t) return { ok: false, why: `no target "${target}" (${Object.keys(T).join(', ')})` };
       if (action === 'start') return { ok: true, what: await t.start() };
       if (action === 'stop') return { ok: true, what: await t.stop() };
+      if (action === 'status') return t.status ? { ok: true, what: await t.status() } : { ok: false, why: `${target} says no status` };
       if (action === 'restart') { const s = await t.stop(); return { ok: true, what: `${s}; ${await t.start()}` }; }
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
