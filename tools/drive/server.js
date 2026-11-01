@@ -144,9 +144,9 @@ function pressWhenAsked(app) {
     touched = true;
     pressing = true;
     try {
-      const s = await proc('key-state', app.shell);
+      const s = await procFor(app, 'key-state');
       if (!(s.ok && /\btestnet\b/.test(String(s.what)))) { line(`[${app.shell}] its key waits for a touch - not pressed: not a testnet key`); return; }
-      const r = await proc('press', app.shell, { buttons: ['1'] });
+      const r = await procFor(app, 'press', { buttons: ['1'] });
       line(r.ok ? `[${app.shell}] pressed: ${r.what} - the key waited for a touch (LED ${colour})` : `[${app.shell}] press refused: ${r.why}`);
     } finally { pressing = false; }
   });
@@ -177,11 +177,11 @@ function pressWhenAsked(app) {
       try {
         /* a testnet key, or a hard key whose DEBUG console answers - a test hex; a production key has none and is never pressed */
         if (app.net !== 'test') {
-          const s = await proc('key-state', app.shell);
+          const s = await procFor(app, 'key-state');
           if (!(s.ok && /\btestnet\b|debug console answers/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
         }
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
-        const r = await proc('press', app.shell, { buttons });
+        const r = await procFor(app, 'press', { buttons });
         line(r.ok ? `[${app.shell}] pressed: ${r.what} - ${outside[1]}` : `[${app.shell}] press refused: ${r.why}`);
       } finally { pressing = false; }
       return;
@@ -692,6 +692,26 @@ async function procAll(action, args = {}) {
     }));
   }
   return Promise.all(asks);
+}
+
+/*
+ * AN APP'S OWN MACHINE, ASKED (2026-11-01: the Windows app's press icon asked the BOX's key-state - two "desktop"
+ * apps, and proc routes by the target's name, remotes first; with blue-key on the box, the drive would have pressed
+ * blue-key for red-key's wait). What concerns an app's key - its state, a press - goes to the machine that app runs on:
+ * the remote it came through, else this machine. Never another machine with the same target.
+ */
+async function procFor(app, action, args = {}) {
+  const via = app.ws && app.ws.via;
+  if (!via) return { ...(await localTargets.act(action, app.shell, args)), where: 'this machine' };
+  const r = [...remotes.values()].find((x) => x.machine === via && x.ws.readyState === 1);
+  if (!r) return { ok: false, why: `${via}, the machine ${app.shell} runs on, is not connected`, where: via };
+  const id = r.nextId++;
+  const reply = await new Promise((resolve) => {
+    const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${via} did not answer "${action} ${app.shell}" in 120 s` }); }, 120000);
+    r.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });
+    r.ws.send(JSON.stringify({ t: 'proc', id, action, target: app.shell, args }));
+  });
+  return { ...reply, where: via };
 }
 
 /*
