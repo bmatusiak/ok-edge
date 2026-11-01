@@ -21,7 +21,6 @@
  * Trust: the server relays over TLS; nothing is sealed end to end (decided 2026-10-28: "sealing e2e will require a lot
  * of tooling"). What the server never does: hold a key, approve, or answer for the owner.
  */
-import { DurableObject } from 'cloudflare:workers';
 import bucketLib from 'node-onlykey-lib/bucket';
 import bytes from 'node-onlykey-lib/bytes';
 
@@ -160,7 +159,17 @@ export async function handleMcp(request, env) {
 /* ------------------------------------------------------------------------------------------------ one session */
 
 /** One MCP session: which agent said hello on it. Everything the agent owns lives in its AgentSession. */
-export class McpSession extends DurableObject {
+/*
+ * THE CORE'S SESSION (mcp-server Rectify app, Brad 2026-11-01: "1 core api, a cloudflare service, and a localhost
+ * service"): plain logic over ctx.storage - the Cloudflare service wraps it in a Durable Object, the localhost service
+ * gives it storage of its own.
+ */
+export class McpSessionCore {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env;
+  }
+
   async open() { await this.ctx.storage.put('created', Date.now()); }
   async known() { return (await this.ctx.storage.get('created')) !== undefined; }
   async end() { await this.ctx.storage.deleteAll(); }
@@ -212,9 +221,10 @@ const ROOM_STUB = (env, roomId) => env.ROOMS.get(env.ROOMS.idFromName(roomId));
  * One agent, by its ID: its name and its plans. The rooms it targets call back here with what their owners did
  * (fromRoom). plan_wait waits on this object's own memory: a change wakes the waiters at once.
  */
-export class AgentSession extends DurableObject {
+export class AgentSessionCore {
   constructor(ctx, env) {
-    super(ctx, env);
+    this.ctx = ctx;
+    this.env = env;
     this.waiters = [];
   }
 

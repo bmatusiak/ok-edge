@@ -20,15 +20,11 @@
  * from memory and costs nothing while its devices stay connected; each socket's state lives in its attachment, not in
  * the object. Pings are answered by the runtime itself (an auto-response) without waking the room.
  */
-import { DurableObject } from 'cloudflare:workers';
 import bucketLib from 'node-onlykey-lib/bucket';
 import bytes from 'node-onlykey-lib/bytes';
-import { handleMcp, McpSession, AgentSession } from './mcp.js';
-
-export { McpSession, AgentSession };
 
 const { room } = bucketLib;
-const ROOM_PATH = /^\/ws\/([0-9a-f]{32})$/;
+export const ROOM_PATH = /^\/ws\/([0-9a-f]{32})$/;
 const AGENT_STATES = ['accepted', 'blocked', 'removed'];
 /* the largest frame passed on: a first sync of post-quantum keys is ~240 KB; room to spare, never unbounded */
 const MAX_FRAME = 4 * 1024 * 1024;
@@ -38,31 +34,26 @@ const JOIN_WITHIN_MS = 30_000;
 const SEALED_MAX_IDS = 2000;
 const SEALED_MAX_BLOB = 1024 * 1024;
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    if (url.pathname === '/mcp') return handleMcp(request, env);
-    const m = ROOM_PATH.exec(url.pathname);
-    if (!m) return env.ASSETS.fetch(request);
-    if (request.headers.get('Upgrade') !== 'websocket') return new Response('a websocket only', { status: 426 });
-    return env.ROOMS.get(env.ROOMS.idFromName(m[1])).fetch(request);
-  },
-};
-
 const send = (ws, msg) => {
   try { ws.send(JSON.stringify(msg)); } catch { /* the socket is closing; its close handler tells the room */ }
 };
 
-export class IdentityRoom extends DurableObject {
+/*
+ * THE CORE'S ROOM (mcp-server Rectify app, Brad 2026-11-01: "1 core api, a cloudflare service, and a localhost service";
+ * "the core api will contain MCP and websocket api logic"): the identity's room as plain logic over ctx - its storage,
+ * its sockets, its alarm. The Cloudflare service hands it a Durable Object's ctx; the localhost service a ctx of its own
+ * - the same websocket API either way, so the desktop authenticates itself to its local MCP exactly as the web app to the
+ * remote one (Brad, 2026-11-01: "so the desktop can re-use the core and websocket to host the mcp and authenticate
+ * itself, like it was talking to the remote mcp").
+ */
+export class RoomCore {
   constructor(ctx, env) {
-    super(ctx, env);
-    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}'));
+    this.ctx = ctx;
+    this.env = env;
   }
 
-  /* one connection: accept it, give it this connection's challenge, and give it JOIN_WITHIN_MS to answer */
-  async fetch(request) {
-    const url = new URL(request.url);
-    const [client, server] = Object.values(new WebSocketPair());
+  /* one connection's socket (the websocket API): accept it, give it this connection's challenge, JOIN_WITHIN_MS to answer */
+  async accept(server, url) {
     const { nonce, message } = room.challenge((n) => crypto.getRandomValues(new Uint8Array(n)));
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ room: ROOM_PATH.exec(url.pathname)[1], host: url.host, nonce: bytes.toHex(nonce), device: null, since: Date.now() });
@@ -70,7 +61,6 @@ export class IdentityRoom extends DurableObject {
     /* the join deadline comes first - an alarm set for a free sealed copy's drop is days away (alarm() sets it again) */
     const at = await this.ctx.storage.getAlarm();
     if (at === null || at > Date.now() + JOIN_WITHIN_MS) await this.ctx.storage.setAlarm(Date.now() + JOIN_WITHIN_MS);
-    return new Response(null, { status: 101, webSocket: client });
   }
 
   /*
@@ -97,7 +87,8 @@ export class IdentityRoom extends DurableObject {
 
     if (!me.device) {
       /* one try: the join, checked against this connection's own challenge and this server's host */
-      const check = room.checkJoin(me.room, msg, { nonce: bytes.fromHex(me.nonce), host: me.host });
+      /* REQUIRE_LOGIN ('1'): only a login proof for THIS challenge enters - the key was present at this join */
+      const check = room.checkJoin(me.room, msg, { nonce: bytes.fromHex(me.nonce), host: me.host }, { requireLogin: this.env.REQUIRE_LOGIN === '1' });
       if (!check.ok) {
         send(ws, { t: 'refused' });
         return ws.close(4401, 'refused');
@@ -130,6 +121,8 @@ export class IdentityRoom extends DurableObject {
         return send(ws, msg.re !== undefined ? { ...r, re: msg.re } : r);
       }
       case 'sealed': {
+        /* a server with no SQLite (the desktop's local MCP - its bucket stays in its own file) keeps no sealed copy: off */
+        if (!this.ctx.storage.sql) return send(ws, { t: 'sealed', re: msg.re, on: false });
         const r = this.sealedOp(me.room, msg);
         /* any operation by a device of the identity is a touch: a free copy's 7 days start again */
         await this.sealedTouch(me.room);

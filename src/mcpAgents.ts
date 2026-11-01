@@ -4,7 +4,7 @@
  * between").
  *
  * An AI agent given the server's URL and this identity's public key builds a sign/decrypt plan on the server's /mcp
- * (mcp-server/src/mcp.js). Every change reaches this identity's room at once; this device, joined there (serverRoom.ts),
+ * (mcp-server/src/core/mcp.js). Every change reaches this identity's room at once; this device, joined there (serverRoom.ts),
  * hears it through the lib's room client (bucket/src/room-client.js `on('mcp')`) and keeps the picture here:
  *   - the agents that asked: pending until the owner accepts them, accepted, or blocked - the owner's word, written in
  *     the room by the identity's own devices only (an agent can never accept itself);
@@ -75,7 +75,7 @@ const upsertAgent = (a: Omit<Agent, 'state'> & {state: AgentState | 'removed'}) 
 };
 const upsertPlan = (p: Plan) => set({plans: [...state.plans.filter(x => x.id !== p.id), p]});
 
-/* what the room tells every device of the identity (mcp-server/src/index.js `tell`) */
+/* what the room tells every device of the identity (mcp-server/src/core/room.js `tell`) */
 function heard(m: any): void {
   switch (m && m.ev) {
     case 'agent':

@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "The user's MCP server source (ESM) - a Rectify app: core/ (the MCP and websocket API logic), cloudflare/ (the Worker and its Durable Objects), localhost/ (plain Node on 127.0.0.1 - the desktop's local MCP).",
+  "type": "module"
+}

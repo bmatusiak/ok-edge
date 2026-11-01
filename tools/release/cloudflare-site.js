@@ -36,11 +36,13 @@ const jsonc = fs.readFileSync(path.join(root, 'wrangler.jsonc'), 'utf8');
 const config = JSON.parse(jsonc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''));
 delete config.$schema;
 delete config.build;
+/* wrangler names its bundle after the entry (mcp-server/src/cloudflare/worker.js -> worker.js) */
+const bundled = path.basename(config.main);
 config.main = 'worker/index.js';
 config.no_bundle = true;
 config.assets = { ...config.assets, directory: './docs' };
 
-const entry = path.join(worker, 'index.js');
+const entry = path.join(worker, bundled);
 if (!fs.existsSync(entry)) { console.error(`cloudflare-site: no bundled Worker at ${entry}`); process.exit(1); }
 if (!fs.existsSync(path.join(docs, 'index.html'))) { console.error(`cloudflare-site: no web app at ${docs}`); process.exit(1); }
 
