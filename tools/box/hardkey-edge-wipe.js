@@ -25,14 +25,26 @@ const { composeLib } = require(`${KIT}/lib/libstack`);
 
 const hex = (b) => Buffer.from(b).toString('hex');
 
+/*
+ * EACH STEP SAID, AND NONE WAITS FOREVER (Brad, 2026-10-31: "wipe is fast, your waiting, thats a bug"): it sat 90 s with
+ * nothing printed. Every step names itself and has 20 s - a step that runs out says which one, and the run ends.
+ */
+const step = async (name, p) => {
+  console.log(`.. ${name}`);
+  let t;
+  try {
+    return await Promise.race([p, new Promise((_, no) => { t = setTimeout(() => no(new Error(`${name}: no answer in 20 s`)), 20000); })]);
+  } finally { clearTimeout(t); }
+};
+
 (async () => {
   const transport = new HardwareTransport();
   transport.on('selected', (d) => { if (d.gadget) { console.log('EMULATOR GADGET - not a hard key, stopping'); process.exit(2); } });
   const device = new Device(transport, { capabilities: detect({ adapter: 'hardware' }) });
-  await transport.start();
-  await device.waitReady();
-  await device.ensureUnlocked(PINS.primary);
-  const lib = await composeLib(device);
+  await step('open the key', transport.start());
+  await step('the key ready', device.waitReady());
+  await step('unlock (the kit PIN)', device.ensureUnlocked(PINS.primary));
+  const lib = await step('the lib over it', composeLib(device));
   let edge = null;
   require(path.join(LIB, 'edge/plugin'))({ transport: lib.services.transport }, (err, s) => { if (err) throw err; edge = s.edge; });
   const show = async (when) => {
@@ -40,9 +52,9 @@ const hex = (b) => Buffer.from(b).toString('hex');
     const { deviceId } = await edge.publicKey();
     console.log(`${when}: device ${hex(deviceId)} seq ${h.seq}`);
   };
-  await show('before');
-  await edge.wipeDebug();
-  await show('after');
+  await step('before', show('before'));
+  await step('wipe', edge.wipeDebug());
+  await step('after', show('after'));
   await transport.stop();
   process.exit(0);
 })().catch((e) => { console.error(`hardkey-edge-wipe: ${e && e.stack || e}`); process.exit(1); });
