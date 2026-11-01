@@ -131,6 +131,18 @@ export function forgetIdentities(): void {
   for (const app of booting.values()) void app.then((a) => a.identity?.forget?.()).catch(() => undefined);
 }
 
+/*
+ * THE KEY'S IDENTITY WAS FORGOTTEN (lib plugins/identity 'forgotten'), with why and on which backend: the login follows
+ * it (MainApp - a key unplugged goes back through Log in; Brad, 2026-10-31: "identity plugin is suppose to control this
+ * state, if i unplug, it suppose to clear the identity").
+ */
+type Forgotten = {backend: Backend; why: string | null};
+const forgottenListeners = new Set<(e: Forgotten) => void>();
+export function onIdentityForgotten(listener: (e: Forgotten) => void): () => void {
+  forgottenListeners.add(listener);
+  return () => { forgottenListeners.delete(listener); };
+}
+
 export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
   const existing = booting.get(backend);
   if (existing) {
@@ -219,6 +231,9 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       if (started.services.edge) started.services.edge.onRequest = noteEdgeRequest;
       /* and the lib's waits between them, for the timeline (debug builds) */
       started.services.okcrypto?.on?.('settle', noteSettle);
+      started.services.identity?.on?.('forgotten', (why: string | null) => {
+        for (const l of [...forgottenListeners]) { try { l({backend, why}); } catch { /* a listener's error is not the key's */ } }
+      });
       resolve({
         device: started.services.device,
         okcrypto: started.services.okcrypto,
@@ -243,7 +258,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
  * With no argument it tears down BOTH, which is what a test teardown wants -
  * leaving one alive would hand the next test a device it did not ask for.
  */
-export async function resetOnlyKey(backend?: Backend): Promise<void> {
+export async function resetOnlyKey(backend?: Backend, why?: string): Promise<void> {
   const targets: Backend[] = backend ? [backend] : ['embedded', 'usb'];
   /* the busy sheet was about this key (a hard key stops the soft key): it closes with it */
   keyGone();
@@ -256,6 +271,8 @@ export async function resetOnlyKey(backend?: Backend): Promise<void> {
     }
     try {
       const app = await pending;
+      /* the key's identity goes first, told why - what follows it (the login) hears that this key is gone */
+      app.identity?.forget?.(why);
       await app.destroy();
     } catch {
       /* a build that never succeeded has nothing to tear down */

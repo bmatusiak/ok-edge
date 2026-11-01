@@ -79,6 +79,10 @@ const listeners = new Set<Listener>();
 let current: SheetState | null = null;
 let answer: ((a: 'approve' | 'decline' | 'timeout') => void) | null = null;
 let soft: SoftKeyEdge | null = null;
+/* the key went away: its Edge, opened on that key's session, goes with it (src/keyGone.ts) */
+export function forgetAgentsKey(): void {
+  soft = null;
+}
 
 /*
  * AFTER THE ANSWER (Brad, 2026-10-04): a DECLINE closes itself after 30 s - the

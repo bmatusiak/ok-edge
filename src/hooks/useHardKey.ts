@@ -185,6 +185,9 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
          */
         setState('stopped');
         setDevice('unknown');
+        /* and what this run learned of that key: the replugged one is asked again (its OKCONNECT, its unlock) */
+        connectedUnlocked.current = false;
+        unlockedAt.current = 0;
         setIdentity(null);
         setLockedModel(null);
         setCapabilities(null);

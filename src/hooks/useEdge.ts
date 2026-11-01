@@ -20,6 +20,10 @@ import NativeShare from 'okedge-native/specs/NativeShare';
 type Source = EdgeSource & EdgeInbox;
 
 let real: SoftKeyEdge | null = null;
+/* the key went away: its Edge, opened on that key's session, goes with it - the next is opened afresh (src/keyGone.ts) */
+export function forgetEdgeKey(): void {
+  real = null;
+}
 
 export function useEdge() {
   const backend = useBackend();

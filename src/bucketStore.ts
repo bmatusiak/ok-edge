@@ -78,11 +78,28 @@ async function bucketKey(identity: string, okcrypto: Okcrypto, onPress?: () => v
  *             storage, as before buckets
  *   neither   closed: nothing is read, and a write is refused
  */
-let open: {identity: string; opened: Opened; key: Uint8Array | null} | null = null;
+/* savedClock: the bucket's clock at its last save - the same clock now means nothing changed since (closeBucket) */
+let open: {identity: string; opened: Opened; key: Uint8Array | null; savedClock: string | null} | null = null;
 let legacy = false;
 
 const bucket = (): Bucket | null => open?.opened.bucket ?? null;
-const persist = (): Promise<void> => (open ? open.opened.write() : Promise.resolve());
+/* the bucket's clock (lib bucket.js): moves on every write here and on every newer record a merge takes in */
+const clockOf = (b: Bucket): string | null => (b as {clock?: string | null}).clock ?? null;
+const persist = (): Promise<void> => {
+  if (!open) return Promise.resolve();
+  const o = open;
+  const at = clockOf(o.opened.bucket);
+  return o.opened.write().then(() => { o.savedClock = at; });
+};
+/* taken in from where it is kept (the desktop's shared file, the CLI's writes): saved already - a bucket that had
+   nothing unsaved before has nothing unsaved after */
+const refresh = async (): Promise<void> => {
+  if (!open) return;
+  const o = open;
+  const clean = clockOf(o.opened.bucket) === o.savedClock;
+  await o.opened.refresh();
+  if (clean) o.savedClock = clockOf(o.opened.bucket);
+};
 
 /** THE BUCKET A TRADE WORKS ON (src/bucketTrade.ts, src/serverRoom.ts): the open one, on every platform - null when closed. */
 export function tradeBucket(): {identity: string; bucket: Bucket} | null {
@@ -103,7 +120,7 @@ export function openBucketIdentity(): {identity: string; kind: 'sealed' | 'kept'
  */
 export async function bucketSummary(): Promise<Record<string, number> | null> {
   if (!open) return null;
-  await open.opened.refresh();
+  await refresh();
   return storeItems(open.opened.bucket);
 }
 
@@ -112,12 +129,32 @@ export function saveTradedBucket(): Promise<void> {
   return persist();
 }
 
-/** Closed (a lock, another key): the bucket in memory goes with it, its key is wiped, and who the key was is forgotten. */
-export function closeBucket(): void {
-  open?.key?.fill(0);
+/**
+ * Closed (a lock, another key, the key unplugged): the bucket in memory goes with it, its key is wiped, and who the key
+ * was is forgotten.
+ *
+ * SEALED AND SAVED BEFORE IT GOES (Brad, 2026-10-31: "decrypted stuff should be encrypted and saved before being
+ * cleared") - ONLY IF IT NEEDS IT ("check state to even see if it needs this, because it could be NOT stale and
+ * already saved and sync'd"): the bucket's clock still the one its last save had means nothing changed since, and
+ * nothing is written. Changed: one last write, queued behind any write still sealing (each storage writes one at a
+ * time); it needs nothing of the key, which may be gone (the sealing keys are derived at open, lib sealedcopy
+ * keysOf). No new write starts on it - the bucket is closed at once.
+ */
+export function closeBucket(): Promise<void> {
+  const was = open;
   open = null;
   legacy = false;
   forgetIdentities();
+  if (!was) return Promise.resolve();
+  if (clockOf(was.opened.bucket) === was.savedClock) {
+    was.key?.fill(0);
+    return Promise.resolve();
+  }
+  console.log(`[bucket] ${was.identity.slice(0, 12)}: changed since its last save - sealed and saved before closing`);
+  return was.opened
+    .write()
+    .catch((e: unknown) => console.log(`[bucket] ${was.identity.slice(0, 12)}: the last save before closing failed - ${String((e as Error)?.message ?? e)}`))
+    .finally(() => was.key?.fill(0));
 }
 
 /** The key has no identity to tie a bucket to: its stores keep plain storage. */
@@ -131,7 +168,7 @@ export function openLegacyStorage(): void {
  */
 export async function storeEntries(store: string): Promise<Record<string, string> | null> {
   if (!open) return null;
-  await open.opened.refresh();
+  await refresh();
   const out: Record<string, string> = {};
   for (const [k, r] of Object.entries((open.opened.bucket.stores[store] ?? {}) as Record<string, {v: string | null; archived?: boolean}>)) if (r && !r.archived && r.v !== null) out[k] = r.v;
   return out;
@@ -221,7 +258,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
     const opened = await storage.open(id, null, () => { throw new Error('kept opened: no rows to prove'); });
     if (opened) {
       console.log(`[bucket] ${id.slice(0, 12)}: kept opened on this computer (shared with the CLI) - no press`);
-      open = {identity: id, opened, key: null};
+      open = {identity: id, opened, key: null, savedClock: clockOf(opened.bucket)};
       return {created: false, pressed: false};
     }
   }
@@ -230,7 +267,7 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
     const opened = await storage.open(id, key, rows => identityService.proveByRows({rows, key, rules: RULES}).bucket as Bucket);
     if (opened) {
       console.log(`[identity] ${id.slice(0, 12)}: proven - the key opened the rows this device kept for it`);
-      open = {identity: id, opened, key};
+      open = {identity: id, opened, key, savedClock: clockOf(opened.bucket)};
       return {created: false, pressed: true};
     }
   }
@@ -239,7 +276,8 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   try { await identityService.verify(ask.opts); } finally { ask.done(); }
   console.log(`[identity] ${id.slice(0, 12)}: proven - the key signed a fresh challenge with the identity key; a new bucket`);
   const key = storage.needsKey ? await bucketKey(id, okcrypto, onPress) : null;
-  open = {identity: id, opened: await storage.create(id, key), key};
+  const created = await storage.create(id, key);
+  open = {identity: id, opened: created, key, savedClock: clockOf(created.bucket)};
   return {created: true, pressed: true};
 }
 
@@ -257,7 +295,7 @@ export async function openIdentityBucketWithSecret(identity: string, secret: Uin
   try {
     const opened = await storage.open(id, key, rows => identityService.proveByRows({rows, key, rules: RULES}).bucket as Bucket);
     if (!opened) return false;
-    open = {identity: id, opened, key};
+    open = {identity: id, opened, key, savedClock: clockOf(opened.bucket)};
   } catch (e) {
     console.log(`[bucket] ${id.slice(0, 12)}: the kept login did not open the rows - ${String((e as Error)?.message ?? e)}`);
     return false;

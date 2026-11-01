@@ -29,6 +29,12 @@ const listeners = new Set<() => void>();
 export function lastKeyIdentity(): KeyIdentity | null {
   return last;
 }
+/** The key went away: its read goes with it (the next key's is read for itself). */
+export function forgetKeyIdentity(): void {
+  if (last === null) return;
+  last = null;
+  for (const l of [...listeners]) l();
+}
 export function useKeyIdentity(): KeyIdentity | null {
   const [v, setV] = useState<KeyIdentity | null>(last);
   useEffect(() => {

@@ -198,7 +198,7 @@ export function useKey({
         );
         if (!alive) return;
         setAttached(was => {
-          if (was === true && !found) void resetOnlyKey('usb');
+          if (was === true && !found) void resetOnlyKey('usb', 'unplugged');
           return found;
         });
       } catch {

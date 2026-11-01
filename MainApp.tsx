@@ -24,7 +24,8 @@ import {BtKeyboardProvider, useSharedBtKeyboard} from './src/hooks/BtKeyboardCon
 import {useBtAuto, type BtAuto} from './src/hooks/useBtAuto';
 import {useUsbHid} from './src/hooks/useUsbHid';
 import {useFidoGatt, type FidoSession} from './src/hooks/useFidoGatt';
-import {getOnlyKey} from './src/onlykey';
+import {getOnlyKey, onIdentityForgotten} from './src/onlykey';
+import {forgetKeyState} from './src/keyGone';
 import type {Backend} from './src/hooks/keySession';
 import {useTestingMode} from './src/hooks/useTestingMode';
 import {useKeyIdentity} from './src/keyIdentity';
@@ -616,6 +617,23 @@ function Shell() {
     if (passed) void joinServerRoom();
     else leaveServerRoom();
   }, [passed]);
+  /*
+   * THE KEY WENT AWAY, SO DID ITS IDENTITY - AND EVERYTHING THAT HUNG ON IT (Brad, 2026-10-31: "the entire user state
+   * depends on identity plugin ... so its important to ensure it sanitary after a unplug"). The lib's identity plugin
+   * says it was forgotten for an unplug (src/onlykey.ts resetOnlyKey): the login of this run ends with it - the
+   * replugged key goes back through Log in, its own PIN and its own identity check, as at a fresh start (a stale
+   * "logged in" sent it straight to the check, which asked a still-locked key and hung) - with the bucket, the kept
+   * session and the door.
+   */
+  useEffect(() => onIdentityForgotten(({why}) => {
+    if (why !== 'unplugged') return;
+    setLoggedInThisRun(false);
+    setPassed(false);
+    void endSession('the key was unplugged');
+    closeBucket();
+    forgetKeyState();
+    setPhase(prev => (prev === 'splash' ? prev : 'login'));
+  }), []);
   useEffect(() => {
     if (lastDoorKey.current === doorKey) return;
     lastDoorKey.current = doorKey;

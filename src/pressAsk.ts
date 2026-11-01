@@ -167,6 +167,14 @@ export function onPressAsk(l: () => void): () => void {
   return () => listeners.delete(l);
 }
 
+/** The key went away: what it was waiting on, and its last press, went with it. */
+export function forgetPressAsk(): void {
+  lastPress = null;
+  lastFido = null;
+  deriveWait = null;
+  changed();
+}
+
 /* tests */
 export function _resetPressAsk() {
   lastPress = null;

@@ -39,6 +39,11 @@ function set(c: HostChallenge | null) {
  * 2026-10-31: "i was expecting a press sheet, not it being displayed on the identity page"): the sheet with no code;
  * the returned function clears it.
  */
+/** The key went away: nothing waits on it any more. */
+export function clearHostChallenge(): void {
+  if (current) set(null);
+}
+
 export function askPress(what: string): () => void {
   set({digits: [], what});
   return () => set(null);
