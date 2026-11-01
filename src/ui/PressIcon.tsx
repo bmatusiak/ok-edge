@@ -12,6 +12,14 @@ import {useQuietMotion} from './CountdownBar';
 export function PressIcon({size = 28}: {size?: number}) {
   const quiet = useQuietMotion();
   const [apart, setApart] = useState(false);
+  /*
+   * SAID ONCE WHEN IT SHOWS (Brad, 2026-10-31: "the new press icon's animation can help you trigger when to know to
+   * press"): the key waits for a press now - the drive presses a test hard key through its debug console on this line
+   * (tools/drive/server.js); the soft key's own button stays the app's.
+   */
+  useEffect(() => {
+    console.log(`[press] icon up (${require('../hooks/KeyContext').activeBackend()})`);
+  }, []);
   useEffect(() => {
     if (quiet) return;
     const t = setInterval(() => setApart(a => !a), 500);

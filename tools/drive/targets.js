@@ -410,6 +410,23 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
 
   const T = {
     desktop: {
+      /*
+       * THE DESKTOP'S HARD KEY, PRESSED THROUGH ITS DEBUG CONSOLE (Brad, 2026-10-31: "the new press icon's animation can
+       * help you trigger when to press ... you just need to send press over the debug interface"). Only a TEST hex has a
+       * console - a production key (a live key) has none, so the drive cannot press it: keyState says which it is, and
+       * press fails on a key without one.
+       */
+      async keyState() {
+        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), '--list'], 20000);
+        const consoleUp = r.ok && /\bconsole\b/.test(r.out);
+        return consoleUp ? 'hard key: debug console answers (a test hex)' : `hard key: no debug console (a production key, or none) - ${r.out.split('\n').pop() || 'nothing listed'}`;
+      },
+      async press({ buttons = ['1'] } = {}) {
+        const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
+        if (!b.length) b.push('1');
+        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...b], 70000);
+        return r.ok ? `pressed ${b.join(' ')} on the hard key (debug console)` : `press failed: ${r.out.split(/\r?\n/).pop()}`;
+      },
       async start() {
         const c = running.get('desktop');
         if ((c && !exited(c)) || strayElectrons().length) return 'already running';

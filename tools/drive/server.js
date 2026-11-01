@@ -158,14 +158,22 @@ function pressWhenAsked(app) {
      * <what>" (keyBusy; 2026-10-31: the login card's certify waited out its 26 s) - one press, any button: the same
      */
     const edgeWait = app.shell === 'webapp' && l.match(/^\[keybusy\] the key waits for its press: (.*)$/);
-    const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']);
+    /*
+     * THE PRESS ICON IS UP (Brad, 2026-10-31: "the new press icon's animation can help you trigger when to know to press
+     * when that displays"): src/ui/PressIcon.tsx says it once when it shows - a hard key's ("usb") is pressed, button 1,
+     * unless a code is being entered (its own "key waits" line has the buttons). The soft key's own button is the app's.
+     */
+    const icon = l.match(/^\[press\] icon up \(usb\)(?:: (.*))?$/);
+    if (icon && codeOpen) return;
+    const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
     if (outside) {
       if (pressing) return;
       pressing = true;
       try {
+        /* a testnet key, or a hard key whose DEBUG console answers - a test hex; a production key has none and is never pressed */
         if (app.net !== 'test') {
           const s = await proc('key-state', app.shell);
-          if (!(s.ok && /\btestnet\b/.test(String(s.what)))) { line(`[${app.shell}] not pressed: its key is not a testnet one (${s.ok ? s.what : s.why})`); return; }
+          if (!(s.ok && /\btestnet\b|debug console answers/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
         }
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
         const r = await proc('press', app.shell, { buttons });
