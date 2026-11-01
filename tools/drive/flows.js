@@ -239,13 +239,16 @@ async function restore(d, { backup, passphraseFile, passphraseKey = 'passphrase'
   await d.tap('Factory reset');
   d = await d.restarted(async () => { await d.tap('Really wipe it'); await d.tap('Restart the app'); });
   await testingMode(d);
-  await d.goto('This Key');
+  /* a blank key's setup is the Setup tab (SetupFlowScreen): the restore ticked on its first page, then the PIN */
+  await d.goto('Setup');
+  await d.tap('Restore a backup');
+  await d.tap('Continue');
   await d.until('Choose a PIN', { life: 30 });
   for (const pass of ['Next', 'Set the PIN']) {
     for (const n of pin) await d.tap(`Button ${n}`);
     await d.tap(pass);
   }
-  await d.tap('Restore a backup');
+  /* the restore was ticked: the PIN set, its page comes next */
   await d.fillFile('-----BEGIN ONLYKEY BACKUP-----', backup);
   await d.fillFile("the backup's passphrase", passphraseFile, passphraseKey);
   await d.tap('Restore');

@@ -16,6 +16,7 @@ import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {Logo} from '../ui/Logo';
 import {Btn, Segmented} from '../ui/components';
+import {useDriveControl} from '../drive/registry';
 import {theme} from '../ui/theme';
 import {SOFT_KEY_HERE} from '../platform';
 import type {KeyControl} from '../hooks/useKey';
@@ -36,6 +37,8 @@ const OPTIONS: ReadonlyArray<{id: Optional; label: string; note: string}> = [
 ];
 
 function CheckRow({checked, label, note, onToggle}: {checked: boolean; label: string; note: string; onToggle: () => void}) {
+  /* a drive ticks it by its label, as it taps a Btn (src/drive/registry.tsx) - debug builds only */
+  useDriveControl(label, true, onToggle);
   return (
     <Pressable onPress={onToggle} accessibilityRole="checkbox" accessibilityState={{checked}} accessibilityLabel={label} style={styles.check}>
       <Text style={styles.box}>{checked ? '☑' : '☐'}</Text>
