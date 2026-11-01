@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect} from 'react';
 import {Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {Btn, KeyValue, Section, StatusPill} from '../ui/components';
+import {useDriveControl} from '../drive/registry';
 import {theme} from '../ui/theme';
 import {useSharedBtKeyboard} from '../hooks/BtKeyboardContext';
 import {useKeyName} from '../hooks/KeyContext';
@@ -150,6 +151,9 @@ export function BluetoothScreen({
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, published]);
+
+  /* a drive flips the master switch by its label with its state, as AutoRow's ("Bluetooth: off") */
+  useDriveControl(`Bluetooth: ${on ? 'on' : 'off'}`, bt.radioOn !== false && bt.supported !== false, () => setMaster(!on));
 
   /*
    * THE RADIO BEING OFF IS NOT A VERDICT ON THE PHONE.
@@ -483,6 +487,11 @@ function AutoRow({
    * phone that cannot advertise. */
   disabled?: boolean;
 }) {
+  /*
+   * a drive flips it by its label WITH its state ("Start on app start: off") - a tap on a switch toggles, so a script
+   * names the state it expects to find and never turns a switch off by asking for on (src/drive/registry.tsx)
+   */
+  useDriveControl(`${label}: ${value ? 'on' : 'off'}`, !disabled, () => onChange(!value));
   return (
     <View style={styles.autoRow}>
       <View style={styles.autoText}>

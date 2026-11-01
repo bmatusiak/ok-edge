@@ -191,6 +191,12 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
     else if (now === 'keypad' && await onGadget(d)) await unlockOutsideKey(d, pin);
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
+    /*
+     * the LIVE soft key blank, its setup page up (the Pixel, 2026-11-01: a fresh install's restart lands there, the
+     * testnet key set up and the live one never) - the drive's login is the testnet's, and testing mode stays off while
+     * the live soft key runs (LoginScreen: one net per run): the app restarted, then testing mode
+     */
+    else if (now === 'not set up' && d.app.net !== 'test') d = await d.restart();
     else if (now === 'not set up') throw new Error('login: the soft key is not set up (a restore or setup comes first)');
     else {
       /*
