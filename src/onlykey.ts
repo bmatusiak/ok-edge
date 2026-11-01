@@ -66,8 +66,9 @@ export type OnlyKeyApp = {
   edge: any;
   /*
    * WHO THIS KEY IS, read once and held, and PROVEN (lib plugins/identity): the bucket identity, the key's site, each
-   * feature's part - every screen and feature asks it instead of the key, and anything that trusts the key asks
-   * requireVerified().
+   * feature's part - every screen and feature asks it instead of the key. The plugin also has requireVerified() (held,
+   * or it throws until a proof has passed), but nothing in the app calls it yet: Key Chain writes and room joins do not
+   * ask it today. Wiring it in front of them is plan C1 (2026-11-01 review).
    */
   identity: any;
   transport: any;
