@@ -104,6 +104,7 @@ const styles = StyleSheet.create({
   sheet: {backgroundColor: theme.surface, borderTopLeftRadius: 14, borderTopRightRadius: 14},
   plainEdge: {borderTopWidth: StyleSheet.hairlineWidth, borderColor: theme.border},
   body: {padding: 16, gap: 8},
-  title: {fontWeight: '600', fontSize: 17},
+  /* centered, on every sheet (Brad, 2026-10-31: "lets center the sheet title") */
+  title: {fontWeight: '600', fontSize: 17, textAlign: 'center'},
   footer: {paddingHorizontal: 16, paddingBottom: 16, paddingTop: 8, gap: 8},
 });
