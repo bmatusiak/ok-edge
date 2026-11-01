@@ -689,6 +689,18 @@ function pastRuns() {
   } catch { return []; }
 }
 
+/*
+ * "USER DOES NOT SEE ACTIVITY" (Brad, 2026-10-31: "i just want a manual trigger to tell you 'user does not see
+ * activity'"; "no timer"): the window's button says it, as one line - wake.js's "user" kind hands it to Claude, who
+ * looks at what is stuck. It stops nothing. The line names the runs in progress and how long each has been quiet.
+ */
+const running = new Set();
+function noActivity() {
+  const now = Date.now();
+  const what = [...running].map((r) => `${r.script} (quiet ${Math.round((now - r.quietSince) / 1000)} s)`);
+  line(`[user] USER DOES NOT SEE ACTIVITY - runs in progress: ${what.length ? what.join(', ') : 'none'}`);
+}
+
 function control(ws) {
   ws.on('message', async (data) => {
     let m;
@@ -711,7 +723,9 @@ function control(ws) {
     bus.on('app-line', onAppLine);
     const started = new Date();
     let reason = '';
-    const watch = (l) => { runLines.push(l); send({ t: 'line', line: l }); };
+    const run = { script: String(m.script), quietSince: Date.now() };
+    running.add(run);
+    const watch = (l) => { runLines.push(l); run.quietSince = Date.now(); send({ t: 'line', line: l }); };
     watchers.add(watch);
     let code = 1;
     let shotApp = null;
@@ -738,6 +752,7 @@ function control(ws) {
       const now = shotApp && apps.get(shotApp.shell);
       if (now) await shotOf(now, `${m.script}-stopped`);
     } finally {
+      running.delete(run);
       bus.off('app-line', onAppLine);
       keys.presses = runLines.filter((l) => /\] pressed: /.test(l)).length;
       if (keys.requests || keys.presses) line(`[${m.script}] ${keys.requests} key request(s) without a press, ${keys.presses} press(es)`);
@@ -773,4 +788,4 @@ function status() {
   };
 }
 
-module.exports = { start, bus, status, shotNow, recentOf, pastRuns, SHOTS, RUNS };
+module.exports = { start, bus, status, shotNow, recentOf, pastRuns, noActivity, SHOTS, RUNS };
