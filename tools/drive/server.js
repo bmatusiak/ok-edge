@@ -652,7 +652,7 @@ async function proc(action, target, args = {}) {
     if (r.ws.readyState !== 1 || !r.targets.includes(target)) continue;
     const id = r.nextId++;
     /* the machine's answer, under its watchdog: 2 minutes, a build 30 (a cold Gradle build is long) */
-    const life = action === 'build' ? 30 * 60 : action === 'cli' ? 10 * 60 : 120;
+    const life = action === 'build' || action === 'hex' ? 30 * 60 : action === 'cli' || action === 'flash' ? 10 * 60 : 120;
     const reply = await new Promise((resolve) => {
       const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${r.machine} did not answer "${action} ${target}" in ${life} s` }); }, life * 1000);
       r.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });

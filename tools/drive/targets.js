@@ -559,6 +559,10 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       },
     },
   };
+  /* the hard key's firmware (hexFor, flashKey): a target only where it can be built - the box, with its toolchain folder */
+  if (LINUX && fs.existsSync(path.join(ROOT, 'fw-edge'))) {
+    T.firmware = { async start() { return 'nothing to start: ask hex or flash'; }, async stop() { return 'nothing to stop'; } };
+  }
 
   /*
    * LAST WORDS (drive debugging #1, Brad 2026-10-31: "yes i like it all"): an app that went without being asked cannot
@@ -662,6 +666,54 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
   };
 
   /*
+   * THE HARD KEY'S FIRMWARE, BUILT AND FLASHED BY THE DRIVE (Brad, 2026-10-31: "the drive remote should be able to build
+   * both prod and test hex so you dont need to remember how to build, you can just ask the drive server to get the last
+   * one it built or build it"). The box only (Linux, the Docker toolchain): the emulator checkout beside ok-edge at its
+   * committed HEAD, with the desktop's plugins (vendor_bridge: the desktop talks vendor only), through the emulator's
+   * plugins/edge/tools/build-hardkey.sh. test = DEBUG on (the kit drives it; a test key's), prod = DEBUG off (-nodebug;
+   * a live key's). The build stamp is the emulator commit's first 8 hex digits, so "the last one built" for these
+   * sources is the image with that stamp - asked again, it is handed back, not built again (--build builds anyway).
+   */
+  const FW_PLUGINS = 'edge,ctap_bridge,vendor_bridge,derive_secret,version_control';
+  const FW_EMU = path.join(ROOT, 'node-onlykey-emulator');
+  const FW_IMAGES = path.join(ROOT, 'fw-edge', 'images');
+  const git = (args) => require('child_process').execFileSync('git', ['-C', FW_EMU, ...args], { encoding: 'utf8' }).trim();
+  async function hexFor({ flavor, force = false } = {}) {
+    if (flavor !== 'test' && flavor !== 'prod') return { ok: false, why: 'say test (DEBUG on - a test key) or prod (DEBUG off - a live key)' };
+    const head = git(['rev-parse', 'HEAD']);
+    if (git(['status', '--porcelain', '--', 'emulator']).split(/\r?\n/).some((l) => l && !l.startsWith('??'))) return { ok: false, why: `the emulator checkout has uncommitted changes - a hex is built from a commit (${head.slice(0, 7)})` };
+    const stamp = head.slice(0, 8);
+    const name = `v3.1.0-test-${FW_PLUGINS.replace(/,/g, '-')}-` ;
+    const tail = `-b${stamp}${flavor === 'prod' ? '-nodebug' : ''}.hex`;
+    const have = () => (fs.existsSync(FW_IMAGES) ? fs.readdirSync(FW_IMAGES).filter((n) => n.startsWith(name) && n.endsWith(tail)) : []);
+    let file = have()[0];
+    let built = false;
+    if (!file || force) {
+      const r = await streamIn(path.join(FW_EMU, 'emulator'), 'bash', ['plugins/edge/tools/build-hardkey.sh'], {
+        timeout: 20 * 60000, env: { ...process.env, PLUGINS: FW_PLUGINS, BUILD_STAMP: stamp, ...(flavor === 'prod' ? { DEBUG: '0' } : {}) }, ...shown(`hex ${flavor}`),
+      });
+      if (!r.ok) return { ok: false, why: `the ${flavor} build failed: ${r.out.split(/\r?\n/).slice(-4).join(' | ')}` };
+      file = have()[0];
+      if (!file) return { ok: false, why: `the ${flavor} build finished but no image ends ${tail}` };
+      built = true;
+    }
+    const full = path.join(FW_IMAGES, file);
+    const sha256 = require('crypto').createHash('sha256').update(fs.readFileSync(full)).digest('hex');
+    return { ok: true, what: JSON.stringify({ flavor, file: full, sha256, commit: head.slice(0, 7), built, at: fs.statSync(full).mtime.toISOString() }) };
+  }
+  /* onto a key waiting in its bootloader (HalfKay - never OKFWUPDATE): the hex for these sources, its SHA-256 said */
+  async function flashKey({ flavor } = {}) {
+    const keys = await keysOnUsb();
+    if (!keys || !keys.some((k) => k.kind === 'bootloader')) return { ok: false, why: 'no key is waiting in its bootloader - put it there first (the drive says when one is)' };
+    if (keys.filter((k) => k.kind === 'bootloader').length > 1) return { ok: false, why: 'more than one key in its bootloader - leave one' };
+    const h = await hexFor({ flavor });
+    if (!h.ok) return h;
+    const { file, sha256 } = JSON.parse(h.what);
+    const r = await streamIn(path.join(ROOT, 'onlykey-testing'), NODE, ['bin/okt.js', 'flash', file], { timeout: 3 * 60000, ...shown(`flash ${flavor}`) });
+    return r.ok ? { ok: true, what: JSON.stringify({ ...JSON.parse(h.what), flashed: true }) } : { ok: false, why: `flash: ${r.out.split(/\r?\n/).slice(-4).join(' | ')}` };
+  }
+
+  /*
    * THE LIB'S CLI ON THIS MACHINE (onlykey-js - for a hard key the CLI is the app), its output live in its own tab
    * ("cli <args>"). No input: a question it asks is answered "no" by its closed stdin - the CLI's own rule for a pipe.
    */
@@ -690,6 +742,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
+      if (action === 'hex') return target === 'firmware' ? hexFor(args) : { ok: false, why: 'hex belongs to the firmware target' };
+      if (action === 'flash') return target === 'firmware' ? flashKey(args) : { ok: false, why: 'flash belongs to the firmware target' };
       if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }
       if (action === 'key-state') return t.keyState ? { ok: true, what: await t.keyState() } : { ok: false, why: `${target}'s key is in the app: its flags say its state` };
       if (action === 'press') return t.press ? { ok: true, what: await t.press(args) } : { ok: false, why: `${target}'s key is in the app: the drive taps its own button` };
