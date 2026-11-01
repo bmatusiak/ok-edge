@@ -11,6 +11,7 @@ import {Btn, Section} from './components';
 import {theme} from './theme';
 import {shell} from '../platform';
 import {joinServerRoom, onRoomState, retryServerRoom, roomState, serverUrl, setServerUrl, type RoomState} from '../serverRoom';
+import {bleRoomState, onBleRoomState, retryBleRoom, type BleRoomState} from '../bleRoom';
 
 const KIND: Record<string, string> = {webapp: 'web app', android: 'phone', desktop: 'desktop', cli: 'computer (CLI)', agent: 'agent'};
 
@@ -76,7 +77,29 @@ export function ServerPanel() {
         </View>
       ) : null}
       {s.last ? <Text style={styles.note}>{`Last trade, with ${s.last.with}: ${s.last.line}`}</Text> : null}
+      <BleRow />
     </Section>
+  );
+}
+
+/*
+ * A COMPUTER'S ROOM OVER BLUETOOTH (the phone; ok-edge plan B3 - bleRoom.ts): the target computer's mcp-server, linked,
+ * and this phone in its identity's room there - its own Try again, as the key is asked only by the person.
+ */
+function BleRow() {
+  const [b, setB] = useState<BleRoomState>(bleRoomState());
+  useEffect(() => onBleRoomState(setB), []);
+  if (shell !== 'android' || (b.status === 'off' && !b.host)) return null;
+  const line = b.status === 'joined' ? `Over Bluetooth: in this key's room on ${b.host}${b.peers.length ? ` - with ${b.peers.map(p => p.name).join(', ')}` : ''}.`
+    : b.status === 'joining' ? `Over Bluetooth: joining ${b.host}…`
+    : b.status === 'linked' ? `Over Bluetooth: ${b.host} is linked - joined once the bucket is open.`
+    : b.status === 'error' ? `Over Bluetooth: not joined - ${b.why ?? 'unknown'}`
+    : 'Over Bluetooth: no computer linked.';
+  return (
+    <View style={styles.list}>
+      <Text style={b.status === 'joined' ? styles.on : styles.note}>{line}</Text>
+      {b.status === 'error' && b.needsKey ? <Btn title="Try again over Bluetooth" onPress={retryBleRoom} /> : null}
+    </View>
   );
 }
 

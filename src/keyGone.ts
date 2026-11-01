@@ -24,4 +24,5 @@ export function forgetKeyState(): void {
   require('./pressAsk').forgetPressAsk();
   require('./credprovider/flow').dropChannel();
   require('./localMcp').leaveLocalMcp();
+  require('./bleRoom').leaveBleRoom();
 }

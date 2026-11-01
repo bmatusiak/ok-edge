@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect} from 'react';
 import {Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {Btn, KeyValue, Section, StatusPill} from '../ui/components';
-import {useDriveControl} from '../drive/registry';
+import {DriveTap, useDriveControl} from '../drive/registry';
 import {theme} from '../ui/theme';
 import {useSharedBtKeyboard} from '../hooks/BtKeyboardContext';
 import {useKeyName} from '../hooks/KeyContext';
@@ -305,6 +305,8 @@ export function BluetoothScreen({
                   style={styles.hostRow}
                   disabled={bt.busy}
                   onPress={() => setTarget(h.address)}>
+                  {/* a drive picks the target by the computer's name ("Target: bmatusiak-ZBOX-MI531") */}
+                  <DriveTap label={`Target: ${h.name || h.address}`} enabled={!bt.busy && !chosen} onPress={() => setTarget(h.address)} />
                   <View style={[styles.radio, chosen && styles.radioOn]}>
                     {chosen ? <View style={styles.radioDot} /> : null}
                   </View>

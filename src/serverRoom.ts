@@ -323,6 +323,8 @@ export async function joinServerRoom(): Promise<void> {
   const open = tradeBucket();
   /* this computer's agents, beside the server's: the local MCP's room (the desktop; no proof - localMcp.ts) */
   if (open) void require('./localMcp').joinLocalRoom(open.identity);
+  /* and a linked computer's room over Bluetooth (the phone; the login proof - bleRoom.ts) */
+  if (open && shell === 'android') void require('./bleRoom').joinBleRoom();
   const url = await serverUrl();
   set({url});
   if (!open || !url || joining || (room && joinedFor === open.identity)) return;
@@ -365,53 +367,9 @@ export async function joinServerRoom(): Promise<void> {
     retries = 0;
     set({status: 'joined', why: null, you: device, peers: r.peers()});
     console.log(`[room] joined ${new URL(url).host} as ${device.name}: ${r.peers().length} other device(s) online`);
-    /* the room was joined with the key's proof, so it may trade while the bucket it joined for is open */
-    r.serve(async (from: string, message: any) => {
-      /* the 🔗 flashes for every trade message this device answers in the room (btActivity 'mcp') */
-      ioPulse('mcp');
-      const out: any = await handleTrade(message, from, {allowed: () => tradeBucket()?.identity === me.id});
-      /* a check answered: the two states compared, and each feature as it is here */
-      if (message?.type === bucketLib.trade.TYPES.PROVE && out?.ok && out.state && message.state) {
-        const b = tradeBucket()?.bucket;
-        const differs: string[] = bucketLib.replicate.differs(out.state, message.state);
-        const stores: Record<string, {items: number; same: boolean}> = {};
-        if (b) for (const [name, items] of Object.entries(storeItems(b))) stores[name] = {items, same: !differs.includes(name)};
-        storesChecked(stores);
-      }
-      /* a trade another device started, answered here: it is this device's last trade too (the 🔗 shows it, as its own) */
-      if (message?.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
-        const b = tradeBucket()?.bucket;
-        storesTraded(out.taken || {}, b ? storeItems(b) : {});
-        const who = r.peers().find((p: RoomPeer) => p.id === from);
-        set({last: {with: who ? who.name : from, at: Date.now(), line: 'traded - answered its trade'}});
-      }
-      return out;
-    });
-    /* the agents that ask this identity (the server's /mcp): their plans, live, and the owner's answers (mcpAgents.ts) */
-    attachAgents(r, Array.from(me.identityPublicKey as Uint8Array, (b: number) => b.toString(16).padStart(2, '0')).join(''));
-    r.on('peer', (p: any) => {
-      set({peers: r.peers()});
-      console.log(`[room] ${p.up ? `${p.up.name} (${p.up.kind}) came online` : `${p.down} left`}`);
-      if (p.up) tradeSoon(p.up);
-    });
-    /*
-     * THE SERVER'S COPY GOT NEWER (another device's put, announced by the room as keyed ids and tags; Brad, 2026-10-30: "if
-     * the app becomes stale and mcp is newer, then it should reflect"): the stores it touches here are marked newer on the
-     * server - a unit this device has not got yet is counted - and a round fetches them.
-     */
-    r.on('sealed-changed', (e: {from: string | null; rows: Record<string, string>}) => {
-      void (async () => {
-        const open = tradeBucket();
-        const me2 = await proofMaterial();
-        if (!open || !me2) return;
-        const at = bucketLib.sealedCopy.locate(open.bucket, bucketLib.sealedCopy.keysOf(me2.bucketKey), e.rows, {rules: RULES});
-        if (!at.stores.length && !at.unknown) return;
-        console.log(`[room] the sealed copy changed on the server (${e.from ?? 'another device'}): newer there - ${[...at.stores, ...(at.unknown ? [`${at.unknown} new`] : [])].join(', ')}`);
-        set({sealed: {...state.sealed, newer: [...new Set([...state.sealed.newer, ...at.stores])].sort(), newerUnknown: state.sealed.newerUnknown + at.unknown}});
-        sealedSoon('the server copy changed');
-      })().catch(() => { /* not this device's bucket now: the next round compares anyway */ });
-    });
+    wireRoom(r, me, SERVER_HOOKS);
     r.on('close', () => {
+      wired.delete(r);
       /* a room left for another (a new server, a new key site) closes a moment later: not this device's room */
       if (room !== r) { console.log('[room] the previous room\'s connection closed'); return; }
       room = null;
@@ -425,8 +383,6 @@ export async function joinServerRoom(): Promise<void> {
       set({status: 'error', why: 'the connection closed - joining again shortly', peers: []});
       rejoinLater();
     });
-    for (const p of r.peers()) tradeSoon(p);
-    sealedSoon('joined');
   } catch (e) {
     const why = String((e as Error)?.message ?? e);
     console.log(`[room] not joined: ${why}`);
@@ -435,6 +391,101 @@ export async function joinServerRoom(): Promise<void> {
   } finally {
     joining = false;
   }
+}
+
+/*
+ * A JOINED ROOM, WHEREVER IT IS (Brad, 2026-11-01: "the mcp server should make communication with ble transparent" -
+ * ok-edge plan B3): the user's server over its websocket, or a computer's mcp-server over Bluetooth (bleRoom.ts) - the
+ * same room client, so the same work: answer the trades other devices start, start one with each device that comes
+ * online, follow the server's sealed copy, show its agents. What differs is only where each says so - the hooks.
+ */
+export type RoomHooks = {
+  /* the log's tag: '[room]' for the user's server, '[room ble]' for a computer's over Bluetooth */
+  tag: string;
+  /* where its agents show (mcpAgents) */
+  where: 'server' | 'local' | 'ble';
+  /* the room's devices changed */
+  peers: (r: any) => void;
+  /* a sealed-copy round's news: 'syncing', then 'synced' / 'none' / 'error' with what moved */
+  sealed: (s: Partial<RoomState['sealed']>) => void;
+  /* the server's copy got newer: the stores it touches here, and units this device cannot name yet */
+  newer: (stores: string[], unknown: number) => void;
+};
+/* the rooms joined now, with their hooks: a change here goes to each (bucketChanged) */
+const wired = new Map<any, RoomHooks>();
+
+const SERVER_HOOKS: RoomHooks = {
+  tag: '[room]',
+  where: 'server',
+  peers: (r) => set({peers: r.peers()}),
+  sealed: (s) => {
+    if (s.status === 'synced' || s.status === 'none') {
+      /* the server holds this bucket as it is now: the prints a later change is compared with */
+      const open = tradeBucket();
+      if (s.status === 'synced' && open) sealedPrints = storePrints(open.bucket);
+      set({sealed: {...state.sealed, stale: [], newer: [], newerUnknown: 0, ...s}});
+      markFirstSync();
+      return;
+    }
+    set({sealed: {...state.sealed, ...s}});
+    if (s.status === 'error') markStale();
+  },
+  newer: (stores, unknown) => set({sealed: {...state.sealed, newer: [...new Set([...state.sealed.newer, ...stores])].sort(), newerUnknown: state.sealed.newerUnknown + unknown}}),
+};
+
+/** Wire a joined room (connectRoom's) for this open bucket: trades both ways, the sealed copy, its agents. */
+export function wireRoom(r: any, me: Me, hooks: RoomHooks): void {
+  wired.set(r, hooks);
+  /* the room was joined with the key's proof, so it may trade while the bucket it joined for is open */
+  r.serve(async (from: string, message: any) => {
+    /* the 🔗 flashes for every trade message this device answers in the room (btActivity 'mcp') */
+    ioPulse('mcp');
+    const out: any = await handleTrade(message, from, {allowed: () => tradeBucket()?.identity === me.id});
+    /* a check answered: the two states compared, and each feature as it is here */
+    if (message?.type === bucketLib.trade.TYPES.PROVE && out?.ok && out.state && message.state) {
+      const b = tradeBucket()?.bucket;
+      const differs: string[] = bucketLib.replicate.differs(out.state, message.state);
+      const stores: Record<string, {items: number; same: boolean}> = {};
+      if (b) for (const [name, items] of Object.entries(storeItems(b))) stores[name] = {items, same: !differs.includes(name)};
+      storesChecked(stores);
+    }
+    /* a trade another device started, answered here: it is this device's last trade too (the 🔗 shows it, as its own) */
+    if (message?.type === bucketLib.trade.TYPES.GIVE && out?.ok) {
+      const b = tradeBucket()?.bucket;
+      storesTraded(out.taken || {}, b ? storeItems(b) : {});
+      const who = r.peers().find((p: RoomPeer) => p.id === from);
+      set({last: {with: who ? who.name : from, at: Date.now(), line: 'traded - answered its trade'}});
+    }
+    return out;
+  });
+  /* the agents that ask this identity (that server's /mcp): their plans, live, and the owner's answers (mcpAgents.ts) */
+  attachAgents(r, Array.from(me.identityPublicKey as Uint8Array, (b: number) => b.toString(16).padStart(2, '0')).join(''), hooks.where);
+  r.on('peer', (p: any) => {
+    hooks.peers(r);
+    console.log(`${hooks.tag} ${p.up ? `${p.up.name} (${p.up.kind}) came online` : `${p.down} left`}`);
+    if (p.up) tradeSoon(p.up, r, hooks);
+  });
+  /*
+   * THE SERVER'S COPY GOT NEWER (another device's put, announced by the room as keyed ids and tags; Brad, 2026-10-30: "if
+   * the app becomes stale and mcp is newer, then it should reflect"): the stores it touches here are marked newer on the
+   * server - a unit this device has not got yet is counted - and a round fetches them.
+   */
+  r.on('sealed-changed', (e: {from: string | null; rows: Record<string, string>}) => {
+    void (async () => {
+      const open = tradeBucket();
+      const me2 = await proofMaterial();
+      if (!open || !me2) return;
+      const at = bucketLib.sealedCopy.locate(open.bucket, bucketLib.sealedCopy.keysOf(me2.bucketKey), e.rows, {rules: RULES});
+      if (!at.stores.length && !at.unknown) return;
+      console.log(`${hooks.tag} the sealed copy changed on the server (${e.from ?? 'another device'}): newer there - ${[...at.stores, ...(at.unknown ? [`${at.unknown} new`] : [])].join(', ')}`);
+      hooks.newer(at.stores, at.unknown);
+      sealedSoon('the server copy changed', r, hooks);
+    })().catch(() => { /* not this device's bucket now: the next round compares anyway */ });
+  });
+  r.on('close', () => { wired.delete(r); });
+  /* joined: a trade with each device here now, and a round with the server's copy */
+  for (const p of r.peers()) tradeSoon(p, r, hooks);
+  sealedSoon('joined', r, hooks);
 }
 
 /* a dropped or refused connection: again after 15 s, 30 s, 1 min ... up to 5 min (no key is asked - see above) */
@@ -453,9 +504,11 @@ function rejoinLater(): void {
 export function bucketChanged(): void {
   /* first, joined or not: what changed here is not on the server until a round sends it (the Sync tab's Features) */
   markStale();
-  if (!room) return;
-  for (const p of room.peers()) tradeSoon(p);
-  sealedSoon('this bucket changed');
+  /* every room joined now - the user's server's, and a computer's over Bluetooth (wireRoom) */
+  for (const [r, hooks] of wired) {
+    for (const p of r.peers()) tradeSoon(p, r, hooks);
+    sealedSoon('this bucket changed', r, hooks);
+  }
 }
 
 /*
@@ -466,45 +519,39 @@ export function bucketChanged(): void {
  * the copy holds. Whoever is online or not, a fresh session catches up from it. In the trades' queue: one change to the
  * bucket at a time. A server not set to keep this identity: said once, nothing sent.
  */
-let sealedSaid = '';
-function sealedSoon(why: string): void {
-  tradeChain = tradeChain.then(() => sealedSync(why)).catch((e: unknown) => {
+const sealedSaid = new Map<string, string>();
+function sealedSoon(why: string, r: any, hooks: RoomHooks): void {
+  tradeChain = tradeChain.then(() => sealedSync(why, r, hooks)).catch((e: unknown) => {
     const msg = String((e as Error)?.message ?? e);
-    console.log(`[room] the sealed copy: not synced - ${msg}`);
-    set({sealed: {...state.sealed, status: 'error', at: Date.now(), why: msg}});
-    markStale();
+    console.log(`${hooks.tag} the sealed copy: not synced - ${msg}`);
+    hooks.sealed({status: 'error', at: Date.now(), why: msg});
   });
 }
-async function sealedSync(why: string): Promise<void> {
-  const r = room;
+async function sealedSync(why: string, r: any, hooks: RoomHooks): Promise<void> {
   const open = tradeBucket();
   const me = await proofMaterial();
-  if (!r || !open || !me) return;
+  if (!r || !wired.has(r) || !open || !me) return;
   const store = r.sealedStore();
   if (!(await store.on())) {
-    if (sealedSaid !== 'off') { sealedSaid = 'off'; console.log('[room] the sealed copy: this server keeps none for this identity'); }
-    set({sealed: {status: 'none', at: Date.now(), why: null, stores: {}, stale: [], newer: [], newerUnknown: 0, tier: null}});
-    markFirstSync();
+    if (sealedSaid.get(hooks.tag) !== 'off') { sealedSaid.set(hooks.tag, 'off'); console.log(`${hooks.tag} the sealed copy: this server keeps none for this identity`); }
+    hooks.sealed({status: 'none', at: Date.now(), why: null, stores: {}, tier: null});
     return;
   }
   const {logblocks} = require('node-onlykey-lib/edge');
   const entries = (name: string) => Object.fromEntries(Object.entries((open.bucket.stores[name] ?? {}) as Record<string, {v: string | null; archived?: boolean}>).filter(([, x]) => x && !x.archived && x.v !== null).map(([k, x]) => [k, x.v as string]));
   const heads = {...logblocks.newestSeqs(entries('edge-logs')), ...logblocks.newestSeqs(entries('edge-logs-test'))};
-  set({sealed: {...state.sealed, status: 'syncing'}});
+  hooks.sealed({status: 'syncing'});
   /* the sealed copy's round trip is room traffic too: the 🔗 flashes */
   ioPulse('mcp');
   const res = await bucketLib.sealedCopy.syncWith(open.bucket, bucketLib.sealedCopy.keysOf(me.bucketKey), store, {rules: RULES, randomBytes, heads});
-  for (const x of res.refused) console.log(`[room] the sealed copy: a row refused - ${x}`);
+  for (const x of res.refused) console.log(`${hooks.tag} the sealed copy: a row refused - ${x}`);
   if (count(res.taken)) {
     await saveTradedBucket();
     storesTraded(res.taken, storeItems(open.bucket));
   }
-  sealedSaid = 'on';
-  /* the server holds this bucket as it is now: the prints a later change is compared with */
-  sealedPrints = storePrints(open.bucket);
-  set({sealed: {status: 'synced', at: Date.now(), why: null, stores: res.stores ?? {}, stale: [], newer: [], newerUnknown: 0, tier: typeof store.tier === 'function' ? store.tier() : null}});
-  console.log(`[room] the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
-  markFirstSync();
+  sealedSaid.set(hooks.tag, 'on');
+  hooks.sealed({status: 'synced', at: Date.now(), why: null, stores: res.stores ?? {}, tier: typeof store.tier === 'function' ? store.tier() : null});
+  console.log(`${hooks.tag} the sealed copy (${why}): got ${res.got}, put ${res.put}${count(res.taken) ? ` - took ${JSON.stringify(res.taken)}` : ''}`);
 }
 
 /** The Server panel's Try again: one more join, which asks the key again when it has to. */
@@ -518,12 +565,12 @@ export function retryServerRoom(): void {
  * the other changes the bucket. A CLI starts its own (its sync is one-shot: it starts, never answers); between two apps
  * the one with the lower id starts, the other answers. One trade at a time, in the order asked.
  */
-function tradeSoon(peer: RoomPeer): void {
-  const mine = state.you?.id ?? '';
+function tradeSoon(peer: RoomPeer, r: any, hooks: RoomHooks): void {
+  const mine = state.you?.id ?? r.you ?? '';
   if (peer.kind === 'cli' || (mine && peer.id < mine)) return;
-  tradeChain = tradeChain.then(() => tradeWith(peer)).catch((e: unknown) => {
+  tradeChain = tradeChain.then(() => tradeWith(peer, r, hooks)).catch((e: unknown) => {
     const line = `not traded: ${String((e as Error)?.message ?? e)}`;
-    console.log(`[room] ${peer.name}: ${line}`);
+    console.log(`${hooks.tag} ${peer.name}: ${line}`);
     set({last: {with: peer.name, at: Date.now(), line}});
   });
 }
@@ -535,17 +582,16 @@ const count = (o: Record<string, number> | undefined) => Object.values(o || {}).
  * ways, the states, then HAVE/GIVE rounds until they match. It runs on the bucket open here, as the peer side does;
  * what it took is stored as a traded bucket is.
  */
-async function tradeWith(peer: RoomPeer): Promise<void> {
-  const r = room;
+async function tradeWith(peer: RoomPeer, r: any, hooks: RoomHooks): Promise<void> {
   const open = tradeBucket();
   const me = await proofMaterial();
-  if (!r || !open || !me) return;
+  if (!r || !wired.has(r) || !open || !me) return;
   /* the 🔗 flashes for every trade message this device sends in the room (btActivity 'mcp') */
   const send = (m: any) => { ioPulse('mcp'); return r.request(peer.id, m, {timeoutMs: ANSWER_MS}); };
   const c = bucketLib.trade.computerSide({bucket: open.bucket, me, randomBytes, rules: RULES});
   const m2 = c.prove(await send(c.hello()));
   const done = (line: string) => {
-    console.log(`[room] ${peer.name}: ${line}`);
+    console.log(`${hooks.tag} ${peer.name}: ${line}`);
     set({last: {with: peer.name, at: Date.now(), line}});
   };
   if (!m2) return done('refused - it did not prove this bucket identity, or does not trade');

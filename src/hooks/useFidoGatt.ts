@@ -6,6 +6,7 @@ import FidoGatt, {
 } from '../transport/FidoGatt';
 import OkEmu from '../transport/OkEmu';
 import {startFidoBridge} from '../fidoBridge';
+import {startBleRoom} from '../bleRoom';
 import type {OnlyKeyApp} from '../onlykey';
 import type {LogLevel} from './useLog';
 
@@ -75,14 +76,13 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
    * to stop trusting the node - so this is the control that means "let a
    * browser's request through" on the FIDO service.
    *
-   * THE VENDOR DOOR IS SHUT, and has no switch (Brad, 2026-10-30: "just remove
-   * ble pair and sync stuff - we are using key3 to push and sync, so phones are
-   * free to become testing over mcp until we rework how ble comes back"). Its
-   * "API" switch let software on the target (onlykey-js --ble) operate the key
-   * through the vendor bridge, and only inside a cli-paired computer's sealed
-   * session; the bridge went with the cli pair. The native service is still
-   * offered (a host records a device's services once, when it bonds), and the
-   * radio is told api=false below, so a write to it never becomes an event.
+   * THE VENDOR DOOR OPENS FOR ONE THING (ok-edge plan B3; Brad, 2026-11-01: "the
+   * mcp server should make communication with ble transparent"): the target
+   * computer's mcp-server and this phone's room over it - frame command 0x86,
+   * heard by bleRoom.ts and nothing else. Every other vendor message is still
+   * answered by silence (no listener takes it). It was shut 2026-10-30 with the
+   * cli pair, whose sealed sessions gated it; the room's own join (the login
+   * proof) is the gate now.
    *
    * Nothing without a target: see `target` below.
    */
@@ -138,8 +138,8 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
   useEffect(() => {
     if (!gatesRead) return;
     try {
-      /* api false: the vendor door stays shut (see THE VENDOR DOOR IS SHUT above) */
-      FidoGatt.setIoPolicy(target, webauthn, false);
+      /* api true: the target's writes become events - bleRoom.ts hears 0x86 only (THE VENDOR DOOR above) */
+      FidoGatt.setIoPolicy(target, webauthn, true);
     } catch (error) {
       log('error', 'setIoPolicy: ' + String(error));
     }
@@ -167,6 +167,8 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
      * authenticator supports nothing and gives up, so the flow appeared to
      * work while being incapable of registering a credential.
      */
+    /* the target computer's mcp-server, over the vendor service: this phone's room there (bleRoom.ts) */
+    startBleRoom();
     const offBridge = startFidoBridge({
       getKey,
       log,

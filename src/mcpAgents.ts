@@ -58,9 +58,10 @@ const planListeners = new Set<(e: PlanEvent) => void>();
  * TWO ROOMS ON THE DESKTOP (Brad, 2026-11-01: "the local mcp has no auth, but it still will communicate with the desktop
  * app for the planner and budget calls"): the user's server's room (its agents anywhere) and the local MCP's (agents on
  * this computer). Each room's agents and plans are kept apart; the picture is all of them, and an answer goes back to
- * the room that holds its agent or plan. Elsewhere there is one room, the server's.
+ * the room that holds its agent or plan. Elsewhere there is one room, the server's - and on the phone, a computer's room
+ * over Bluetooth too (bleRoom.ts: its mcp-server's agents, ok-edge plan B3).
  */
-export type RoomWhere = 'server' | 'local';
+export type RoomWhere = 'server' | 'local' | 'ble';
 type Held = {where: RoomWhere; agents: Agent[]; plans: Plan[]};
 const rooms = new Map<any, Held>();
 
