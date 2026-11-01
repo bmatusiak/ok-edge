@@ -181,7 +181,17 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
       /*
        * its end is the key unlocked - the bypass types seven digits, and while it does the key is still "locked" with
        * no button live (2026-10-31, the Pixel: judged "elsewhere" mid-bypass, a Menu tap found nothing)
+       *
+       * NOT BEFORE THE SOFT KEY ANSWERS (the Pixel, 2026-11-01: the bypass tapped 0.3 s after the firmware started lost
+       * digits; the key kept the rest - it checks as each digit lands, and a broken entry starts over only with a hold or
+       * an unplug - so the next bypass was wrong too): this app start's "[softkey] OKCONNECT ok" first.
        */
+      const r = d.app.recent || [];
+      let start = -1;
+      for (let i = r.length - 1; i >= 0; i--) if (/Running "main"/.test(r[i])) { start = i; break; }
+      if (!r.slice(start + 1).some((l) => /\[softkey\] OKCONNECT ok/.test(l))) {
+        await d.until(/\[softkey\] OKCONNECT ok/, { life: 60, fail: [] });
+      }
       await d.tap('Login Bypass');
       await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] }).catch(() => {
         throw new Error(`login: the key stayed locked after Login Bypass (${TEST_PIN}) - one wrong PIN attempt; not tried again. Its PIN: --pin <pin>`);

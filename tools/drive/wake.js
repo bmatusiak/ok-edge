@@ -54,5 +54,7 @@ function read() {
   }
 }
 fs.mkdirSync(path.dirname(LOG), { recursive: true });
+/* the mark that says a watcher runs (wake-mark.js): run.js doctor and the no-activity button read it */
+require('./wake-mark').markWatching(on);
 fs.watch(path.dirname(LOG), (e, name) => { if (!name || name === path.basename(LOG)) read(); });
 console.error(`wake: following ${LOG} for ${on.join(', ')}`);

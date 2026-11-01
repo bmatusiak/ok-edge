@@ -9,6 +9,10 @@
  */
 module.exports = async (d, args) => {
   const allFiles = args.includes('--all-files');
+  /* first: whether the agent is listening to the drive (wake-mark.js) - its events reach it only through a watcher */
+  const { wakeWatcher, ARM } = require('../wake-mark');
+  const w = wakeWatcher();
+  d.say(w ? `wake watcher: running (pid ${w.pid}, since ${w.since}) - wakes on ${w.on.join(', ')}` : `wake watcher: NONE - ${ARM}`);
   const answers = await d.everywhere('doctor');
   const ok = answers.filter((a) => a.ok).map((a) => ({ where: a.where, ...JSON.parse(a.what) }));
   for (const a of answers.filter((x) => !x.ok)) d.say(`${a.where}: no answer - ${a.why}`);

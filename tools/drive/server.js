@@ -785,6 +785,8 @@ function noActivity() {
   const now = Date.now();
   const what = [...running].map((r) => `${r.script} (quiet ${Math.round((now - r.quietSince) / 1000)} s)`);
   line(`[user] USER DOES NOT SEE ACTIVITY - runs in progress: ${what.length ? what.join(', ') : 'none'}`);
+  /* nobody following the log hears it: said where Brad looks (wake-mark.js) */
+  if (!require('./wake-mark').wakeWatcher()) line('[user] no wake watcher is running - the agent did not hear this; it should arm one (run.js doctor says so too)');
 }
 
 function control(ws) {
