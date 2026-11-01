@@ -93,11 +93,25 @@ export function useEdge() {
         setView({verdict: {kind: 'locked'}, headSeq: null, lastSync: null, rows: []});
         return;
       }
-      setView(await work(s));
+      /*
+       * A COPY THAT CANNOT BE BROUGHT UP TO DATE STILL SHOWS (Brad, 2026-10-31: "i did see budget history before, now i
+       * dont"): the key's head out of this computer's reach (EDGE_NO_CHECKPOINT) said above the tab - and the rest, the
+       * budgets and every device's history this computer holds, read as always. It used to end the whole refresh.
+       */
+      let cold = false;
+      try {
+        setView(await work(s));
+      } catch (e: any) {
+        if (e?.code !== 'EDGE_NO_CHECKPOINT') throw e;
+        cold = true;
+        setError(e.message);
+        console.log(`[edge] this key's copy is out of reach (${e.why}${e.copyEnds != null ? `: copy ends #${e.copyEnds}, key #${e.keySeq}, ring from #${e.ringFrom}` : ''}) - showing what this computer holds`);
+      }
+      const orNone = <T,>(p: Promise<T>, none: T): Promise<T> => (cold ? p.catch(() => none) : p);
       lap('work');
       /* one head read, one copy load for the rest of this refresh (SoftKeyEdge.beginRun) */
       (s as unknown as {beginRun?: () => void}).beginRun?.();
-      setBudgets(await s.budgets());
+      setBudgets(await orNone(s.budgets(), []));
       lap('budgets');
       /* budget history: what this phone opened that is not live now (soft key only) */
       const src = s as unknown as {pastBudgets?: () => Promise<EdgeBudget[]>};
@@ -118,10 +132,10 @@ export function useEdge() {
         setDeviceViews(views);
         setOwnName((await ownStatement().catch(() => null))?.nametag ?? null);
       }
-      setKeyState(s.state ? await s.state() : null);
-      setEnded(s.ended ? await s.ended() : []);
+      setKeyState(s.state ? await orNone(s.state(), null) : null);
+      setEnded(s.ended ? await orNone(s.ended(), []) : []);
       lap('state+ended');
-      const pending = await s.pending();
+      const pending = await orNone(s.pending(), []);
       setRequests(pending);
       lap('pending');
       /* every sync, not only with a request waiting: a copy that fails the budget rules (R3) must show on the tab, not only on the sheet (2026-10-04) */
