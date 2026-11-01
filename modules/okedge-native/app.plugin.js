@@ -256,4 +256,28 @@ const withNoBackup = (config) => withAndroidManifest(config, (c) => {
   return c;
 });
 
-module.exports = (config) => withNoBackup(withOkRnLook(withAppGradle(withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config)))))));
+/*
+ * THE APP'S LINK SCHEME, okedge:// (Brad, 2026-11-01: "okrn needs to be replaced with okedge"): Guest Book's swap invite
+ * is okedge://connect?... (node-onlykey-lib guestbook/src/invite.js) - shown as a QR; the phone's own camera opens it
+ * here, and Guest Book takes it (src/plugins/guestbook/plugin.tsx, Linking). ok-rn registered okrn://connect; ok-edge
+ * registered none, so a camera scan could not reach the app. Only the connect host: other okedge:// links wait until
+ * there is a use for them (okedge-links-are-for-guest-book).
+ */
+const withLinkScheme = (config) => withAndroidManifest(config, (c) => {
+  const app = c.modResults.manifest.application && c.modResults.manifest.application[0];
+  const main = app && (app.activity || []).find((a) => /\.MainActivity$/.test(a.$['android:name']));
+  if (main) {
+    main['intent-filter'] = main['intent-filter'] || [];
+    const has = main['intent-filter'].some((f) => (f.data || []).some((d) => d.$['android:scheme'] === 'okedge'));
+    if (!has) {
+      main['intent-filter'].push({
+        action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
+        category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }, { $: { 'android:name': 'android.intent.category.BROWSABLE' } }],
+        data: [{ $: { 'android:scheme': 'okedge', 'android:host': 'connect' } }],
+      });
+    }
+  }
+  return c;
+});
+
+module.exports = (config) => withLinkScheme(withNoBackup(withOkRnLook(withAppGradle(withActivityCalls(withAppCalls(withOkEmuProperties(withOkEmuProject(config))))))));

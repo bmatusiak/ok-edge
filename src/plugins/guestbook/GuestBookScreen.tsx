@@ -65,7 +65,7 @@ type Swap = SwapStart;
 
 /*
  * THE SWAP SHEET SITS OVER EVERY PAGE: started from My card (show / scan), from Add's Scan when
- * the QR is an invite, or from outside (the phone's camera opened an okrn://connect link).
+ * the QR is an invite, or from outside (the phone's camera opened an okedge://connect link).
  */
 export function GuestBookScreen({ctx}: {ctx: TabContext}) {
   const [swap, setSwap] = useState<Swap | null>(null);

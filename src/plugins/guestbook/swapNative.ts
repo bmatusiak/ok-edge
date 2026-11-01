@@ -55,7 +55,7 @@ export function contactIdentity(getKey: () => Promise<{okcrypto: Okcrypto}>) {
 }
 
 /*
- * AN INVITE FROM OUTSIDE THE TAB: the phone's own camera opened an okrn://connect link, or it
+ * AN INVITE FROM OUTSIDE THE TAB: the phone's own camera opened an okedge://connect link, or it
  * was scanned on Add. App switches to Guest Book and hands it over; the screen takes it when it
  * mounts, or hears it when it is already open.
  */
@@ -76,4 +76,4 @@ export function onInvite(fn: (url: string) => void): () => void {
     listeners.delete(fn);
   };
 }
-export const isInvite = (text: string | null | undefined) => /^okrn:\/\/connect\?/.test(String(text || '').trim());
+export const isInvite = (text: string | null | undefined) => /^okedge:\/\/connect\?/.test(String(text || '').trim());

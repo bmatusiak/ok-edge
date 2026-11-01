@@ -227,7 +227,7 @@ export function createSwap(deps: Deps) {
       }
     },
 
-    /** The other phone's invite (a QR's text or an okrn:// link): connect and open. */
+    /** The other phone's invite (a QR's text or an okedge:// link): connect and open. */
     async join(inviteText: string) {
       try {
         const invite = inv.readInvite(inviteText);

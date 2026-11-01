@@ -14,7 +14,7 @@ nameDerive(CONTACT_LABEL, 'Guest Book key swap: prove this OnlyKey to the other 
 import type {WatchContext} from '../types';
 
 /*
- * okrn://connect LINKS (the swap invite, read by the phone's own camera instead of Guest Book's
+ * okedge://connect LINKS (the swap invite, read by the phone's own camera instead of Guest Book's
  * scanner): Android opens the app with it, and this watch - mounted with the app, tab shown or
  * not - brings Guest Book forward and hands it the invite. Anything else is not ours.
  */
