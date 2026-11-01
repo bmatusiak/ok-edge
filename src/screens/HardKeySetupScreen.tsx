@@ -19,7 +19,8 @@ import {theme} from '../ui/theme';
 
 type Stage = 'start' | 'first' | 'again' | 'working' | 'done' | 'error';
 
-export function HardKeySetupScreen({onDone}: {onDone: () => void}) {
+/* onBack: back to the login screen (Brad, 2026-10-31: "i need a back button on this page") - not while the key is asked */
+export function HardKeySetupScreen({onDone, onBack}: {onDone: () => void; onBack?: () => void}) {
   const [stage, setStage] = useState<Stage>('start');
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +80,11 @@ export function HardKeySetupScreen({onDone}: {onDone: () => void}) {
           <Text style={[styles.say, {color: theme.error}]}>{`The key did not take it: ${error}`}</Text>
           <Text style={styles.hint}>Two passes that differ are refused by the key itself. Nothing was set.</Text>
           <Btn title="Start over" onPress={() => setStage('start')} />
+        </View>
+      ) : null}
+      {onBack && stage !== 'working' && stage !== 'done' ? (
+        <View style={styles.actions}>
+          <Btn title="Back" onPress={onBack} />
         </View>
       ) : null}
     </ScrollView>

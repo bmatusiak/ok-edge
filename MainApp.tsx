@@ -912,10 +912,11 @@ function Shell() {
             />
           ) : phase === 'setup' && keys.backend === 'usb' ? (
             /* a hard key's PIN goes in on its own buttons - nothing here can press them */
-            <HardKeySetupScreen onDone={() => setPhase('login')} />
+            <HardKeySetupScreen onDone={() => setPhase('login')} onBack={() => setPhase('login')} />
           ) : phase === 'setup' ? (
             <SetupScreen
               onDone={() => setPhase('login')}
+              onBack={() => setPhase('login')}
               model={emu.model}
               onProvision={emu.provision}
               led={keys.backend === 'embedded' ? emu.led : undefined}

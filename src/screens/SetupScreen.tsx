@@ -151,8 +151,11 @@ export function SetupScreen({
   onRestart,
   onProvision,
   led,
+  onBack,
 }: {
   onDone?: () => void;
+  /** Back to the login screen, before anything is set (Brad, 2026-10-31: "i need a back button on this page"). */
+  onBack?: () => void;
   model?: 'classic' | 'duo';
   mode?: 'setup' | 'change';
   /** In change mode, which PIN. */
@@ -781,6 +784,13 @@ export function SetupScreen({
             />
           </View>
         </View>
+        {onBack ? (
+          <View style={styles.action}>
+            <View style={styles.cell}>
+              <Btn title="Back" onPress={onBack} />
+            </View>
+          </View>
+        ) : null}
 
         {/*
           * Only the primary PIN is required. The other two are offered because
