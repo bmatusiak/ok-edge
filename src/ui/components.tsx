@@ -277,10 +277,13 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  readOnly = false,
 }: {
   options: readonly T[];
   value: T;
-  onChange: (next: T) => void;
+  onChange?: (next: T) => void;
+  /** shows the value, takes no taps (the setup flow's which-key row: the app decides, the person sees it) */
+  readOnly?: boolean;
 }) {
   return (
     <View style={styles.segmented}>
@@ -289,7 +292,8 @@ export function Segmented<T extends string>({
         return (
           <Pressable
             key={option}
-            onPress={() => onChange(option)}
+            disabled={readOnly}
+            onPress={() => onChange?.(option)}
             style={[styles.segment, active && styles.segmentActive]}>
             <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
               {option}

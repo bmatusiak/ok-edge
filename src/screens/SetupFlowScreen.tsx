@@ -5,8 +5,8 @@
  * in the flow").
  *
  * One flow, wherever a blank key is met - the login's setup step (MainApp) and the Setup tab (features/core.tsx):
- *   1. which key: the Soft Key / Hard key switch - here and nowhere else - when a hard key is attached and this
- *      platform has a soft key; then Continue
+ *   1. which key: the Soft Key / Hard key row - here and nowhere else - READ-ONLY: a detected hard key always wins
+ *      (useKey), the soft key otherwise; then Continue
  *   2. its PIN: the soft key's on-screen PIN (SetupScreen: the app presses it) or a hard key's PIN on its own buttons
  *      (HardKeySetupScreen: a prod hard key has nothing the app can press). Back returns to page 1.
  */
@@ -36,11 +36,12 @@ export function SetupFlowScreen({keys, onDone, onBack}: {
   const hard = keys.backend === 'usb';
   /* the picked key has no PIN yet (the other one may) */
   const blank = emu.device === 'uninitialized';
-  /* something to choose between: a hard key on the bus, and a soft key on this platform (the web app has none) */
-  const keyPick: {value: KeyPick; onChange: (next: KeyPick) => void} | null =
-    keys.attached === true && SOFT_KEY_HERE
-      ? {value: hard ? 'Hard key' : 'Soft Key', onChange: next => keys.setOverride(next === 'Hard key' ? 'usb' : 'embedded')}
-      : null;
+  /*
+   * WHICH KEY, READ-ONLY (Brad, 2026-10-31: "hardkey always wins now ... the hardkey softkey selector becomes
+   * readonly"): a detected hard key is the key (useKey backend), the soft key otherwise - the row shows which, and
+   * takes no taps. Drawn where this platform has a soft key (the web app has only the hard key).
+   */
+  const keyShown: KeyPick | null = SOFT_KEY_HERE ? (hard ? 'Hard key' : 'Soft Key') : null;
 
   if (page === 'pin') {
     return hard ? (
@@ -55,15 +56,13 @@ export function SetupFlowScreen({keys, onDone, onBack}: {
       <Logo height={44} />
       <Text style={styles.title}>Set up a key</Text>
       <Text style={styles.hint}>
-        {keyPick
-          ? 'Which key are you setting up? The soft key lives in this app; a hard key is the OnlyKey on USB.'
-          : hard
-            ? 'The OnlyKey on USB has no PIN yet.'
-            : "This app's soft key has no PIN yet."}
+        {hard
+          ? 'The OnlyKey on USB is the key here - a hard key always wins over the soft key.'
+          : "This app's soft key - plug in an OnlyKey to set that up instead."}
       </Text>
-      {keyPick ? (
+      {keyShown ? (
         <View style={styles.pick}>
-          <Segmented options={PICK_OPTIONS} value={keyPick.value} onChange={keyPick.onChange} />
+          <Segmented options={PICK_OPTIONS} value={keyShown} readOnly />
         </View>
       ) : null}
       <Text style={styles.say}>

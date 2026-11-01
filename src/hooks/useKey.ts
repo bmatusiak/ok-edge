@@ -255,19 +255,26 @@ export function useKey({
     if (attached === false && override === 'usb') void setOverride(null);
   }, [attached, override, setOverride]);
 
+  /*
+   * A DETECTED HARD KEY STOPS THE SOFT KEY (Brad, 2026-10-31: "hardkey always wins now, if a hardkey gets detected,
+   * stop the softkey"). Its firmware cannot restart in place (no in-process restart, useOkEmu), so after this the soft
+   * key is back only when the app restarts.
+   */
+  useEffect(() => {
+    if (attached === true && soft.state === 'running') void soft.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attached, soft.state]);
+
   /**
-   * Which key wins.
-   *
-   * An override beats everything EXCEPT a hard key that has gone away - see
-   * the effect above, which clears that case before this runs. Short of that,
-   * if someone has forced a key, showing them the other one would be answering
-   * a different question than they asked.
+   * Which key wins: A DETECTED HARD KEY, ALWAYS (Brad, 2026-10-31: "hardkey always wins now"). A remembered soft-key
+   * pick used to beat it - his new prod key, on the desktop, went unseen behind a blank soft key. With no hard key, an
+   * override or the mode decides as before (an override to the hard key is cleared when it leaves - the effect above).
    */
   const backend: Backend = useMemo(() => {
+    if (attached === true) return 'usb';
     if (override) return override;
-    if (mode === 'auto' && attached === true) return 'usb';
     return 'embedded';
-  }, [override, mode, attached]);
+  }, [override, attached]);
 
   /**
    * SELECTING THE HARD KEY OPENS IT. Nothing else was doing that.
