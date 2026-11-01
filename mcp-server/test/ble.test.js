@@ -7,7 +7,8 @@
  *   - the phone learns the server's name (HERE) and dials ble://<it>
  *   - a join with a kept certificate is REFUSED over Bluetooth even with OPEN_JOIN and REQUIRE_LOGIN off - only a login
  *     proof for this connection's challenge enters
- *   - with one, the phone is in the identity's room beside a websocket device, and frames pass both ways
+ *   - with one, the phone is in the identity's room beside a websocket device, and frames pass both ways; this computer
+ *     learns which room the phone is in (/ble)
  */
 'use strict';
 
@@ -90,6 +91,9 @@ test('Bluetooth: with a login proof the phone joins its room beside a websocket 
   /* a computer of the same identity over the websocket (the open join lets this computer's own 127.0.0.1 in) */
   const desk = await connectRoom({ url: s.url, me, device: dev('Desktop', 'desktop'), WebSocket: globalThis.WebSocket, randomBytes, timeoutMs: 5000 });
   assert.deepEqual(desk.peers().map((p) => p.name), ['Phone']);
+  /* this computer asks which room the phone is in (onlykey-js --ble): the Bluetooth device only, not the websocket one */
+  const where = await (await fetch(`${s.url}/ble`)).json();
+  assert.deepEqual(where, { host: 'box.ble', phones: [{ room: me.id, device: { ...where.phones[0].device, id: phone.you, name: 'Phone' } }] });
   phone.serve(async (from, m) => ({ echo: m.ping, over: 'bluetooth' }));
   desk.serve(async (from, m) => ({ echo: m.ping, over: 'websocket' }));
   assert.deepEqual(await desk.request(phone.you, { ping: 1 }, { timeoutMs: 5000 }), { echo: 1, over: 'bluetooth' });

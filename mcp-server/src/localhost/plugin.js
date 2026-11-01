@@ -103,6 +103,8 @@ function namespace(Core, env, all, DatabaseSync = null) {
       }
       return made.get(id);
     },
+    /* the instances made so far, [id, core] */
+    made: () => [...made.entries()],
   };
 }
 
@@ -151,11 +153,14 @@ export default function setup(imports, register) {
         env.AGENTS = namespace(mcpCore.AgentSessionCore, env, storages);
         env.MCP_SESSIONS = namespace(mcpCore.McpSessionCore, env, storages);
         const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 + 1024 });
+        /* the Bluetooth link (ble.js), once started below */
+        let bt = null;
         const handler = async (req, res) => {
           try {
             const path = new URL(req.url, 'http://x').pathname;
             if (path === '/mcp') return writeResponse(res, await mcpCore.handleMcp(await asRequest(req), env));
             if (mcpCore.ROOM_PATH.test(path)) { res.writeHead(426); return res.end('a websocket only'); }
+            if (path === '/ble' && bt) return bleRooms(req, res);
             if (assets) return serveAsset(assets, path, res);
             res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
             return res.end('<!doctype html><title>ok-edge</title><p>The local MCP: /mcp for agents, /ws/&lt;identity&gt; for this computer\'s app.</p>');
@@ -197,7 +202,22 @@ export default function setup(imports, register) {
         });
         const p = await listen(server, port);
         const p2 = second ? await listen(second, plain) : null;
-        const bt = ble ? startBle({ ...ble, attach: (raw, roomId, url) => attach(raw, roomId, url, 'ble') }) : null;
+        /*
+         * WHICH ROOM THE PHONE IS IN (ok-edge plan B4): this computer's onlykey-js --ble asks, to reach the phone's key as
+         * an agent of that room (bucket room-agent.js). Answered only to this computer itself - the room's id and the
+         * phone's device record, what the room tells any agent of it anyway; the agent still waits for the owner to accept it.
+         */
+        const bleRooms = (req, res) => {
+          const from = req.socket.remoteAddress || '';
+          if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(from)) { res.writeHead(403); return res.end('this computer only'); }
+          const phones = [];
+          for (const [room, core] of env.ROOMS.made()) {
+            for (const [, a] of core.joined()) if (a.origin === 'ble') phones.push({ room, device: a.device });
+          }
+          res.writeHead(200, { 'content-type': 'application/json' });
+          return res.end(JSON.stringify({ host: bt.host, phones }));
+        };
+        bt = ble ? startBle({ ...ble, attach: (raw, roomId, url) => attach(raw, roomId, url, 'ble') }) : null;
         return {
           url: `${tls ? 'https' : 'http'}://${host}:${p}`,
           port: p,
