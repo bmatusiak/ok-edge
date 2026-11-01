@@ -417,8 +417,9 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
        * press fails on a key without one.
        */
       async keyState() {
-        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), '--list'], 20000);
-        const consoleUp = r.ok && /\bconsole\b/.test(r.out);
+        /* the console's echo, never its listing: a production key lists the interface too (hardkey-press.js --probe) */
+        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), '--probe'], 20000);
+        const consoleUp = r.ok && /debug console answers/.test(r.out);
         return consoleUp ? 'hard key: debug console answers (a test hex)' : `hard key: no debug console (a production key, or none) - ${r.out.split('\n').pop() || 'nothing listed'}`;
       },
       async press({ buttons = ['1'] } = {}) {
@@ -524,7 +525,10 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
           /* ok-edge's own copy of the lib: it has node-hid (the lib's clone keeps it optional) */
           const st = await runIn(EDGE, NODE, [path.join(EDGE, 'node_modules', 'node-onlykey-lib', 'cli', 'index.js'), 'status'], 30000);
           const state = (st.out.split('\n').find((l) => /^\s*state\s/.test(l)) || '').trim().split(/\s+/)[1] || `unread (${st.out.split('\n').pop()})`;
-          return `hard key 2, the testnet test key (kit PIN): ${state === 'unlocked' || state === 'locked' ? 'connected' : 'not connected'}; state ${state}${keys}`;
+          /* the page cannot probe its key's console (FIDO2 only): this machine does, by the echo (hardkey-press.js --probe) */
+          const pr = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), '--probe'], 20000);
+          const debug = pr.ok && /debug console answers/.test(pr.out) ? 'debug console answers (a test hex)' : 'no debug console echo (a production key, or none)';
+          return `hard key 2, the testnet test key (kit PIN): ${state === 'unlocked' || state === 'locked' ? 'connected' : 'not connected'}; state ${state}; ${debug}${keys}`;
         }
         if (!gadgetHost) return `the gadget is not held here (start the web app through the drive)${keys}`;
         return `the testnet soft key (gadget): ${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}${keys}`;

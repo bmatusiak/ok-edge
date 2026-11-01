@@ -197,10 +197,14 @@ function pressWhenAsked(app) {
          * key also has; its firmware just never reads it). The app's own probe (useHardKey consoleAnswers: an inert byte
          * echoed back - only a DEBUG build echoes) is the test hex's proof; without it nothing is pressed.
          */
+        /*
+         * The web app cannot probe its key (the browser speaks FIDO2 only): its machine's echo probe is the proof there
+         * (targets.js keyState, hardkey-press.js --probe) - a hard key only by its echo, the gadget by being the gadget.
+         */
         if (app.net !== 'test') {
-          if (app.flags.consoleAnswers !== true) { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
+          if (app.flags.consoleAnswers !== true && app.shell !== 'webapp') { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
           const s = await procFor(app, 'key-state');
-          if (!(s.ok && /\btestnet\b|debug console answers/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
+          if (!(s.ok && /debug console answers|the testnet soft key \(gadget\)/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
         }
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
         const r = await procFor(app, 'press', { buttons });

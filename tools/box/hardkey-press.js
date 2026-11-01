@@ -129,6 +129,19 @@ async function main(argv) {
     return 0;
   }
   const node = LINUX ? hardConsole() : hidConsole();
+  /*
+   * --probe: does this key's DEBUG console answer? One inert byte (Z - not a button, not a command; the lib's
+   * device.consoleAnswers) and its echo: only a test hex echoes. A production key lists the console interface too (red-key,
+   * 2026-11-01), so the listing is never the proof - the echo is. Nothing is pressed, locked or not.
+   */
+  if (argv.includes('--probe')) {
+    const echo = readLines(node, (l) => /I received from DEBUG: *90\b/.test(l), 3000).then(() => true, () => false);
+    await new Promise((r) => setTimeout(r, 100));
+    send(node, 'Z');
+    const answers = await echo;
+    console.log(answers ? `debug console answers on ${node}` : `no echo on ${node} - not a test hex`);
+    return answers ? 0 : 3;
+  }
   /* --watch: each line with the time it came, to the ms - to line up with the page's own [timeline] lines */
   if (argv.includes('--watch')) { await readLines(node, (l) => { console.log(`${new Date().toISOString().slice(11, 23)} ${l}`); return false; }, 0); return 0; }
   const after = (argv.find((a) => a.startsWith('--after=')) || '').slice(8);
