@@ -108,7 +108,8 @@ export function useEdge() {
         if (e?.code !== 'EDGE_NO_CHECKPOINT') throw e;
         cold = true;
         setError(e.message);
-        setOutOfReach(e.why === 'top-ends-before-the-ring' && Number.isInteger(e.copyEnds) && Number.isInteger(e.keySeq) ? {from: e.copyEnds + 1, to: e.keySeq} : null);
+        /* where the copy ends (its own or the card's top - edgeStore.syncNow) to the key's head: the links no one holds */
+        setOutOfReach(Number.isInteger(e.copyEnds) && Number.isInteger(e.keySeq) && e.keySeq > e.copyEnds ? {from: e.copyEnds + 1, to: e.keySeq} : null);
         console.log(`[edge] this key's copy is out of reach (${e.why}${e.copyEnds != null ? `: copy ends #${e.copyEnds}, key #${e.keySeq}, ring from #${e.ringFrom}` : ''}) - showing what this computer holds`);
       }
       const orNone = <T,>(p: Promise<T>, none: T): Promise<T> => (cold ? p.catch(() => none) : p);

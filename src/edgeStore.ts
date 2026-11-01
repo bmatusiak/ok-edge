@@ -585,10 +585,32 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
    * Without one nothing is read or stored - the copy waits for a checkpoint.
    */
   if (head.seq >= 0 && !head.head) {
-    if (!source.warmUp) throw Object.assign(new Error('this device needs a checkpoint - certify to start'), {code: 'EDGE_NO_CHECKPOINT'});
-    await source.warmUp();
+    /*
+     * WHERE THIS COPY ENDS, ITS OWN OR THE TOP'S (box, 2026-11-01: blue-key sabotaged past the ring, the app said "no-top"
+     * and offered nothing - though it held the chain up to #39 itself). The copy this computer holds ends somewhere too:
+     * whichever reaches further, it or the card's top, is where the links nobody holds begin - the range a LOSS accepts.
+     */
+    const lastHeld = mirror.links[mirror.links.length - 1];
+    const ownEnd = lastHeld ? seqOf(lastHeld) : mirror.anchor ? mirror.anchor.seq : null;
+    const keySeq = head.seq;
+    const ringFrom = head.ringFrom;
+    const reach = (e: any) => {
+      /*
+       * -1: this computer holds none of it, and neither does the bucket (the open took in any log it had - takeShared): nothing
+       * anywhere holds the key's links before its ring, so the whole chain to its head is what a LOSS accepts.
+       */
+      const ends = Math.max(ownEnd ?? -1, Number.isInteger(e?.copyEnds) ? e.copyEnds : -1);
+      e.copyEnds = ends;
+      e.keySeq = keySeq;
+      e.ringFrom = ringFrom;
+      e.message = `${ends < 0 ? "this device holds none of the key's chain, and the bucket holds no log of it" : `this device's copy ends at #${ends}`}; the key is at #${keySeq} and keeps its links from #${ringFrom} - accept #${ends + 1}-#${keySeq} as lost (a press) to go on`;
+      return e;
+    };
+    const noCheckpoint = () => reach(Object.assign(new Error('this device needs a checkpoint - certify to start'), {code: 'EDGE_NO_CHECKPOINT', why: 'no-top'}));
+    if (!source.warmUp) throw noCheckpoint();
+    await source.warmUp().catch((e: any) => { throw e?.code === 'EDGE_NO_CHECKPOINT' ? reach(e) : e; });
     head = await source.head();
-    if (!head.head) throw Object.assign(new Error('this device needs a checkpoint - certify to start'), {code: 'EDGE_NO_CHECKPOINT'});
+    if (!head.head) throw noCheckpoint();
     lap('warm-up');
   }
   setAsideStrays(mirror, head.seq, now);
