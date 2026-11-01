@@ -13,6 +13,8 @@
  *                shot {}                       the app's picture of itself (shot.ts: each shell captures its own)
  *                quit {}                       the app closes itself (quit.ts) - a drive's stop, storage flushed
  *                raise {}                      a test: an unhandled rejection, which must come back as an error event
+ *                server {url}                  the user's server this device joins (setServerUrl; null: the key's site) -
+ *                                              the box's stand-in for a phone, which no host mapping can point there
  *
  * EVENTS, NOT TIMERS (Brad, 2026-10-31): nothing here polls. A dropped connection is dialled again on the app's next
  * change (a control, a log line), never on a clock.
@@ -118,6 +120,12 @@ function dial(): void {
     else if (m.t === 'quit') void quit().then(r => reply('ok' in r, r));
     /* the proof of #2 (errors are events): a rejection nothing handles, as a real bug would leave one */
     else if (m.t === 'raise') { reply(true); void Promise.reject(new Error('drive: a test rejection (run.js raise)')); }
+    else if (m.t === 'server') {
+      void require('../serverRoom').setServerUrl(m.url ? String(m.url) : null).then(
+        () => reply(true),
+        (e: unknown) => reply(false, {why: String((e as Error)?.message ?? e)}),
+      );
+    }
     /*
      * #7 health: what the app keeps - each key and its size on the testnet; on the live chain only how many and how
      * much (a key's name can say what is kept). A value is never sent.

@@ -67,6 +67,8 @@ const adb = (args) => run(ADB, ['-s', phoneId(), ...args]);
  */
 const STANDIN_PID = path.join(ROOT, 'standin.pid');
 const STANDIN_ON = process.env.DRIVE_STANDIN !== '0';
+/* its plain port, for the phone: adb reverse brings the phone's 127.0.0.1:<it> here (the phone trusts no dev certificate) */
+const STANDIN_PLAIN = process.env.DRIVE_STANDIN_PLAIN || '8787';
 function standinPid() {
   try {
     const pid = Number(fs.readFileSync(STANDIN_PID, 'utf8'));
@@ -81,7 +83,7 @@ async function ensureStandin(line) {
   const certs = path.join(ROOT, 'devcert');
   const server = launch('server-dev', NODE, [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--host', '127.0.0.1', '--port', '443',
     '--assets', path.join(EDGE, 'docs'), '--sealed', '--tls-key', path.join(certs, 'apps.crp.to.key'), '--tls-cert', path.join(certs, 'apps.crp.to.crt'),
-    '--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN || '1'}`]);
+    '--plain-port', STANDIN_PLAIN, '--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN || '1'}`]);
   server.unref();
   fs.writeFileSync(STANDIN_PID, String(server.pid));
   const ready = await new Promise((resolve) => {
@@ -609,8 +611,18 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         const port = process.env.DRIVE_PORT || '8790';
         const rev = await adb(['reverse', `tcp:${port}`, `tcp:${port}`]);
         if (!rev.ok) return `adb reverse: ${rev.out}`;
+        /*
+         * on the box: the phone's server is the stand-in too, on its plain port - the app is pointed at it once with
+         * `run.js server http://127.0.0.1:${STANDIN_PLAIN} --app android` (kept in the app's storage)
+         */
+        let standin = '';
+        if (LINUX && STANDIN_ON) {
+          standin = await ensureStandin(line);
+          const r2 = await adb(['reverse', `tcp:${STANDIN_PLAIN}`, `tcp:${STANDIN_PLAIN}`]);
+          standin = r2.ok ? `; the stand-in on the phone's 127.0.0.1:${STANDIN_PLAIN} (${standin})` : `; adb reverse to the stand-in: ${r2.out}`;
+        }
         const r = await adb(['shell', 'am', 'start', '-n', `${APP_ID}/com.okedge.MainActivity`]);
-        return r.ok ? 'started' : r.out;
+        return r.ok ? `started${standin}` : r.out;
       },
       async stop() {
         const r = await adb(['shell', 'am', 'force-stop', APP_ID]);

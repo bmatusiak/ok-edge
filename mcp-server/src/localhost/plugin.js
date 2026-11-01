@@ -17,9 +17,14 @@
  * webapp files"): a page reaches a key over FIDO2 only from a secure origin on the key's site, so `tls` serves it as
  * https with the box's dev certificate, under the site's name mapped to this machine - the deployed path, one process.
  *
- *   mcpLocalhost.start({host = '127.0.0.1', port = 0, env = {}, assets = null, tls = null, sealed = false})
+ * THE PHONE ON IT (Brad, 2026-11-01: "bucket-data-storage-container ~ android <-> remote-mcp ~ ..."): a phone trusts no
+ * dev certificate and reaches this machine only through `adb reverse` to a port of its own 127.0.0.1 - so `plain` is a
+ * second listener, plain http on this host, with the same routes and the same rooms (one process, one sealed copy).
+ *
+ *   mcpLocalhost.start({host = '127.0.0.1', port = 0, env = {}, assets = null, tls = null, sealed = false, plain = null})
  *     assets: a directory to serve;  tls: {key, cert} (PEM);  sealed: true for the sealed copy (needs node:sqlite)
- *     -> {url, port, close()}
+ *     plain: a port for a second, plain http listener beside the tls one
+ *     -> {url, port, plainUrl, close()}
  */
 import http from 'node:http';
 import https from 'node:https';
@@ -131,7 +136,7 @@ export default function setup(imports, register) {
   const { mcpCore } = imports;
   register(null, {
     mcpLocalhost: {
-      async start({ host = '127.0.0.1', port = 0, env: settings = {}, assets = null, tls = null, sealed = false } = {}) {
+      async start({ host = '127.0.0.1', port = 0, env: settings = {}, assets = null, tls = null, sealed = false, plain = null } = {}) {
         const storages = [];
         const env = { REQUIRE_LOGIN: '1', LIFETIME_IDENTITIES: '*', ...settings };
         /* node:sqlite only when asked: Electron's Node may not have it, and the desktop keeps no sealed copy */
@@ -154,7 +159,7 @@ export default function setup(imports, register) {
           }
         };
         const server = tls ? https.createServer({ key: tls.key, cert: tls.cert }, handler) : http.createServer(handler);
-        server.on('upgrade', (req, socket, head) => {
+        const onUpgrade = (req, socket, head) => {
           const url = new URL(req.url, `http://${req.headers.host}`);
           const m = mcpCore.ROOM_PATH.exec(url.pathname);
           if (!m) { socket.destroy(); return; }
@@ -172,22 +177,27 @@ export default function setup(imports, register) {
             ws.on('error', gone);
             room.accept(ws, url).catch(() => ws.close(1011, 'not accepted'));
           });
+        };
+        server.on('upgrade', onUpgrade);
+        const second = plain && tls ? http.createServer(handler) : null;
+        if (second) second.on('upgrade', onUpgrade);
+        const listen = (s, p) => new Promise((resolve, reject) => {
+          s.once('error', reject);
+          s.listen(p, host, () => resolve(s.address().port));
         });
-        return new Promise((resolve, reject) => {
-          server.once('error', reject);
-          server.listen(port, host, () => {
-            const p = server.address().port;
-            resolve({
-              url: `${tls ? 'https' : 'http'}://${host}:${p}`,
-              port: p,
-              close: () => new Promise((done) => {
-                for (const s of storages) s.stop();
-                for (const c of wss.clients) c.terminate();
-                server.close(() => done());
-              }),
-            });
-          });
-        });
+        const p = await listen(server, port);
+        const p2 = second ? await listen(second, plain) : null;
+        return {
+          url: `${tls ? 'https' : 'http'}://${host}:${p}`,
+          port: p,
+          plainUrl: second ? `http://${host}:${p2}` : null,
+          close: () => new Promise((done) => {
+            for (const s of storages) s.stop();
+            for (const c of wss.clients) c.terminate();
+            if (second) second.close();
+            server.close(() => done());
+          }),
+        };
       },
     },
   });
