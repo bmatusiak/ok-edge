@@ -34,6 +34,16 @@ function set(c: HostChallenge | null) {
  * The lib options for one operation on a hard key that may wait for its code: `confirm` shows the digits, and the
  * returned `done` clears them (call it in a finally).
  */
+/**
+ * A plain press a hard key waits for, asked by a screen that knows it (the identity check's bucket press - Brad,
+ * 2026-10-31: "i was expecting a press sheet, not it being displayed on the identity page"): the sheet with no code;
+ * the returned function clears it.
+ */
+export function askPress(what: string): () => void {
+  set({digits: [], what});
+  return () => set(null);
+}
+
 export function challengeOpts(what: string): {opts: {confirm: (a: {digits?: number[]}) => void}; done: () => void} {
   return {
     opts: {confirm: ({digits}) => set({digits: Array.isArray(digits) ? digits : [], what})},

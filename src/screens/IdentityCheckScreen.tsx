@@ -13,7 +13,7 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {Logo} from '../ui/Logo';
-import {PressIcon} from '../ui/PressIcon';
+import {askPress} from '../hostChallenge';
 import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
@@ -73,6 +73,15 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
   React.useEffect(() => { setDriveFlag('identityCheck', true); return () => setDriveFlag('identityCheck', false); }, []);
   const [read, setRead] = useState<Read>({kind: 'checking'});
   const [open, setOpen] = useState<Open>({kind: 'idle'});
+  /*
+   * A HARD KEY'S BUCKET PRESS ON THE PRESS SHEET (Brad, 2026-10-31: "i was expecting a press sheet, not it being
+   * displayed on the identity page"): askPress raises the hard key's sheet while the press waits and clears it after.
+   * The soft key (onPress given) keeps its own button here.
+   */
+  useEffect(() => {
+    if (open.kind !== 'press' || onPress) return;
+    return askPress("Open this identity's bucket");
+  }, [open.kind, onPress]);
   /*
    * STAY LOGGED IN ON THIS TAB (webSession.ts; Brad, 2026-10-29: asked at login): the web app only, unchosen until the
    * person ticks it, for this login only - every reload until the browser exits goes back in with no press.
@@ -203,9 +212,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
       ) : null}
       <View style={styles.action}>
         {open.kind === 'opening' ? <Text style={styles.hint}>Opening this identity's bucket…</Text> : null}
-        {/* the press icon here too (Brad, 2026-10-31: "no press sheet" - this page asks for the login's presses itself) */}
-        {open.kind === 'press' ? <PressIcon /> : null}
-        {open.kind === 'press' ? <Text style={[styles.hint, styles.press]}>Press the key to open this identity's bucket</Text> : null}
+        {/* a hard key's press is asked on the press sheet (askPress, below); the soft key's has its button here */}
+        {open.kind === 'press' && onPress ? <Text style={[styles.hint, styles.press]}>Press the key to open this identity's bucket</Text> : null}
         {open.kind === 'press' && onPress ? <Btn title="Press the soft key" tone="primary" onPress={onPress} /> : null}
         {/* the bucket opens by a decapsulation on slot 128: field 30 decides its press */}
         {open.kind === 'press' ? <SkipPressHint /> : null}

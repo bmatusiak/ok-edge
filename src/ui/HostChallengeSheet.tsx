@@ -6,6 +6,7 @@
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Sheet} from './Sheet';
+import {PressIcon} from './PressIcon';
 import {theme} from './theme';
 import {hostChallenge, onHostChallenge, type HostChallenge} from '../hostChallenge';
 import {activeBackend} from '../hooks/KeyContext';
@@ -17,6 +18,7 @@ export function HostChallengeSheet() {
   if (!c || activeBackend() !== 'usb') return null;
   return (
     <Sheet title="Press the key">
+      <PressIcon />
       <Text style={styles.what}>{c.what}</Text>
       {c.digits.length ? (
         <>
