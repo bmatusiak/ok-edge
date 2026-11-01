@@ -7,6 +7,7 @@ import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Btn} from './components';
 import {Sheet} from './Sheet';
+import {PressIcon} from './PressIcon';
 import {theme} from './theme';
 import {DEVICE_WORD} from '../platform';
 import {cardOffer, dismissCardOffer, makeCard, onCardOffer, type CardOffer} from '../loginCard';
@@ -20,7 +21,8 @@ export function LoginCardSheet() {
     <Sheet tone="edge" title={`This ${DEVICE_WORD}'s login card`} onClose={busy ? undefined : dismissCardOffer}>
       <Text style={styles.line}>{`This ${DEVICE_WORD}'s key (device ${o.device.slice(0, 8)}…) has no login card yet, so this login asked each request on its own.`}</Text>
       <Text style={styles.dim}>The key certifies the card once - it names this device, your bucket identity and the requests a login makes. After that, logging in here is one press.</Text>
-      {o.state === 'pressing' ? <Text style={[styles.line, {color: theme.warn}]}>Press the key to certify the card.</Text> : null}
+      {/* the press icon wherever the key waits for a press (Brad, 2026-10-31: "this press sheet needs the press icon animation") */}
+      {o.state === 'pressing' ? <><PressIcon /><Text style={[styles.line, {color: theme.warn}]}>Press the key to certify the card.</Text></> : null}
       {o.state === 'failed' ? <Text style={[styles.line, {color: theme.error}]}>{`Not made: ${o.why}`}</Text> : null}
       <View style={styles.row}>
         <Btn title={o.state === 'failed' ? 'Try again' : 'Make the card'} tone="primary" disabled={busy} onPress={() => { void makeCard(); }} />

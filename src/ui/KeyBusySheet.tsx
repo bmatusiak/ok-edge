@@ -8,6 +8,7 @@
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Sheet} from './Sheet';
+import {PressIcon} from './PressIcon';
 import {theme} from './theme';
 import {keyBusy, onKeyBusy, type KeyBusy} from '../keyBusy';
 import {hostChallenge, onHostChallenge, type HostChallenge} from '../hostChallenge';
@@ -33,6 +34,7 @@ export function KeyBusySheet() {
   const step = `This request: step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`;
   return (
     <Sheet title={b.press && !b.done ? 'Press your OnlyKey' : 'Working with your key'}>
+      {b.press && !b.done ? <PressIcon /> : null}
       <Text style={styles.counts}>{queue.join(' · ')}</Text>
       <View style={styles.track}>
         <View style={[styles.fill, {width: `${queuePct}%`}]} />

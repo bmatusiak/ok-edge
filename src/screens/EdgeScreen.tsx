@@ -15,6 +15,7 @@ import {bytes as okbytes} from 'node-onlykey-lib';
 import {BackHandler, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {grants, codes} from 'node-onlykey-lib/edge';
 import {Btn, Section, Segmented} from '../ui/components';
+import {PressIcon} from '../ui/PressIcon';
 import {theme} from '../ui/theme';
 import {EdgeList, EdgeListEntry, type EdgeListItem} from '../ui/EdgeList';
 import {BottomDrawer, DRAWER_HANDLE} from '../ui/BottomDrawer';
@@ -454,6 +455,7 @@ export function BudgetCard({b, busy, stopping = false, onOpen, onRevoke, held, o
       )}
       {waitingResume ? (
         <>
+          <PressIcon />
           <Text style={[styles.op, {color: theme.warn}]}>Press the key to resume</Text>
           {consentRefusal() ? <Text style={[styles.op, {color: theme.error}]}>{consentRefusal()}</Text> : null}
           <View style={styles.row}>
@@ -520,6 +522,7 @@ function PendingCard({r, busy, waiting, blocked, onApprove, onPress, onDecline}:
       ))}
       {waiting ? (
         <>
+          <PressIcon />
           <Text style={[styles.op, {color: theme.warn}]}>Press the key to confirm</Text>
           {activeBackend() === 'embedded' ? <Text style={styles.dim}>
             {`This ${DEVICE_WORD} is also the key, so its press proves less than a hard key's. The key stops waiting after 20 s.`}
@@ -981,7 +984,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
                 <Text style={[styles.receiptTitle, {color: theme.error}]}>{`This ${DEVICE_WORD} cannot reach the key's newest links (${range})`}</Text>
                 <Text style={styles.dim}>No copy holds them, so nothing after them can be checked here. Accepting them as lost records it in the chain with a press, and this copy goes on from there. The history before them stays.</Text>
                 {edge.pressFor === 'loss' ? (
-                  <Text style={[styles.op, {color: theme.warn}]}>Press the key to accept the loss</Text>
+                  <><PressIcon /><Text style={[styles.op, {color: theme.warn}]}>Press the key to accept the loss</Text></>
                 ) : confirmLoss ? (
                   <View style={styles.row}>
                     <Btn title={`Yes, accept loss of ${range}`} tone="danger" onPress={() => { if (consentRefusal()) return; setConfirmLoss(false); void edge.acceptLoss(o.from, o.to); }} disabled={edge.busy} />

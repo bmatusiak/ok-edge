@@ -14,6 +14,7 @@ import {answerSheet, closeSheet, onSheet, pressFromSheet, type SheetState} from 
 import {Btn} from './components';
 import {Locate} from './PressSheet';
 import {Sheet} from './Sheet';
+import {PressIcon} from './PressIcon';
 import {theme} from './theme';
 import {consentRefusal} from '../debugGuard';
 import {BudgetCard} from '../screens/EdgeScreen';
@@ -255,6 +256,7 @@ export function EdgeRequestSheet() {
             ) : null}
             {s.phase === 'press' ? (
               <>
+                <PressIcon />
                 <Text style={[styles.op, {color: theme.warn}]}>Press the key to confirm</Text>
                 {left !== null ? (
                   <Text style={[styles.countdown, left <= 15 && {color: theme.error}]}>{`Press within ${mmss(left)}`}</Text>

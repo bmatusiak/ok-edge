@@ -128,6 +128,7 @@ function pressWhenAsked(app) {
    */
   let touched = false;
   let codeOpen = false;
+  let iconAnswered = false;
   const waiting = (hex) => {
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
     return (b > 0x40 && b > r && b > g) || (r > 0x30 && g > 0x30 && b < 0x30);
@@ -164,7 +165,11 @@ function pressWhenAsked(app) {
      * unless a code is being entered (its own "key waits" line has the buttons). The soft key's own button is the app's.
      */
     const icon = l.match(/^\[press\] icon up \(usb\)(?:: (.*))?$/);
-    if (icon && codeOpen) return;
+    /* one icon press per key request: two sheets showing the icon for one wait must not press twice - a stray press on an
+       unlocked key types a slot. The app's next request step ("[timeline] begin/end") opens it again. */
+    if (/^\[timeline\] \d+ (begin|end) /.test(l)) { iconAnswered = false; return; }
+    if (icon && (codeOpen || iconAnswered)) return;
+    if (icon) iconAnswered = true;
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
     if (outside) {
       if (pressing) return;
