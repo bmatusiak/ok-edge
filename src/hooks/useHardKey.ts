@@ -69,6 +69,8 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
    */
   const connectedUnlocked = useRef(false);
   const reconnecting = useRef(false);
+  /* the console probe's last answer for the key plugged in now (connect, below) - false again at the unplug */
+  const consoleProven = useRef(false);
   const connectRef = useRef<(() => Promise<unknown>) | null>(null);
 
   useEffect(() => {
@@ -172,6 +174,7 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
          */
         setState('error');
         setDevice('unknown');
+        consoleProven.current = false;
         setIdentity(null);
         setLockedModel(null);
         setCapabilities(null);
@@ -188,6 +191,7 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
         /* and what this run learned of that key: the replugged one is asked again (its OKCONNECT, its unlock) */
         connectedUnlocked.current = false;
         unlockedAt.current = 0;
+        consoleProven.current = false;
         setIdentity(null);
         setLockedModel(null);
         setCapabilities(null);
@@ -360,11 +364,18 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
         const probe =
           caps.debugConsole === true ||
           (caps.debugConsole === null && UsbPipe.carries(IFACE.SEREMU));
-        answers = probe ? await dev.consoleAnswers() : false;
+        /*
+         * A SKIPPED PROBE KEEPS WHAT THIS PLUG-IN PROVED (2026-11-01: blue-key, a
+         * test hex, answers the probe while locked, then names itself
+         * v3.1.0-prodc once unlocked - the version word is not the proof, the
+         * echo is). The unplug resets it to null, so another key never inherits it.
+         */
+        answers = probe ? await dev.consoleAnswers() : consoleProven.current;
       } catch (e) {
         answers = false;
         log('info', `console probe did not answer: ${String(e)}`);
       }
+      consoleProven.current = answers;
       setConsoleAnswers(answers);
       log('info', `console ${answers ? 'answers' : 'is write-only'}`);
       console.log(`[hardkey] console ${answers ? 'answers' : 'is write-only'}`);
