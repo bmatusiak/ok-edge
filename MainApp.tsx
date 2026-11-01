@@ -1,5 +1,5 @@
 import React, {Fragment, useCallback, useEffect, useRef, useState} from 'react';
-import {Alert, AppState, KeyboardAvoidingView, Pressable, StatusBar, StyleSheet, Text, View} from 'react-native';
+import {Alert, AppState, KeyboardAvoidingView, Pressable, ScrollView, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {currentNet, onNet, type Net} from './src/net';
 import {clearIfScheduled} from './src/testnet';
 import {resetEdgeStoreOnce} from './src/edgeV1';
@@ -131,8 +131,19 @@ function IoPolicySync({setTarget}: {setTarget: (address: string | null) => void}
   return null;
 }
 
-
-
+/*
+ * EVERY DOOR PAGE SCROLLS (Brad, 2026-10-31: "it needs to scroll all pages" - in a short desktop window the setup page
+ * ran up under the banner and its Back button was cut off below Next): the pages before the tabs - splash, login, setup,
+ * PIN, identity check - in one ScrollView that still centres a page that fits. The tabs scroll themselves.
+ */
+function Door({scroll, children}: {scroll: boolean; children: React.ReactNode}) {
+  if (!scroll) return <>{children}</>;
+  return (
+    <ScrollView style={styles.door} contentContainerStyle={styles.doorContent} keyboardShouldPersistTaps="handled">
+      {children}
+    </ScrollView>
+  );
+}
 
 export default function App() {
   /* every derive the soft key answers goes into the Key Chain list (plugins/key_chain) */
@@ -870,6 +881,7 @@ function Shell() {
           height instead, so the tab's ScrollView can bring the field into view.
         */}
         <KeyboardAvoidingView style={styles.body} key={sessionEpoch} behavior="padding">
+          <Door scroll={phase !== 'main'}>
           {phase === 'splash' ? (
             <SplashScreen onDone={() => {
               setSplashDone(true);
@@ -947,6 +959,7 @@ function Shell() {
           ) : currentTab ? (
             currentTab.render(tabContext)
           ) : null}
+          </Door>
         </KeyboardAvoidingView>
 
         <Drawer
@@ -1016,6 +1029,8 @@ const styles = StyleSheet.create({
    * twice - which is the gap that appeared above the navigation bar.
    */
   body: {flex: 1, paddingHorizontal: 16},
+  door: {flex: 1},
+  doorContent: {flexGrow: 1, justifyContent: 'center'},
 
   bar: {
     flexDirection: 'row',
