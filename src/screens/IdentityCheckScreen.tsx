@@ -13,6 +13,7 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {Logo} from '../ui/Logo';
+import {PressIcon} from '../ui/PressIcon';
 import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
@@ -202,6 +203,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
       ) : null}
       <View style={styles.action}>
         {open.kind === 'opening' ? <Text style={styles.hint}>Opening this identity's bucket…</Text> : null}
+        {/* the press icon here too (Brad, 2026-10-31: "no press sheet" - this page asks for the login's presses itself) */}
+        {open.kind === 'press' ? <PressIcon /> : null}
         {open.kind === 'press' ? <Text style={[styles.hint, styles.press]}>Press the key to open this identity's bucket</Text> : null}
         {open.kind === 'press' && onPress ? <Btn title="Press the soft key" tone="primary" onPress={onPress} /> : null}
         {/* the bucket opens by a decapsulation on slot 128: field 30 decides its press */}
