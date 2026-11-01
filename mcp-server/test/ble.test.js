@@ -9,13 +9,21 @@
  *     proof for this connection's challenge enters
  *   - with one, the phone is in the identity's room beside a websocket device, and frames pass both ways; this computer
  *     learns which room the phone is in (/ble)
+ *   - onlykey-js --ble (node-onlykey-lib cli/ble-room.js): this computer comes into that room as an agent, waits for the
+ *     owner's accept on the phone, and its pipe reaches the phone's key session - a report there and back over Bluetooth
  */
 'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('crypto');
-const { identity, dev, bid } = require('./helpers');
+const { identity, dev, bid, fakeKey } = require('./helpers');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { createKeySession } = require('node-onlykey-lib/desktop/session');
+const { createDesktopPipe } = require('node-onlykey-lib/cli/transport-desktop');
+const { phoneChannel } = require('node-onlykey-lib/cli/ble-room');
 const { connectRoom } = require('node-onlykey-lib/bucket').roomClient;
 const bleSocket = require('node-onlykey-lib/transport/ble-socket');
 
@@ -121,6 +129,48 @@ test('Bluetooth: the link going closes the phone\'s socket - the room hears it g
   await left;
   assert.deepEqual(desk.peers(), []);
   desk.close();
+});
+
+test('onlykey-js --ble: the computer finds the phone\'s room, the owner accepts it, its pipe reaches the phone\'s key', async (t) => {
+  const bt = fakeBluetooth();
+  const { s } = await server(t, bt);
+  const host = await hereFrom(bt.phone);
+  const seed = 'ble-cli';
+  const me = await identity(seed);
+  const key = keyOf(seed);
+  const login = (asked) => bid.signLogin(key, me.identityPublicKey, me.bucketKey.publicKey, asked);
+  const phone = await connectRoom({ url: `ble://${host}`, me, device: dev('Phone', 'android'), WebSocket: bt.phone.WebSocket, randomBytes, login, timeoutMs: 5000 });
+  /* the phone: its key session for the room's agents (as the app's keyAgents.ts), and the owner accepting what is new */
+  const session = createKeySession({ pipe: fakeKey(), hostFor: () => ({ send: async () => null }), dev: 'android', holder: 'the phone' });
+  const clients = new Map();
+  phone.on('key', ({ from, m }) => {
+    let c = clients.get(from);
+    if (!c) { c = { send: (obj) => phone.keyReply(from, obj) }; clients.set(from, c); }
+    if (m.t === 'hello') void session.open(c);
+    else void session.message(c, m);
+  });
+  phone.on('key-gone', ({ from }) => { const c = clients.get(from); if (c) { session.close(c); clients.delete(from); } });
+  phone.on('mcp', (e) => { if (e.ev === 'agent' && e.agent.state === 'pending') void phone.mcp('agent', { agent: e.agent.id, state: 'accepted' }); });
+  /* the CLI */
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ble-cli-'));
+  const said = [];
+  const pipe = createDesktopPipe({ channel: phoneChannel({ url: s.url, root, name: 'box CLI', say: (l) => said.push(l), acceptMs: 5000 }) });
+  await pipe.start();
+  assert.ok(said.some((l) => /accept "box CLI" on the phone/.test(l)), said.join(' | '));
+  assert.deepEqual(pipe.device, { product: 'fake key' });
+  const got = new Promise((resolve) => pipe.on('stream', (e) => { if (e.dir === 0) resolve(e.bytes); }));
+  const report = new Uint8Array(64);
+  report[0] = 7;
+  await pipe.write(2, report);
+  assert.equal((await got)[0], 8, 'the phone\'s key answered over Bluetooth');
+  await pipe.stop();
+  /* accepted once: the next run goes straight through, nothing to accept */
+  said.length = 0;
+  const again = createDesktopPipe({ channel: phoneChannel({ url: s.url, root, name: 'box CLI', say: (l) => said.push(l), acceptMs: 5000 }) });
+  await again.start();
+  assert.deepEqual(said, []);
+  await again.stop();
+  phone.close();
 });
 
 /* the helpers' seed key, as identity() builds it - its agent signs with the identity label's secret */

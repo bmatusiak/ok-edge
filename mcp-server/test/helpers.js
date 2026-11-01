@@ -65,4 +65,21 @@ async function enter(me, device, { host = HOST, roomId = me.id } = {}) {
   return { c, answer: await c.next() };
 }
 
-module.exports = { BASE, HOST, WS, identity, dev, connect, enter, room, bid };
+/* a key that answers each 64-byte report on the vendor interface with one report: its first byte + 1 */
+function fakeKey() {
+  const streams = new Set();
+  return {
+    isRunning: () => true,
+    start: async () => {},
+    on(ev, fn) { if (ev !== 'stream') return () => {}; streams.add(fn); return () => streams.delete(fn); },
+    async write(iface, bytes) {
+      const out = new Uint8Array(64);
+      out[0] = (bytes[0] + 1) & 0xff;
+      setTimeout(() => { for (const s of streams) s({ iface, dir: 0, bytes: out }); /* DIR.OUT */ }, 5);
+    },
+    device: { product: 'fake key' },
+    interfaces: () => [2],
+  };
+}
+
+module.exports = { BASE, HOST, WS, identity, dev, connect, enter, room, bid, fakeKey };

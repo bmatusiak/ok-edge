@@ -13,30 +13,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const crypto = require('crypto');
-const { identity, dev } = require('./helpers');
+const { identity, dev, fakeKey } = require('./helpers');
 const { roomClient, roomAgent } = require('node-onlykey-lib/bucket');
 const { createKeySession } = require('node-onlykey-lib/desktop/session');
 const { createDesktopPipe } = require('node-onlykey-lib/cli/transport-desktop');
 
 const randomBytes = (n) => new Uint8Array(crypto.randomBytes(n));
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
-
-/* a key that answers each 64-byte report on the vendor interface with one report: its first byte + 1 */
-function fakeKey() {
-  const streams = new Set();
-  return {
-    isRunning: () => true,
-    start: async () => {},
-    on(ev, fn) { if (ev !== 'stream') return () => {}; streams.add(fn); return () => streams.delete(fn); },
-    async write(iface, bytes) {
-      const out = new Uint8Array(64);
-      out[0] = (bytes[0] + 1) & 0xff;
-      setTimeout(() => { for (const s of streams) s({ iface, dir: 0, bytes: out }); /* DIR.OUT */ }, 5);
-    },
-    device: { product: 'fake key' },
-    interfaces: () => [2],
-  };
-}
 
 async function server(t) {
   const Rectify = (await import('@bmatusiak/rectify')).default;
