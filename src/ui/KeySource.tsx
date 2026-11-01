@@ -1,26 +1,24 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {Btn, Section, Segmented} from './components';
+import {Section} from './components';
 import {theme} from './theme';
 import type {KeyControl} from '../hooks/useKey';
 
 /**
- * Which key the app is talking to, and how it decides.
+ * Which key the app is talking to - READ-ONLY.
  *
  * TWO DEVICES, NEVER MERGED. The soft key and a hard key answer the same
  * protocol, so every other screen is the same code either way - but they hold
- * different secrets, and this is the only control that says which one is being
- * read.
+ * different secrets, and this says which one is being read.
  *
- * ## Why the override is separate from the mode
- *
- * "In auto, but pinned to the soft key for now" is a real thing to want while
- * testing. Folding the override into the mode makes that state unreachable
- * without changing a preference you then have to remember to change back, so
- * they are two controls.
+ * A DETECTED HARD KEY ALWAYS WINS, across the whole app (Brad, 2026-10-31:
+ * "hardkey always wins now, if a hardkey gets detected, stop the softkey ... it
+ * is across the whole app"; "the hardkey softkey selector becomes readonly").
+ * useKey decides it in one place; the auto/manual setting and the Soft / Hard /
+ * Off override that used to be here are gone - nothing here can beat it.
  */
 export function KeySource({keys}: {keys: KeyControl}) {
-  const {mode, setMode, override, setOverride, backend, attached, name} = keys;
+  const {backend, attached, name} = keys;
 
   return (
     <Section title="Which key">
@@ -50,45 +48,11 @@ export function KeySource({keys}: {keys: KeyControl}) {
                 'app does not draw a keypad for one.'
               : 'Reading a physical OnlyKey over USB. Asking whether its console ' +
                 'takes presses from the app…'
-          : 'Reading the soft key: the same firmware, running inside this app. ' +
-            'It stays running while a hard key is in use, so switching back ' +
-            'finds it where you left it.'}
+          : 'Reading the soft key: the same firmware, running inside this app.'}
       </Text>
-
-      <Text style={styles.label}>When a hard key is attached</Text>
-      <Segmented
-        value={mode}
-        options={['auto', 'manual'] as const}
-        onChange={next => void setMode(next)}
-      />
       <Text style={styles.hint}>
-        {mode === 'auto'
-          ? 'Switch to it, and back to the soft key when it is unplugged.'
-          : 'Stay where you are. Attaching one only makes it available.'}
-      </Text>
-
-      <Text style={styles.label}>Override</Text>
-      <View style={styles.actions}>
-        <Btn
-          title="Soft Key"
-          tone={override === 'embedded' ? 'primary' : undefined}
-          onPress={() => void setOverride('embedded')}
-        />
-        <Btn
-          title="Hard Key"
-          tone={override === 'usb' ? 'primary' : undefined}
-          onPress={() => void setOverride('usb')}
-        />
-        <Btn
-          title="Off"
-          tone={override === null ? 'primary' : undefined}
-          onPress={() => void setOverride(null)}
-        />
-      </View>
-      <Text style={styles.hint}>
-        {override
-          ? 'Forced, whatever is plugged in. This wins over the setting above.'
-          : 'Not forced — the setting above decides.'}
+        A hard key, once detected, always wins: the soft key is stopped then, and
+        comes back when the app restarts.
       </Text>
     </Section>
   );
@@ -98,7 +62,5 @@ const styles = StyleSheet.create({
   row: {flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4},
   active: {color: theme.text, fontSize: 16, fontWeight: '700', flex: 1},
   dim: {color: theme.textDim, fontSize: 12},
-  label: {color: theme.text, fontSize: 13, fontWeight: '600', marginTop: 14},
   hint: {color: theme.textDim, fontSize: 12, lineHeight: 18, marginTop: 6},
-  actions: {flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap'},
 });
