@@ -113,9 +113,16 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
         source = await SoftKeyEdge.open(); /* null: locked, or no Edge */
         if (source && alive) await round.run();
       } catch (e) {
-        pending = true;
-        console.log(`[edge-watch] sync failed: ${errText(e)}`);
-        /* the next tick tries again; the tab shows any real error when opened */
+        const why = errText(e);
+        /*
+         * A FAILURE ONLY A PERSON CURES IS NOT TRIED AGAIN ON THE CLOCK (the Pixel, 2026-11-01: "accept #50-#57 as lost (a
+         * press) to go on" read the chain every 10 s for minutes - 384 key requests with no press): the key cannot answer
+         * it differently until the person accepts the loss on the Edge tab. The next link stored (edge_link) or a
+         * confirmation cleared tries again; anything else - a busy key, a dropped read - is tried at the next tick.
+         */
+        const needsPerson = /as lost|accept .* loss/i.test(why);
+        pending = !needsPerson;
+        console.log(`[edge-watch] sync failed: ${why}${needsPerson ? ' - waiting for the person (the Edge tab), not tried again on the clock' : ''}`);
       } finally {
         busy = false;
       }
