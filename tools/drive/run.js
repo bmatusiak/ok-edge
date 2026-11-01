@@ -21,6 +21,16 @@ const [script, ...own] = rest;
 const args = [...own, ...passed];
 if (!script) { console.error('usage: run.js <script> [--app desktop|webapp|android] [args...]'); process.exit(2); }
 
+/*
+ * NOBODY LISTENING, SAID FIRST (Brad, 2026-11-01: "your watcher is not armed, your waiting on nothing"; "does drive need a
+ * skill to remind you to have a watcher?" - a skill only loads when asked for, so the reminder is here, on every run):
+ * the agent running this hears Brad's "I see no activity" and his pictures only through a wake watcher (wake.js, under a
+ * Monitor). None running -> the first line of every run says so, loudly. (wake-mark.js knows; doctor says it too.)
+ */
+if (!require('./wake-mark').wakeWatcher()) {
+  console.log(`!!! NO WAKE WATCHER - Brad's "I see no activity" and pictures reach nobody. ${require('./wake-mark').ARM}`);
+}
+
 const ws = new WebSocket(`ws://127.0.0.1:${process.env.DRIVE_PORT || 8790}/control`);
 ws.on('open', () => ws.send(JSON.stringify({ t: 'run', script, app, args })));
 ws.on('message', (data) => {
