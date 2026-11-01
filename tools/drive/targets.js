@@ -725,11 +725,61 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     return r.ok ? { ok: true, what: r.out.split('\n').slice(-12).join('\n') } : { ok: false, why: `exit not 0: ${r.out.split('\n').slice(-6).join(' | ')}` };
   }
 
+  /*
+   * THE STATE OF EVERYTHING ON THIS MACHINE (Brad, 2026-10-31: "do you have a status or doctor command that tells you
+   * the state of everything, like what repos are on the remote, what heads they are on, if they are dirty (and what
+   * files are dirty), devices, app pids"): the repos beside ok-edge (branch, head, the dirty files by name), the keys on
+   * its USB, its apps' processes by pid (each app's main process: the desktop's Electron, the web app's server, Metro,
+   * the drive) and the phone's app pid when a phone is on adb here. Read-only; run.js doctor lays the machines side by side.
+   */
+  const DOCTOR_REPOS = ['node-onlykey-lib', 'ok-edge', 'node-onlykey-emulator', 'onlykey-testing', 'ok-rn', 'onlykey-edge'];
+  const gitIn = (dir, args) => { try { return require('child_process').execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', timeout: 15000, windowsHide: true }).trim(); } catch { return null; } };
+  async function processList() {
+    if (LINUX) {
+      const out = [];
+      for (const d of fs.readdirSync('/proc')) {
+        if (!/^\d+$/.test(d)) continue;
+        try { out.push({ pid: Number(d), cmd: fs.readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' ') }); } catch { /* gone while read */ }
+      }
+      return out;
+    }
+    const r = await run('powershell.exe', ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine } | ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }']);
+    return r.out.split(/\r?\n/).map((l) => { const t = l.indexOf('\t'); return { pid: Number(l.slice(0, t)), cmd: l.slice(t + 1) }; }).filter((p) => p.pid);
+  }
+  async function doctor() {
+    const repos = [];
+    for (const name of DOCTOR_REPOS) {
+      const dir = path.join(ROOT, name);
+      if (!fs.existsSync(path.join(dir, '.git'))) continue;
+      const dirty = (gitIn(dir, ['status', '--porcelain']) || '').split(/\r?\n/).filter(Boolean);
+      repos.push({ name, branch: gitIn(dir, ['branch', '--show-current']), head: gitIn(dir, ['rev-parse', 'HEAD']), subject: (gitIn(dir, ['log', '-1', '--format=%s']) || '').slice(0, 72), dirty });
+    }
+    let libPin = null;
+    try { libPin = JSON.parse(fs.readFileSync(path.join(EDGE, 'node_modules', 'node-onlykey-lib', 'package.json'), 'utf8')).version; } catch { /* not installed here */ }
+    const ps = await processList();
+    const norm = (c) => c.split(String.fromCharCode(92)).join('/'); /* Windows paths, as Linux writes them */
+    const pick = (test) => ps.filter((p) => test(norm(p.cmd))).map((p) => p.pid);
+    const apps = {
+      desktop: pick((c) => c.includes('ok-edge/node_modules/electron') && !c.includes('--type=')),
+      'desktop soft key': pick((c) => c.includes('okemu-host')),
+      webapp: pick((c) => c.includes('serve-docs.js') || (c.includes('webapp-chromium') && !c.includes('--type='))),
+      metro: pick((c) => /expo(\.js)? start|metro|react-native start/.test(c) && !c.includes('jest-worker')),
+      'drive (NW.js)': pick((c) => c.includes('tools/drive') && /nw(\.exe)?\b/.test(c) && !c.includes('--type=')),
+    };
+    let phone = null;
+    try {
+      const id = phoneId();
+      if (id) { const r = await adb(['shell', 'pidof', APP_ID]); phone = { device: id, app: APP_ID, pid: r.ok && r.out.trim() ? r.out.trim() : null }; }
+    } catch { /* no phone on adb here */ }
+    return { ok: true, what: JSON.stringify({ machine: os.hostname(), platform: process.platform, repos, libPin, keys: await keysOnUsb(), apps, phone }) };
+  }
+
   return {
     list: Object.keys(T),
     /* this machine's keys, as they change (watchKeys) */
     watchKeys,
     async act(action, target, args = {}) {
+      if (action === 'doctor') return doctor();
       const t = T[target];
       if (!t) return { ok: false, why: `no target "${target}" (${Object.keys(T).join(', ')})` };
       if (action === 'start') return { ok: true, what: await t.start() };

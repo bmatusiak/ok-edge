@@ -416,7 +416,9 @@ function driveFor(app, say) {
 
   /* a target's machine, asked directly (#7 health, #1 last words): proc's answer, {ok, what, where} */
   const machine = (action, target = app.shell, args = {}) => proc(action, target, args);
-  const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
+  /* every machine at once - this one and each connected remote (run.js doctor) */
+  const everywhere = (action, args = {}) => procAll(action, args);
+  const api = { app, say, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
   return api;
 }
 
@@ -661,6 +663,22 @@ async function proc(action, target, args = {}) {
     return { ...reply, where: r.machine };
   }
   return { ...(await localTargets.act(action, target, args)), where: 'this machine' };
+}
+
+/* an action asked of THIS machine and of every connected remote: [{where, ok, what|why}] (run.js doctor) */
+async function procAll(action, args = {}) {
+  for (const u of REMOTES) dialRemote(u);
+  const asks = [localTargets.act(action, '', args).then((r) => ({ ...r, where: 'this machine' }), (e) => ({ ok: false, why: e.message, where: 'this machine' }))];
+  for (const r of remotes.values()) {
+    if (r.ws.readyState !== 1) continue;
+    const id = r.nextId++;
+    asks.push(new Promise((resolve) => {
+      const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${r.machine} did not answer "${action}" in 60 s`, where: r.machine }); }, 60000);
+      r.waiting.set(id, (m) => { clearTimeout(dog); resolve({ ...m, where: r.machine }); });
+      r.ws.send(JSON.stringify({ t: 'proc', id, action, target: '', args }));
+    }));
+  }
+  return Promise.all(asks);
 }
 
 /*
