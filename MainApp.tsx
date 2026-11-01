@@ -617,7 +617,7 @@ function Shell() {
    */
   useEffect(() => {
     if (passed) void joinServerRoom();
-    else leaveServerRoom();
+    else { leaveServerRoom(); require('./src/localMcp').leaveLocalMcp(); }
   }, [passed]);
   /*
    * THE KEY WENT AWAY, SO DID ITS IDENTITY - AND EVERYTHING THAT HUNG ON IT (Brad, 2026-10-31: "the entire user state

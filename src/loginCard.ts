@@ -146,6 +146,16 @@ export async function makeCard(): Promise<void> {
   }
 }
 
+/**
+ * THE CARD IS STALE (lib identity.login: `stale` - the login asked something the card does not name, or not something
+ * it does; Brad, 2026-11-01: "login flow and budget use count need to match"): a new card is offered, made from the last
+ * manual login's record (identity.loginRecord - the next login runs manually until it is made, so the record is fresh).
+ */
+export function offerNewCard(identity: string, device: string): void {
+  console.log(`[card] this device's login card (${device.slice(0, 8)}) no longer matches its login - a new one offered`);
+  setOffer({identity, device, state: 'offered', why: 'the login changed since this card was made'});
+}
+
 /** Not now: the next login runs manually again, and offers it again. */
 export function dismissCardOffer(): void {
   setOffer(null);

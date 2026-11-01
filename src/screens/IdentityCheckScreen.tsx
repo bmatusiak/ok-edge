@@ -25,7 +25,7 @@ import {proofKept, proofMaterial} from '../bucketTrade';
 import {DEVICE_WORD, shell} from '../platform';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {readKeyIdentity} from '../keyIdentity';
-import {afterLogin, localCard} from '../loginCard';
+import {afterLogin, localCard, offerNewCard} from '../loginCard';
 import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
@@ -118,9 +118,12 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
          */
         const card = await (identity as any).loginCard();
         const kept = card ? await localCard(read.identity, card.device) : null;
+        /*
+         * THE LOGIN AS THE CARD LEARNS IT: only what every login asks (the bucket and the proof). This computer's bucket
+         * key for the hosted room is made once (proofMaterial) - outside it, so a one-time request never goes on the card.
+         */
         const logged = await (identity as any).login(async () => {
           await open();
-          if (!keyKept) await proofMaterial();
         }, {card: kept, reason: loginReason(), onPress: () => setOpen({kind: 'press'}), ...SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`)});
         if (!logged?.budget) {
           console.log(`[identity] ${read.identity.slice(0, 12)}: a manual login - ${logged?.manual ?? 'no budget'}`);
@@ -139,7 +142,11 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
           } catch (e: unknown) {
             console.log(`[identity] ${read.identity.slice(0, 12)}: the login's links are NOT in this copy yet - ${String((e as Error)?.message ?? e)}`);
           }
+          /* the card no longer matches what this login asked (an update changed the login): a new card, from this login */
+          if (logged.stale && card) offerNewCard(read.identity, card.device);
         }
+        /* this computer's bucket key for the hosted room, made once - after the login, its own requests (proofMaterial) */
+        if (!keyKept) await proofMaterial();
       }
       /* chosen: this login kept for the tab's next load (the bucket's secret, encrypted - webSession.ts) */
       if (stay && read.kind === 'read') {

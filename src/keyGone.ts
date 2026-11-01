@@ -23,4 +23,5 @@ export function forgetKeyState(): void {
   require('./hostChallenge').clearHostChallenge();
   require('./pressAsk').forgetPressAsk();
   require('./credprovider/flow').dropChannel();
+  require('./localMcp').leaveLocalMcp();
 }

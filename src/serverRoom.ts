@@ -197,7 +197,7 @@ export async function setServerUrl(url: string | null): Promise<void> {
 }
 
 /* how this device shows in the room: one id for good (this device's storage), a name that says what it is */
-async function thisDevice(): Promise<RoomPeer> {
+export async function thisDevice(): Promise<RoomPeer> {
   let id = await AsyncStorage.getItem(DEVICE_KEY);
   if (!id || !/^[0-9a-f]{16}$/.test(id)) {
     id = Array.from(randomBytes(8), b => b.toString(16).padStart(2, '0')).join('');

@@ -256,19 +256,19 @@ export async function openIdentityBucket(identity: string, okcrypto: Okcrypto, o
   const state = await storage.state(id);
   if (state === 'kept') {
     /*
-     * KEPT OPENED HERE, AND STILL TWO PRESSES (Brad, 2026-11-01: "when i login, it skips the 2 presses i need to do for
-     * login"; "every time i login it should still make me press 2 times"). The file opens with no key, so nothing proved
-     * this key holds the identity - a device repeating the identity's public key walked in. Every login proves it as on
-     * every platform: the key signs a fresh challenge with the identity key, then derives the identity's bucket key -
-     * held while the bucket is open (the sealed copy for the server), wiped at the close.
+     * KEPT OPENED HERE - AND THE KEY PROVES ITSELF TO THE LOCAL MCP FIRST (Brad, 2026-11-01: "every time i login it should
+     * still make me press 2 times"; "the desktop checks itself over its local mcp"): the bucket key derived and the local
+     * room's challenge signed (localMcp.ts) - two requests, the login card's list. The file itself opens with no key, as
+     * before. With no local MCP (it did not start), the key signs a challenge this app makes instead - still proven.
      */
-    const prove = challengeOpts('Proving this key holds the identity');
-    try { await identityService.verify(prove.opts); } finally { prove.done(); }
-    const key = await bucketKey(id, okcrypto, onPress);
+    if (!(await require('./localMcp').loginToLocalMcp(id, onPress))) {
+      const prove = challengeOpts('Proving this key holds the identity');
+      try { await identityService.verify(prove.opts); } finally { prove.done(); }
+    }
     const opened = await storage.open(id, null, () => { throw new Error('kept opened: no rows to prove'); });
     if (opened) {
-      console.log(`[bucket] ${id.slice(0, 12)}: proven - the key signed a fresh challenge and derived the bucket key; kept opened on this computer (shared with the CLI)`);
-      open = {identity: id, opened, key, savedClock: clockOf(opened.bucket)};
+      console.log(`[bucket] ${id.slice(0, 12)}: proven; kept opened on this computer (shared with the CLI)`);
+      open = {identity: id, opened, key: null, savedClock: clockOf(opened.bucket)};
       return {created: false, pressed: true};
     }
   }
