@@ -96,6 +96,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
   const continueAndOpen = async () => {
     if (read.kind !== 'read') { openLegacyStorage(); onContinue(); return; }
     setOpen({kind: 'opening'});
+    /* a login budget opened on the key: its links are this copy's to take, whether the login ends well or not */
+    let budgetOpened = false;
     try {
       const {okcrypto, identity, edge} = await getOnlyKey(activeBackend());
       const open = () => openIdentityBucket(read.identity, okcrypto, () => setOpen({kind: 'press'}));
@@ -122,9 +124,11 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
          * THE LOGIN AS THE CARD LEARNS IT: only what every login asks (the bucket and the proof). This computer's bucket
          * key for the hosted room is made once (proofMaterial) - outside it, so a one-time request never goes on the card.
          */
+        const filer = SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`);
         const logged = await (identity as any).login(async () => {
           await open();
-        }, {card: kept, reason: loginReason(), onPress: () => setOpen({kind: 'press'}), ...SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`)});
+        }, {card: kept, reason: loginReason(), onPress: () => setOpen({kind: 'press'}), ...filer,
+          onOpened: async (g: any, o: any) => { budgetOpened = true; await filer.onOpened(g, o); }});
         if (!logged?.budget) {
           console.log(`[identity] ${read.identity.slice(0, 12)}: a manual login - ${logged?.manual ?? 'no budget'}`);
           if (card) void afterLogin(read.identity, card.device).catch((e: unknown) => console.log(`[card] ${String((e as Error)?.message ?? e)}`));
@@ -155,6 +159,20 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
       }
       onContinue();
     } catch (e: unknown) {
+      /*
+       * A FAILED LOGIN'S LINKS STILL INTO THIS COPY (box, 2026-11-01: six card logins refused by a server each opened a
+       * budget, failed before the sync, and moved the key past its ring - the copy and the card's top could not reach it
+       * again, and every later login ran manually): the budget's links are on the key whatever came of the login.
+       */
+      if (budgetOpened) {
+        try {
+          const s = await SoftKeyEdge.open();
+          if (s) await require('../edgeStore').sync(s);
+          console.log("[identity] the failed login's links are in this copy");
+        } catch (e2: unknown) {
+          console.log(`[identity] the failed login's links are NOT in this copy - ${String((e2 as Error)?.message ?? e2)}`);
+        }
+      }
       setOpen({kind: 'failed', why: String((e as Error)?.message ?? e)});
     }
   };
