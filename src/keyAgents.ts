@@ -26,6 +26,8 @@ export function serveKeyAgents(r: any): () => void {
   const conv = createKeyConversation();
   const pipeOf = (): any => (activeBackend() === 'usb' ? UsbPipe : OkEmu);
   let current: Client | null = null;
+  /* the one being opened: the session says it connected before open() resolves */
+  let opening: Client | null = null;
   /* the key this app has open, as the session's pipe; its writes wait for the hand-over */
   const pipe = {
     isRunning: () => pipeOf().isRunning(),
@@ -49,7 +51,7 @@ export function serveKeyAgents(r: any): () => void {
     log: (l: string) => console.log(`[key-agent] ${l}`),
     onClient: (connected: boolean) => {
       conv.setConnected(connected);
-      console.log(`[key-agent] ${connected ? `${current?.name ?? 'a computer'} talks to this key` : 'the computer let the key go'}`);
+      console.log(`[key-agent] ${connected ? `${(current ?? opening)?.name ?? 'a computer'} talks to this key` : 'the computer let the key go'}`);
     },
   });
   const clients = new Map<string, Client>();
@@ -63,7 +65,8 @@ export function serveKeyAgents(r: any): () => void {
     }
     if (m && m.t === 'hello') {
       const cl = c;
-      void session.open(cl).then((ok: boolean) => { if (ok) current = cl; });
+      opening = cl;
+      void session.open(cl).then((ok: boolean) => { if (ok) current = cl; }).finally(() => { if (opening === cl) opening = null; });
     } else void session.message(c, m);
   });
   const offGone = r.on('key-gone', ({from}: {from: string}) => {
