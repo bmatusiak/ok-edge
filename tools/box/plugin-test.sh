@@ -14,7 +14,7 @@ source ~/.nvm/nvm.sh >/dev/null 2>&1
 P=~/project/onlykey
 C=${1:?emulator commit}; SECTION=${2:?kit section}; NAME=${3:?test name substring or -}
 ASIS=${AS_PUBLISHED:-0}
-PL=edge,ctap_bridge,derive_secret$([ "$ASIS" = 1 ] || echo ,version_control)
+PL=edge,ctap_bridge,vendor_bridge,derive_secret$([ "$ASIS" = 1 ] || echo ,version_control)
 D=$P/plugin-test/$C$([ "$ASIS" = 1 ] && echo -as-published)
 E=$D/node-onlykey-emulator/emulator
 say() { echo "== $(date +%T) $*"; }
