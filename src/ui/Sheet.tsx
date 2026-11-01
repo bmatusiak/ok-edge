@@ -3,6 +3,7 @@ import {Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vie
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {theme} from './theme';
+import {SheetCountdown} from './SheetCountdown';
 import {DriveLayer, DriveTap} from '../drive/registry';
 
 /*
@@ -45,6 +46,7 @@ export function Sheet({
   footer,
   flush = false,
   extraBottom = 0,
+  countdown,
   children,
 }: {
   visible?: boolean;
@@ -61,6 +63,12 @@ export function Sheet({
   flush?: boolean;
   /* more room under the body (the press sheet's: React Native's debug warnings sit along the bottom) */
   extraBottom?: number;
+  /*
+   * THE KEY'S TIME, ALONG THE BOTTOM (Brad, 2026-11-01: "i would like a progress bar for all sheets that show a press at
+   * the bottom of the sheets"): set while the key waits for a press - from when it began, over the key's wait - in
+   * the sheet's own colour (red for a press, yellow for Edge).
+   */
+  countdown?: {since: number; seconds: number} | null;
   children?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -92,6 +100,7 @@ export function Sheet({
             {children}
           </ScrollView>
           {footer ? <View style={styles.footer}>{footer}</View> : null}
+          {countdown ? <SheetCountdown since={countdown.since} seconds={countdown.seconds} color={edge ?? theme.error} /> : null}
         </View>
       </View>
       </DriveLayer>

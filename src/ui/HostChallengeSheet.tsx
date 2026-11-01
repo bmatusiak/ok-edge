@@ -7,7 +7,6 @@ import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Sheet} from './Sheet';
 import {PressIcon} from './PressIcon';
-import {SheetCountdown} from './SheetCountdown';
 import {usePressSound} from './pressSound';
 import {theme} from './theme';
 import {hostChallenge, onHostChallenge, type HostChallenge} from '../hostChallenge';
@@ -32,7 +31,7 @@ export function HostChallengeSheet() {
   /* a hard key's only: the soft key's wait has its own sheet with its button (PressSheet, from the firmware's record) */
   if (!c || !hard) return null;
   return (
-    <Sheet tone="press" title="Press the key">
+    <Sheet tone="press" title="Press the key" countdown={since !== null ? {since, seconds: KEY_WAIT_S} : null}>
       <PressIcon />
       <Text style={styles.what}>{c.what}</Text>
       {c.digits.length ? (
@@ -46,7 +45,6 @@ export function HostChallengeSheet() {
       ) : (
         <Text style={styles.note}>Press a button on your OnlyKey.</Text>
       )}
-      {since !== null ? <SheetCountdown since={since} seconds={KEY_WAIT_S} color={theme.error} /> : null}
     </Sheet>
   );
 }

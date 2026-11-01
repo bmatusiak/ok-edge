@@ -12,6 +12,13 @@ import {useQuietMotion} from './CountdownBar';
 
 const STEP_MS = 5000;
 
+/* when a press began: set when `active` turns on, cleared when it turns off - for a sheet's countdown */
+export function usePressSince(active: boolean): number | null {
+  const [since, setSince] = useState<number | null>(null);
+  useEffect(() => { setSince(active ? Date.now() : null); }, [active]);
+  return since;
+}
+
 export function SheetCountdown({since, seconds, color}: {since: number; seconds: number; color: string}) {
   const quiet = useQuietMotion();
   const total = seconds * 1000;

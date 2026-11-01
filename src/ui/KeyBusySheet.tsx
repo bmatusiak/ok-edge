@@ -9,6 +9,8 @@ import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Sheet} from './Sheet';
 import {PressIcon} from './PressIcon';
+import {usePressSince} from './SheetCountdown';
+import {usePressSound} from './pressSound';
 import {theme} from './theme';
 import {keyBusy, onKeyBusy, type KeyBusy} from '../keyBusy';
 import {hostChallenge, onHostChallenge, type HostChallenge} from '../hostChallenge';
@@ -18,6 +20,10 @@ export function KeyBusySheet() {
   const [c, setC] = useState<HostChallenge | null>(hostChallenge());
   useEffect(() => onKeyBusy(setB), []);
   useEffect(() => onHostChallenge(setC), []);
+  /* an Edge request that waits for its press: the key's 25 s along the bottom */
+  const pressSince = usePressSince(!!b && b.press && !b.done);
+  /* and rings, as every press sheet (Brad, 2026-11-01: "also audio") */
+  usePressSound(pressSince, 'press');
   if (!b || c) return null;
   /*
    * TWO BARS (Brad, 2026-10-29: "tracking the queue and the individual in 2 progress bars"): the queue - this run's
@@ -33,7 +39,7 @@ export function KeyBusySheet() {
   /* the step in progress, counted from 1 (the bar fills by the steps done) */
   const step = `This request: step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`;
   return (
-    <Sheet title={b.press && !b.done ? 'Press your OnlyKey' : 'Working with your key'}>
+    <Sheet title={b.press && !b.done ? 'Press your OnlyKey' : 'Working with your key'} countdown={pressSince !== null ? {since: pressSince, seconds: 25} : null}>
       {b.press && !b.done ? <PressIcon /> : null}
       <Text style={styles.counts}>{queue.join(' · ')}</Text>
       <View style={styles.track}>

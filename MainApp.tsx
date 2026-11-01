@@ -513,6 +513,8 @@ function Shell() {
   useEffect(() => setDriveFlag('phase', phase), [phase]);
   useEffect(() => setDriveFlag('tab', tab), [tab]);
   useEffect(() => setDriveFlag('key', emu.device), [emu.device]);
+  /* a hard key's debug console answers (its echo - a test hex only): the drive presses a hard key only when this says so */
+  useEffect(() => setDriveFlag('consoleAnswers', keys.backend === 'usb' && emu.canPress === true), [keys.backend, emu.canPress]);
   /*
    * A LOGIN THIS TAB KEPT (webSession.ts, chosen at the identity check): on a reload the login screen goes on by itself
    * - the key is asked (armWebKey), and the identity check opens the bucket with no press. Once a page load.

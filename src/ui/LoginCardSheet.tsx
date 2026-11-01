@@ -8,6 +8,8 @@ import {StyleSheet, Text, View} from 'react-native';
 import {Btn} from './components';
 import {Sheet} from './Sheet';
 import {PressIcon} from './PressIcon';
+import {usePressSince} from './SheetCountdown';
+import {usePressSound} from './pressSound';
 import {theme} from './theme';
 import {DEVICE_WORD} from '../platform';
 import {cardOffer, dismissCardOffer, makeCard, onCardOffer, type CardOffer} from '../loginCard';
@@ -15,10 +17,14 @@ import {cardOffer, dismissCardOffer, makeCard, onCardOffer, type CardOffer} from
 export function LoginCardSheet() {
   const [o, setO] = useState<CardOffer>(cardOffer());
   useEffect(() => onCardOffer(setO), []);
+  /* the certify's press: the key's 25 s along the bottom */
+  const pressSince = usePressSince(o?.state === 'pressing');
+  /* and rings, as every press sheet (Brad, 2026-11-01: "also audio") */
+  usePressSound(pressSince, 'press');
   if (!o) return null;
   const busy = o.state === 'certifying' || o.state === 'pressing';
   return (
-    <Sheet tone="edge" title={`This ${DEVICE_WORD}'s login card`} onClose={busy ? undefined : dismissCardOffer}>
+    <Sheet tone="edge" title={`This ${DEVICE_WORD}'s login card`} onClose={busy ? undefined : dismissCardOffer} countdown={pressSince !== null ? {since: pressSince, seconds: 25} : null}>
       <Text style={styles.line}>{`This ${DEVICE_WORD}'s key (device ${o.device.slice(0, 8)}…) has no login card yet, so this login asked each request on its own.`}</Text>
       <Text style={styles.dim}>The key certifies the card once - it names this device, your bucket identity and the requests a login makes. After that, logging in here is one press.</Text>
       {/* the press icon wherever the key waits for a press (Brad, 2026-10-31: "this press sheet needs the press icon animation") */}

@@ -15,6 +15,7 @@ import {Btn} from './components';
 import {Locate} from './PressSheet';
 import {Sheet} from './Sheet';
 import {PressIcon} from './PressIcon';
+import {usePressSince} from './SheetCountdown';
 import {theme} from './theme';
 import {consentRefusal} from '../debugGuard';
 import {BudgetCard} from '../screens/EdgeScreen';
@@ -134,6 +135,8 @@ export function EdgeRequestSheet() {
   /* no second confirm since 2026-10-08: no "yours" mark - the identities asked for are on the sheet (Brad) */
   useEffect(() => onSheet(next => { setS(next); }), []);
   const left = useSecondsLeft(s && (s.phase === 'ask' || s.phase === 'press') ? s.until : null);
+  /* the press phase: from when it began to the request's deadline, along the bottom */
+  const pressSince = usePressSince(s?.phase === 'press');
   /*
    * NO DOUBLE TAPS (Brad, 2026-10-04: a tap on Approve took a moment to register, the
    * timer ticked, a second tap landed on the next step by accident). The buttons start
@@ -178,7 +181,7 @@ export function EdgeRequestSheet() {
 
   return (
     /* closable only when done; extraBottom: in debug builds React Native's warning toasts sit along the bottom and catch taps (2026-10-04) */
-    <Sheet tone="edge" onClose={s.phase === 'done' ? closeSheet : undefined} extraBottom={48}>
+    <Sheet tone="edge" onClose={s.phase === 'done' ? closeSheet : undefined} extraBottom={48} countdown={pressSince !== null && s.phase === 'press' ? {since: pressSince, seconds: Math.max(1, Math.round((s.until - pressSince) / 1000))} : null}>
             {/* the testnet (src/net.ts): a throwaway key - said before anything is approved */}
             {currentNet() === 'test' ? <Text style={[styles.title, {color: theme.io}]}>TESTNET</Text> : null}
             {a.kind === 'identity' ? (
