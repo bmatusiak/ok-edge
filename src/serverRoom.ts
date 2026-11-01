@@ -268,7 +268,7 @@ export async function logIn(identity: string, onPress?: () => void): Promise<'se
         return p;
       },
     });
-    console.log(`[login] ${held.id.slice(0, 12)}: proven to the server (${new URL(url).host}) - the key signed its challenge`);
+    console.log(`[room] login: ${held.id.slice(0, 12)}: proven to the server (${new URL(url).host}) - the key signed its challenge`);
     adoptProof({id: held.id, identityPublicKey: held.publicKey, bucketKey, certificate: proof as unknown as Uint8Array, login: asked as unknown as {host: string; nonce: Uint8Array}});
     if (loggedIn) { try { loggedIn.room.close(); } catch { /* closed */ } }
     loggedIn = {identity: held.id, url, room: r};
@@ -277,7 +277,7 @@ export async function logIn(identity: string, onPress?: () => void): Promise<'se
     const why = String((e as Error)?.message ?? e);
     /* the server answered (its challenge came, the key was asked): its refusal, or the key's, is the login's */
     if (asked || shell === 'webapp') { bucketKey.secretKey.fill(0); throw e; }
-    console.log(`[login] ${new URL(url).host} did not answer - ${why}; this app checks the key itself`);
+    console.log(`[room] login: ${new URL(url).host} did not answer - ${why}; this app checks the key itself`);
     bucketKey.secretKey.fill(0);
     return null;
   } finally {
