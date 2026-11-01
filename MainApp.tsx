@@ -51,7 +51,7 @@ const SPLASH_SEEN: boolean = (() => {
   }
 })();
 import {LoginScreen} from './src/screens/LoginScreen';
-import {KeyPickBar, PinScreen, type KeyPick} from './src/screens/PinScreen';
+import {PinScreen, type KeyPick} from './src/screens/PinScreen';
 import {SetupScreen} from './src/screens/SetupScreen';
 import {HardKeySetupScreen} from './src/screens/HardKeySetupScreen';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
@@ -203,7 +203,7 @@ function Shell() {
   });
   const keys = useKey({softLog: emuLog.log, hardLog: hardLog.log, fidoPending: fido.pending});
   /*
-   * THE SOFT KEY / HARD KEY SWITCH, wherever a key is chosen: the PIN screen and both setup screens. OFFERED ONLY WHEN
+   * THE SOFT KEY / HARD KEY SWITCH, wherever a key is chosen: the login screen (before login - Brad, 2026-10-31) and the PIN screen. OFFERED ONLY WHEN
    * THERE IS SOMETHING TO CHOOSE BETWEEN - no hard key on the bus, or no soft key here (the web app), no row. Picking
    * writes the OVERRIDE rather than the mode: the mode is a standing preference ("prefer the hard key when one is
    * attached"), and this is someone saying which key they mean right now, for this login.
@@ -879,6 +879,7 @@ function Shell() {
             <LoginScreen
               device={emu.device}
               attached={keys.attached}
+              keyPick={keyPick}
               keyVersion={keys.hard.version}
               picked={keys.backend === 'embedded' && keys.soft.state === 'running' ? net : null}
               /*
@@ -911,20 +912,14 @@ function Shell() {
             />
           ) : phase === 'setup' && keys.backend === 'usb' ? (
             /* a hard key's PIN goes in on its own buttons - nothing here can press them */
-            <>
-              {keyPick ? <KeyPickBar keyPick={keyPick} /> : null}
-              <HardKeySetupScreen onDone={() => setPhase('login')} />
-            </>
+            <HardKeySetupScreen onDone={() => setPhase('login')} />
           ) : phase === 'setup' ? (
-            <>
-              {keyPick ? <KeyPickBar keyPick={keyPick} /> : null}
-              <SetupScreen
-                onDone={() => setPhase('login')}
-                model={emu.model}
-                onProvision={emu.provision}
-                led={keys.backend === 'embedded' ? emu.led : undefined}
-              />
-            </>
+            <SetupScreen
+              onDone={() => setPhase('login')}
+              model={emu.model}
+              onProvision={emu.provision}
+              led={keys.backend === 'embedded' ? emu.led : undefined}
+            />
           ) : phase === 'identity' ? (
             <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => { setPassed(true); setPhase('main'); }} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
           ) : phase === 'pin' ? (
