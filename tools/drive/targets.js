@@ -424,6 +424,11 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       async press({ buttons = ['1'] } = {}) {
         const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
         if (!b.length) b.push('1');
+        /*
+         * NOT BEFORE THE KEY WAITS (box, 2026-11-01: the login budget's press went the moment its sheet showed, before the
+         * request was on the key - lost, the login timed out to "Try again"): 800 ms first, as the kit's own Edge tests.
+         */
+        await new Promise((ok) => setTimeout(ok, 800));
         const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...b], 70000);
         return r.ok ? `pressed ${b.join(' ')} on the hard key (debug console)` : `press failed: ${r.out.split(/\r?\n/).pop()}`;
       },
