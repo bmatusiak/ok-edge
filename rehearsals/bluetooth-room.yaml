@@ -1,6 +1,7 @@
 # This phone in its identity's room on a computer's mcp-server over Bluetooth (ok-edge plan B3): logged in, Bluetooth
-# on, the computer its Target - the computer's mcp-server (run.js mcpble start, on the box) links, says its name, and the
-# phone joins with the login proof (one press). Optional steps: a phone already set needs none of them.
+# on, the computer its Target, Bluetooth MCP switched on - the computer's mcp-server (run.js mcpble start, on the box)
+# links, says its name, and the phone joins with the login proof (one press). The switch is turned off first when it is
+# on, so the join is this run's. Optional steps: a phone already set needs none of them (3 s each to find out).
 appId: com.okrn
 name: The phone in the computer's room over Bluetooth
 tags:
@@ -14,7 +15,14 @@ env:
 - tapOn:
     text: "Bluetooth: off"
     optional: true
+    timeout: 3
 - tapOn:
     text: "Target: ${COMPUTER}"
     optional: true
+    timeout: 3
+- tapOn:
+    text: "MCP and sync: on"
+    optional: true
+    timeout: 3
+- tapOn: "MCP and sync: off"
 - waitForLog: '\[room ble\] joined'

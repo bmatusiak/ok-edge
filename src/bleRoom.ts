@@ -116,7 +116,7 @@ export function bleTargetSet(): void {
 export async function joinBleRoom(): Promise<void> {
   const host = state.host;
   const open = tradeBucket();
-  if (!host || !open || joining || room) return;
+  if (!enabled || !host || !open || joining || room) return;
   joining = true;
   set({status: 'joining', why: null, needsKey: false});
   const prove = challengeOpts(`Proving this key holds the identity to ${host}`);
@@ -154,6 +154,19 @@ export async function joinBleRoom(): Promise<void> {
     joining = false;
   }
 }
+
+/*
+ * THE BLUETOOTH MCP SWITCH (the Bluetooth tab; useFidoGatt tells it with the radio's gate): off, this phone leaves the
+ * computer's room and joins none; on, it joins when a computer is linked and a bucket is open.
+ */
+let enabled = false;
+export function setBleMcp(on: boolean): void {
+  if (on === enabled) return;
+  enabled = on;
+  console.log(`[room ble] Bluetooth MCP ${on ? 'on' : 'off'}`);
+  if (!on) { leaveBleRoom(); link.down('Bluetooth MCP switched off'); set({host: null, status: 'off', why: null, peers: []}); }
+}
+export const bleMcpOn = () => enabled;
 
 /** The Server panel's Try again for the Bluetooth room. */
 export function retryBleRoom(): void {

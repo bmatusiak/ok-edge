@@ -159,7 +159,8 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
       case 'tapOn': {
         const sel = selectorOf(a);
         let target = null;
-        await waitFor(() => (target = controlFor(sel)) !== null, 30, `no live control "${sel.text || sel.id}"`);
+        /* timeout: seconds to wait for the control (30) - an optional step that may find nothing waits less (ours) */
+        await waitFor(() => (target = controlFor(sel)) !== null, Number(sel.timeout) || 30, `no live control "${sel.text || sel.id}"`);
         for (let i = 0; i < (sel.repeat || 1); i++) {
           if (i) await new Promise((r) => setTimeout(r, sel.delay || 100));
           await d.tap(target.label);

@@ -6,7 +6,7 @@ import FidoGatt, {
 } from '../transport/FidoGatt';
 import OkEmu from '../transport/OkEmu';
 import {startFidoBridge} from '../fidoBridge';
-import {bleTargetSet, startBleRoom} from '../bleRoom';
+import {bleTargetSet, setBleMcp, startBleRoom} from '../bleRoom';
 import type {OnlyKeyApp} from '../onlykey';
 import type {LogLevel} from './useLog';
 
@@ -18,6 +18,8 @@ import type {LogLevel} from './useLog';
  * the key would turn the switch off for everybody who had it on.
  */
 const RELAY_KEY = 'ok-rn/bt/auto-authenticator';
+/* the Bluetooth MCP switch (the Bluetooth tab's Bluetooth MCP panel): the vendor door, for the computer's mcp-server */
+const MCP_KEY = 'okedge/bt/mcp';
 
 type Options = {
   log: (level: LogLevel, text: string) => void;
@@ -76,17 +78,19 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
    * to stop trusting the node - so this is the control that means "let a
    * browser's request through" on the FIDO service.
    *
-   * THE VENDOR DOOR OPENS FOR ONE THING (ok-edge plan B3; Brad, 2026-11-01: "the
-   * mcp server should make communication with ble transparent"): the target
-   * computer's mcp-server and this phone's room over it - frame command 0x86,
-   * heard by bleRoom.ts and nothing else. Every other vendor message is still
-   * answered by silence (no listener takes it). It was shut 2026-10-30 with the
-   * cli pair, whose sealed sessions gated it; the room's own join (the login
-   * proof) is the gate now.
+   * THE VENDOR DOOR OPENS FOR ONE THING, AND HAS ITS SWITCH (ok-edge plan B3;
+   * Brad, 2026-11-01: "the mcp server should make communication with ble
+   * transparent"; "need a new panel called Bluetooth MCP so it can be toggled on
+   * and off"): the target computer's mcp-server and this phone's room over it -
+   * frame command 0x86, heard by bleRoom.ts and nothing else; every other vendor
+   * message is answered by silence. Off by default, as the cli pair's API switch
+   * was; it was shut 2026-10-30 with the cli pair, whose sealed sessions gated
+   * it - the room's own join (the login proof) is the gate now.
    *
    * Nothing without a target: see `target` below.
    */
   const [webauthn, setWebAuthnState] = useState(false);
+  const [mcp, setMcpState] = useState(false);
   const webauthnRef = useRef(false);
   webauthnRef.current = webauthn;
   /*
@@ -98,9 +102,10 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
   const [gatesRead, setGatesRead] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(RELAY_KEY)
-      .then(savedWebAuthn => {
+    Promise.all([AsyncStorage.getItem(RELAY_KEY), AsyncStorage.getItem(MCP_KEY)])
+      .then(([savedWebAuthn, savedMcp]) => {
         setWebAuthnState(savedWebAuthn === '1');
+        setMcpState(savedMcp === '1');
         setGatesRead(true);
       })
       .catch(() => setGatesRead(true));
@@ -109,6 +114,11 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
   const setWebAuthn = useCallback((next: boolean) => {
     setWebAuthnState(next);
     void AsyncStorage.setItem(RELAY_KEY, next ? '1' : '0');
+  }, []);
+
+  const setMcp = useCallback((next: boolean) => {
+    setMcpState(next);
+    void AsyncStorage.setItem(MCP_KEY, next ? '1' : '0');
   }, []);
 
   /*
@@ -138,14 +148,15 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
   useEffect(() => {
     if (!gatesRead) return;
     try {
-      /* api true: the target's writes become events - bleRoom.ts hears 0x86 only (THE VENDOR DOOR above) */
-      FidoGatt.setIoPolicy(target, webauthn, true);
-      /* a computer targeted: its mcp-server's name asked (again) - bleRoom.ts */
-      if (target) bleTargetSet();
+      /* api = the Bluetooth MCP switch: the target's writes become events - bleRoom.ts hears 0x86 only (THE VENDOR DOOR above) */
+      FidoGatt.setIoPolicy(target, webauthn, mcp);
+      /* the phone's room on the computer follows the switch; a computer targeted: its name asked (again) */
+      setBleMcp(mcp);
+      if (target && mcp) bleTargetSet();
     } catch (error) {
       log('error', 'setIoPolicy: ' + String(error));
     }
-  }, [gatesRead, target, webauthn, log]);
+  }, [gatesRead, target, webauthn, mcp, log]);
 
   const [mtu, setMtu] = useState(0);
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -294,6 +305,8 @@ export function useFidoGatt({log, getKey, getBackend, isUnlocked}: Options) {
     confirm,
     webauthn,
     setWebAuthn,
+    mcp,
+    setMcp,
     target,
     setTarget,
   };

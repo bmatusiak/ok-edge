@@ -1,7 +1,8 @@
-import React, {useCallback, useEffect} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {Btn, KeyValue, Section, StatusPill} from '../ui/components';
 import {DriveTap, useDriveControl} from '../drive/registry';
+import {bleRoomState, onBleRoomState, retryBleRoom, type BleRoomState} from '../bleRoom';
 import {theme} from '../ui/theme';
 import {useSharedBtKeyboard} from '../hooks/BtKeyboardContext';
 import {useKeyName} from '../hooks/KeyContext';
@@ -468,9 +469,58 @@ export function BluetoothScreen({
               </View>
             ) : null}
           </Section>
+
+          <BluetoothMcpPanel fido={fido} />
         </>
       ) : null}
     </ScrollView>
+  );
+}
+
+/*
+ * BLUETOOTH MCP (Brad, 2026-11-01: "in bluetooth tab need a new panel called Bluetooth MCP so it can be toggled on and
+ * off ... because we removed vendor toggle we need to add one for the MCP & sync in its own panel"; "the new panel
+ * should show if it's connected to a room"). The switch is the vendor door (useFidoGatt, off by default): on, the target
+ * computer's mcp-server reaches this phone and the phone joins its identity's room there with the login proof
+ * (bleRoom.ts) - agents and sync over Bluetooth, no internet. Below it, that room as it is now.
+ */
+function BluetoothMcpPanel({fido}: {fido: FidoSession}) {
+  const [b, setB] = useState<BleRoomState>(bleRoomState());
+  useEffect(() => onBleRoomState(setB), []);
+  const room = !fido.mcp ? 'Off - a computer\'s mcp-server cannot reach this phone over Bluetooth.'
+    : !fido.target ? 'No target - choose the computer above.'
+    : !b.host ? 'Waiting for the target\'s mcp-server to link.'
+    : b.status === 'joined' ? `In this key's room on ${b.host}.`
+    : b.status === 'joining' ? `Joining the room on ${b.host}…`
+    : b.status === 'error' ? `Not in the room on ${b.host}: ${b.why ?? 'unknown'}`
+    : `${b.host} is linked - the room is joined once this key's bucket is open.`;
+  const sealed = b.sealed.status === 'synced' ? `its copy: synced${b.sealed.at ? ` at ${new Date(b.sealed.at).toLocaleTimeString()}` : ''}`
+    : b.sealed.status === 'none' ? 'its copy: it keeps none for this key'
+    : b.sealed.status === 'syncing' ? 'its copy: syncing…'
+    : b.sealed.status === 'error' ? `its copy: not synced - ${b.sealed.why ?? 'unknown'}`
+    : null;
+  return (
+    <Section title="Bluetooth MCP">
+      <AutoRow
+        label="MCP and sync"
+        hint="The target computer's mcp-server reaches this phone: its agents' plans and this key's sync, over Bluetooth."
+        value={fido.mcp}
+        disabled={fido.supported === false}
+        onChange={fido.setMcp}
+      />
+      <View style={styles.stateRow}>
+        <StatusPill state={b.status === 'joined' ? 'connected' : b.host ? 'advertising' : 'idle'} />
+        <Text style={styles.hostName}>{b.status === 'joined' ? 'in the room' : b.host ? 'linked' : 'not linked'}</Text>
+      </View>
+      <Text style={b.status === 'error' ? styles.error : styles.note}>{room}</Text>
+      {b.status === 'joined' ? (
+        <Text style={styles.note}>
+          {b.peers.length ? `With ${b.peers.map(p => p.name).join(', ')}.` : 'No other device of this key is in it.'}
+          {sealed ? ` ${sealed[0].toUpperCase()}${sealed.slice(1)}.` : ''}
+        </Text>
+      ) : null}
+      {fido.mcp && b.status === 'error' && b.needsKey ? <Btn title="Try again" onPress={retryBleRoom} /> : null}
+    </Section>
   );
 }
 
