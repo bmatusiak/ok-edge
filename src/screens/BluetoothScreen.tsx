@@ -267,7 +267,7 @@ export function BluetoothScreen({
               </>
             ) : (
               <Text style={styles.note}>
-                The computer both features below talk to. Chosen once, then reconnected on its own.
+                The one computer every door below opens to - the keyboard, the authenticator, and MCP and sync. Chosen once, then reconnected on its own.
                 To add another computer, pair from that computer — pick “
                 {bt.localName || 'this phone'}” in its Bluetooth settings.
               </Text>
@@ -496,7 +496,7 @@ function BluetoothMcpPanel({fido}: {fido: FidoSession}) {
     : `${b.host} is linked - the room is joined once this key's bucket is open.`;
   const sealed = b.sealed.status === 'synced' ? `its copy: synced${b.sealed.at ? ` at ${new Date(b.sealed.at).toLocaleTimeString()}` : ''}`
     : b.sealed.status === 'none' ? 'its copy: it keeps none for this key'
-    : b.sealed.status === 'syncing' ? 'its copy: syncing…'
+    : b.sealed.status === 'syncing' ? 'its copy: syncing'
     : b.sealed.status === 'error' ? `its copy: not synced - ${b.sealed.why ?? 'unknown'}`
     : null;
   return (

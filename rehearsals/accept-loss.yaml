@@ -1,0 +1,20 @@
+# A copy left behind the key's ring is brought back by its loss (the recovery half of lost-links.yaml, on any key):
+# the Edge tab says which links this device cannot reach, the loss is accepted (one press), the copy verifies again.
+# For a testnet key whose copy fell behind (the Pixel, 2026-11-01: app restarts mid-sync, #50-#57 off its 8-link ring).
+appId: com.okrn
+name: Accept a loss the copy cannot cure
+tags:
+  - edge
+---
+- launchApp
+- login: {}
+- goto: Edge
+- extendedWaitUntil:
+    visible: "This (computer|device|phone) cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+    timeout: 60000
+- copyTextFrom: "This (computer|device|phone) cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+- evalScript: '${output.range = maestro.copiedText.match(/\((#\d+–#\d+)\)/)[1]}'
+- tapOn: "Accept loss of ${output.range}…"
+- tapOn: "Yes, accept loss of ${output.range}"
+- waitForLog: 'the LOSS at #\d+ accepted the unreachable links'
+- waitForLog: '-> verified #\d+ \(full\)'
