@@ -51,6 +51,19 @@ import {armWebKey} from '../hooks/useWebKey';
 export type KeyPick = 'Hard key' | 'Soft Key';
 const PICK_OPTIONS: readonly KeyPick[] = ['Hard key', 'Soft Key'];
 
+/*
+ * THE SWITCH ITSELF, for this screen and the two setup screens (Brad, 2026-10-31, walking a new prod hard key's setup on
+ * the desktop: the soft key was blank, so Log in went straight to its setup and the switch - drawn only here - was never
+ * shown; a remembered soft-key pick hid the attached hard key for good).
+ */
+export function KeyPickBar({keyPick}: {keyPick: {value: KeyPick; onChange: (next: KeyPick) => void}}) {
+  return (
+    <View style={styles.pick}>
+      <Segmented options={PICK_OPTIONS} value={keyPick.value} onChange={keyPick.onChange} />
+    </View>
+  );
+}
+
 export function PinScreen({
   onPress,
   onPressRun,
@@ -261,15 +274,7 @@ export function PinScreen({
         * your finger. Choosing after seeing a keypad that is about to vanish
         * would be the wrong order.
         */}
-      {keyPick ? (
-        <View style={styles.pick}>
-          <Segmented
-            options={PICK_OPTIONS}
-            value={keyPick.value}
-            onChange={keyPick.onChange}
-          />
-        </View>
-      ) : null}
+      {keyPick ? <KeyPickBar keyPick={keyPick} /> : null}
 
       {led ? (
         <View style={styles.ledRow}>

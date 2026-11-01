@@ -51,7 +51,7 @@ const SPLASH_SEEN: boolean = (() => {
   }
 })();
 import {LoginScreen} from './src/screens/LoginScreen';
-import {PinScreen} from './src/screens/PinScreen';
+import {KeyPickBar, PinScreen, type KeyPick} from './src/screens/PinScreen';
 import {SetupScreen} from './src/screens/SetupScreen';
 import {HardKeySetupScreen} from './src/screens/HardKeySetupScreen';
 import NativeFidoGatt from 'okedge-native/specs/NativeFidoGatt';
@@ -202,6 +202,16 @@ function Shell() {
     isUnlocked,
   });
   const keys = useKey({softLog: emuLog.log, hardLog: hardLog.log, fidoPending: fido.pending});
+  /*
+   * THE SOFT KEY / HARD KEY SWITCH, wherever a key is chosen: the PIN screen and both setup screens. OFFERED ONLY WHEN
+   * THERE IS SOMETHING TO CHOOSE BETWEEN - no hard key on the bus, or no soft key here (the web app), no row. Picking
+   * writes the OVERRIDE rather than the mode: the mode is a standing preference ("prefer the hard key when one is
+   * attached"), and this is someone saying which key they mean right now, for this login.
+   */
+  const keyPick: {value: KeyPick; onChange: (next: KeyPick) => void} | null =
+    keys.attached === true && SOFT_KEY_HERE
+      ? {value: keys.backend === 'usb' ? 'Hard key' : 'Soft Key', onChange: next => keys.setOverride(next === 'Hard key' ? 'usb' : 'embedded')}
+      : null;
 
 
   backendRef.current = keys.backend;
@@ -897,14 +907,20 @@ function Shell() {
             />
           ) : phase === 'setup' && keys.backend === 'usb' ? (
             /* a hard key's PIN goes in on its own buttons - nothing here can press them */
-            <HardKeySetupScreen onDone={() => setPhase('login')} />
+            <>
+              {keyPick ? <KeyPickBar keyPick={keyPick} /> : null}
+              <HardKeySetupScreen onDone={() => setPhase('login')} />
+            </>
           ) : phase === 'setup' ? (
-            <SetupScreen
-              onDone={() => setPhase('login')}
-              model={emu.model}
-              onProvision={emu.provision}
-              led={keys.backend === 'embedded' ? emu.led : undefined}
-            />
+            <>
+              {keyPick ? <KeyPickBar keyPick={keyPick} /> : null}
+              <SetupScreen
+                onDone={() => setPhase('login')}
+                model={emu.model}
+                onProvision={emu.provision}
+                led={keys.backend === 'embedded' ? emu.led : undefined}
+              />
+            </>
           ) : phase === 'identity' ? (
             <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => { setPassed(true); setPhase('main'); }} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
           ) : phase === 'pin' ? (
@@ -916,25 +932,7 @@ function Shell() {
               model={emu.model}
               settling={emu.settling}
               led={keys.backend === 'embedded' ? emu.led : undefined}
-              /*
-               * OFFERED ONLY WHEN THERE IS SOMETHING TO CHOOSE BETWEEN. With
-               * no hard key on the bus the row would be two options one of
-               * which does nothing, so it is not drawn at all.
-               *
-               * Picking writes the OVERRIDE rather than the mode: the mode is
-               * a standing preference ("prefer the hard key when one is
-               * attached"), and this is someone saying which key they mean
-               * right now, for this login.
-               */
-              keyPick={
-                /* where there is no soft key (the web app), the hard key is the only key: nothing to pick */
-                keys.attached === true && SOFT_KEY_HERE
-                  ? {
-                      value: keys.backend === 'usb' ? 'Hard key' : 'Soft Key',
-                      onChange: next =>
-                        keys.setOverride(next === 'Hard key' ? 'usb' : 'embedded'),
-                    }
-                  : null
+              keyPick={keyPick
               }
               onBack={() => setPhase('login')}
               /*
