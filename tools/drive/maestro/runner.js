@@ -26,6 +26,13 @@
  * - runScript's file runs as an async function (await is allowed) with env as variables, `output`, `maestro`
  *   (copiedText, platform) and `drive` (the drive's API: waitForLog, machine, say, app, shot).
  * An unknown command fails the flow by its name - nothing is skipped silently.
+ *
+ * ONE NAME PER FLOW, A FILE PER PLATFORM ONLY WHERE IT DIFFERS (Brad, 2026-11-01: "if a flow is different between
+ * platforms we use .platform.yaml, so we still call flow without platform and it runs on the intended platform - generic
+ * flows that exist between platforms are not redundant"): the app's own file naming (x.android.ts / x.desktop.ts /
+ * x.webapp.ts). A flow or script is always named plainly - `rehearse login`, `runFlow: login.yaml`, `runScript:
+ * scripts/x.js` - and `login.<shell>.yaml` (android / desktop / webapp) runs in its place on that shell when it exists,
+ * else `login.yaml`. No `when: platform` branches inside a shared flow, no copy per platform.
  */
 const fs = require('fs');
 const path = require('path');
@@ -34,6 +41,19 @@ const yaml = require('js-yaml');
 const { login, budget } = require('../flows');
 
 const PLATFORM = { android: 'Android', webapp: 'Web', desktop: 'Desktop' };
+const SHELLS = Object.keys(PLATFORM);
+
+/**
+ * The file a plain name means on this shell: name.<shell>.ext beside it when there is one, else the name itself. A name
+ * that already names a shell (login.android.yaml) is taken as written.
+ */
+function forShell(file, shell) {
+  const ext = path.extname(file);
+  const base = file.slice(0, -ext.length);
+  if (SHELLS.some((sh) => base.endsWith(`.${sh}`))) return file;
+  const own = `${base}.${shell}${ext}`;
+  return fs.existsSync(own) ? own : file;
+}
 
 /* a flow file: the header and the commands, as Maestro writes them (a lone list is commands with no header) */
 function loadFlow(file) {
@@ -120,7 +140,9 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
     for (const c of commands) await run(c, env, dir);
   }
 
-  async function runFile(file, env) {
+  async function runFile(named, env) {
+    const file = forShell(named, d.app.shell);
+    if (file !== named) say(`${path.basename(named)}: ${path.basename(file)} on ${maestro.platform}`);
     const f = loadFlow(file);
     const flowEnv = { ...interp(f.config.env || {}, env), ...env };
     say(`flow ${f.config.name || path.basename(file)}${f.config.appId ? ` (${f.config.appId})` : ''} on ${maestro.platform}`);
@@ -211,7 +233,7 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
       case 'runScript': {
         const spec = typeof a === 'string' ? { file: a } : a;
         if (!holds(spec.when, env)) return;
-        const file = path.resolve(dir, spec.file);
+        const file = forShell(path.resolve(dir, spec.file), d.app.shell);
         const code = fs.readFileSync(file, 'utf8');
         const ctx = vm.createContext({ ...env, ...(spec.env || {}), output, maestro, drive: driveApi(), console: { log: (...x) => say(x.join(' ')) }, setTimeout, Promise, JSON, Math, RegExp, Date });
         await vm.runInContext(`(async () => {\n${code}\n})()`, ctx, { filename: file });
@@ -278,4 +300,4 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
   return { runFile, output, get drive() { return d; } };
 }
 
-module.exports = { createRunner, loadFlow };
+module.exports = { createRunner, loadFlow, forShell };
