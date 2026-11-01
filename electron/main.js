@@ -34,6 +34,23 @@ if (app.isPackaged) {
 }
 
 /*
+ * A STAND-IN FOR THE USER'S SERVER (the box's drive; Brad, 2026-11-01: "bucket-data-storage-container ~ desktop-app <->
+ * remote-mcp ~ bucket-data-storage-container", the same for the web app and the phone): OKEDGE_STANDIN_HOST names the key's
+ * site, which then resolves to this machine and is trusted with the box's dev certificate - the switches the box's test
+ * Chromium gets for the web app - so the desktop and the web app sync through the same local server under the same name.
+ * A developer's only: cleared above in a release.
+ */
+const STANDIN = process.env.OKEDGE_STANDIN_HOST || null;
+if (STANDIN) {
+  app.commandLine.appendSwitch('host-resolver-rules', `MAP ${STANDIN} 127.0.0.1`);
+  app.on('certificate-error', (event, _wc, url, _err, _cert, callback) => {
+    if (new URL(url).hostname !== STANDIN) return;
+    event.preventDefault();
+    callback(true);
+  });
+}
+
+/*
  * THE TEST BUILD (OKEDGE_FLAVOR=test, electron/start.js): the development export in dist/desktop-test, the phone's debug
  * build - and its OWN page storage (a separate profile), so a test run never reads or writes what the prod build kept.
  * The origin stays https://apps.crp.to, so WebAuthn works the same.

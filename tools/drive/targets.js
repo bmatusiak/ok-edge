@@ -58,6 +58,41 @@ function phoneId() {
 const adb = (args) => run(ADB, ['-s', phoneId(), ...args]);
 
 /* a long-running child of ours: its own process group (Linux), its output in a log */
+/*
+ * THE BOX'S STAND-IN FOR THE USER'S SERVER (Brad, 2026-11-01: "2 main places for buckets to sync ... any 1 of them can bring
+ * new stuff to remote-mcp"): mcp-server's localhost service on 127.0.0.1:443 as the key's site (the dev certificate,
+ * the web app's files, the sealed copy, the login proof required) - ONE process the web app and the desktop both sync
+ * through, so a change one brings the other takes. Its own pid file: it outlives the apps and a drive-remote restart
+ * (the sealed copy is in its memory). DRIVE_STANDIN=0: none - the box's apps use the deployed server.
+ */
+const STANDIN_PID = path.join(ROOT, 'standin.pid');
+const STANDIN_ON = process.env.DRIVE_STANDIN !== '0';
+function standinPid() {
+  try {
+    const pid = Number(fs.readFileSync(STANDIN_PID, 'utf8'));
+    process.kill(pid, 0);
+    return pid;
+  } catch { return null; }
+}
+async function ensureStandin(line) {
+  if (!LINUX || !STANDIN_ON) return null;
+  const up = standinPid();
+  if (up) return `the stand-in server runs (pid ${up})`;
+  const certs = path.join(ROOT, 'devcert');
+  const server = launch('server-dev', NODE, [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--host', '127.0.0.1', '--port', '443',
+    '--assets', path.join(EDGE, 'docs'), '--sealed', '--tls-key', path.join(certs, 'apps.crp.to.key'), '--tls-cert', path.join(certs, 'apps.crp.to.crt'),
+    '--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN || '1'}`]);
+  server.unref();
+  fs.writeFileSync(STANDIN_PID, String(server.pid));
+  const ready = await new Promise((resolve) => {
+    const dog = setTimeout(() => { w && w.close(); resolve(null); }, 30000);
+    const w = follow('server-dev', (l) => { if (/ready on|Error/.test(l)) { clearTimeout(dog); w && w.close(); resolve(l); } });
+  });
+  if (!ready || /Error/.test(ready)) throw new Error(`the stand-in server did not start: ${ready || 'no "ready on" in 30 s'} (logs/server-dev.log)`);
+  if (line) line(`stand-in server: ${ready}`);
+  return `the stand-in server started (pid ${server.pid})`;
+}
+
 function launch(name, cmd, args, env = {}) {
   try { fs.mkdirSync(LOGS, { recursive: true }); } catch { /* the log is a nicety */ }
   const out = fs.openSync(path.join(LOGS, `${name}.log`), 'w');
@@ -142,7 +177,7 @@ let KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' ? 'hard' : 'gadget';
 /* the site the box's keys carry (ctap_bridge's default) - where "Go to <site>" sends the web app */
 const KEY_SITE = process.env.DRIVE_KEY_SITE || 'ok-edge.bmatusiak.workers.dev';
 /* the web app's processes, by their command lines: its browser profile, its local Worker (wrangler dev, workerd) */
-const webappProc = (cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js') || cmd.includes('localhost/main.js') || (cmd.includes('wrangler') && cmd.includes('\0dev\0')) || cmd.includes('workerd\0serve');
+const webappProc = (cmd) => cmd.includes('webapp-chromium') || cmd.includes('serve-docs.js') || (cmd.includes('wrangler') && cmd.includes('\0dev\0')) || cmd.includes('workerd\0serve');
 const EMU = process.env.EMU || path.join(ROOT, 'node-onlykey-emulator', 'emulator');
 const GADGET_STORE = path.join(ROOT, 'webapp-softkey');
 const GADGET_SRC = path.join(os.homedir(), '.config/Electron-test/okemu/plugins-config.edge-test');
@@ -437,6 +472,9 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         const c = running.get('desktop');
         if ((c && !exited(c)) || strayElectrons().length) return 'already running';
         const env = { ...(LINUX ? { OKEDGE_NODE: NODE, DISPLAY: process.env.DRIVE_DISPLAY || ':10' } : {}) };
+        /* on the box: its user's server is the stand-in, under the key's site (electron/main.js OKEDGE_STANDIN_HOST) */
+        const standin = await ensureStandin(line);
+        if (standin) { env.OKEDGE_STANDIN_HOST = KEY_SITE; line(`desktop: the user's server is the box's stand-in - ${standin}`); }
         const child = launch('desktop-test', LINUX ? 'npm' : 'npm.cmd', ['run', 'electron:test', ...(LINUX ? ['--', '--no-sandbox'] : [])], env);
         /* kept after it exits: its exit code is its last words (lastWords); the next start replaces it */
         running.set('desktop', child);
@@ -472,30 +510,19 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
          * Cloudflare in production. 443 needs the box's unprivileged port floor at 443 (/etc/sysctl.d/60-okedge-443.conf).
          * Bound to 127.0.0.1: local-only testing - nothing on the LAN reaches it (the browser here maps both names to it).
          */
-        /*
-         * THE LOCALHOST SERVICE, NOT wrangler dev (Brad, 2026-11-01: "test webapp with local mcp + websocket embedded,
-         * localhost plugin will host the webapp files"): mcp-server's core in plain Node (mcp-server/src/localhost) - the
-         * same rooms, MCP and sealed copy as the Worker, docs/ as its assets, no Cloudflare runtime to build first.
-         */
+        /* the web app's server: the box's stand-in (ensureStandin) - mcp-server's localhost service, shared with the desktop */
+        const serverNote = await ensureStandin(line);
+        if (!serverNote) return 'the web app needs the stand-in server (DRIVE_STANDIN is 0)';
         const certs = path.join(ROOT, 'devcert');
-        const server = launch('server-dev', NODE, [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--host', '127.0.0.1', '--port', '443',
-          '--assets', path.join(EDGE, 'docs'), '--sealed', '--tls-key', path.join(certs, 'apps.crp.to.key'), '--tls-cert', path.join(certs, 'apps.crp.to.crt'),
-          ...(process.env.DRIVE_REQUIRE_LOGIN ? ['--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN}`] : [])]);
-        /* the browser once the server says it is ready - its own line, followed in its log */
-        const ready = await new Promise((resolve) => {
-          const dog = setTimeout(() => { w && w.close(); resolve(null); }, 30000);
-          const w = follow('server-dev', (l) => { if (/ready on|Error/.test(l)) { clearTimeout(dog); w && w.close(); resolve(l); } });
-        });
-        if (!ready || /Error/.test(ready)) return `the local server did not start: ${ready || 'no "ready on" in 30 s'} (logs/server-dev.log)`;
         const spki = fs.readFileSync(path.join(certs, 'apps.crp.to.spki'), 'utf8').trim();
         /* --disable-popup-blocking: a drive's tap is not a person's gesture, and "Go to <site>" opens a tab (window.open) - only this test profile */
         const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333', '--disable-popup-blocking',
           `--host-resolver-rules=MAP apps.crp.to 127.0.0.1, MAP ${KEY_SITE} 127.0.0.1`,
           `--ignore-certificate-errors-spki-list=${spki}`, `--user-data-dir=${path.join(ROOT, 'webapp-chromium')}`, '--no-first-run', '--new-window', 'https://apps.crp.to/'],
         { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });
-        running.set('webapp', [server, browser]);
+        running.set('webapp', [browser]);
         followOut('webapp', 'webapp-chromium');
-        return `started at https://apps.crp.to/ (the key's site ${KEY_SITE} on the same local Worker; ${keyNote})`;
+        return `started at https://apps.crp.to/ (the key's site ${KEY_SITE} on ${serverNote}; ${keyNote})`;
       },
       /*
        * THE BROWSER'S WINDOW, PICTURED BY ITS MACHINE (Brad, 2026-10-31: "the webapp screenshot does not see the security
