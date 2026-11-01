@@ -192,8 +192,9 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
   };
 
   return (
-    /* not dismissable: it goes when the key stops waiting. extraBottom: in debug builds React Native's warning toasts sit along the bottom and catch taps */
-    <Sheet tone="edge" extraBottom={48}>
+    /* not dismissable: it goes when the key stops waiting. extraBottom: in debug builds React Native's warning toasts sit along the bottom and catch taps.
+       tone: yellow for an Edge approval, red for every other press */
+    <Sheet tone={showVendor && wait!.w.what === 'edge' ? 'edge' : 'press'} extraBottom={48}>
             {currentNet() === 'test' ? <Text style={[styles.title, {color: theme.io}]}>TESTNET</Text> : null}
             {showDerive ? (
               <DeriveBody d={derive!} />

@@ -28,9 +28,10 @@ import {DriveLayer, DriveTap} from '../drive/registry';
  * press waiting on the key, a live Edge request) - the sheet goes away when its owner hides it.
  */
 
-export type SheetTone = 'edge' | 'guestbook' | 'neutral';
+/* press: an ordinary press on the key - red (Brad, 2026-10-31: "edge sheets are yellow, bluetooth are blue, can regular press outline be red for normal presses") */
+export type SheetTone = 'edge' | 'guestbook' | 'press' | 'neutral';
 
-const TONE_COLOR: Record<SheetTone, string | null> = {edge: theme.warn, guestbook: theme.accentHover, neutral: null};
+const TONE_COLOR: Record<SheetTone, string | null> = {edge: theme.warn, guestbook: theme.accentHover, press: theme.error, neutral: null};
 /* room left above a full-height sheet, under the status bar */
 const TOP_GAP = 24;
 

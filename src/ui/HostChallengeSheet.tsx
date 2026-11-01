@@ -17,7 +17,7 @@ export function HostChallengeSheet() {
   /* a hard key's only: the soft key's wait has its own sheet with its button (PressSheet, from the firmware's record) */
   if (!c || activeBackend() !== 'usb') return null;
   return (
-    <Sheet title="Press the key">
+    <Sheet tone="press" title="Press the key">
       <PressIcon />
       <Text style={styles.what}>{c.what}</Text>
       {c.digits.length ? (
