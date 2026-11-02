@@ -93,14 +93,38 @@ function show(name) {
   $('shotsHead').textContent = name === DRIVE ? 'every picture, newest first' : name === RUNS_TAB ? 'click a run: its pictures and samples' : `${name}'s pictures, newest first`;
 }
 
+/*
+ * LINES DRAWN ONCE A FRAME (Brad, 2026-11-01: "the drive window is not responsive, locked up" - its renderer at full CPU,
+ * 690 MB and growing, while the soft key's console and the web app's key requests logged hundreds of lines a second):
+ * each line was its own append and its own scroll, a layout per line. Now lines wait in a queue per tab and one frame
+ * draws them all - one append, one trim, one scroll - and a tab more than MAX_LINES behind drops the oldest unseen ones.
+ */
+const pending = new Map();
+let frame = 0;
 function addLine(name, l) {
   const t = tabOf(name);
-  const div = document.createElement('div');
-  div.textContent = l;
-  div.className = classOf(l);
-  t.log.appendChild(div);
-  while (t.log.childElementCount > MAX_LINES) t.log.firstChild.remove();
-  if (follow && name === current) t.log.scrollTop = t.log.scrollHeight;
+  let q = pending.get(t);
+  if (!q) { q = []; pending.set(t, q); }
+  q.push(l);
+  if (q.length > MAX_LINES) q.splice(0, q.length - MAX_LINES);
+  if (!frame) frame = requestAnimationFrame(drawLines);
+}
+function drawLines() {
+  frame = 0;
+  for (const [t, q] of pending) {
+    const batch = document.createDocumentFragment();
+    for (const l of q) {
+      const div = document.createElement('div');
+      div.textContent = l;
+      div.className = classOf(l);
+      batch.appendChild(div);
+    }
+    t.log.appendChild(batch);
+    let extra = t.log.childElementCount - MAX_LINES;
+    while (extra-- > 0) t.log.firstChild.remove();
+    if (follow && t === tabs.get(current)) t.log.scrollTop = t.log.scrollHeight;
+  }
+  pending.clear();
 }
 
 $('follow').onclick = () => {
