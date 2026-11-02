@@ -1,0 +1,20 @@
+# THE AGENT IDENTITY ON THIS DESKTOP'S TESTNET SOFT KEY (once - `edge setup`, made by the CLI, kept by this app): the
+# CLI on the app's machine asks it beside the flow; this app's sheet approves it, the drive presses the test key. The
+# ship (ship-proof.yaml) signs and pushes as this identity. Testnet only.
+#   run.js rehearse --app desktop@box agent-setup
+name: The agent identity on the testnet soft key
+tags:
+  - edge
+---
+- runFlow: desktop-soft-key.yaml
+- runScript: scripts/setup-start.js
+- waitForTap:
+    what: 'agent identity'
+    timeout: 120000
+- tapOn: "Approve"
+- runScript: scripts/setup-end.js
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: gadget
