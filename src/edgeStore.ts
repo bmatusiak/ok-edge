@@ -13,7 +13,7 @@
  *     hashes to its receipt link.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {block, chain, codes, copy, grants, sync as syncLib, receipts} from 'node-onlykey-lib/edge';
+import {block, chain, codes, copy, grants, sync as syncLib, receipts, verdict as verdictLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import type {EdgeCopyKey, EdgeLinkRecord, EdgeSource} from './edge/types';
 import {raiseAlarms} from './edgeAlerts';
@@ -334,25 +334,8 @@ export async function forgetMirror(deviceId: Uint8Array): Promise<void> {
 
 const seqOf = (r: EdgeLinkRecord) => chain.decodeLink(r.link).seq;
 
-/*
- * THE ANCHOR A CHECK STARTS FROM, or null: a fresh copy is anchored at the key's checkpoint (no history read before it),
- * but once it holds the chain from its start - the CLI's history came in (edgeSoftKey.takeShared) - the anchor no longer
- * stands in for anything: the check runs from genesis and every link is checked (chain.chainStart: seq 0, or a CONTINUE;
- * or a LOSS in the copy covering everything before its first link - the key accepted those as gone, and the full check
- * verifies that LOSS like any link: box key 2, 2026-10-29, whose CLI copy starts at #110 after a LOSS of #0-#109).
- */
-function anchorOf(mirror: Mirror): {seq: number; head: Uint8Array} | null {
-  if (!mirror.anchor) return null;
-  /* re-anchored at a LOSS this copy holds (anchorAfterLoss): nothing before the lost range welds to what follows - checked from the LOSS */
-  const at = mirror.anchor.seq;
-  if (mirror.links.some(l => seqOf(l) === at && chain.decodeLink(l.link).op === codes.OP.LOSS)) return mirror.anchor;
-  const first = mirror.links[0];
-  if (!first) return mirror.anchor;
-  const f = chain.decodeLink(first.link);
-  if (f.seq === 0 || f.op === codes.OP.CONTINUE) return null;
-  const covered = copy.lossesIn(mirror.links).some((l: {from: number; to: number}) => l.from === 0 && l.to >= f.seq - 1);
-  return covered ? null : mirror.anchor;
-}
+/* the anchor a check starts from, or null: the lib's (edge/src/verdict.js anchorOf) */
+const anchorOf = (mirror: Mirror): {seq: number; head: Uint8Array} | null => verdictLib.anchorOf(mirror);
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /*
@@ -484,7 +467,7 @@ export const chainState = {
       if (prev?.head && prev.head.seq === head.seq && toHex(prev.head.head) === toHex(head.head)) {
         const was = verifiedNow.get(id);
         const m = await loadMirror(source.deviceId);
-        if (was && was.seq === head.seq && was.head === toHex(head.head) && sameCopy(m.links, was)) {
+        if (was && was.seq === head.seq && was.head === toHex(head.head) && sameAsKept(m.links, was)) {
           const a: ChainAnswer = {...prev, path: 'skipped', at: Date.now(), ms: Date.now() - t0};
           answers.set(id, a);
           return a;
@@ -903,9 +886,9 @@ export async function liveView(source: EdgeSource, mirror: Mirror, known?: {seq:
 function shortPath(mirror: Mirror, head: {seq: number; head: Uint8Array}): boolean {
   const was = verifiedNow.get(toHex(mirror.deviceId));
   if (!was) return false;
-  if (was.seq === head.seq && was.head === toHex(head.head) && sameCopy(mirror.links, was)) return true;
+  if (was.seq === head.seq && was.head === toHex(head.head) && sameAsKept(mirror.links, was)) return true;
   return was.verdict.kind === 'verified' && was.count > 0 && was.count <= mirror.links.length &&
-    (mirror.links.length > was.count || head.seq > was.seq) && samePrefix(mirror.links, was);
+    (mirror.links.length > was.count || head.seq > was.seq) && prefixOfKept(mirror.links, was);
 }
 
 /* the grant ids the copy has seen opened (grant-create links) */
@@ -947,37 +930,6 @@ function sealDue(mirror: Mirror, live: number[]): boolean {
   return grantIdsIn(mirror).some(id => !live.includes(id) && !before.has(id));
 }
 
-/*
- * THE SEALED START (BLOCKS.md). With nothing verified this session: the newest
- * seal at or below the copy's end, its signature checked with the public key the
- * key gave THIS session (whose device id must be this copy's). copy.assess then
- * welds the stored links to it like any anchor. Anything that does not fit -> null,
- * and the caller checks in full.
- */
-/* why the last sealed start was not used, said once per reason (a fallback is never silent) */
-let sealNoSaid = '';
-function sealedStart(mirror: Mirror, head: {seq: number}, key: EdgeCopyKey | null): {seq: number; head: Uint8Array} | null {
-  const no = (why: string) => {
-    if (mirror.seals?.length && sealNoSaid !== why) { sealNoSaid = why; console.log(`[edge] sealed start not used: ${why}`); }
-    return null;
-  };
-  if (!mirror.seals?.length || !mirror.links.length) return null;
-  if (!key?.publicKey) return no('the key gave no public key this session');
-  let deviceId: Uint8Array;
-  try { deviceId = chain.deviceIdOf(key.publicKey); } catch { return no('the public key is not an Edge key'); }
-  if (toHex(deviceId) !== toHex(mirror.deviceId)) return no(`the public key is another device's (${toHex(deviceId).slice(0, 8)} vs ${toHex(mirror.deviceId).slice(0, 8)})`);
-  const lastSeq = seqOf(mirror.links[mirror.links.length - 1]);
-  const seal = [...mirror.seals].reverse().find(x => x.seq <= lastSeq && x.seq <= head.seq);
-  if (!seal) return no('no seal at or below the end of the copy');
-  /*
-   * An OLDER checkpoint (one anchor per copy, 2026-10-10): checked by its P-256 half only. The
-   * newest one - the key's live checkpoint this session - is the hybrid anchor, checked with
-   * both halves in evaluateWith before any of this is used.
-   */
-  if (!chain.verifyCheckpointP256({deviceId, seq: seal.seq, head: seal.head}, seal.signature, key.publicKey)) return no(`the seal at #${seal.seq} does not verify`);
-  /* the stored links are welded to it by copy.assess, as every anchor is - a copy that starts late (the Pixel's, at #268) works as in the full check */
-  return {seq: seal.seq, head: seal.head};
-}
 
 /** The Sync button: the next check of this key's copy is a full one, from the root. */
 export function forgetVerifiedFor(deviceId: Uint8Array) {
@@ -998,8 +950,11 @@ export function forgetVerifiedFor(deviceId: Uint8Array) {
  *   head moved, older part the same -> only the new links, from the verified head
  *   anything else (copy changed)    -> full check (red if it fails)
  */
-/* seq/head: the key's head then; count/lastSeq/lastHead: the copy's links then, and its last one (whose stored head the full check confirmed) */
-type Verified = {seq: number; head: string; count: number; lastSeq: number; lastHead: string; records: EdgeLinkRecord[]; verdict: Verdict; unverified: number[]};
+/*
+ * THE KEPT STATE OF THE LAST CHECK, per device: the lib verdict's own (edge/src/verdict.js) - plain data, the copy compared
+ * by a digest of its links, not by the records' identity - so it could be kept across a restart (S4; not yet: in memory).
+ */
+type Verified = {seq: number; head: string; count: number; lastSeq: number; lastHead: string; digest: string; verdict: Verdict; unverified: number[]};
 /* the copy holds exactly the records this session verified / starts with them (the rest appended) */
 function samePrefix(links: EdgeLinkRecord[], was: {records: EdgeLinkRecord[]}): boolean {
   if (links.length < was.records.length) return false;
@@ -1009,6 +964,9 @@ function samePrefix(links: EdgeLinkRecord[], was: {records: EdgeLinkRecord[]}): 
 function sameCopy(links: EdgeLinkRecord[], was: {records: EdgeLinkRecord[]}): boolean {
   return links.length === was.records.length && samePrefix(links, was);
 }
+/* the same, against a kept verdict state (its digest) */
+const sameAsKept = (links: EdgeLinkRecord[], st: Verified) => st.count === links.length && verdictLib.digestOf(links) === st.digest;
+const prefixOfKept = (links: EdgeLinkRecord[], st: Verified) => st.count <= links.length && verdictLib.digestOf(links, st.count) === st.digest;
 const verifiedNow = new Map<string, Verified>();
 /*
  * WHERE THE VERIFY TIME GOES (A13, 2026-10-07: "verify 740" on a check that was
@@ -1018,204 +976,44 @@ let vlaps: Record<string, number> = {};
 const vlap = (n: string, t0: number) => { vlaps[n] = (vlaps[n] ?? 0) + Date.now() - t0; };
 /* the path each verdict took, for the sync's log line: not saved, nothing sensitive */
 let lastCheck: 'full' | 'new-links' | 'sealed' | 'skipped' | null = null;
+/* the verdict's log lines; why a sealed start was not used is said once per reason (a fallback is never silent) */
+let sealNoSaid = '';
+const sayVerify = (t: string) => {
+  if (t.startsWith('sealed start not used')) { if (t === sealNoSaid) return; sealNoSaid = t; }
+  console.log(`[edge] ${t}`);
+};
 
 export function evaluate(mirror: Mirror, head: {seq: number; head: Uint8Array; ringFrom: number} | null, held: EdgeLinkRecord[] = [], key: EdgeCopyKey | null = null): EdgeView {
   return evaluateWith(mirror, head, held, key, false)!;
 }
 
 /*
- * noFull: the quick path (liveView, without the key's ring). When only the full
- * check would do, it stops and says so (null) instead of running the full check
- * WITHOUT the ring and having liveView run it again with it - after a burst of
- * links on a Galaxy A13 that was 22.5 s of checking in one sync (2026-10-07).
+ * THE CHECK IS THE LIB'S (edge/src/verdict.js - the hybrid anchor, the sealed start, only the new links, notHere,
+ * unsigned; R27): this keeps its state per device and draws the rows. noFull: the quick path (liveView, without the
+ * key's ring) - null when only the full check would do, so liveView runs it once with the ring (a Galaxy A13 burst,
+ * 2026-10-07, checked twice for 22.5 s).
  */
 function evaluateWith(mirror: Mirror, head: {seq: number; head: Uint8Array; ringFrom: number} | null, held: EdgeLinkRecord[], key: EdgeCopyKey | null, noFull: boolean): EdgeView | null {
   const td = Date.now();
   const decoded = mirror.links.map(r => ({r, f: chain.decodeLink(r.link)}));
   vlap('decode', td);
-  /*
-   * NO HEAD BYTES (the key never reveals its head - the host welds it from its copy): a host that holds no copy of this
-   * chain yet (a new computer, 2026-10-31 the box with key 2) knows the seq and not the head - the same as not synced,
-   * until a copy arrives (the bucket's edge logs, or this host following the chain from its start).
-   */
-  if (!head || !head.head) {
-    return {verdict: {kind: 'not-synced'}, headSeq: null, lastSync: mirror.lastSync, rows: rowsOf(decoded, new Set(), mirror), setAside: asideOf(mirror), refusals: mirror.refusals, continued: mirror.continued ?? null};
-  }
+  const base = {lastSync: mirror.lastSync, setAside: asideOf(mirror), refusals: mirror.refusals, continued: mirror.continued ?? null};
+  /* no head bytes: not synced yet (a host with no copy of this chain knows the seq, not the head) */
+  if (!head || !head.head) return {verdict: {kind: 'not-synced'}, headSeq: null, rows: rowsOf(decoded, new Set(), mirror), ...base};
   const id = toHex(mirror.deviceId);
-  const headHex = toHex(head.head);
   const tc = Date.now();
-  const viewOf = (verdict: Verdict, unverified: Set<number>): EdgeView => {
-    vlap('check', tc);
-    const tr = Date.now();
-    try {
-      return {verdict, headSeq: head.seq, lastSync: mirror.lastSync, rows: rowsOf(decoded, unverified, mirror), setAside: asideOf(mirror), refusals: mirror.refusals, continued: mirror.continued ?? null};
-    } finally { vlap('rows', tr); }
-  };
-  const was = verifiedNow.get(id);
-  /*
-   * ONE MOMENT OF THE KEY (as lib grants.check, Pixel 2026-10-06; seen again on the
-   * A13 2026-10-07): the head and the key's checkpoint are separate reads, and a link
-   * that lands between them (a push's signature right after a receipt) gives a
-   * checkpoint for a NEWER head than the one checked. As an anchor past the end it
-   * made the new-links check fail and sent every check to the full one. It is only
-   * one anchor: check without it; the next sync has both at the same head.
-   */
-  /* a key with no link yet signs its checkpoint at seq 0xFFFFFFFF (no link): nothing to anchor, nothing landed */
-  const emptyChain = key?.checkpoint?.seq === 0xffffffff;
-  const cp = key?.checkpoint && !emptyChain && key.checkpoint.seq <= head.seq ? key.checkpoint : null;
-  if (key?.checkpoint && !cp && !emptyChain) console.log(`[edge] verify ${id.slice(0, 8)}: the key's checkpoint is for #${key.checkpoint.seq}, the head read was #${head.seq} - a link landed during the sync; checked without it`);
-  const remember = (verdict: Verdict, unverified: number[]) => {
-    const last = decoded[decoded.length - 1];
-    verifiedNow.set(id, {seq: head.seq, head: headHex, count: mirror.links.length, lastSeq: last ? last.f.seq : -1, lastHead: last ? toHex(last.r.head) : '', records: mirror.links.slice(), verdict, unverified});
-  };
-  if (was && was.seq === head.seq && was.head === headHex && sameCopy(mirror.links, was)) {
-    lastCheck = 'skipped';
-    console.log(`[edge] verify ${id.slice(0, 8)}: skipped (same head #${head.seq}, same copy)`);
-    return viewOf(was.verdict, new Set(was.unverified));
-  }
-  /*
-   * A verified copy may carry losses the person accepted (R24) - older history,
-   * unchanged while its records are: they and the seqs they leave unverified carry
-   * over, and only the links after the copy's last verified one are new - the
-   * key's head moved, or the copy caught up with links the key's ring held
-   * (seen on the Pixel: a restart checked the copy, then the sync appended
-   * #292 and checked it all again). A gap or a red verdict always goes to the
-   * full check.
-   */
-  const grew = was && (mirror.links.length > was.count || head.seq > was.seq);
-  if (was && grew && was.verdict.kind === 'verified' && was.count > 0 && was.count <= mirror.links.length &&
-      samePrefix(mirror.links, was)) {
-    const a = copy.assess(
-      {links: mirror.links, openings: key?.openings ?? {}},
-      {publicKey: key?.publicKey, publicKeyPq: key?.publicKeyPq ?? null, deviceId: mirror.deviceId, head: {seq: head.seq, head: head.head}, held, checkpoint: cp},
-      {from: {seq: was.lastSeq, head: fromHex(was.lastHead)}, ringFrom: head.ringFrom},
-    );
-    if (a.chain.ok && !a.chain.gaps.length && !a.open.length && !a.missing.length) {
-      const lost = was.verdict.kind === 'verified' ? was.verdict.lost : undefined;
-      const notHere = was.verdict.kind === 'verified' ? was.verdict.notHere : undefined;
-      const verdict: Verdict = {kind: 'verified', through: head.seq, ...(lost ? {lost} : {}), ...(notHere ? {notHere} : {})};
-      remember(verdict, was.unverified);
-      lastCheck = 'new-links';
-      console.log(`[edge] verify ${id.slice(0, 8)}: new links #${was.lastSeq + 1}..#${head.seq} only`);
-      return viewOf(verdict, new Set(was.unverified));
-    }
-    /* anything but a clean pass: the full check decides (and names what failed) */
-    console.log(`[edge] verify ${id.slice(0, 8)}: new links not clean (${(a.chain.failure ? `${a.chain.failure.reason} at #${a.chain.failure.seq}` : `${a.chain.gaps.length} gap(s), ${a.open.length} open, ${a.missing.length} missing`)}) - full check`);
-  }
-  if (noFull) {
-    lastCheck = 'full';
-    return null;
-  }
-  /*
-   * R27 "what counts as verified": the library's one answer, the same Approve
-   * reads - anchors (genesis, HEAD, every checkpoint the key's own public key
-   * verifies), the gap only what no anchor reaches, minus the key's own links,
-   * and only a verified LOSS later than a gap covers it.
-   *
-   * SEALED (BLOCKS.md; Brad, 2026-10-07: "we only need to verify the new
-   * stuff"). With nothing from this session, the check starts from the newest seal
-   * the key signed - its signature checked against the public key the key gave
-   * THIS session - which stands in for every signature at or below it (one per
-   * budget ever opened: the cost that grew with the chain). The stored links are
-   * still welded to it and the verdict is computed as in the full check. A clean
-   * result is the answer; anything else runs again without the seal, and that
-   * full check decides.
-   */
-  /*
-   * THE HYBRID ANCHOR (one ML-DSA anchor per copy; Brad, 2026-10-10). The key's live
-   * checkpoint is this copy's NEWEST: it must verify with both halves - P-256 under
-   * key.publicKey and ML-DSA-65 under key.publicKeyPq (chain.verifyCheckpoint, strict) -
-   * because the older checkpoints (seals, budget openings) are checked by P-256 alone and are
-   * quantum-safe only through the welds up to it. copy.assess would merely leave a bad one out
-   * as an anchor; lib grants.check (verifyCopyKept - Approve runs it, SoftKeyEdge strictHead)
-   * refuses it, so the banner refuses it too: one
-   * answer. No fallback: a checkpoint without its ML-DSA-65 half, or a key that gave no
-   * ML-DSA-65 key, fails here (Edge is unreleased).
-   */
-  let hybridOk = false;
-  if (cp && key?.publicKey) {
-    let ok = false;
-    try {
-      ok = chain.verifyCheckpoint({deviceId: chain.deviceIdOf(key.publicKey), seq: cp.seq, head: cp.head}, cp.signature, key.publicKey, cp.signaturePq ?? null, key.publicKeyPq ?? null);
-    } catch { /* malformed: not ok */ }
-    hybridOk = ok;
-    if (!ok) {
-      lastCheck = 'full';
-      console.log(`[edge] verify ${id.slice(0, 8)}: the key's checkpoint at #${cp.seq} does not verify with both halves (P-256 + ML-DSA-65)`);
-      /* not remembered: the next check is a full one again, with a checkpoint asked afresh */
-      verifiedNow.delete(id);
-      return viewOf({kind: 'tampered', seq: cp.seq, reason: 'bad-checkpoint'}, new Set());
-    }
-  }
-  /* an anchored copy is checked from its anchor (lib copy.assess from: the welds to the signed head prove it) */
-  const anchor = anchorOf(mirror);
-  const sealed = was || anchor ? null : sealedStart(mirror, head, key);
-  const assessWith = (seal: {seq: number; head: Uint8Array} | null) => copy.assess(
-    {links: mirror.links, openings: key?.openings ?? {}},
-    {publicKey: key?.publicKey, publicKeyPq: key?.publicKeyPq ?? null, deviceId: mirror.deviceId, head: {seq: head.seq, head: head.head}, held, checkpoint: cp},
-    anchor
-      ? {from: {seq: anchor.seq, head: anchor.head}, ringFrom: head.ringFrom}
-      : {ringFrom: head.ringFrom, lastSeen: mirror.lastSeen ?? undefined, ...(seal ? {sealed: seal} : {})},
+  const r = verdictLib.verdict(
+    {deviceId: mirror.deviceId, links: mirror.links, anchor: mirror.anchor ?? null, seals: mirror.seals ?? [], lastSeen: mirror.lastSeen ?? null},
+    head, key, {held, prev: verifiedNow.get(id) ?? null, noFull, say: sayVerify},
   );
-  let a = sealed ? assessWith(sealed) : null;
-  if (a && sealed && !a.chain.failure && !a.open.length) {
-    lastCheck = 'sealed';
-    console.log(`[edge] verify ${id.slice(0, 8)}: sealed through #${sealed.seq} (its signature checked this session), full checks after it through #${head.seq}`);
-  } else {
-    if (a) console.log(`[edge] verify ${id.slice(0, 8)}: the sealed start was not clean (${a.chain.failure ? `${a.chain.failure.reason} at #${a.chain.failure.seq}` : `${a.chain.gaps.length} gap(s), ${a.open.length} open`}) - full check`);
-    lastCheck = 'full';
-    console.log(`[edge] verify ${id.slice(0, 8)}: full check through #${head.seq}${was && was.seq === head.seq && !sameCopy(mirror.links, was) ? ' (the copy changed under the same head)' : ''}`);
-    a = assessWith(null);
-  }
-  const result = a.chain;
-  const unverified = new Set<number>();
-  /*
-   * UNVERIFIED IS WHAT IS REALLY MISSING (lib copy.assess `missing`): a gap's links the key vouches for are checked -
-   * the ones its ring holds, and the link right after a verified LOSS whose `next` hash matches it (R24). Green1 (key 3),
-   * 2026-10-29: the LOSS #586 for #565-#577 carries #578's hash, yet #578 was drawn unverified and the take refused
-   * all of the CLI's links for it - the lib had it as vouched all along.
-   */
-  for (const g of a.missing) for (let s = g.from; s <= g.to; s++) unverified.add(s);
-  /*
-   * NOTHING AT OR BEFORE THE ANCHOR WAS CHECKED (copy.assess from the anchor leaves those links out): they are not drawn
-   * green, and takeOwnLinks never keeps one on this check's word. Found 2026-10-29 (the audit for the CLI's history in
-   * the web app): links offered from before a fresh copy's anchor came out "verified" unchecked. A copy that reaches
-   * back to the chain's start has no anchor (anchorOf) - the full check from genesis decides every link.
-   */
-  if (anchor) for (const {f} of decoded) if (f.seq <= anchor.seq) unverified.add(f.seq);
-  let verdict: Verdict;
-  const open: {from: number; to: number}[] = a.open;
-  const lost: {from: number; to: number}[] = a.missing;
-  if (result.failure) verdict = {kind: 'tampered', seq: result.failure.seq, reason: result.failure.reason};
-  /*
-   * A GAP BENEATH A CONFIRMED CHECKPOINT (the Pixel's live chain, 2026-10-30: #157-#160 never reached this device - swiped
-   * away before the copy kept them - and the red "does not match the key" stood there for good, every sync a full check):
-   * the key signed its head with both halves (hybridOk, above), the links after the gap weld up to it, and the ones
-   * before it are checked as always. The missing links are history this device does not hold - kept as notHere, drawn as
-   * such, fetched from another device when one has them - and the copy counts as verified, so the next sync checks only
-   * new links. Without that signature a gap is still a gap.
-   */
-  else if (open.length && hybridOk) verdict = {kind: 'verified', through: head.seq, notHere: open, ...(lost.length ? {lost} : {})};
-  else if (open.length) verdict = {kind: 'gap', through: result.verifiedThrough, from: open[0].from, to: open[0].to};
-  else if (lost.length) verdict = {kind: 'verified', through: head.seq, lost};
-  else verdict = {kind: 'verified', through: result.verifiedThrough};
-  /*
-   * VERIFIED NEEDS A SIGNATURE (Brad, 2026-10-11: "checking every field in a token means nothing
-   * if we never check the signature"). The welds above only prove the links lead to the head the
-   * key reported; the key's checkpoint verifying with both halves is what proves the key signed
-   * that head. A checkpoint that could not be read, or was for a newer head (dropped above), left
-   * this check with no signature at all - and it used to end "verified" anyway. Not any more:
-   * "unsigned", never kept as this session's verified state, so the next check is a full one with
-   * the checkpoint asked again (liveView asks once more at once).
-   */
-  /* a key with nothing recorded yet (head #-1) has no link to sign and nothing to trust */
-  if (verdict.kind === 'verified' && !hybridOk && head.seq >= 0) {
-    console.log(`[edge] verify ${id.slice(0, 8)}: no checkpoint of the key verified in this check - not checked yet (unsigned)`);
-    verifiedNow.delete(id);
-    return viewOf({kind: 'unsigned', through: verdict.through}, unverified);
-  }
-  remember(verdict, [...unverified]);
-  return viewOf(verdict, unverified);
+  vlap('check', tc);
+  if (!r) { lastCheck = 'full'; return null; }
+  if (r.state) verifiedNow.set(id, r.state as Verified); else verifiedNow.delete(id);
+  lastCheck = r.path as typeof lastCheck;
+  const tr = Date.now();
+  try {
+    return {verdict: r.verdict as Verdict, headSeq: head.seq, rows: rowsOf(decoded, new Set(r.unverified as number[]), mirror), ...base};
+  } finally { vlap('rows', tr); }
 }
 
 /*
