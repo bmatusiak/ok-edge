@@ -15,6 +15,7 @@ import NativeShare from 'okedge-native/specs/NativeShare';
 import {supports} from '../firmwareFeatures';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const keychain = require('node-onlykey-lib/keychain');
+import {useDriveField} from '../drive/registry';
 import {applyHeldKeyChain, keychainList, onKeyChainRecorded, saveKeyChainList, updateKeyChainList} from '../keyChainRecorder';
 import {
   type Probe, type Entry, type Job, type DeviceType, type HostType, type RemoveTarget, SLOTS, slotName, DEVICE_TYPES, KIND_TITLE,
@@ -158,6 +159,9 @@ export function KeyChainScreen({
   const [deriveVersion, setDeriveVersion] = useState<'v1' | 'v2'>('v1');
   const [deriveType, setDeriveType] = useState('p256');
   const [deriveLabel, setDeriveLabel] = useState('');
+  /* the derive form's name field: its placeholder says what to type for the scheme, and the drive fills it by that */
+  const derivePlaceholder = scheme === 'SSH' ? 'user@host' : scheme === 'GPG' ? 'Name <email>' : 'label (e.g. example.com)';
+  useDriveField(derivePlaceholder, setDeriveLabel);
   const [devType, setDevType] = useState<DeviceType>('ed25519');
   const [devKind, setDevKind] = useState('ssh');
   const [name, setName] = useState('');
@@ -994,7 +998,7 @@ export function KeyChainScreen({
                 onChangeText={setDeriveLabel}
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder={scheme === 'SSH' ? 'user@host' : scheme === 'GPG' ? 'Name <email>' : 'label (e.g. example.com)'}
+                placeholder={derivePlaceholder}
                 placeholderTextColor={theme.textDim}
                 style={styles.input}
               />

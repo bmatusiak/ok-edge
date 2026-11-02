@@ -19,8 +19,10 @@ env:
 - waitForAnimationToEnd
 # a label of this run's own, so a second run is a new key, not "Already in the App"
 - evalScript: '${output.label = "kc-rehearsal-" + Date.now()}'
-- tapOn: "label \\(e.g. example.com\\)"
-- inputText: "${output.label}"
+# the name field, by its placeholder (a field the drive fills: useDriveField)
+- inputText:
+    text: "${output.label}"
+    field: "label (e.g. example.com)"
 - tapOn: "Derive and keep"
 - assertVisible:
     text: "Derived and kept in the App: ${output.label}\\."
