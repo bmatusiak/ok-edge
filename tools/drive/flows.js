@@ -213,6 +213,14 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180, key = null } = {}) {
       continue;
     }
     else if (now === 'keypad' && await gadget(d)) await unlockOutsideKey(d, pin);
+    /*
+     * A SOFT-KEY LOGIN NEVER TYPES ON A USB KEY'S KEYPAD (box desktop, 2026-11-01: the gadget on the box's USB was the
+     * desktop's key, "Enter testing mode" did not change that, and the testing PIN went to the gadget - a wrong attempt).
+     * A key whose debug console answers is a USB key, not the soft key: stopped, nothing typed.
+     */
+    else if (now === 'keypad' && key === 'soft' && d.app.flags.consoleAnswers === true) {
+      throw new Error('login: the keypad is a USB key\'s, not the soft key\'s (its console answers) - nothing typed; take the USB key off first (the box gadget: machine use-key hard)');
+    }
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
     /*

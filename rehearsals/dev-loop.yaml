@@ -8,7 +8,17 @@ tags:
   - agents
   - edge
 ---
-# the desktop's own testnet soft key - its own chain, its local MCP - never the box's shared gadget
+# the box's gadget off the USB first: while it is there the desktop takes it as its key (the web app's key, not this
+# desktop's soft key) - on again at the end
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: hard
+# started again with no USB key: it comes up on its soft key
+- stopApp
+- launchApp
+# the desktop's own testnet soft key - its own chain, its local MCP
 - login:
     key: soft
 - goto: Edge
@@ -16,3 +26,8 @@ tags:
 - runScript: scripts/plan-agent-start.js
 - runFlow: mcp-plan.yaml
 - runScript: scripts/plan-agent-end.js
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: gadget
