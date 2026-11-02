@@ -22,8 +22,19 @@
   nav button .dot.fail { color: var(--bad); }
   /* a command's tab (a build, the CLI): a terminal's look */
   .log.cli { background: #07090b; color: #c8d3c0; font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; line-height: 1.35; }
-  main { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
-  .log { overflow-y: auto; padding: 6px 12px; white-space: pre-wrap; word-break: break-word; min-height: 0; }
+  /*
+   * THE BUTTONS NEVER LEAVE THE WINDOW (Brad, 2026-11-01: "the drive server did not like being resized, and is hiding
+   * gui elements" - "I see no activity" could not be hit): a 1fr column is at least its log's widest line, so a long
+   * line pushed the picture bar off the window. The log's column may shrink to nothing; the bar keeps 220-320 px, and
+   * a narrow window puts the bar above the log instead of beside it.
+   */
+  html, body { overflow: hidden; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 320px); min-height: 0; min-width: 0; }
+  .log { overflow-y: auto; overflow-x: hidden; padding: 6px 12px; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; min-height: 0; min-width: 0; }
+  @media (max-width: 640px) {
+    main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    aside { order: -1; border-left: none; border-bottom: 1px solid #2a313b; max-height: 40vh; }
+  }
   .log .fail { color: var(--bad); } .log .pass { color: var(--ok); } .log .press { color: var(--warn); } .log .run { color: var(--accent); }
   /* the picture bar: the button stays at its top, only the list under it scrolls */
   aside { border-left: 1px solid #2a313b; display: flex; flex-direction: column; min-height: 0; }
