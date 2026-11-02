@@ -218,9 +218,15 @@ function pressWhenAsked(app) {
     if (!led) return;
     const colour = led[1];
     if (!waiting(colour) || touched || codeOpen || pressing) return;
+    /*
+     * TWO KINDS OF WAIT, TWO GUARDS (box web app, 2026-11-01 22:05: a login card's certify over WebAuthn needed a browser
+     * touch - LED yellow-green #525c00 - and then the Edge press - LED plain yellow #525200, "[keybusy] the key waits for its
+     * press"; one guard for both took the touch as the answer and the press never came). The LED answers the touches;
+     * plain yellow is the Edge press, the press icon's and [keybusy]'s to answer (their own guard, below).
+     */
+    const [lr, lg] = [1, 3].map((i) => parseInt(colour.slice(i, i + 2), 16));
+    if (lr === lg && lr > 0x30) return;
     touched = true;
-    /* one wait, one press: the icon's line for this same wait must not press again (shared guard, below) */
-    iconAnswered = true;
     pressing = true;
     try {
       const s = await procFor(app, 'key-state');
@@ -248,19 +254,14 @@ function pressWhenAsked(app) {
        unlocked key types a slot. The app's next request step ("[timeline] begin/end") opens it again. */
     if (/^\[timeline\] \d+ (begin|end) /.test(l)) { iconAnswered = false; return; }
     /*
-     * ONE GUARD FOR BOTH TRIGGERS (box web app, 2026-11-01: the press icon and the gadget's waiting LED each pressed the
-     * same wait - two presses at 20:25:22, and the key's next wait in that loss went unanswered until it gave up). A press
-     * from either marks the step answered for both, until the app's next request step.
+     * THE EDGE PRESS: the press icon and the web app's "[keybusy] the key waits for its press" both name the same wait -
+     * one guard for the two, until the app's next request step. The LED's browser touches are a different wait with their
+     * own guard (above). A code's "key waits: ... - buttons" is under neither - its digits are what the key asked for.
      */
-    if (icon && (codeOpen || iconAnswered || touched)) return;
-    if (icon) { iconAnswered = true; touched = true; }
-    /*
-     * AND THE WEB APP'S OWN "the key waits for its press" (box web app, 2026-11-01 20:32:52: the icon, this line and the
-     * LED each pressed the loss's one wait - three presses, the loss failed): the same one guard. A code's "key waits:
-     * ... - buttons" is not under it - its digits are what the key asked for.
-     */
-    if (edgeWait && (codeOpen || iconAnswered || touched)) return;
-    if (edgeWait) { iconAnswered = true; touched = true; }
+    if (icon && (codeOpen || iconAnswered)) return;
+    if (icon) iconAnswered = true;
+    if (edgeWait && (codeOpen || iconAnswered)) return;
+    if (edgeWait) iconAnswered = true;
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
     if (outside) {
       if (pressing) return;

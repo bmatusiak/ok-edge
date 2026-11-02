@@ -1,0 +1,16 @@
+# The login card, made on this device (a press): its certify's checkpoint carries a gate token, filed as the card's top
+# at once - Edge then warms up here with no press, and on any host that shares the bucket (WARM_GATE, the cold boot).
+name: Make the login card
+tags:
+  - edge
+---
+- tapOn:
+    text: "Make the card"
+    timeout: 30
+- waitForLog:
+    pattern: '\[card\] this device.s login card certified at #\d+'
+    timeout: 120000
+    idle: none
+- waitForLog:
+    pattern: '\[card\] top filed'
+    timeout: 60000
