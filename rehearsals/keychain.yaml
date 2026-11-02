@@ -12,11 +12,13 @@ env:
 - runFlow: login.yaml
 - goto: Key Chain
 - waitForAnimationToEnd
-# "On this App" - the second "+ Add" (the first is "On this Key")
+# "On this App"'s "+ Add" (the drive lists controls as they registered: index 1 is "On this Key"'s) - its editor
+# offers Derive, which the key's does not
 - tapOn:
     text: "\\+ Add"
-    index: 1
+    index: 0
 - waitForAnimationToEnd
+- assertVisible: "Derive"
 # a label of this run's own, so a second run is a new key, not "Already in the App"
 - evalScript: '${output.label = "kc-rehearsal-" + Date.now()}'
 # the name field, by its placeholder (a field the drive fills: useDriveField)
