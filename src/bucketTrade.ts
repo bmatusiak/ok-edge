@@ -54,8 +54,15 @@ async function ensureMe(): Promise<void> {
   const sealed = await AsyncStorage.getItem(KEY(open.identity));
   if (sealed) {
     const j = JSON.parse(okbytes.fromHex(await NativeSecrets.boxOpen(ALIAS, sealed)).reduce((s: string, c: number) => s + String.fromCharCode(c), ''));
-    me = {id: open.identity, identityPublicKey: okbytes.fromHex(j.i), bucketKey: {secretKey: okbytes.fromHex(j.s), publicKey: okbytes.fromHex(j.p)}, certificate: okbytes.fromHex(j.c)};
-    return;
+    const kept: Me = {id: open.identity, identityPublicKey: okbytes.fromHex(j.i), bucketKey: {secretKey: okbytes.fromHex(j.s), publicKey: okbytes.fromHex(j.p)}, certificate: okbytes.fromHex(j.c)};
+    /*
+     * USED ONLY IF ITS CERTIFICATE VERIFIES (the survey of 2026-11-02: the CLI checked its kept copy, this app did not -
+     * a copy with a certificate from other bytes would be used, and every proof from it refused): the lib's one check
+     * (bucket-identity certifies). One that fails is dropped and made again below.
+     */
+    if (bucketLib.bucketIdentity.certifies(kept)) { me = kept; return; }
+    console.log(`[bucket] ${open.identity.slice(0, 12)}: the kept bucket key's certificate does not verify - dropped, made again`);
+    await AsyncStorage.removeItem(KEY(open.identity));
   }
   const {okcrypto} = await getOnlyKey(activeBackend());
   const ok = okcrypto as any;
@@ -80,6 +87,10 @@ async function ensureMe(): Promise<void> {
   const ask = challengeOpts(`Certifying this ${DEVICE_WORD}'s bucket key`);
   let certificate;
   try { certificate = await bucketLib.bucketIdentity.certify(ok, identity.publicKey, bucketKey.publicKey, ask.opts); } finally { ask.done(); }
+  /* checked before it is kept, as the CLI does (bucket/cli/trade.js makeMe) */
+  if (!bucketLib.bucketIdentity.certifies({id: open.identity, identityPublicKey: identity.publicKey, bucketKey, certificate})) {
+    throw new Error("the key's certificate for this device's bucket key does not verify - not kept (the key's answers were not its own?)");
+  }
   const text = JSON.stringify({i: okbytes.toHex(identity.publicKey), s: okbytes.toHex(bucketKey.secretKey), p: okbytes.toHex(bucketKey.publicKey), c: okbytes.toHex(certificate)});
   await AsyncStorage.setItem(KEY(open.identity), await NativeSecrets.boxSeal(ALIAS, okbytes.toHex(new TextEncoder().encode(text))));
   await AsyncStorage.removeItem(OLD_KEY(open.identity));
