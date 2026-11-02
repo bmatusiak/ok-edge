@@ -26,7 +26,7 @@ import {getOnlyKey, type Backend} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {shell} from './platform';
 import OkEmu from './transport/OkEmu';
-import {chainState, evaluate, loadMirror, takeOwnLinks, type EdgeView} from './edgeStore';
+import {chainState, evaluate, loadMirror, ownEnd, takeOwnLinks, type EdgeView} from './edgeStore';
 import {keptRun} from './linkStash';
 /* keys whose shared records this app run has offered already (desktop) */
 const takenShared = new Set<string>();
@@ -385,14 +385,9 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
      * its newer links onto the last head this app's mirror holds - told to the lib's tracker before anything names the
      * head (the login budget, a TX start). No key request. A host whose mirror is empty has no head until it syncs.
      */
-    const mirror = await loadMirror(deviceId).catch(() => null);
-    const last = mirror?.links[mirror.links.length - 1];
-    if (last?.head && typeof (app.edge as any).knownHead === 'function') {
-      (app.edge as any).knownHead(require('node-onlykey-lib/edge').chain.decodeLink(last.link).seq, last.head, deviceId);
-    } else if (!last && mirror?.anchor && typeof (app.edge as any).knownHead === 'function') {
-      /* a copy that starts at a checkpoint and holds nothing after it yet: its anchor is where it ends */
-      (app.edge as any).knownHead(mirror.anchor.seq, mirror.anchor.head, deviceId);
-    }
+    /* the last link's head, or the anchor of a copy that holds nothing after it yet (the lib's history store, ends) */
+    const end = await ownEnd(deviceId).catch(() => null);
+    if (end && typeof (app.edge as any).knownHead === 'function') (app.edge as any).knownHead(end.seq, end.head, deviceId);
     await soft.takeShared().catch((e: any) => console.log(`[edge] shared records: not read - ${String(e?.message ?? e)}`));
     return soft;
   }
@@ -496,9 +491,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
 
   async warmUp(): Promise<void> {
     /* the copy may have grown since open() (the bucket's log, takeShared): where it ends now, then the top only if needed */
-    const mirror = await loadMirror(this.deviceId).catch(() => null);
-    const last = mirror?.links[mirror.links.length - 1];
-    if (last?.head) this.edge.knownHead(chain.decodeLink(last.link).seq, last.head, this.deviceId);
+    const end = await ownEnd(this.deviceId).catch(() => null);
+    if (end) this.edge.knownHead(end.seq, end.head, this.deviceId);
     const top = (await this.edge.head()).head ? null : await require('./loginCard').cardTop(toHex(this.deviceId));
     const cp = await this.edge.warmUp(top);
     console.log(`[edge] warmed up at #${cp?.seq ?? '-'}: ${top ? `the login card's top (#${top.checkpoint.seq} + ${top.links.length} link(s))` : 'this host already held the head'}`);

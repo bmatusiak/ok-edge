@@ -13,7 +13,7 @@
  *     hashes to its receipt link.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {block, chain, codes, copy, grants, sync as syncLib, receipts, verdict as verdictLib} from 'node-onlykey-lib/edge';
+import {block, chain, codes, copy, grants, historystore, sync as syncLib, receipts, verdict as verdictLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import type {EdgeCopyKey, EdgeLinkRecord, EdgeSource} from './edge/types';
 import {raiseAlarms} from './edgeAlerts';
@@ -23,26 +23,14 @@ import {currentNet, edgeKey} from './net';
 const KEY_PREFIX = (): string => edgeKey('mirror.');
 const READ_BATCH = 16;
 
-type StoredMirror = {
-  /* 1 since the clean start (Brad, 2026-10-07); a copy without it is the old chain's and is not read */
-  v?: number;
-  deviceId: string;
-  links: {link: string; head: string; reveal?: string}[];
-  messages: Record<string, string>;
-  lastSeen: {seq: number; head: string} | null;
-  lastSync: number | null;
-  /* where this copy starts: the key's checkpoint a new device anchored on (no history before it is held) */
-  anchor?: {seq: number; head: string};
-  setAside?: {link: string; head: string; at: number}[];
-  seen?: Record<string, number>;
-  reasons?: Record<string, {computer: string; text: string; at: number}>;
-  refusals?: {computer: string; seq: number; status: string; at: number}[];
-  publicKey?: string;
-  publicKeyPq?: string;
-  continued?: ContinueCheck | null;
-  merged?: {seq: number; head: string; signature: string; signaturePq?: string; at: number}[];
-  seals?: {seq: number; head: string; signature: string; signaturePq?: string; ended: number[]}[];
-};
+/*
+ * THE COPY'S STORE IS THE LIB'S (S4 step 8, 2026-11-02: node-onlykey-lib edge/src/historystore.js): the same key and
+ * stored form this file wrote (v1 JSON in AsyncStorage), the session's copy and the guard against writing over an edit
+ * made to the stored copy - one store a CLI or another host keeps the same way. Every copy already held reads as it is.
+ */
+const history = historystore.createHistory({kv: AsyncStorage, prefix: KEY_PREFIX});
+/** Where this device's copy of a key ends - the last link's head, or the anchor of an empty copy: told to the key's session (knownHead). */
+export const ownEnd = (deviceId: Uint8Array): Promise<{seq: number; head: Uint8Array} | null> => history.ends(deviceId);
 
 /*
  * R28: this copy's chain begins with a CONTINUE link - checked once against the
@@ -188,48 +176,6 @@ export type EdgeRow = {
   note?: {computer: string; text: string; at: number};
 };
 
-const storageKey = (deviceId: Uint8Array) => KEY_PREFIX() + toHex(deviceId);
-
-/*
- * THE COPY IN MEMORY FOR THE SESSION (option A; Brad, 2026-10-07: "option A is good").
- * Every sync read the whole copy back from storage, parsed it, and hashed it to see
- * whether anything had edited it - on the A13 ~130 ms to load and 60-500 ms to hash,
- * every sync. Now storage is read once a session; after that the copy lives here and
- * storage is only written. Other apps cannot edit this process's memory, so the copy
- * in memory is the one this session checked: what changed since is told by its
- * RECORDS - the same objects (appended to) or not - with nothing to hash.
- *   An edit to the copy in STORAGE while the app runs must still turn red, so it is
- *   never written over: each save first reads the stored text back and compares it
- *   with what this session last read or wrote (a string compare - no parsing, no
- *   hashing). Different: something else wrote it - the save is not made, the copy in
- *   memory is dropped, and the next sync reads storage and checks it (red if edited).
- *   Found by its test (2026-10-07): without this the next save quietly erased the
- *   edit. The Sync button (forgetVerifiedFor) and a restart read storage at once.
- * Records are never changed in place (tamper replaces them), and loadMirror hands out
- * a copy of the lists, so a caller that changes it without saving changes nothing.
- */
-const inMemory = new Map<string, Mirror>();
-/* the stored text as this session last read or wrote it */
-const storedText = new Map<string, string>();
-function cloneMirror(m: Mirror): Mirror {
-  return {
-    ...m, links: m.links.slice(), messages: {...m.messages}, seen: {...m.seen}, reasons: {...m.reasons},
-    refusals: m.refusals.slice(), setAside: m.setAside.slice(),
-    ...(m.merged ? {merged: m.merged.slice()} : {}), ...(m.seals ? {seals: m.seals.slice()} : {}),
-  };
-}
-/* each record's stored form, kept with it: a save turns only the NEW records into hex (A13: "save 80-290") */
-type StoredLink = StoredMirror['links'][number];
-const storedForm = new WeakMap<EdgeLinkRecord, StoredLink>();
-function storedOf(l: EdgeLinkRecord): StoredLink {
-  let x = storedForm.get(l);
-  if (!x) {
-    x = {link: toHex(l.link), head: l.head ? toHex(l.head) : '', ...(l.reveal ? {reveal: toHex(l.reveal)} : {})};
-    storedForm.set(l, x);
-  }
-  return x;
-}
-
 /*
  * ANOTHER DEVICE'S LOG IS THE BUCKET'S (S4 step 5, 2026-11-02): its blocks are in the identity bucket's edge-logs already -
  * every device files its own there - so this device no longer copies them into a mirror of its own. What it keeps per
@@ -290,46 +236,11 @@ export async function otherLog(deviceId: Uint8Array): Promise<Mirror> {
 }
 
 export async function loadMirror(deviceId: Uint8Array): Promise<Mirror> {
-  const kept = inMemory.get(toHex(deviceId));
-  if (kept) return cloneMirror(kept);
-  const m = await readMirror(deviceId);
-  inMemory.set(toHex(deviceId), m);
-  return cloneMirror(m);
+  return history.load(deviceId) as Promise<Mirror>;
 }
 
-async function readMirror(deviceId: Uint8Array): Promise<Mirror> {
-  const raw = await AsyncStorage.getItem(storageKey(deviceId));
-  if (raw) storedText.set(toHex(deviceId), raw);
-  else storedText.delete(toHex(deviceId));
-  if (!raw) return {deviceId, links: [], messages: {}, lastSeen: null, lastSync: null, setAside: [], seen: {}, reasons: {}, refusals: []};
-  const s = JSON.parse(raw) as StoredMirror;
-  if (s.v !== 1) {
-    /* the old chain's copy (before the clean start, edgeV1.ts): not read - this key starts again */
-    storedText.delete(toHex(deviceId));
-    return {deviceId, links: [], messages: {}, lastSeen: null, lastSync: null, setAside: [], seen: {}, reasons: {}, refusals: []};
-  }
-  return {
-    deviceId: fromHex(s.deviceId),
-    links: s.links.map(l => {
-      const r = {link: fromHex(l.link), head: fromHex(l.head), reveal: l.reveal ? fromHex(l.reveal) : null};
-      storedForm.set(r, l);
-      return r;
-    }),
-    messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [Number(k), v])),
-    lastSeen: s.lastSeen ? {seq: s.lastSeen.seq, head: fromHex(s.lastSeen.head)} : null,
-    lastSync: s.lastSync,
-    anchor: s.anchor ? {seq: s.anchor.seq, head: fromHex(s.anchor.head)} : null,
-    setAside: (s.setAside ?? []).map(x => ({link: fromHex(x.link), head: fromHex(x.head), at: x.at})),
-    seen: Object.fromEntries(Object.entries(s.seen ?? {}).map(([k, v]) => [Number(k), v])),
-    reasons: Object.fromEntries(Object.entries(s.reasons ?? {}).map(([k, v]) => [Number(k), v])),
-    refusals: s.refusals ?? [],
-    publicKey: s.publicKey ? fromHex(s.publicKey) : null,
-    publicKeyPq: s.publicKeyPq ? fromHex(s.publicKeyPq) : null,
-    continued: s.continued ?? null,
-    merged: (s.merged ?? []).map(a => ({seq: a.seq, head: fromHex(a.head), signature: fromHex(a.signature), ...(a.signaturePq ? {signaturePq: fromHex(a.signaturePq)} : {}), at: a.at})),
-    seals: (s.seals ?? []).map(x => ({seq: x.seq, head: fromHex(x.head), signature: fromHex(x.signature), ...(x.signaturePq ? {signaturePq: fromHex(x.signaturePq)} : {}), ended: x.ended ?? []})),
-  };
-}
+/* from the store, the session's copy untouched (an old mirror's `merged`, read once by acceptedPoints) */
+const readMirror = (deviceId: Uint8Array): Promise<Mirror> => history.read(deviceId) as Promise<Mirror>;
 
 /*
  * A LOST LINK NEVER STRANDS THE KEY (Brad, 2026-10-31: "we certify that we know about the missing block so we can
@@ -351,44 +262,16 @@ export async function anchorAfterLoss(source: EdgeSource, at: {seq: number; head
 }
 
 export async function saveMirror(m: Mirror): Promise<void> {
+  const r = await history.save(m);
+  if (!r.outside) return;
   const id = toHex(m.deviceId);
-  const s: StoredMirror = {
-    v: 1,
-    deviceId: toHex(m.deviceId),
-    links: m.links.map(storedOf),
-    messages: Object.fromEntries(Object.entries(m.messages).map(([k, v]) => [String(k), v])),
-    lastSeen: m.lastSeen ? {seq: m.lastSeen.seq, head: toHex(m.lastSeen.head)} : null,
-    lastSync: m.lastSync,
-    ...(m.anchor ? {anchor: {seq: m.anchor.seq, head: toHex(m.anchor.head)}} : {}),
-    seen: Object.fromEntries(Object.entries(m.seen).map(([k, v]) => [String(k), v])),
-    ...(Object.keys(m.reasons).length ? {reasons: Object.fromEntries(Object.entries(m.reasons).map(([k, v]) => [String(k), v]))} : {}),
-    ...(m.refusals.length ? {refusals: m.refusals} : {}),
-    ...(m.setAside.length ? {setAside: m.setAside.map(x => ({link: toHex(x.link), head: toHex(x.head), at: x.at}))} : {}),
-    ...(m.publicKey ? {publicKey: toHex(m.publicKey)} : {}),
-    ...(m.publicKeyPq ? {publicKeyPq: toHex(m.publicKeyPq)} : {}),
-    ...(m.continued ? {continued: m.continued} : {}),
-    ...(m.merged?.length ? {merged: m.merged.map(a => ({seq: a.seq, head: toHex(a.head), signature: toHex(a.signature), ...(a.signaturePq ? {signaturePq: toHex(a.signaturePq)} : {}), at: a.at}))} : {}),
-    ...(m.seals?.length ? {seals: m.seals.map(x => ({seq: x.seq, head: toHex(x.head), signature: toHex(x.signature), ...(x.signaturePq ? {signaturePq: toHex(x.signaturePq)} : {}), ended: x.ended}))} : {}),
-  };
-  const text = JSON.stringify(s);
-  const now = await AsyncStorage.getItem(storageKey(m.deviceId));
-  if (inMemory.has(id) && now !== (storedText.get(id) ?? null)) {
-    console.log(`[edge] the stored copy of ${id.slice(0, 8)} was changed outside this session - not written over; the next sync reads it back and checks it`);
-    inMemory.delete(id);
-    verifiedNow.delete(id);
-    answers.delete(id);
-    return;
-  }
-  inMemory.set(id, cloneMirror(m));
-  if (now === text) return; /* nothing new to store */
-  await AsyncStorage.setItem(storageKey(m.deviceId), text);
-  storedText.set(id, text);
+  console.log(`[edge] the stored copy of ${id.slice(0, 8)} was changed outside this session - not written over; the next sync reads it back and checks it`);
+  verifiedNow.delete(id);
+  answers.delete(id);
 }
 
 export async function forgetMirror(deviceId: Uint8Array): Promise<void> {
-  inMemory.delete(toHex(deviceId));
-  storedText.delete(toHex(deviceId));
-  await AsyncStorage.removeItem(storageKey(deviceId));
+  await history.forget(deviceId);
 }
 
 const seqOf = (r: EdgeLinkRecord) => chain.decodeLink(r.link).seq;
@@ -595,10 +478,10 @@ async function continuedFrom(mirror: Mirror): Promise<ContinueCheck | null> {
   try { f = first ? chain.decodeLink(first.link) : null; } catch { return null; }
   if (!f || f.op !== OP_CONTINUE) return null;
   const own = toHex(mirror.deviceId);
-  const keys = (await AsyncStorage.getAllKeys()).filter(k => k.startsWith(KEY_PREFIX()) && k !== KEY_PREFIX() + own);
+  const keys = (await history.ids()).filter(id => id !== own);
   let unverifiable: ContinueCheck | null = null;
-  for (const k of keys) {
-    const old = await loadMirror(fromHex(k.slice(KEY_PREFIX().length)));
+  for (const id of keys) {
+    const old = await loadMirror(fromHex(id));
     const r = copy.checkContinue(first.link, {deviceId: old.deviceId, links: old.links});
     if (r.ok) return {ok: true, fromDeviceId: toHex(old.deviceId), oldSeq: r.oldSeq ?? f.seq - 1, debtsChecked: r.debtsChecked};
     if (r.reason === 'unverifiable') unverifiable = {ok: false, fromDeviceId: toHex(old.deviceId), oldSeq: r.oldSeq ?? f.seq - 1, reason: 'unverifiable'};
@@ -778,64 +661,32 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
 }
 
 /**
- * onlykey-js edge sync phase 2 (Brad, 2026-10-05): a place that keeps copies offers
- * links for this phone's copy. Merged into a CANDIDATE, checked the same way
- * every sync is (liveView: the key's head, its ring, its checkpoint - R27),
- * and NOT saved: the caller (edgeAgents, on COMMIT) keeps the added links with
- * keepOffered once the candidate verifies - its own key's links, no sheet and
- * no press since 2026-10-08 (before that: a sheet, Yes, a press and the key's
- * `sync` link). A link that disagrees with one this copy already holds
- * is a fork - reported, never chosen between (the copy stays as it is).
- */
-export async function mergeOffered(source: EdgeSource, offered: EdgeLinkRecord[], now = Date.now()):
-  Promise<{candidate: Mirror; added: EdgeLinkRecord[]; conflicts: number[]; view: EdgeView}> {
-  const mirror = await loadMirror(source.deviceId);
-  const m = syncLib.merge(mirror.links, offered);
-  const candidate: Mirror = {...mirror, links: m.links, seen: {...mirror.seen}};
-  for (const r of m.added) candidate.seen[seqOf(r)] = candidate.seen[seqOf(r)] ?? now;
-  const view = await liveView(source, candidate);
-  return {candidate, added: m.added, conflicts: m.conflicts, view};
-}
-
-/**
- * Take links offered for THIS key's own chain - from a computer that asks (edgeAgents), or
- * on the desktop from this computer's shared records - by one set of rules: no fork, the copy
- * verifies with them, every added link checked against the key. Kept only then.
+ * Take links offered for THIS key's own chain (on the desktop, this computer's shared records - edgeSoftKey takeShared)
+ * by the lib's one set of rules (S4 step 6: edge verdict.takeOwn - no fork, the copy verifies with them, every added
+ * link checked against the key unless an accepted loss covers it). The copy WITH them is checked as every copy is
+ * (liveView: the key's head, its ring, its checkpoint - R27); kept only then, by the lib's store (historystore.take)
+ * in the sync queue - merged into the copy as it is then, not saved from the candidate. A fork is reported, never
+ * chosen between. The key's OWN links merge at once (Brad, 2026-10-08: "Own links direct").
  */
 export async function takeOwnLinks(source: EdgeSource, offered: EdgeLinkRecord[]):
   Promise<{ok: true; count: number} | {ok: false; refusal: string; detail: string}> {
-  const m = await mergeOffered(source, offered);
-  /*
-   * A LINK INSIDE A RANGE THE KEY ACCEPTED AS LOST (a LOSS link, R24) cannot be checked against the
-   * key, and the LOSS accounts for it - it is not refused for that, and it stays: the link after it
-   * welds to it (key 1, 2026-10-24: a second LOSS #387-#390 covered #390, which this computer's copy
-   * still held; left out, #391 could not be checked either).
-   */
-  const losses = copy.lossesIn(m.candidate.links);
-  const lost = (seq: number) => losses.some((l: {from: number; to: number}) => l.from <= seq && seq <= l.to);
-  if (m.conflicts.length) {
-    return {ok: false, refusal: 'invalid', detail: `a fork: this copy holds different links at #${m.conflicts.join(', #')} - nothing taken; settle it in the app`};
+  const mirror = await loadMirror(source.deviceId);
+  const m = syncLib.merge(mirror.links, offered);
+  const candidate: Mirror = {...mirror, links: m.links};
+  const view = await liveView(source, candidate);
+  const rule = verdictLib.takeOwn({
+    added: m.added, conflicts: m.conflicts, verdict: view.verdict,
+    verifiedSeqs: view.rows.filter(r => r.verified).map(r => r.seq), losses: copy.lossesIn(candidate.links),
+  });
+  if (!rule.ok) {
+    const seqs = candidate.links.map(seqOf);
+    console.log(`[edge] take: copy #${seqs[0]}..#${seqs[seqs.length - 1]} (${seqs.length}), verdict ${JSON.stringify(view.verdict)} - ${rule.detail}`);
+    return rule;
   }
-  if (m.added.length && m.view.verdict.kind !== 'verified' && m.view.verdict.kind !== 'gap') {
-    return {ok: false, refusal: 'copy_unverified', detail: `with those links this copy would not verify (${m.view.verdict.kind}) - nothing taken`};
-  }
-  /*
-   * EVERY LINK TAKEN IS A CHECKED ONE (Brad, 2026-10-11: "checking every field in a token means
-   * nothing if we never check the signature"). A "gap" verdict means part of the copy cannot be
-   * checked; links offered INSIDE such a gap were kept unchecked, and the real links at those
-   * seqs refused later as a "fork". Each added link must be verified in the copy it lands in -
-   * welded to the key's signed checkpoint - or nothing is taken.
-   */
-  const verifiedSeqs = new Set(m.view.rows.filter(r => r.verified).map(r => r.seq));
-  const unchecked = m.added.map(seqOf).filter(seq => !verifiedSeqs.has(seq) && !lost(seq));
-  if (unchecked.length) {
-    const seqs = m.candidate.links.map(seqOf);
-    console.log(`[edge] take: copy #${seqs[0]}..#${seqs[seqs.length - 1]} (${seqs.length}), verdict ${JSON.stringify(m.view.verdict)}, ${unchecked.length} unchecked from #${unchecked[0]}`);
-    return {ok: false, refusal: 'copy_unverified', detail: `#${unchecked.slice(0, 5).join(', #')}${unchecked.length > 5 ? '…' : ''} cannot be checked against the key - nothing taken`};
-  }
-  /* Brad, 2026-10-08 ("Own links direct"): the key's OWN links merge at once - its own, checked against its signature */
   if (m.added.length) {
-    await keepOffered(source.deviceId, m.added);
+    const run = syncing.then(() => history.take(source.deviceId, m.added), () => history.take(source.deviceId, m.added));
+    syncing = run.catch(() => undefined);
+    await run;
     await sync(source).catch(() => undefined);
   }
   return {ok: true, count: m.added.length};
@@ -850,28 +701,6 @@ export function keepSeen(deviceId: Uint8Array, seen: Record<string, number>): Pr
 async function keepSeenNow(deviceId: Uint8Array, seen: Record<string, number>): Promise<void> {
   const mirror = await loadMirror(deviceId);
   for (const [k, v] of Object.entries(seen)) if (Number.isFinite(v) && v > 0) mirror.seen[Number(k)] = v;
-  await saveMirror(mirror);
-}
-
-/**
- * Keep the offered links of this phone's OWN chain (a COMMIT whose candidate verified;
- * until 2026-10-08 only after the key linked the sync). IN THE SYNC QUEUE, and merged
- * into the copy as it is NOW, not saved from mergeOffered's candidate: found on the
- * Pixel (2026-10-05), the background copy sync loaded the mirror while the sheet was
- * up and saved it after this, dropping the five links the person had just approved.
- * A link that now disagrees is a fork: nothing kept.
- */
-export function keepOffered(deviceId: Uint8Array, added: EdgeLinkRecord[], now = Date.now()): Promise<void> {
-  const run = syncing.then(() => keepOfferedNow(deviceId, added, now), () => keepOfferedNow(deviceId, added, now));
-  syncing = run.catch(() => undefined);
-  return run;
-}
-async function keepOfferedNow(deviceId: Uint8Array, added: EdgeLinkRecord[], now: number): Promise<void> {
-  const mirror = await loadMirror(deviceId);
-  const m = syncLib.merge(mirror.links, added);
-  if (m.conflicts.length) throw new Error(`a fork at #${m.conflicts.join(', #')} - nothing kept`);
-  mirror.links = m.links;
-  for (const r of m.added) mirror.seen[seqOf(r)] = mirror.seen[seqOf(r)] ?? now;
   await saveMirror(mirror);
 }
 
@@ -970,7 +799,7 @@ function sealDue(mirror: Mirror, live: number[]): boolean {
 /** The Sync button: the next check of this key's copy is a full one, from the root. */
 export function forgetVerifiedFor(deviceId: Uint8Array) {
   verifiedNow.delete(toHex(deviceId));
-  inMemory.delete(toHex(deviceId)); /* from storage, as at a start: an edit made there shows now */
+  history.drop(deviceId); /* from storage, as at a start: an edit made there shows now */
   answers.delete(toHex(deviceId));
 }
 
