@@ -21,7 +21,8 @@ const KINDS = {
   app: /app connected|app disconnected|drive server gone|remote .* (connected|gone)/, /* apps and remotes coming and going */
   /* a change the key monitor saw ("hard (usb …", "no OnlyKey") - not run.js keys' own answer ("hard key - usb …") */
   keys: /\[keys\] [^:]+: (no OnlyKey|[a-z]+ \((usb|OnlyKey) )/,
-  run: /\[[a-z-]+\] (STOPPED|FINISHED)\b/,                                       /* a drive script ending */
+  /* a drive script ending - not the agent's own queries (log, state, find, doctor, shot): those it already waits on */
+  run: /\[(?!(log|state|find|doctor|shot)\])[a-z-]+\] (STOPPED|FINISHED)\b/,
   press: /\] pressed: /,                                                         /* a press the drive made */
   user: /USER DOES NOT SEE ACTIVITY/,                                            /* Brad's "I see no activity" button */
   failed: /\] key request failed: /,                                             /* an app's key request that stopped (server.js) */

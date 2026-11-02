@@ -22,3 +22,5 @@ tags:
 - waitForLog:
     pattern: '\[mcp\] plan \S+: (done|ended|failed|declined)'
     timeout: 300000
+    # the plan pauses, idle, while the agent fills its placeholder: idle is not an end here
+    idle: none

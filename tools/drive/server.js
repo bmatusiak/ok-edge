@@ -122,6 +122,24 @@ const everyApp = new Set();
  * no longer write into one tab. The host is the drive-remote's machine, or this one's.
  */
 const HOST = require('os').hostname();
+/*
+ * EVERY APP LINE IN A FILE (Brad, 2026-11-01: "need to figure out why you're not getting results back fast enough" - a
+ * loss's own lines were gone from the 300 kept per app within a minute, pushed out by the gadget's firmware console):
+ * each tab's lines appended to drive-logs/apps/<shell (host)>.log, whole, to grep after the fact. The 300 kept in memory
+ * stay for run.js log and the window.
+ */
+const APP_LOGS = path.join(path.dirname(LOG), 'apps');
+const appFiles = new Map();
+bus.on('app-line', (tab, l) => {
+  let f = appFiles.get(tab);
+  if (!f) {
+    try { fs.mkdirSync(APP_LOGS, { recursive: true }); } catch { /* there */ }
+    f = fs.createWriteStream(path.join(APP_LOGS, `${String(tab).replace(/[^\w ().@-]/g, '_')}.log`), { flags: 'a' });
+    f.on('error', () => {});
+    appFiles.set(tab, f);
+  }
+  f.write(`${l}\n`);
+});
 /* an app's key request that ended failed, or a press the key stopped waiting for (the app's own lines) */
 const STOPPED_RE = /^\[timeline\] \d+ end #\d+ .* failed|the key stopped waiting for the press/;
 const tabName = (app) => `${app.shell} (${(app.ws && app.ws.via) || HOST})`;

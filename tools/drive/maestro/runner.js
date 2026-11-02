@@ -310,10 +310,33 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
         if (failedEarly) throw new Error(`no log line /${spec.pattern}/ - the app failed first: ${failedEarly.l.slice(0, 200)}`);
         let stopFail = false;
         const failed = failRe ? d.until(failRe, { life, fail: [] }).then((l) => { if (!stopFail) throw new Error(`no log line /${spec.pattern}/ - the app failed: ${String(l).slice(0, 200)}`); }, () => new Promise(() => {})) : new Promise(() => {});
+        /*
+         * AND WHEN THE APP GOES IDLE WITHOUT IT (Brad, 2026-11-01: "i see it, doing nothing, waiting, i have enough time
+         * to complain before you got the results back"): the watchdog's quiet is reset by every line, and the gadget's
+         * firmware console never stops - so a wait ran a minute and more after the app had stopped. Idle is the app's own
+         * state: no key request in flight (its "[timeline] begin/end" since this step began) and not busy, for `idle` ms
+         * (5 s; `idle: none` waits as before).
+         */
+        const idleMs = spec.idle === 'none' ? 0 : Number(spec.idle || 5000);
+        let inflight = 0;
+        for (const x of seen) if (x.at >= prevStart) { const t = /^\[timeline\] \d+ (begin|end) /.exec(x.l); if (t) inflight = Math.max(0, inflight + (t[1] === 'begin' ? 1 : -1)); }
+        let idleTimer = null;
+        let idleReject = null;
+        const idle = new Promise((_, rej) => { idleReject = rej; });
+        const armIdle = () => {
+          clearTimeout(idleTimer);
+          if (!idleMs || inflight > 0 || (d.app.flags && d.app.flags.busy)) return;
+          idleTimer = setTimeout(() => idleReject(new Error(`no log line /${spec.pattern}/ - the app went idle (no key request, not busy, ${idleMs / 1000} s) without it`)), idleMs);
+        };
+        const onLog = (l) => { const t = /^\[timeline\] \d+ (begin|end) /.exec(String(l)); if (t) { inflight = Math.max(0, inflight + (t[1] === 'begin' ? 1 : -1)); armIdle(); } };
+        d.app.on('log', onLog);
+        d.app.on('controls', armIdle);
+        armIdle();
         const line = await Promise.race([
           d.until(re, { life, fail: [] }).catch((e) => { throw new Error(`no log line /${spec.pattern}/: ${e.message.split('\n')[0]}`); }),
           failed,
-        ]).finally(() => { stopFail = true; });
+          idle,
+        ]).finally(() => { stopFail = true; clearTimeout(idleTimer); d.app.off('log', onLog); d.app.off('controls', armIdle); });
         if (spec.as) output[spec.as] = line;
         return;
       }
