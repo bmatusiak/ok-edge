@@ -313,7 +313,7 @@ async function shotOf(app, name) {
 async function shotNow(by, shell) {
   const targets = [...apps.values()].filter((a) => !shell || a.shell === shell);
   /* by: the window that asked ('host', a remote's machine) - or 'error', the app's own error (#2) */
-  const why = by === 'error' ? 'a picture on an error' : `picture asked from the ${by} window`;
+  const why = by === 'error' ? 'a picture on an error' : by === 'no-activity' ? 'pictures for "I see no activity"' : `picture asked from the ${by} window`;
   line(`${why}${shell ? ` (${shell})` : ''}`);
   /*
    * and a sample of the log with it (Brad: "the picture now should take a sample of the log"): the drive's last lines
@@ -860,6 +860,8 @@ function noActivity() {
   line(`[user] USER DOES NOT SEE ACTIVITY - runs in progress: ${what.length ? what.join(', ') : 'none'}`);
   /* nobody following the log hears it: said where Brad looks (wake-mark.js) */
   if (!require('./wake-mark').wakeWatcher()) line('[user] no wake watcher is running - the agent did not hear this; it should arm one (run.js doctor says so too)');
+  /* AND THE MOMENT KEPT (Brad, 2026-11-01: "the 'i see no activity' should take a snapshot"): every connected app's picture and log sample, as "Picture now" */
+  shotNow('no-activity').catch((e) => line(`[user] no picture: ${e.message}`));
 }
 
 function control(ws) {
