@@ -122,6 +122,8 @@ const everyApp = new Set();
  * no longer write into one tab. The host is the drive-remote's machine, or this one's.
  */
 const HOST = require('os').hostname();
+/* an app's key request that ended failed, or a press the key stopped waiting for (the app's own lines) */
+const STOPPED_RE = /^\[timeline\] \d+ end #\d+ .* failed|the key stopped waiting for the press/;
 const tabName = (app) => `${app.shell} (${(app.ws && app.ws.via) || HOST})`;
 function pickApp(name) {
   if (!name || !String(name).includes('@')) return apps.get(name);
@@ -210,6 +212,13 @@ function pressWhenAsked(app) {
      */
     if (icon && (codeOpen || iconAnswered || touched)) return;
     if (icon) { iconAnswered = true; touched = true; }
+    /*
+     * AND THE WEB APP'S OWN "the key waits for its press" (box web app, 2026-11-01 20:32:52: the icon, this line and the
+     * LED each pressed the loss's one wait - three presses, the loss failed): the same one guard. A code's "key waits:
+     * ... - buttons" is not under it - its digits are what the key asked for.
+     */
+    if (edgeWait && (codeOpen || iconAnswered || touched)) return;
+    if (edgeWait) { iconAnswered = true; touched = true; }
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
     if (outside) {
       if (pressing) return;
@@ -546,7 +555,19 @@ function attachApp(sock) {
     if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
     /* the app says it reloads itself (a newer build): its going is expected */
     if (m.t === 'log' && /^\[web\] reloading/.test(String(m.line))) expectGone(app.shell);
-    if (m.t === 'log') { const l = `${stamp()} ${m.line}`; keep(app.recent, l); bus.emit('app-line', tabName(app), l); app.emit('log', String(m.line)); return; }
+    if (m.t === 'log') {
+      const l = `${stamp()} ${m.line}`;
+      keep(app.recent, l);
+      bus.emit('app-line', tabName(app), l);
+      /*
+       * A KEY REQUEST THAT STOPPED, SAID IN THE DRIVE'S OWN LOG (Brad, 2026-11-01: "need a better way for you to know
+       * when things stop"): app lines reach only the window, so a failed request was seen by nobody listening -
+       * wake.js "failed" wakes the agent on this line at once
+       */
+      if (STOPPED_RE.test(String(m.line))) line(`[${tabName(app)}] key request failed: ${String(m.line).slice(0, 200)}`);
+      app.emit('log', String(m.line));
+      return;
+    }
     /*
      * AN ERROR IN THE APP (drive debugging #2): logged in its tab, the whole message kept in its lines, and a picture
      * with a log sample at once - one per burst: none is asked while one is on its way (an event, not a clock)

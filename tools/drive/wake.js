@@ -24,8 +24,10 @@ const KINDS = {
   run: /\[[a-z-]+\] (STOPPED|FINISHED)\b/,                                       /* a drive script ending */
   press: /\] pressed: /,                                                         /* a press the drive made */
   user: /USER DOES NOT SEE ACTIVITY/,                                            /* Brad's "I see no activity" button */
+  failed: /\] key request failed: /,                                             /* an app's key request that stopped (server.js) */
 };
-const DEFAULT = ['picture', 'bootloader', 'error', 'app', 'user'];
+/* a run ending and a request failing wake by default (Brad, 2026-11-01: "need a better way for you to know when things stop") */
+const DEFAULT = ['picture', 'bootloader', 'error', 'app', 'user', 'run', 'failed'];
 
 const args = process.argv.slice(2);
 if (args.includes('--list')) { for (const [k, re] of Object.entries(KINDS)) console.log(`${k.padEnd(11)} ${re}`); process.exit(0); }

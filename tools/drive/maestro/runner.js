@@ -299,7 +299,21 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
         const re = new RegExp(spec.pattern);
         const early = seen.find((x) => x.at >= prevStart && re.test(x.l));
         if (early) { if (spec.as) output[spec.as] = early.l; return; }
-        const line = await d.until(re, { life, fail: [] }).catch((e) => { throw new Error(`no log line /${spec.pattern}/: ${e.message.split('\n')[0]}`); });
+        /*
+         * A FAILED KEY REQUEST ENDS THE WAIT AT ONCE (Brad, 2026-11-01: "it did end, waiting on nothing! red flag" - the
+         * loss's request failed at 20:32:53 and the flow waited out 60 s of quiet for its success line): the app's own
+         * "[timeline] ... end ... failed" or "the key stopped waiting for the press", since the step before or while
+         * waiting. `failOn` names another failure; `failOn: none` waits as before.
+         */
+        const failRe = spec.failOn === 'none' ? null : new RegExp(spec.failOn || '\\[timeline\\] \\d+ end #\\d+ .* failed|the key stopped waiting for the press');
+        const failedEarly = failRe && seen.find((x) => x.at >= prevStart && failRe.test(x.l));
+        if (failedEarly) throw new Error(`no log line /${spec.pattern}/ - the app failed first: ${failedEarly.l.slice(0, 200)}`);
+        let stopFail = false;
+        const failed = failRe ? d.until(failRe, { life, fail: [] }).then((l) => { if (!stopFail) throw new Error(`no log line /${spec.pattern}/ - the app failed: ${String(l).slice(0, 200)}`); }, () => new Promise(() => {})) : new Promise(() => {});
+        const line = await Promise.race([
+          d.until(re, { life, fail: [] }).catch((e) => { throw new Error(`no log line /${spec.pattern}/: ${e.message.split('\n')[0]}`); }),
+          failed,
+        ]).finally(() => { stopFail = true; });
         if (spec.as) output[spec.as] = line;
         return;
       }
