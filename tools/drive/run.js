@@ -38,7 +38,13 @@ ws.on('message', (data) => {
   if (m.t === 'line') console.log(m.line);
   /* a query's answer: to this caller only, never drawn in the drive windows (server.js driveFor) */
   if (m.t === 'answer') for (const l of m.lines) console.log(l);
-  if (m.t === 'end') { ws.close(); process.exit(m.code); }
+  /* the run's end: its verdict and where its lines are (grep that file - the lines are not sent here) */
+  if (m.t === 'end') {
+    const k = m.keys && (m.keys.requests || m.keys.presses) ? ` · ${m.keys.requests} key request(s) without a press, ${m.keys.presses} press(es)` : '';
+    console.log(`${script} ${m.code === 0 ? 'FINISHED' : `STOPPED: ${m.reason || ''}`} · ${Math.round((m.ms || 0) / 1000)} s${k} · ${m.lines || 0} lines: ${m.file || '(not kept)'}`);
+    ws.close();
+    process.exit(m.code);
+  }
 });
 ws.on('error', (e) => { console.error(`drive: no server (${e.message}) - start the drive app: node tools/drive/launch.js server [--remote ws://<box>:8791]`); process.exit(1); });
 /* the server ending the run is the end; a server that went away is one too */

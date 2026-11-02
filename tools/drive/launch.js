@@ -78,7 +78,11 @@ async function start(mode, rest) {
   /* the Node running this, for the Node programs the drive starts (targets.js NODE): NW.js's own binary is not one */
   const env = { ...process.env, DRIVE_NODE: process.execPath };
   if (process.platform === 'linux') env.DISPLAY = process.env.DRIVE_DISPLAY || process.env.DISPLAY || ':10';
-  const child = spawn(nwBin, [__dirname, mode, ...rest], { detached: true, stdio: 'ignore', env, windowsHide: false });
+  /* NW.js's own output (its stderr is where a crash below the server's handlers lands) - kept, not ignored */
+  const logs = process.env.DRIVE_LOGS || path.join(os.homedir(), process.platform === 'linux' ? 'project/onlykey/logs' : 'drive-logs');
+  fs.mkdirSync(logs, { recursive: true });
+  const out = fs.openSync(path.join(logs, `drive-nw-${mode}.log`), 'a');
+  const child = spawn(nwBin, [__dirname, mode, ...rest], { detached: true, stdio: ['ignore', out, out], env, windowsHide: false });
   child.unref();
   fs.writeFileSync(PIDFILE, JSON.stringify({ pid: child.pid, mode }));
   console.log(`drive ${mode}: NW.js started (pid ${child.pid}) - its window shows every line; close it to stop`);

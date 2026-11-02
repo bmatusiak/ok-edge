@@ -42,6 +42,17 @@ const LOG = process.env.DRIVE_LOG || path.join(process.env.HOME || process.env.U
 let logFile = null;
 
 const stamp = () => new Date().toTimeString().slice(0, 8);
+/*
+ * A CRASH SAYS WHY (Brad, 2026-11-01: "driver server crashed" - the window was gone and its log ended on a FINISHED line,
+ * nothing else): an uncaught error or rejection is written to the log file synchronously (the stream would not flush
+ * before the exit), then the process ends as it would have - nothing is kept running in a broken state.
+ */
+for (const ev of ['uncaughtException', 'unhandledRejection']) {
+  process.on(ev, (e) => {
+    try { fs.appendFileSync(LOG, `${stamp()} CRASHED (${ev}): ${(e && e.stack) || e}\n`); } catch { /* the log itself is gone */ }
+    process.exit(70);
+  });
+}
 /* one line, everywhere it is watched: stdout, the log file, and the callers of the runs that are going */
 const watchers = new Set();
 /* the last lines, for the log sample a picture asked from the window keeps beside it (shotNow) */
@@ -766,7 +777,8 @@ function saveRun({ script, app, args, code, reason, started, lines, files, keys 
     const record = { id, script, app, args, verdict: code === 0 ? 'PASS' : 'FAIL', reason, started: started.toISOString(), ended: ended.toISOString(), ms: ended - started, keys, files, dir };
     fs.writeFileSync(path.join(dir, 'run.json'), `${JSON.stringify(record, null, 2)}\n`);
     bus.emit('run', record);
-  } catch (e) { line(`run record not kept: ${e.message}`); }
+    return record;
+  } catch (e) { line(`run record not kept: ${e.message}`); return null; }
 }
 /* the kept runs, newest last (the window lists them) */
 function pastRuns() {
@@ -813,7 +825,12 @@ function control(ws) {
     let reason = '';
     const run = { script: String(m.script), quietSince: Date.now() };
     running.add(run);
-    const watch = (l) => { runLines.push(l); run.quietSince = Date.now(); send({ t: 'line', line: l }); };
+    /*
+     * THE CALLER GETS THE END, NOT EVERY LINE (Brad, 2026-11-01: "drive server has been FILLING up your context faster
+     * then expected ... have it give log file name, so you can look in it instead of getting the entire log sent to
+     * you"): the lines go to the window, the log and the run's lines.log; run.js prints the verdict and that file.
+     */
+    const watch = (l) => { runLines.push(l); run.quietSince = Date.now(); };
     watchers.add(watch);
     let code = 1;
     let shotApp = null;
@@ -838,10 +855,8 @@ function control(ws) {
       code = 0;
     } catch (e) {
       reason = String(e.message).split('\n')[0];
+      /* no picture at the stop (Brad, 2026-11-01: "remove the trigger that take a snapshot at the end of a command") - run.js shot takes one when wanted */
       line(`[${m.script}] STOPPED: ${e.message}`);
-      /* the picture of where it stopped, taken by the app itself - the newest connection of that shell (a restart makes a new one) */
-      const now = shotApp && apps.get(shotApp.shell);
-      if (now) await shotOf(now, `${m.script}-stopped`);
     } finally {
       running.delete(run);
       bus.off('app-line', onAppLine);
@@ -850,9 +865,9 @@ function control(ws) {
       watchers.delete(watch);
       bus.off('shot', onFile);
       bus.off('sample', onFile);
-      saveRun({ script: String(m.script), app: (shotApp && shotApp.shell) || m.app || '?', args: m.args || [], code, reason, started, lines: runLines, files: runFiles, keys });
+      const rec = saveRun({ script: String(m.script), app: (shotApp && shotApp.shell) || m.app || '?', args: m.args || [], code, reason, started, lines: runLines, files: runFiles, keys });
       if (answered.length) send({ t: 'answer', lines: answered });
-      send({ t: 'end', code });
+      send({ t: 'end', code, reason, keys, ms: Date.now() - started, lines: runLines.length, file: rec ? path.join(rec.dir, 'lines.log') : null });
     }
   });
 }
