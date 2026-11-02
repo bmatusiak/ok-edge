@@ -612,7 +612,16 @@ function driveFor(app, say, answer = () => {}, run = null) {
 
   /* a target's machine, asked directly (#7 health, #1 last words): proc's answer, {ok, what, where} */
   /* the app's own target is asked on the app's own machine (procFor); another target, where it is */
-  const machine = (action, target = app.shell, args = {}) => (target === app.shell && app.ws ? procFor(app, action, args) : proc(action, target, args));
+  /*
+   * an app named @windows/@local/@here is asked on THIS machine even while it is not connected (2026-11-02: `rebuild
+   * --app desktop@windows` built on the box - proc sends a target to the remote that has it first - and started the
+   * Windows desktop on its old build)
+   */
+  const machine = (action, target = app.shell, args = {}) => {
+    if (target === app.shell && app.ws) return procFor(app, action, args);
+    if (target === app.shell && HERE_WORDS.includes(app.where)) return localTargets.act(action, target, args).then((r) => ({ ...r, where: 'this machine' }));
+    return proc(action, target, args);
+  };
   /* every machine at once - this one and each connected remote (run.js doctor) */
   const everywhere = (action, args = {}) => procAll(action, args);
   const api = { app, say, answer, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name), holdPress: (on) => { pressHeld = !!on; say(on ? 'the Edge press is held: the key waits on its own' : 'the Edge press is pressed again'); } };
