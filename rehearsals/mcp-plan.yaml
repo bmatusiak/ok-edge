@@ -12,7 +12,7 @@ tags:
 # the Agents rows are on the Budgets view (the tab may have been left on Presses)
 - tapOn: "Budgets"
 - tapOn:
-    text: "Accept"
+    text: "Accept ${output.agentName || 'mcp-plan-agent'}"
     timeout: 60
 - waitForTap:
     what: 'budget ask'

@@ -54,9 +54,10 @@ function AgentRow({agent, plans}: {agent: Agent; plans: Plan[]}) {
         <Text style={styles.name}>{agent.name}</Text>
         <Text style={[styles.state, {color: stateColor}]}>{agent.state}</Text>
         <View style={{flex: 1}} />
-        {agent.state === 'pending' ? <Btn title="Accept" tone="primary" onPress={() => act('accepted')} disabled={busy} /> : null}
-        {agent.state !== 'blocked' ? <Btn title="Block" tone="danger" onPress={() => act('blocked')} disabled={busy} /> : null}
-        {agent.state !== 'pending' ? <Btn title="Remove" onPress={() => act('removed')} disabled={busy} /> : null}
+        {/* each labelled with its agent (the drive taps "Accept <name>" - 2026-11-01: a flow accepted another room's agent, both rows saying just "Accept") */}
+        {agent.state === 'pending' ? <Btn title="Accept" label={`Accept ${agent.name}`} tone="primary" onPress={() => act('accepted')} disabled={busy} /> : null}
+        {agent.state !== 'blocked' ? <Btn title="Block" label={`Block ${agent.name}`} tone="danger" onPress={() => act('blocked')} disabled={busy} /> : null}
+        {agent.state !== 'pending' ? <Btn title="Remove" label={`Remove ${agent.name}`} onPress={() => act('removed')} disabled={busy} /> : null}
       </View>
       <Text style={styles.dim}>{`agent ${agent.id.slice(0, 12)}…${agent.first ? ` · first seen ${new Date(agent.first).toLocaleString()}` : ''}`}</Text>
       {why ? <Text style={[styles.dim, {color: theme.error}]}>{why}</Text> : null}
