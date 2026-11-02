@@ -145,14 +145,22 @@ export function EdgeRequestSheet() {
    * disabled and wake 1 s after each step appears (the ask, the second confirm, the
    * press); a tap disables them all until the phone has moved to the next step.
    */
-  const [ready, setReady] = useState(false);
+  /*
+   * READY BELONGS TO ONE STEP (box desktop, 2026-11-01: a new sheet's first render still had the last step's ready - its
+   * Approve looked live and "[tap] wanted" was said, the drive tapped, then the reset after that render turned the button
+   * off and the tap was dropped): the step that became ready is remembered, and a new step is not ready from its first
+   * render until its own second has passed.
+   */
+  const step = s ? s.phase : null;
+  const stepAsk = s ? s.ask : null;
+  const [readyFor, setReadyFor] = useState<{phase: string | null; ask: unknown} | null>(null);
   const [acting, setActing] = useState(false);
   useEffect(() => {
-    setReady(false);
     setActing(false);
-    const t = setTimeout(() => setReady(true), 1000);
+    const t = setTimeout(() => setReadyFor({phase: step, ask: stepAsk}), 1000);
     return () => clearTimeout(t);
-  }, [s?.phase, s?.ask]);
+  }, [step, stepAsk]);
+  const ready = !!readyFor && readyFor.phase === step && readyFor.ask === stepAsk;
   const off = !ready || acting;
   /* the person's answer is waited for (not the key's press): the drive's signal (tapWanted) - no icon */
   const asked = s?.ask;
