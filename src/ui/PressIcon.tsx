@@ -1,7 +1,8 @@
 /*
  * THE PRESS ICON (Brad, 2026-10-31: "i think i need a animated press icon, using U+261E ☞ and U+25CE ◎, doing this
- * "☞◎" "☞ ◎" alternating centered"): a finger tapping the key's button, wherever the app waits for a press on the
- * key. Still in testing mode on the testnet (useQuietMotion - the driver reads only a screen that has stopped moving).
+ * "☞◎" "☞ ◎" alternating centered"): a finger tapping the key's button - ON PRESS SHEETS ONLY (Brad, 2026-11-01: "the
+ * touch icon is for press sheets only"; never in a page element - one put in Edge's accept-loss row made the drive press
+ * a wait twice, and a loss failed). Still in testing mode on the testnet (useQuietMotion - the driver reads only a screen that has stopped moving).
  */
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text} from 'react-native';
