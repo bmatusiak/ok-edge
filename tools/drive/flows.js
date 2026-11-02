@@ -221,7 +221,7 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
        * 2026-10-31) - the button live, or the state moved on; only the first is tapped
        */
       await d.until((app) => app.controls.some((c) => c.label === now && c.enabled) || loginState(app) !== now, { life: 30, fail: [] });
-      if (loginState(d.app) === now) await d.tap(now);
+      if (loginState(d.app) === now) await d.tap(now, { unless: (app) => loginState(app) !== now });
     }
     /* the move's effect: the state is another one (or the login is in) */
     await d.until((app) => { const s = loginState(app); return s !== null && s !== now; }, { life: Math.max(5, Math.round((until - Date.now()) / 1000)), fail: [] });

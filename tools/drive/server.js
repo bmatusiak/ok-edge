@@ -343,12 +343,18 @@ function driveFor(app, say, answer = () => {}) {
    * of the controls was a moment old - an overlay opened as the tap went out (2026-10-31, the Pixel: "Approve" is
    * covered) - so it waits for the app's next controls and tries again, within the same watchdog.
    */
-  async function tap(label, { life = 30 } = {}) {
+  /*
+   * unless(app): the tap is no longer wanted - its state moved on by itself (box desktop, 2026-11-01: the login's
+   * "Continue" went as the identity check finished on its own, and the tap waited out its watchdog on a login that was
+   * in). Then nothing is tapped and it returns false.
+   */
+  async function tap(label, { life = 30, unless = null } = {}) {
     const end = Date.now() + life * 1000;
     for (;;) {
       const left = Math.max(1, Math.round((end - Date.now()) / 1000));
-      await until(() => app.controls.some((c) => c.label === label && c.enabled), { life: left, fail: [] })
+      await until(() => app.controls.some((c) => c.label === label && c.enabled) || Boolean(unless && unless(app)), { life: left, fail: [] })
         .catch((e) => { throw failure(`"${label}" never became live: ${e.message.split('\n')[0]}`); });
+      if (unless && unless(app)) { say(`"${label}" not tapped - no longer wanted`); return false; }
       const r = await app.call({ t: 'tap', label });
       if (r.ok) break;
       if (!/is (covered|disabled)/.test(String(r.why)) || Date.now() >= end) throw failure(`tap "${label}": ${r.why}`);
@@ -361,6 +367,7 @@ function driveFor(app, say, answer = () => {}) {
       if (app.closed) throw failure(`tap "${label}": the app went`);
     }
     say(`tapped "${label}"`);
+    return true;
   }
 
   async function fill(field, value, { secret = false } = {}) {
