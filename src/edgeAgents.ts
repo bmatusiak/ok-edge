@@ -63,7 +63,8 @@ async function saveSeen(seen: Set<string>) {
 export type SheetAsk =
   /* no peer, sync, sibling or anchor sheet since 2026-10-08: the phone's own links merge at once; another device's log merges when its signatures check and shows in the Edge tab (its device filter, DeviceFilterSheet, 2026-10-31) */
   /* blocked: why Approve is off - this phone's copy does not verify (R27); Decline still answers */
-  | {kind: 'request'; computer: string | null; view: any; blocked: string | null; at: number}
+  /* plan: the MCP plan this request is the budget of (mcpPlans.ts) - its sheet goes when another device claims it */
+  | {kind: 'request'; computer: string | null; view: any; blocked: string | null; at: number; plan?: string}
   /* SPEC H7 (2026-10-20): a computer sets the agent identity this phone keeps - a tap, no press; `was` = the record it replaces */
   | {kind: 'identity'; computer: string | null; record: any; was: any | null; blocked: null; at: number};
 /* until: when this phase runs out (ms since epoch) - the sheet counts down to it */
@@ -221,7 +222,23 @@ async function computerOf(from: string): Promise<{id: string; name: string} | nu
   return null;
 }
 
-export function handleEdgeMessage(msg: any, from: string): Promise<unknown | null> {
+/*
+ * AN MCP PLAN'S BUDGET (mcpPlans.ts, Step 4b): the plan runs as an agent whose channel is this device's own host, so its
+ * request meets this sheet like a computer's. Two things are its own: `onApprove` claims the plan in its room before the
+ * press (null to go on, or why not - then it is declined here), and the plan id lets withdrawSheet take the sheet down
+ * when another device of the identity claimed it first.
+ */
+export type PlanAsk = {plan: string; onApprove: () => Promise<string | null>};
+let withdrawnPlan: string | null = null;
+/** Another device of the identity runs this plan: its sheet here goes, unanswered by the person (no refusal shown). */
+export function withdrawSheet(plan: string): void {
+  if (current?.phase !== 'ask' || current.ask.kind !== 'request' || current.ask.plan !== plan) return;
+  console.log(`[edge] plan ${plan}: another of your devices runs it - its sheet here goes`);
+  withdrawnPlan = plan;
+  answerSheet('decline');
+}
+
+export function handleEdgeMessage(msg: any, from: string, planAsk?: PlanAsk): Promise<unknown | null> {
   /* B7 stage 2: a note changes nothing, so it never waits behind a sheet */
   if (msg?.type === noteLib.TYPE) return handleNote(msg, from).catch(() => null);
   /* a sheet the person answers: a budget, or the agent identity (a sync is held, never asked - 2026-10-08) */
@@ -233,7 +250,7 @@ export function handleEdgeMessage(msg: any, from: string): Promise<unknown | nul
   /* the time a request spends on the phone, step by step (Brad, 2026-10-06: the A13's slow answers) - times only */
   const arrived = Date.now();
   stepLog = {t0: arrived, at: arrived, parts: []};
-  const run = queue.then(() => { step('queue'); return handle(msg, from); }).catch((e: unknown) => {
+  const run = queue.then(() => { step('queue'); return handle(msg, from, planAsk); }).catch((e: unknown) => {
     /*
      * Never leave the sheet stuck (it sat on "Press" for good when a press
      * timeout came back as a garbled answer, 2026-10-03): end it with the
@@ -443,7 +460,7 @@ const toHexId = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2,
 const fromHexId = (h: string) => Uint8Array.from((String(h).match(/../g) ?? []).map(x => parseInt(x, 16)));
 const seqOfLink = (r: any) => chain.decodeLink(r.link).seq;
 
-async function handle(msg: any, from: string): Promise<unknown | null> {
+async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknown | null> {
   const seen = await loadSeen();
   try {
     /* the Key Chain list is not Edge's (Brad, 2026-10-08: "Move it out of Edge"): Edge's sync carries device logs only */
@@ -481,21 +498,37 @@ async function handle(msg: any, from: string): Promise<unknown | null> {
       ? null
       : `this device's copy of the chain does not verify (${copy.reason}${copy.seq !== undefined ? ` at #${copy.seq}` : ''}). Sync or settle it on the Edge tab.`;
     let asked: SheetAsk | null = null;
+    /* why the plan's claim was refused at Approve (another device was first), shown as the sheet's end */
+    let notClaimed: string | null = null;
     const r: any = await soft.answerAgent(msg, {
       seen,
       from: computer.name,
       computer: computer.id,
       ask: async view => {
-        asked = {kind: 'request', computer: computer.name, view, blocked, at: Date.now()};
+        asked = {kind: 'request', computer: computer.name, view, blocked, at: Date.now(), ...(planAsk ? {plan: planAsk.plan} : {})};
         step('answerAgent');
         stepsDone('sheet shown');
         const a = await askPerson(asked);
-        return blocked ? 'copy_unverified' : a;
+        if (blocked) return 'copy_unverified';
+        if (a === 'approve' && planAsk) {
+          notClaimed = await planAsk.onApprove().catch((e: unknown) => String((e as Error)?.message ?? e));
+          if (notClaimed) return 'decline';
+        }
+        return a;
       },
       onPress: () => asked && show({phase: 'press', ask: asked, until: Date.now() + PRESS_WAIT_MS}),
     });
     if (r.dropped) return null;
     if (r.ok) await syncCopy(soft).catch(() => undefined); /* the opening link, into the tab's copy */
+    if (asked && planAsk && withdrawnPlan === planAsk.plan) {
+      withdrawnPlan = null;
+      show(null);
+      return r;
+    }
+    if (asked && notClaimed) {
+      show({phase: 'done', ask: asked, result: {ok: false, refusal: 'declined', detail: notClaimed}});
+      return r;
+    }
     if (asked) {
       show({
         phase: 'done',

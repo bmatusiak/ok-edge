@@ -41,6 +41,8 @@ export type Plan = {
   results: Record<string, PlanResult>;
   receipts: {seq: number; code: string}[];
   why: string | null;
+  /* the device that runs it, once one claimed it (its owner tapped Approve there - mcp-server room.js plan-claim) */
+  by?: string;
 };
 /* identityPublicKey: what the owner gives an agent (with the /mcp address) - the hex of the bucket identity's public key */
 export type AgentsState = {online: boolean; identityPublicKey: string | null; agents: Agent[]; plans: Plan[]};
@@ -127,6 +129,8 @@ function heard(h: Held, m: any): void {
 
 /** A room was joined (serverRoom.ts the server's, localMcp.ts this computer's): follow its agents, read what it holds. */
 export function attachAgents(r: any, identityPublicKey: string, where: RoomWhere = 'server'): void {
+  /* the submitted plans this device may run (mcpPlans.ts) - listened for once, from the first room with agents */
+  require('./mcpPlans').startMcpPlans();
   for (const [x, h] of [...rooms]) if (h.where === where) rooms.delete(x);
   const h: Held = {where, agents: [], plans: []};
   rooms.set(r, h);
@@ -155,6 +159,14 @@ const need = (id: string, kind: 'agent' | 'plan') => {
 /** The owner's word on an agent (the room broadcasts it to every device of the identity). */
 export async function setAgent(id: string, s: 'accepted' | 'blocked' | 'removed'): Promise<void> {
   await need(id, 'agent').setAgent(id, s);
+}
+/** This device runs the plan (its owner tapped Approve here): refused when another device of the identity claimed it first. */
+export async function planClaim(id: string): Promise<void> {
+  await need(id, 'plan').planClaim(id);
+}
+/** This device's id in the room that holds the plan - what the plan's `by` names when this device claimed it. */
+export function youIn(id: string): string | null {
+  try { return need(id, 'plan').you ?? null; } catch { return null; }
 }
 /** A plan's progress, back to its agent (plan_wait): its state, results by item, receipts. */
 export async function planUpdate(id: string, u: {state?: PlanState; results?: PlanResult[]; receipts?: {seq: number; code: string}[]; why?: string}): Promise<void> {
