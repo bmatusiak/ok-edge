@@ -13,7 +13,7 @@
  *   okedge:localMcp (sync)  -> the server's base URL (http://127.0.0.1:8650), or null while it is not up
  */
 /*
- * ONE ADDRESS, ALWAYS (Brad, 2026-11-02: "8650 - WEB/OK: 80 = http web, 65 = OK"): an agent's MCP config names a URL -
+ * ONE ADDRESS, ALWAYS (Brad, 2026-11-02: "80 = http web, 65 = OK" - OK on a phone keypad; "8650 - web is surrounded around ok", as 8065 is Mattermost's default): an agent's MCP config names a URL -
  * Claude Code's `claude mcp add --transport http okedge http://127.0.0.1:8650/mcp` - so the port cannot be a new one each
  * start. Taken by something else, the local MCP does not start and says so (no other port: an agent would not find it).
  */
