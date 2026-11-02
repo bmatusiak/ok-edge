@@ -178,6 +178,12 @@ function watchStuck(app) {
   app.on('close', () => { for (const timer of open.values()) clearTimeout(timer); open.clear(); });
 }
 
+/*
+ * THE EDGE PRESS HELD (Brad, 2026-11-01: "lets run it without pressing the key, so i can see how the key is waiting"):
+ * while a script holds it, the Edge press is left to the key's own time-out - the browser's touches are still pressed
+ * (they carry the request to the key; without them nothing would wait). Ends with the script that held it.
+ */
+let pressHeld = false;
 /* THE SESSION PRESSER: every press sheet, whenever it comes, while the app is on the testnet (13) */
 function pressWhenAsked(app) {
   let pressing = false;
@@ -235,6 +241,7 @@ function pressWhenAsked(app) {
     const edgePress = lr === lg && lr > 0x30;
     if (edgePress ? iconAnswered : touched) return;
     if (edgePress) iconAnswered = true; else touched = true;
+    if (edgePress && pressHeld) { line(`[${app.shell}] held: the key waits for its Edge press (LED ${colour}) - not pressed`); return; }
     pressing = true;
     try {
       const s = await procFor(app, 'key-state');
@@ -283,6 +290,7 @@ function pressWhenAsked(app) {
     if (anyPress && iconAnswered) return;
     if (anyPress) iconAnswered = true;
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
+    if (outside && pressHeld && outside[2] === 'any') { line(`[${app.shell}] held: ${outside[1]} - not pressed`); return; }
     if (outside) {
       /* a press in progress (a touch) is waited for, not a reason to drop this one - the key would wait out its 25 s */
       while (pressing) await new Promise((r) => setTimeout(r, 100));
@@ -570,7 +578,7 @@ function driveFor(app, say, answer = () => {}) {
   const machine = (action, target = app.shell, args = {}) => (target === app.shell && app.ws ? procFor(app, action, args) : proc(action, target, args));
   /* every machine at once - this one and each connected remote (run.js doctor) */
   const everywhere = (action, args = {}) => procAll(action, args);
-  const api = { app, say, answer, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name) };
+  const api = { app, say, answer, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name), holdPress: (on) => { pressHeld = !!on; say(on ? 'the Edge press is held: the key waits on its own' : 'the Edge press is pressed again'); } };
   return api;
 }
 

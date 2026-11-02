@@ -45,7 +45,22 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
 
   /* ---- the server's side */
   /* a plain request (launch.js asking whether this remote is up) gets an answer; the port is for the server's socket */
-  const controlHttp = http.createServer((req, res) => { res.writeHead(204); res.end(); });
+  /*
+   * A PRESS BY HAND (Brad, 2026-11-01: "a simple nodejs script on the box with the gadget"; tools/box/press-window.js):
+   * this machine holds the gadget's one controller socket, so a press from a window here comes through it -
+   * GET /press?token=<the drive token>&app=webapp, from this machine only. The press is the targets' own (testnet keys).
+   */
+  const controlHttp = http.createServer(async (req, res) => {
+    const u = new URL(req.url, 'http://x');
+    if (u.pathname !== '/press') { res.writeHead(204); res.end(); return; }
+    const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+    if (!local || u.searchParams.get('token') !== token) { res.writeHead(403); res.end('refused'); return; }
+    const app = u.searchParams.get('app') || 'webapp';
+    const r = await targets.act('press', app, { buttons: ['1'] }).catch((e) => ({ ok: false, why: e.message }));
+    line(`press by hand on ${app}: ${r.ok ? r.what : r.why}`);
+    res.writeHead(r.ok ? 200 : 500, { 'content-type': 'text/plain' });
+    res.end(r.ok ? r.what : r.why);
+  });
   controlHttp.on('error', (e) => line(`the server's port ${controlPort}: ${e.message}`));
   const control = new WebSocketServer({ server: controlHttp.listen(controlPort, '0.0.0.0') });
   control.on('connection', (ws, req) => {

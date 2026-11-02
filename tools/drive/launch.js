@@ -25,9 +25,9 @@ const args = process.argv.slice(2);
 
 const running = () => {
   try {
-    const { pid, mode } = JSON.parse(fs.readFileSync(PIDFILE, 'utf8'));
+    const { pid, mode, rest } = JSON.parse(fs.readFileSync(PIDFILE, 'utf8'));
     process.kill(pid, 0);
-    return { pid, mode };
+    return { pid, mode, rest: Array.isArray(rest) ? rest : [] };
   } catch { return null; }
 };
 
@@ -103,7 +103,7 @@ async function start(mode, rest) {
   if (mode === 'server' && !env.DRIVE_LOG) env.DRIVE_LOG = path.join(logs, 'drive-server.log');
   const child = spawn(nwBin, [__dirname, mode, ...rest], { detached: true, stdio: ['ignore', out, out], env, windowsHide: false });
   child.unref();
-  fs.writeFileSync(PIDFILE, JSON.stringify({ pid: child.pid, mode }));
+  fs.writeFileSync(PIDFILE, JSON.stringify({ pid: child.pid, mode, rest }));
   console.log(`drive ${mode}: NW.js started (pid ${child.pid}) - its window shows every line; close it to stop`);
   /*
    * AND READY BEFORE THIS RETURNS (2026-10-31: a hand-made wait after a restart looked for its line in the log's last
@@ -135,7 +135,16 @@ async function start(mode, rest) {
 (async () => {
   const [cmd, ...rest] = args;
   if (cmd === 'stop') { console.log(await stop()); return; }
-  if (cmd === 'restart' && ['server', 'remote'].includes(rest[0])) { console.log(await stop()); await start(rest[0], rest.slice(1)); return; }
+  /*
+   * A RESTART KEEPS WHAT IT WAS STARTED WITH (2026-11-01: a plain "restart server" dropped --remote, the box's apps were
+   * gone, and two runs waited out their 90 s on "webapp did not come back"): options given replace them; none, the same.
+   */
+  if (cmd === 'restart' && ['server', 'remote'].includes(rest[0])) {
+    const was = running();
+    const opts = rest.length > 1 ? rest.slice(1) : was && was.mode === rest[0] ? was.rest : [];
+    if (opts.length) console.log(`drive ${rest[0]}: restarted with ${opts.join(' ')}`);
+    console.log(await stop()); await start(rest[0], opts); return;
+  }
   if (['server', 'remote'].includes(cmd)) { await start(cmd, rest); return; }
   console.error('usage: node tools/drive/launch.js server|remote [options] | stop | restart server|remote [options]');
   process.exit(2);
