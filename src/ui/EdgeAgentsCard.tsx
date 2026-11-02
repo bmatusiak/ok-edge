@@ -3,9 +3,10 @@
  *
  * No agent list since 2026-10-08 (Brad: "so the claude key thing is overkill"; "lets cut it
  * out"): an agent is no longer registered with a key and a press. A budget request is taken
- * because it comes from a computer PAIRED with this phone (the Bluetooth tab's 6-digit code,
- * its Revoke) inside that pairing's encrypted session; the sheet names the computer. The
- * switch stays (Brad's open item 5: a kill switch?): off = every budget request refused unread.
+ * because it comes through the identity's room (joined with the key's login proof) from an
+ * agent the owner accepted (Sync tab, Agents) - pairing codes went 2026-10-30; the sheet names
+ * the agent. The switch stays (Brad's open item 5: a kill switch?): off = every budget request
+ * refused unread.
  *
  * Approving is not here: that stays on the sheet over any tab.
  */
@@ -26,7 +27,7 @@ export function EdgeAgentsCard({inDrawer = false}: {onChanged?: () => void; chan
   const explain = (
     <Text style={styles.dim}>
       {on
-        ? `Requests on: an agent on ${AGENT_FROM} may ask for budgets; each still shows here and needs your press.`
+        ? `Requests on: ${AGENT_FROM} may ask for budgets; each still shows on the Edge sheet and needs your press.`
         : 'Requests off: every budget request is refused unread.'}
     </Text>
   );
