@@ -1,0 +1,9 @@
+# THE EDGE TAB'S PRESSES, ON SCREEN (for reading the uses and their receipts after a run: run.js text right after)
+#   run.js rehearse --app <app> edge-presses
+name: The Edge tab's Presses
+tags:
+  - edge
+---
+- goto: Edge
+- tapOn: "Presses"
+- waitForAnimationToEnd
