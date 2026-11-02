@@ -1,0 +1,14 @@
+# ONE BUDGET ASK ON THIS APP'S SHEET, APPROVED (the drive presses the test key): for a budget asked from elsewhere - a
+# CLI on the app's machine, a debug run - while this flow answers it. Testnet / test keys only.
+#   run.js rehearse --app desktop@box approve-budget
+name: Approve one budget ask
+tags:
+  - edge
+---
+- waitForTap:
+    what: 'budget ask'
+    timeout: 180000
+- tapOn: "Approve"
+- waitForLog:
+    pattern: 'budget \d+ (open|opened)|\[edge\].*budget'
+    timeout: 60000
