@@ -23,8 +23,11 @@ env:
     text: "${output.label}"
     field: "label (e.g. example.com)"
 - tapOn: "Derive and keep"
-- assertVisible:
-    text: "Derived and kept in the App: ${output.label}\\."
-    timeout: 60
+# the derive waits for its press (the drive gives it): a minute of quiet at most. Said as new - the soft key records the
+# derive before the tab saves it, and the tab tells new from known by the list before the derive
+- extendedWaitUntil:
+    visible: "Derived and kept in the App: ${output.label}\\."
+    timeout: 60000
+# in the list once - kept by the recorder and the tab's save alike, not twice and not written over
 - assertVisible: "${output.label}"
 - takeScreenshot: keychain-kept
