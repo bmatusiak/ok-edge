@@ -22,7 +22,7 @@ import {doorSecret, openIdentityBucket, openIdentityBucketWithSecret, openLegacy
 import {canKeepSession, keepSession, keptSession, takeSession} from '../webSession';
 import {currentNet} from '../net';
 import {proofKept, proofMaterial} from '../bucketTrade';
-import {DEVICE_WORD, shell} from '../platform';
+import {BROWSER_PAGE, DEVICE_WORD, loginReason} from '../platform';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {readKeyIdentity} from '../keyIdentity';
 import {afterLogin, localCard, offerNewCard} from '../loginCard';
@@ -39,7 +39,7 @@ import {setDriveFlag} from '../drive/registry';
  * follows - the page never moves by itself.
  */
 function wrongSite(site: string | null): string | null {
-  if (shell !== 'webapp' || !site || typeof location === 'undefined') return null;
+  if (!BROWSER_PAGE || !site || typeof location === 'undefined') return null;
   return location.hostname === site ? null : site;
 }
 
@@ -59,14 +59,7 @@ type Open = {kind: 'idle'} | {kind: 'opening'} | {kind: 'press'} | {kind: 'faile
  */
 declare const location: {host: string; hostname: string; search: string; assign(url: string): void} | undefined;
 declare const navigator: {userAgent?: string} | undefined;
-function loginReason(): string {
-  if (shell === 'webapp') {
-    const ua = String(navigator?.userAgent ?? '');
-    const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'a browser';
-    return `log in: the web app in ${browser} at ${typeof location !== 'undefined' ? location.host : 'its site'}`;
-  }
-  return `log in: the ${shell === 'desktop' ? 'desktop' : 'phone'} app`;
-}
+/* the reason itself: each platform says what it is (platform.*.ts loginReason) */
 
 export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: string; onContinue: () => void; onPress?: () => void}) {
   /* a drive waits for the identity check to end before its next move (src/drive/registry.tsx) */

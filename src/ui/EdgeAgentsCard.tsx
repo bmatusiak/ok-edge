@@ -15,12 +15,8 @@ import {agentRequestsOn, setAgentRequestsOn} from '../edgeAgents';
 import {Section} from './components';
 import {theme} from './theme';
 import {DrawerArea} from './BottomDrawer';
-import {shell} from '../platform';
+import {AGENT_FROM} from '../platform';
 
-/* where an agent's request comes from, on each shell */
-const AGENT_FROM = shell === 'android' ? 'an agent you accepted in Agents (through your server, or a computer over Bluetooth)'
-  : shell === 'desktop' ? 'a computer agent on this computer (Sync tab)'
-  : 'an agent through the server (Sync tab, the Server panel)';
 
 /* inDrawer: laid out as an area of the Edge Management drawer (src/ui/BottomDrawer.tsx) */
 export function EdgeAgentsCard({inDrawer = false}: {onChanged?: () => void; changed?: unknown; inDrawer?: boolean; testingMode?: boolean}) {

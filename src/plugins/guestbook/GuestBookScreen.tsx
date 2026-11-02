@@ -7,7 +7,7 @@ import {useSecureScreen} from '../../hooks/useSecureScreen';
 import {Btn, KeyValue, Section, Segmented} from '../../ui/components';
 import {EdgeList, type EdgeListItem} from '../../ui/EdgeList';
 import {theme} from '../../ui/theme';
-import {shell} from '../../platform';
+import {BLUETOOTH_HERE} from '../../platform';
 import type {TabContext} from '../types';
 import {readMyCard, type MyKey} from './myCard';
 import {useGuestBook, type Contact, type Found, type Labelled, type Source} from './useGuestBook';
@@ -166,7 +166,7 @@ function GuestBookPages({ctx, onSwap}: {ctx: TabContext; onSwap: (s: Swap) => vo
         </View>
         {/* in person, over Bluetooth: one phone shows, the other scans (Brad, 2026-10-12) */}
         {/* the phone's only: Bluetooth and the camera */}
-        {shell === 'android' ? (
+        {BLUETOOTH_HERE ? (
         <View style={styles.bar}>
           <Btn title="Swap keys: show my QR" tone="primary" onPress={() => onSwap('host')} />
           {/* keys are picked first, in the sheet; the camera opens from there (Brad, 2026-10-13) */}

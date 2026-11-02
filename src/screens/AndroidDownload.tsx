@@ -13,7 +13,7 @@ import React, {useEffect, useState} from 'react';
 import {Linking, StyleSheet, Text, View} from 'react-native';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
-import {shell} from '../platform';
+import {BROWSER_PAGE} from '../platform';
 
 export type AndroidManifest = {
   appId: string;
@@ -41,7 +41,7 @@ const pairs = (hex: string) => hex.toUpperCase().match(/../g)?.join(':') ?? hex;
 export function useAndroidManifest(): AndroidManifest | null {
   const [m, setM] = useState<AndroidManifest | null>(null);
   useEffect(() => {
-    if (shell !== 'webapp') return;
+    if (!BROWSER_PAGE) return;
     let alive = true;
     fetch(MANIFEST, {cache: 'no-store'})
       .then(r => (r.ok ? r.json() : null))

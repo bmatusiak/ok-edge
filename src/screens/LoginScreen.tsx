@@ -8,7 +8,7 @@ import {buildInfo} from '../buildInfo';
 import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import type {DeviceState} from '../hooks/useOkEmu';
 import {DownloadsPage} from './DownloadsPage';
-import {shell} from '../platform';
+import {BROWSER_PAGE, KEY_OVER_WEBAUTHN} from '../platform';
 
 /**
  * The first thing you see, and a provenance screen as much as a door.
@@ -46,7 +46,7 @@ export function LoginScreen({
   /* "waiting" only while the key has not said what it is: an unlocked key read "Waiting for the key…" too (desktop, 2026-10-30) */
   const hint = setup
     ? 'This key has no PIN yet. Choose one to finish setting it up.'
-    : device === 'unknown' && shell !== 'webapp'
+    : device === 'unknown' && !KEY_OVER_WEBAUTHN
       ? 'Waiting for the key…'
       : null;
 
@@ -71,7 +71,7 @@ export function LoginScreen({
     <View style={styles.root}>
       <Logo height={44} />
 
-      {shell === 'webapp' ? (
+      {BROWSER_PAGE ? (
         /*
          * THE WEB APP HAS NO SOFT KEY (Brad, 2026-10-26: "firmware in webapp is unknown because webapp has no softkey
          * support ... change that panel for something more logical"): the card above describes a staged emulator the
@@ -110,7 +110,7 @@ export function LoginScreen({
         * not the same as nothing being there, so only `true` says anything.
         */}
       {/* the web app cannot see USB (only what answers WebAuthn), so it never says a key is attached */}
-      {attached === true && shell !== 'webapp' ? (
+      {attached === true && !KEY_OVER_WEBAUTHN ? (
         <Text style={styles.attached}>Hard key attached</Text>
       ) : null}
 
@@ -148,7 +148,7 @@ export function LoginScreen({
         */}
       <View style={styles.devFooter}>
         {/* the web app: what it publishes - its source code, the firmware for a developer key, the Android app, the command line (DownloadsPage.tsx) */}
-        {shell === 'webapp' ? <Btn title="Downloads" onPress={() => setDownloads(true)} /> : null}
+        {BROWSER_PAGE ? <Btn title="Downloads" onPress={() => setDownloads(true)} /> : null}
         {__DEV__ && onTesting ? (
           <View style={styles.devFooterInner}>
             <Btn title="Enter testing mode" onPress={onTesting} disabled={picked === 'live'} />

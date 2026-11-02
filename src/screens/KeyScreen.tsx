@@ -14,7 +14,7 @@ import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import NativeSecrets from 'okedge-native/specs/NativeSecrets';
 import {buildInfo} from '../buildInfo';
 import {usePasskeyProvider} from '../hooks/usePasskeyProvider';
-import {SHOW_SCROLLBARS, shell} from '../platform';
+import {PHONE_PERMISSIONS_HERE, SHOW_SCROLLBARS} from '../platform';
 
 /**
  * The key itself: what state it is in, what it holds, and its buttons.
@@ -349,7 +349,7 @@ function Unlocked({emu, keys, slots}: {emu: EmuSession; keys: KeyControl; slots?
       ) : null}
 
       {/* the phone's only: Android, passkeys in Chrome, Bluetooth, biometrics */}
-      {shell === 'android' ? <AppCapabilities /> : null}
+      {PHONE_PERMISSIONS_HERE ? <AppCapabilities /> : null}
 
       {operations ? (
         <Section title="What the library has proven">

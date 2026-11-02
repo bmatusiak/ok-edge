@@ -12,7 +12,7 @@
  * An open Edge budget holds the check off until it ends (setBudgetsOpen, below). Running only while someone is logged in
  * (MainApp: the app's main phase); stopped on the login screens.
  */
-import {shell} from './platform';
+import {IDLE_END_HERE} from './platform';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {logOut} from './logOut';
@@ -23,7 +23,7 @@ declare const sessionStorage: any;
 /* a development build can be tested in seconds (sessionStorage okedge-idle-ms, read at load); a release is 15 minutes */
 const devIdle = (() => { try { return __DEV__ && typeof sessionStorage !== 'undefined' ? Number(sessionStorage.getItem('okedge-idle-ms')) || 0 : 0; } catch { return 0; } })();
 export const IDLE_MS = devIdle > 0 ? devIdle : 15 * 60 * 1000;
-export const ENABLED = shell === 'webapp';
+export const ENABLED = IDLE_END_HERE;
 /* how long the idle check waits for the key's answer before it counts as no answer */
 const CHECK_MS = 15000;
 

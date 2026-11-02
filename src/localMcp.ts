@@ -10,7 +10,7 @@
  */
 import * as bucketLib from 'node-onlykey-lib/bucket';
 import {invokeSync} from './desktop/specs/module';
-import {shell} from './platform';
+import {LOCAL_MCP_HERE} from './platform';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {attachAgents, detachAgents} from './mcpAgents';
@@ -22,7 +22,7 @@ let joining = false;
 
 /* the local MCP's base URL - the desktop only, and only once it is up (null: not here, or it did not start) */
 export function localMcpUrl(): string | null {
-  return shell === 'desktop' ? invokeSync<string>('okedge:localMcp') : null;
+  return LOCAL_MCP_HERE ? invokeSync<string>('okedge:localMcp') : null;
 }
 
 /** Join the local MCP's room for this identity, once (no proof, nothing asked of the key); its agents shown and answered. */

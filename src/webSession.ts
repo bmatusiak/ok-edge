@@ -18,13 +18,13 @@
  * key.
  */
 import {bytes as okbytes} from 'node-onlykey-lib';
-import {shell} from './platform';
+import {WEB_SESSION} from './platform';
 
 declare const sessionStorage: any;
 declare const indexedDB: any;
 
 const SESSION = 'okedge-session';
-const web = shell === 'webapp' && typeof sessionStorage !== 'undefined' && typeof indexedDB !== 'undefined' && !!globalThis.crypto?.subtle;
+const web = WEB_SESSION && typeof sessionStorage !== 'undefined' && typeof indexedDB !== 'undefined' && !!globalThis.crypto?.subtle;
 
 type Kept = {identity: string; net: string; ref: string; iv: string; ct: string};
 

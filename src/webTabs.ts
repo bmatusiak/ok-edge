@@ -8,7 +8,7 @@
  * when it starts and when it comes to the front again, every other tab answers; a tab says bye when it closes. A tab that
  * vanished without a bye (killed) drops out at the next hello, which starts the count afresh.
  */
-import {shell} from './platform';
+import {BROWSER_PAGE} from './platform';
 
 declare const BroadcastChannel: any;
 declare const document: any;
@@ -20,7 +20,7 @@ const others = new Set<string>();
 const me = Math.random().toString(36).slice(2);
 const tell = () => { for (const l of listeners) l(others.size); };
 
-if (shell === 'webapp' && typeof BroadcastChannel !== 'undefined') {
+if (BROWSER_PAGE && typeof BroadcastChannel !== 'undefined') {
   const ch = new BroadcastChannel('okedge-tabs');
   ch.onmessage = (ev: {data: {t: string; id: string}}) => {
     const m = ev.data;

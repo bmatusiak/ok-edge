@@ -9,7 +9,7 @@ import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, TextInput, View} from 'react-native';
 import {Btn, Section} from './components';
 import {theme} from './theme';
-import {shell} from '../platform';
+import {BLUETOOTH_HERE, BROWSER_PAGE} from '../platform';
 import {joinServerRoom, onRoomState, retryServerRoom, roomState, serverUrl, setServerUrl, type RoomState} from '../serverRoom';
 import {bleRoomState, onBleRoomState, retryBleRoom, type BleRoomState} from '../bleRoom';
 
@@ -17,7 +17,7 @@ const KIND: Record<string, string> = {webapp: 'web app', android: 'phone', deskt
 
 function statusText(s: RoomState): string {
   if (!s.url) {
-    if (shell === 'webapp' && s.site) return `This page is ${location.host.split(":")[0]}, not your key's site ${s.site} - nothing syncs here. Open https://${s.site}.`;
+    if (BROWSER_PAGE && s.site) return `This page is ${location.host.split(":")[0]}, not your key's site ${s.site} - nothing syncs here. Open https://${s.site}.`;
     /* the room is the only sync since the cli pair's Bluetooth sync went (2026-10-30): no server, no sync */
     if (!s.site) return "Your key names no server (ctap_bridge off, or no site set) - nothing syncs on this device.";
     return 'No server - nothing syncs on this device.';
@@ -36,7 +36,7 @@ export function ServerPanel() {
   useEffect(() => {
     void serverUrl().then(u => { setDraft(u ?? ''); if (u && !roomState().url) void joinServerRoom(); });
   }, []);
-  const editable = shell !== 'webapp';
+  const editable = !BROWSER_PAGE;
   const save = async (url: string | null) => {
     setError(null);
     try { await setServerUrl(url); } catch (e) { setError(String((e as Error)?.message ?? e)); }
@@ -89,7 +89,7 @@ export function ServerPanel() {
 function BleRow() {
   const [b, setB] = useState<BleRoomState>(bleRoomState());
   useEffect(() => onBleRoomState(setB), []);
-  if (shell !== 'android' || (b.status === 'off' && !b.host)) return null;
+  if (!BLUETOOTH_HERE || (b.status === 'off' && !b.host)) return null;
   const line = b.status === 'joined' ? `Over Bluetooth: in this key's room on ${b.host}${b.peers.length ? ` - with ${b.peers.map(p => p.name).join(', ')}` : ''}.`
     : b.status === 'joining' ? `Over Bluetooth: joining ${b.host}…`
     : b.status === 'linked' ? `Over Bluetooth: ${b.host} is linked - joined once the bucket is open.`

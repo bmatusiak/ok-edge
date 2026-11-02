@@ -27,7 +27,7 @@ import {createVendorBridgeCtap} from 'node-onlykey-lib/transport/vendor-bridge';
 
 import OkEmu, {type Iface} from './transport/OkEmu';
 import UsbPipe from './transport/UsbPipe';
-import {shell} from './platform';
+import {KEY_OVER_WEBAUTHN, shell} from './platform';
 import {keyGone, noteEdgeRequest, noteSettle, noteTunnel} from './keyBusy';
 
 /**
@@ -162,7 +162,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
     const plugins: any[] & {config?: Record<string, unknown>} = [
       hostPlugin,
       /* the webapp has no USB: its key is the WebAuthn tunnel (a transport with no vendor interface, lib plugins/transport/tunnel) */
-      backend === 'usb' ? (shell === 'webapp' ? tunnelTransport : usbTransport) : embeddedTransport,
+      backend === 'usb' ? (KEY_OVER_WEBAUTHN ? tunnelTransport : usbTransport) : embeddedTransport,
       sessionPlugin,
       devicePlugin,
       okcryptoPlugin,
@@ -202,7 +202,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
        * lib refuses the mismatch (RPID_MISMATCH) before the browser is asked anything - no prompt, nothing at the key.
        */
       /* (a key with emulator patch 0016 - our v3.1.01 on - is asked without the 5.5 s waits: the lib reads it from the version) */
-      ...(backend === 'usb' && shell === 'webapp'
+      ...(backend === 'usb' && KEY_OVER_WEBAUTHN
         ? {okcrypto: {ctap: createWebAuthnCtap({credentials: navigator.credentials, rpId: location.hostname}), rpIds: [location.hostname]}}
         : {}),
       /*
@@ -227,7 +227,7 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       late.ctap = createVendorBridgeCtap(started.services.transport);
       /* each WebAuthn operation's progress, for the sheet that says to wait for the key (src/keyBusy.ts) */
       /* only the web app's requests are browser windows; every other host asks its key itself (the sheet's words) */
-      started.services.okcrypto?.on?.('tunnel', shell === 'webapp' ? noteTunnel : (e: any) => noteTunnel({...e, via: 'direct'}));
+      started.services.okcrypto?.on?.('tunnel', KEY_OVER_WEBAUTHN ? noteTunnel : (e: any) => noteTunnel({...e, via: 'direct'}));
       /* and each Edge request that goes straight to the key (the phone's soft key, a USB key): the same sheet */
       if (started.services.edge) started.services.edge.onRequest = noteEdgeRequest;
       /* and the lib's waits between them, for the timeline (debug builds) */

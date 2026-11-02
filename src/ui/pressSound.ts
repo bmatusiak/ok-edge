@@ -15,7 +15,7 @@
  * that knows a hard key is waiting - it rings for it here.
  */
 import {useEffect} from 'react';
-import {shell} from '../platform';
+import {NATIVE_CHIME_HERE} from '../platform';
 
 const SOFT_EVERY_MS = 2_000;
 const LOUD_EVERY_MS = 3_000;
@@ -41,7 +41,7 @@ function play(which: 'soft' | 'loud') {
  * native side plays it (the same file and audio stream as a press's); elsewhere the page does.
  */
 export function chimeOnce(): void {
-  if (shell !== 'android') return play('soft');
+  if (!NATIVE_CHIME_HERE) return play('soft');
   try {
     require('okedge-native/specs/NativeOkEmu').default.chime();
   } catch {
@@ -55,7 +55,7 @@ export function chimeOnce(): void {
  */
 export function usePressSound(wait: number | null, kind: SoundKind) {
   useEffect(() => {
-    if (shell === 'android' || !wait) return;
+    if (NATIVE_CHIME_HERE || !wait) return;
     const since = Date.now();
     let timer: ReturnType<typeof setTimeout> | null = null;
     const ring = () => {

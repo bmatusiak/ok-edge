@@ -9,7 +9,7 @@ import * as biometrics from '../biometrics';
 import {DuoPinForm} from '../ui/DuoPinForm';
 import {useActiveKey} from '../hooks/KeyContext';
 import {theme} from '../ui/theme';
-import {shell} from '../platform';
+import {KEY_WAITS_FOR_LOGIN} from '../platform';
 import {armWebKey} from '../hooks/useWebKey';
 
 /**
@@ -153,7 +153,7 @@ export function PinScreen({
    * box, 2026-10-28). Showing the PIN screen is the person's choice to use the key, wherever it is shown from.
    */
   useEffect(() => {
-    if (shell === 'webapp') armWebKey();
+    if (KEY_WAITS_FOR_LOGIN) armWebKey();
   }, []);
 
   useEffect(() => {

@@ -1,8 +1,7 @@
 /* clipboard in the page, the sealed box in Electron's main process (safeStorage) or, in the web app, the page (webBox.ts); no biometrics on the desktop (module.ts: how a desktop module is made) */
 import type {Spec} from 'okedge-native/specs/NativeSecrets';
-import {desktopModule, invoke} from './module';
-import {shell} from '../../platform';
-import * as webBox from './webBox';
+import {desktopModule} from './module';
+import * as box from './secretsBox';
 let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
 export default desktopModule<Spec>('NativeSecrets', {
@@ -28,9 +27,9 @@ export default desktopModule<Spec>('NativeSecrets', {
   async biometricStore() { throw new Error('this desktop has no biometric store - nothing was stored'); },
   /*
    * The Keystore box: on the desktop Electron's safeStorage (the OS keychain/DPAPI), in the main process; in the
-   * web app a non-extractable WebCrypto key in IndexedDB (webBox.ts says what that does and does not protect).
+   * web app a non-extractable WebCrypto key in IndexedDB - this shell's own file (secretsBox.desktop.ts / .webapp.ts).
    */
-  boxSeal: (alias: string, hex: string) => (shell === 'webapp' ? webBox.boxSeal(alias, hex) : invoke<string>('NativeSecrets:boxSeal', alias, hex)),
-  boxOpen: (alias: string, hex: string) => (shell === 'webapp' ? webBox.boxOpen(alias, hex) : invoke<string>('NativeSecrets:boxOpen', alias, hex)),
-  boxForget: (alias: string) => (shell === 'webapp' ? webBox.boxForget(alias) : invoke<boolean>('NativeSecrets:boxForget', alias)),
+  boxSeal: (alias: string, hex: string) => box.boxSeal(alias, hex),
+  boxOpen: (alias: string, hex: string) => box.boxOpen(alias, hex),
+  boxForget: (alias: string) => box.boxForget(alias),
 });

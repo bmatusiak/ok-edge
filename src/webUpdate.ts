@@ -14,7 +14,7 @@
  * Only the web app's exported build: the desktop's own web export and the phone have no worker, and the dev server
  * (Metro) has no version.
  */
-import {shell} from './platform';
+import {WEB_SESSION} from './platform';
 
 declare const navigator: any;
 declare const caches: any;
@@ -23,7 +23,7 @@ declare const sessionStorage: any;
 declare const document: any;
 
 export const WEB_BUILD: string = String(process.env.EXPO_PUBLIC_WEB_BUILD ?? '');
-const on = shell === 'webapp' && !!WEB_BUILD && typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+const on = WEB_SESSION && !!WEB_BUILD && typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
 
 /** The worker registered (once, at start). */
 export function registerWebCache(): void {

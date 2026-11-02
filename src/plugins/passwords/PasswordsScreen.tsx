@@ -24,7 +24,7 @@ import {usePasswordManager} from './usePasswordManager';
 import type {Manager} from './stores';
 import type {DeriveOkcrypto} from './innerKeys';
 import type {PhraseOkcrypto} from './usePasswordManager';
-import {SHOW_SCROLLBARS, shell} from '../../platform';
+import {AUTOFILL_HERE, BLUETOOTH_HERE, SHOW_SCROLLBARS} from '../../platform';
 import {CLIPBOARD_TTL_MS} from '../../ui/sensitive';
 
 /*
@@ -436,7 +436,7 @@ function OpenStore({
   /* the panels below belong to the whole store, not to a filtered view */
   if (!filtered) {
     /* the phone's only: Android Autofill */
-    if (shell === 'android') {
+    if (AUTOFILL_HERE) {
       items.push({key: 's-autofill', kind: 'section', title: 'Autofill'});
       items.push({key: 'autofill', kind: 'node', render: () => <AutofillCard />});
     }
@@ -600,7 +600,7 @@ function EntryView({
         </View>
       </Section>
       {/* the phone's only: it types as a Bluetooth keyboard */}
-      {shell === 'android' && entry.kind === 'login' && (entry.username || entry.password) ? (
+      {BLUETOOTH_HERE && entry.kind === 'login' && (entry.username || entry.password) ? (
         <Section title="Type on the computer">
           {canType ? (
             <>

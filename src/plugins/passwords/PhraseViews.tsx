@@ -6,7 +6,7 @@ import {useSharedBtKeyboard} from '../../hooks/BtKeyboardContext';
 import {nameDerive} from '../../pressAsk';
 import {Btn, Section, Segmented} from '../../ui/components';
 import {theme} from '../../ui/theme';
-import {shell} from '../../platform';
+import {BLUETOOTH_HERE} from '../../platform';
 import type {Manager} from './stores';
 import type {PhraseOkcrypto} from './usePasswordManager';
 
@@ -207,7 +207,7 @@ export function PhraseEntry({entry, phraseKey, act}: {entry: any; phraseKey: Phr
         </View>
       </Section>
       {/* the phone's only: it types as a Bluetooth keyboard */}
-      {shell === 'android' && words ? (
+      {BLUETOOTH_HERE && words ? (
         <Section title="Type on the computer">
           {canType ? (
             next < words.length ? (

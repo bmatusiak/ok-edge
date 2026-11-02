@@ -20,7 +20,7 @@ import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
-import {shell} from '../platform';
+import {BROWSER_PAGE} from '../platform';
 
 /* one built hex: the web app's manifest lists the prod one alone */
 export type FirmwareBuild = {
@@ -57,7 +57,7 @@ const prodOf = (m: Manifest) =>
 export function useFirmwareManifest(): Manifest | null {
   const [m, setM] = useState<Manifest | null>(null);
   useEffect(() => {
-    if (shell !== 'webapp') return;
+    if (!BROWSER_PAGE) return;
     let alive = true;
     fetch(BASE + 'manifest.json', {cache: 'no-store'})
       .then(r => (r.ok ? r.json() : null))

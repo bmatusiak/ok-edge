@@ -4,10 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useOkEmu} from './useOkEmu';
 import {useHardKey} from './useHardKey';
 import {useWebKey} from './useWebKey';
-import {shell} from '../platform';
+import {KEY_OVER_WEBAUTHN} from '../platform';
 
 /* the webapp's hard key is reached through WebAuthn (useWebKey, same shape); every other shell's through USB */
-const useUsbKey = shell === 'webapp' ? useWebKey : useHardKey;
+const useUsbKey = KEY_OVER_WEBAUTHN ? useWebKey : useHardKey;
 import UsbPipe, {VENDOR_ID, PRODUCT_ID} from '../transport/UsbPipe';
 import {resetOnlyKey} from '../onlykey';
 import type {LogLevel} from './useLog';
@@ -190,7 +190,7 @@ export function useKey({
      */
     const look = async () => {
       /* a page cannot list USB devices: the key is taken as there, and asking it says whether it is (useWebKey) */
-      if (shell === 'webapp') { if (alive) setAttached(true); return; }
+      if (KEY_OVER_WEBAUTHN) { if (alive) setAttached(true); return; }
       try {
         const devices = await UsbPipe.listDevices();
         const found = devices.some(

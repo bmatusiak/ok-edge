@@ -8,7 +8,7 @@
  */
 import {closeBucket} from './bucketStore';
 import {endSession} from './webSession';
-import {shell} from './platform';
+import {BROWSER_PAGE} from './platform';
 import {OkEmu} from './transport/OkEmu';
 
 declare const location: any;
@@ -16,7 +16,7 @@ declare const location: any;
 export async function logOut(): Promise<void> {
   closeBucket();
   await endSession('log out').catch(() => undefined);
-  if (shell === 'webapp') {
+  if (BROWSER_PAGE) {
     location.reload();
     return;
   }

@@ -11,10 +11,5 @@
  *
  * The requires sit inside the branch so the other shells never run a TurboModule lookup.
  */
-import { shell } from './platform';
-
-if (shell === 'android') {
-  require('./installRandom');
-  require('./installWebCrypto');
-  require('./okSslCrypto');
-}
+/* the web app and the desktop page (Chromium) have crypto.getRandomValues and crypto.subtle already: nothing to install - the phone's is crypto.android.ts */
+export {};

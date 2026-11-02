@@ -35,7 +35,7 @@ import {AgentsCard} from '../ui/AgentsCard';
 import {AgentIdentityCard} from '../ui/AgentIdentityCard';
 import type {EdgeRow, EdgeView, Verdict} from '../edgeStore';
 import type {EdgeBudget, EdgeCopyCheck, EdgeRequest} from '../edge/types';
-import {DEVICE_WORD, shell} from '../platform';
+import {DEVICE_WORD, NATIVE_WATCHDOG_HERE} from '../platform';
 import {activeBackend} from '../hooks/KeyContext';
 
 const {OP, DECISION, END, FLAG} = codes;
@@ -1225,7 +1225,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
               * the way a dead JS side would look - no beats, no cleanup. The native
               * watchdog must post "Edge watching stopped" within ~30 s. Restart the app after.
               */}
-            {shell !== 'android' ? null : (
+            {!NATIVE_WATCHDOG_HERE ? null : (
               <View style={styles.row}>
                 <Btn title="Freeze JS (test)" tone="danger" onPress={() => { for (;;) { /* never returns */ } }} />
                 <Btn

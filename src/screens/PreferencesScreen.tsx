@@ -14,7 +14,7 @@ import type {EmuSession} from '../hooks/useOkEmu';
 import {FidoGatt} from '../transport/FidoGatt';
 import type {PermissionStatus} from '../transport/FidoGatt';
 import {usePasskeyProvider} from '../hooks/usePasskeyProvider';
-import {SHOW_SCROLLBARS, shell} from '../platform';
+import {BIOMETRICS_HERE, PHONE_PERMISSIONS_HERE, SHOW_SCROLLBARS} from '../platform';
 
 const {keystrokes} = okdevice;
 
@@ -507,7 +507,7 @@ export function PreferencesScreen({
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={SHOW_SCROLLBARS}>
       {/* the phone's only: Android permissions and passkey provider */}
-      {has('prefs') && shell === 'android' ? (<>
+      {has('prefs') && PHONE_PERMISSIONS_HERE ? (<>
       <Section title="Permissions">
         <Text style={styles.body}>
           What the security-key role needs from the phone. A dialog dismissed
@@ -622,7 +622,7 @@ export function PreferencesScreen({
       </Section>
 
       {/* the phone's only: biometrics (Android Keystore) */}
-      {shell === 'android' ? (
+      {BIOMETRICS_HERE ? (
       <Section title="Unlock with biometrics">
         <Text style={styles.body}>
           Save your PIN on this phone so unlocking is a fingerprint instead of

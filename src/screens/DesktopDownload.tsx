@@ -16,7 +16,7 @@ import React, {useEffect, useState} from 'react';
 import {Linking, StyleSheet, Text, View} from 'react-native';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
-import {shell} from '../platform';
+import {BROWSER_PAGE} from '../platform';
 
 export type DesktopPackage = {
   os: 'windows' | 'linux';
@@ -39,7 +39,7 @@ const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(0)} MB`;
 export function useDesktopManifest(): DesktopPackage[] | null {
   const [m, setM] = useState<DesktopPackage[] | null>(null);
   useEffect(() => {
-    if (shell !== 'webapp') return;
+    if (!BROWSER_PAGE) return;
     let alive = true;
     fetch(MANIFEST, {cache: 'no-store'})
       .then(r => (r.ok ? r.json() : null))
