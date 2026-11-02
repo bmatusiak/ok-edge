@@ -278,6 +278,18 @@ listPast();
 /* a second launch lands here (single instance): its arguments are ignored, the window comes forward */
 nw.App.on('open', () => { const w = nw.Window.get(); w.restore(); w.focus(); addLine(DRIVE, `${new Date().toTimeString().slice(0, 8)} a second launch: this window is the one drive ${mode} on this host`); });
 
+/*
+ * A RESIZE, MEASURED (Brad, 2026-11-01: "the drive server did not like being resized, and is hiding gui elements"): the
+ * window's size beside the page's, once the resize settles - a page that kept its old width shows here as a mismatch.
+ */
+let resized = 0;
+nw.Window.get().on('resize', (w, h) => {
+  clearTimeout(resized);
+  resized = setTimeout(() => {
+    addLine(DRIVE, `${new Date().toTimeString().slice(0, 8)} window ${w}x${h} · page ${window.innerWidth}x${window.innerHeight} · body ${document.body.scrollWidth} wide`);
+  }, 300);
+});
+
 if (mode === 'remote') mod.start({ appPort: Number(opt('--port') || 8790), controlPort: Number(opt('--control-port') || 8791) });
 else mod.start({ port: Number(opt('--port') || 8790), remotes: many('--remote') });
 showStatus();

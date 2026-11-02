@@ -7,8 +7,14 @@
   :root { --bg: #111418; --panel: #1a1f26; --text: #d8dee6; --dim: #7d8794; --ok: #4cc38a; --bad: #e5534b; --warn: #d8a43a; --accent: #5aa9e6; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 Consolas, "DejaVu Sans Mono", monospace; }
-  body { display: grid; grid-template-rows: auto auto 1fr; }
-  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid #2a313b; }
+  /*
+   * the page's one column is the window's width, never its widest row's (2026-11-01: the chips in one unbroken line made
+   * the column wider than the window, and the picture bar with its buttons sat past the right edge)
+   */
+  body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid #2a313b; min-width: 0; }
+  #chips { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+  .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   header h1 { margin: 0; font-size: 14px; }
   .chip { padding: 2px 8px; border-radius: 10px; background: #252c36; white-space: nowrap; }
   .chip.ok { color: var(--ok); } .chip.bad { color: var(--bad); }
