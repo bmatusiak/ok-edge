@@ -6,18 +6,18 @@
  * only need plain, no cert needed, we point the desktop app to localhost for the mcp").
  *
  * The mcp-server Rectify app (mcp-server/src: mcp-core + mcp-localhost) in this main process, on http:// and ws:// at
- * 127.0.0.1:8065 (PORT, below) - never another interface. The same routes and the same logic as the hosted one: /mcp for agents
+ * 127.0.0.1:8650 (PORT, below) - never another interface. The same routes and the same logic as the hosted one: /mcp for agents
  * on this machine, /ws/<identity> where this app joins - with no proof (below) - to hear their plans and answer them. It
  * keeps no sealed copy - the bucket stays in its file (hosting.js).
  *
- *   okedge:localMcp (sync)  -> the server's base URL (http://127.0.0.1:8065), or null while it is not up
+ *   okedge:localMcp (sync)  -> the server's base URL (http://127.0.0.1:8650), or null while it is not up
  */
 /*
- * ONE ADDRESS, ALWAYS (Brad, 2026-11-02: "8065 - WEB/OK: 80 = http web, 65 = OK"): an agent's MCP config names a URL -
- * Claude Code's `claude mcp add --transport http okedge http://127.0.0.1:8065/mcp` - so the port cannot be a new one each
+ * ONE ADDRESS, ALWAYS (Brad, 2026-11-02: "8650 - WEB/OK: 80 = http web, 65 = OK"): an agent's MCP config names a URL -
+ * Claude Code's `claude mcp add --transport http okedge http://127.0.0.1:8650/mcp` - so the port cannot be a new one each
  * start. Taken by something else, the local MCP does not start and says so (no other port: an agent would not find it).
  */
-const PORT = 8065;
+const PORT = 8650;
 let server = null;
 let starting = null;
 
