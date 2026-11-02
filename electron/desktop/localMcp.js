@@ -5,7 +5,7 @@
  * the core and websocket to host the mcp and authenticate itself, like it was talking to the remote mcp"; "local only,
  * only need plain, no cert needed, we point the desktop app to localhost for the mcp").
  *
- * The mcp-server Rectify app (mcp-server/src: mcp-core + mcp-localhost) in this main process, on http:// and ws:// at
+ * The mcp-server Rectify app (node-onlykey-lib mcp/: mcp-core + mcp-localhost - the same `onlykey-js --service` hosts) in this main process, on http:// and ws:// at
  * 127.0.0.1:8650 (PORT, below) - never another interface. The same routes and the same logic as the hosted one: /mcp for agents
  * on this machine, /ws/<identity> where this app joins - with no proof (below) - to hear their plans and answer them. It
  * keeps no sealed copy - the bucket stays in its file (hosting.js).
@@ -25,9 +25,9 @@ async function start() {
   if (starting) return starting;
   starting = (async () => {
     const Rectify = require('@bmatusiak/rectify');
-    /* the server's source is ESM (mcp-server/src/package.json); the main process is CommonJS */
-    const core = (await import('../../mcp-server/src/core/plugin.js')).default;
-    const localhost = (await import('../../mcp-server/src/localhost/plugin.js')).default;
+    /* the server's source is ESM (node-onlykey-lib mcp/package.json); the main process is CommonJS */
+    const core = (await import('node-onlykey-lib/mcp/core')).default;
+    const localhost = (await import('node-onlykey-lib/mcp/localhost')).default;
     const app = Rectify.build([core, localhost]);
     await app.start();
     /*

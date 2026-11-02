@@ -5,7 +5,8 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import Rectify from '@bmatusiak/rectify';
-import core from '../core/plugin.js';
+/* the core is node-onlykey-lib's (mcp/core - S5c, 2026-11-02): the same server code the desktop and `onlykey-js --service` host */
+import core from 'node-onlykey-lib/mcp/core';
 import cloudflare from './plugin.js';
 
 const app = Rectify.build([core, cloudflare]);

@@ -62,8 +62,8 @@ function fakeBluetooth() {
 
 async function server(t, bt) {
   const Rectify = (await import('@bmatusiak/rectify')).default;
-  const core = (await import('../src/core/plugin.js')).default;
-  const localhost = (await import('../src/localhost/plugin.js')).default;
+  const core = (await import('node-onlykey-lib/mcp/core')).default;
+  const localhost = (await import('node-onlykey-lib/mcp/localhost')).default;
   const app = Rectify.build([core, localhost]);
   await app.start();
   const lines = [];

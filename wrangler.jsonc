@@ -1,6 +1,6 @@
 /*
  * The user's server (`npm run server:dev` runs it locally; the release workflow, .github/workflows/release.yml, builds
- * it onto the cloudflare branch, and Cloudflare deploys that branch on each push). mcp-server/src/cloudflare/worker.js + core/room.js: the Worker - the identity rooms on /ws/<identity id> (a Durable Object each) and
+ * it onto the cloudflare branch, and Cloudflare deploys that branch on each push). mcp-server/src/cloudflare/worker.js + node-onlykey-lib mcp/core/room.js: the Worker - the identity rooms on /ws/<identity id> (a Durable Object each) and
  * the web app, built into docs/ and served as one page, so a reload on any route loads the app.
  *
  * The workflow builds the RELEASE export (mcp-server/build-webapp.js, CI set): a public URL never carries the testing
@@ -10,7 +10,7 @@
  *
  * run_worker_first: /ws/* and /mcp reach the Worker even though the single-page fallback would answer every path with
  * the app. Durable Objects: ROOMS (an identity's room), MCP_SESSIONS (one MCP session: which agent said hello), AGENTS
- * (one agent: its plans) - mcp-server/src/core/mcp.js.
+ * (one agent: its plans) - node-onlykey-lib mcp/core/mcp.js.
  * new_sqlite_classes: the free plan's Durable Objects are the SQLite-backed kind.
  */
 {
@@ -22,7 +22,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   /*
-   * LIFETIME_IDENTITIES (mcp-server/src/core/room.js sealedLifetime) - the identities whose sealed copy is kept for good;
+   * LIFETIME_IDENTITIES (node-onlykey-lib mcp/core/room.js sealedLifetime) - the identities whose sealed copy is kept for good;
    * every other identity syncs too, on the free tier: its copy is dropped after 7 days without a touch (Brad,
    * 2026-10-30). Bucket identity ids, comma-separated, or * for all - a Worker SECRET (`npx wrangler secret put
    * LIFETIME_IDENTITIES`), not a var here. Cloudflare builds and deploys the cloudflare branch on every push, from the

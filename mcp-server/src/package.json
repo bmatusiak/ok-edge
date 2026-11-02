@@ -1,5 +1,5 @@
 {
   "private": true,
-  "description": "The user's MCP server source (ESM) - a Rectify app: core/ (the MCP and websocket API logic), cloudflare/ (the Worker and its Durable Objects), localhost/ (plain Node on 127.0.0.1 - the desktop's local MCP).",
+  "description": "The Cloudflare Worker (ESM): cloudflare/ - the Worker and its Durable Objects around the server's core, which is node-onlykey-lib's (mcp/core, mcp/localhost - moved there 2026-11-02, S5c: one server code for the Worker, the desktop app's local MCP and `onlykey-js --service`).",
   "type": "module"
 }

@@ -23,8 +23,8 @@ const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 
 async function server(t) {
   const Rectify = (await import('@bmatusiak/rectify')).default;
-  const core = (await import('../src/core/plugin.js')).default;
-  const localhost = (await import('../src/localhost/plugin.js')).default;
+  const core = (await import('node-onlykey-lib/mcp/core')).default;
+  const localhost = (await import('node-onlykey-lib/mcp/localhost')).default;
   const app = Rectify.build([core, localhost]);
   await app.start();
   const s = await app.services.mcpLocalhost.start({ port: 0, env: { REQUIRE_LOGIN: '0', OPEN_JOIN: '1' } });
