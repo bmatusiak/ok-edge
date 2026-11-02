@@ -20,41 +20,14 @@ export type {BucketStorage, Bucket, Opened} from './storage.types';
 
 const invoke = (channel: string, ...args: unknown[]) => desktop!.invoke(channel, ...args);
 
-function kept(identity: string, net: string, bucket: Bucket): Opened {
-  let writes: Promise<unknown> = Promise.resolve();
-  return {
-    bucket,
-    write() {
-      const run = writes.then(() => invoke('okedge:bucketMergeIn', identity, net, bucketLib.serialize(bucket)));
-      writes = run.catch(() => {});
-      return run.then(() => {});
-    },
-    async refresh() {
-      const text = (await invoke('okedge:bucketRead', identity, net)) as string | null;
-      if (!text) return 0;
-      const {bucket: merged, report} = bucketLib.merge(bucket, bucketLib.parse(text), {rules: RULES});
-      bucket.stores = merged.stores;
-      /* the clock moves past every stamp taken in (lib merge), so this page's next write is later than all of them */
-      (bucket as {clock?: unknown}).clock = (merged as {clock?: unknown}).clock;
-      return Object.values(report.taken as Record<string, number>).reduce((a, b) => a + b, 0);
-    },
-  };
-}
-
-export const storage: BucketStorage = {
-  needsKey: false,
-  async state(identity) {
-    return (await invoke('okedge:bucketHas', identity, currentNet())) ? 'kept' : 'none';
+/* the lib's shared-file storage (bucket/src/storage.js sharedFileStorage), its file side the main process's (lib bucket/cli/file-side.js) */
+export const storage: BucketStorage = bucketLib.storage.sharedFileStorage({
+  side: {
+    has: (identity: string, net: string) => invoke('okedge:bucketHas', identity, net),
+    read: (identity: string, net: string) => invoke('okedge:bucketRead', identity, net),
+    keep: (identity: string, net: string, text: string) => invoke('okedge:bucketKeep', identity, net, text),
+    mergeIn: (identity: string, net: string, text: string) => invoke('okedge:bucketMergeIn', identity, net, text),
   },
-  async open(identity) {
-    const net = currentNet();
-    const text = (await invoke('okedge:bucketRead', identity, net)) as string | null;
-    return text ? kept(identity, net, bucketLib.parse(text)) : null;
-  },
-  async create(identity) {
-    const net = currentNet();
-    const bucket = bucketLib.create({owner: identity});
-    await invoke('okedge:bucketKeep', identity, net, bucketLib.serialize(bucket));
-    return kept(identity, net, bucket);
-  },
-};
+  net: currentNet,
+  rules: RULES,
+}) as BucketStorage;

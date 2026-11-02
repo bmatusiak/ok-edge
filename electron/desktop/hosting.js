@@ -110,6 +110,8 @@ async function stop() {
 }
 
 const bucketHome = () => require('node-onlykey-lib/bucket/cli/home');
+/* the page's four bucket calls (okedge:bucketHas / Keep / Read / MergeIn): the lib's file side - the CLI's own code for this file */
+const fileSide = () => require('node-onlykey-lib/bucket/cli/file-side').fileSide(bucketHome());
 
 module.exports = {
   start,
@@ -126,31 +128,15 @@ module.exports = {
      * page's stores read and write this file, as the CLI does - each write a locked read-modify-write, so the two
      * never drop each other's change. The lib names the file from the identity id and refuses any other name.
      */
-    'okedge:bucketHas': (identity, net) => bucketHome().hasIdentityBucket(identity, net),
-    'okedge:bucketKeep': (identity, net, text) =>
-      bucketHome().keepIdentityBucket(identity, net, require('node-onlykey-lib/bucket').open(text, { allowUnsealed: true }).bucket),
+    'okedge:bucketHas': (identity, net) => fileSide().has(identity, net),
+    'okedge:bucketKeep': (identity, net, text) => fileSide().keep(identity, net, text),
     /*
      * THE PAGE HOLDS THE BUCKET IN MEMORY, AS EVERY PLATFORM DOES (ok-edge src/bucket/storage.desktop.ts; PROPOSAL-rectify-
      * ok-edge.md R1). It reads the file once, and writes by handing its whole bucket back to be MERGED into the file inside
      * its lock - the lib's merge with the store rules, newer wins - so a write the CLI made meanwhile is never lost. (It
      * used to send every read and write here key by key: bucketGet/Set/Entries/SetMany/Summary/Move, gone.)
      */
-    'okedge:bucketRead': (identity, net) => {
-      const home = bucketHome();
-      if (!home.hasIdentityBucket(identity, net)) return null;
-      return require('node-onlykey-lib/bucket').serialize(home.read(home.identityFile(identity, net)));
-    },
-    'okedge:bucketMergeIn': (identity, net, text) => {
-      const lib = require('node-onlykey-lib/bucket');
-      const rules = require('node-onlykey-lib/bucket/src/store-rules').storeRules();
-      const home = bucketHome();
-      const report = home.update(home.identityFile(identity, net), (b) => {
-        const { bucket, report: r } = lib.merge(b, lib.parse(text), { rules });
-        b.stores = bucket.stores;
-        b.clock = bucket.clock;
-        return r;
-      });
-      return report.taken;
-    },
+    'okedge:bucketRead': (identity, net) => fileSide().read(identity, net),
+    'okedge:bucketMergeIn': (identity, net, text) => fileSide().mergeIn(identity, net, text),
   },
 };
