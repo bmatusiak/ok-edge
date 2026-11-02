@@ -24,6 +24,12 @@ export type KeyBusy = {
   waiting: number;
   /* the key waits for its press (an Edge budget opened, resumed or settled; a loss accepted) */
   press: boolean;
+  /*
+   * ...and has it: the ceremony after the press wait came back (Brad, 2026-11-01: "we send a ctap knowing a button press
+   * needs to happen, so we display the sheet for that request - after that, we hide the press sheet, and show the working
+   * with key progress sheet"). The rest of the request is its answer being collected - no press is asked any more.
+   */
+  pressed: boolean;
   done: boolean;
   /* how the request went: through the WebAuthn tunnel (a browser window a step), or straight to the key (the phone's soft key, a USB key) */
   via: 'tunnel' | 'direct';
@@ -136,7 +142,7 @@ export function noteTunnel(e: TunnelEvent) {
   const steps = Math.max(e.steps || 1, e.step, 1);
   const b: KeyBusy = {
     what: whatOf(e.msg, e.slot), step: e.step, steps, ops, opsDone, waiting: e.waiting ?? 0,
-    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), done: false, via: e.via ?? 'tunnel',
+    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), pressed: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.step >= 2, done: false, via: e.via ?? 'tunnel',
     since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
   };
   if (e.phase === 'end') {
@@ -160,6 +166,8 @@ export function noteTunnel(e: TunnelEvent) {
    * flow presses on this line (tools/box/webapp-edge-budget.sh).
    */
   if (b.press && e.phase === 'step' && e.step === 1) console.log(`[keybusy] the key waits for its press: ${b.what}`);
+  /* and once it has it: the press sheet goes, the progress stays (KeyBusySheet, HostChallengeSheet) */
+  if (b.press && e.phase === 'step' && e.step === 2) console.log(`[keybusy] pressed - the key answers: ${b.what}`);
   if (current) { set(b); return; }
   if (!showTimer) {
     showTimer = setTimeout(() => {

@@ -21,10 +21,11 @@ export function KeyBusySheet() {
   useEffect(() => onKeyBusy(setB), []);
   useEffect(() => onHostChallenge(setC), []);
   /* an Edge request that waits for its press: the key's 25 s along the bottom */
-  const pressSince = usePressSince(!!b && b.press && !b.done);
+  const pressSince = usePressSince(!!b && b.press && !b.pressed && !b.done);
   /* and rings, as every press sheet (Brad, 2026-11-01: "also audio") */
   usePressSound(pressSince, 'press');
-  if (!b || c) return null;
+  /* a host's press sheet (HostChallengeSheet) is on top until the key has the press - then this one's progress (Brad, 2026-11-01) */
+  if (!b || (c && !b.pressed)) return null;
   /*
    * TWO BARS (Brad, 2026-10-29: "tracking the queue and the individual in 2 progress bars"): the queue - this run's
    * requests answered, of those answered, the one in progress and those waiting behind it (a run asks one after another,
@@ -39,10 +40,10 @@ export function KeyBusySheet() {
   /* the step in progress, counted from 1 (the bar fills by the steps done) */
   const step = `This request: step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`;
   return (
-    <Sheet title={b.press && !b.done ? 'Press your OnlyKey' : 'Working with your key'} countdown={pressSince !== null ? {since: pressSince, seconds: 25}
+    <Sheet title={b.press && !b.pressed && !b.done ? 'Press your OnlyKey' : 'Working with your key'} countdown={pressSince !== null ? {since: pressSince, seconds: 25}
       /* the request's own limit while it runs (Brad, 2026-11-01: the sheet sat "just inactive" while a read hung 30 s; "if it has a timer it gets a timer progress bar") */
       : !b.done && b.limitMs ? {since: b.since, seconds: Math.max(1, Math.round(b.limitMs / 1000))} : null}>
-      {b.press && !b.done ? <PressIcon /> : null}
+      {b.press && !b.pressed && !b.done ? <PressIcon /> : null}
       <Text style={styles.counts}>{queue.join(' · ')}</Text>
       <View style={styles.track}>
         <View style={[styles.fill, {width: `${queuePct}%`}]} />
@@ -53,7 +54,7 @@ export function KeyBusySheet() {
       </View>
       <Text style={styles.counts}>{step}</Text>
       <Text style={styles.note}>
-        {b.press && !b.done
+        {b.press && !b.pressed && !b.done
           ? 'The key is waiting for you: press it to go on. The browser window that asks for your security key is part of this step.'
           : b.via === 'direct'
             ? 'This app is talking to your OnlyKey. Wait here until it is done.'

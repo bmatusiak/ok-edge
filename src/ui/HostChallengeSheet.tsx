@@ -11,6 +11,7 @@ import {usePressSound} from './pressSound';
 import {theme} from './theme';
 import {hostChallenge, onHostChallenge, type HostChallenge} from '../hostChallenge';
 import {activeBackend} from '../hooks/KeyContext';
+import {keyBusy, onKeyBusy, type KeyBusy} from '../keyBusy';
 
 /*
  * THE KEY'S 20 SECONDS (Brad, 2026-10-31: "dont we have a press sheet with a timer for 20 seconds, i think thats the hold
@@ -26,10 +27,19 @@ export function HostChallengeSheet() {
   /* when this wait began: a new challenge is a new wait */
   const [since, setSince] = useState<number | null>(null);
   useEffect(() => { setSince(c ? Date.now() : null); }, [c]);
+  /*
+   * ONLY WHILE THE PRESS IS ASKED (Brad, 2026-11-01: "we send a ctap knowing a button press needs to happen, so we display
+   * the sheet for that request - after that, we hide the press sheet, and show the working with key progress sheet"): once
+   * the key has the press (keyBusy pressed - the ceremony after the press wait came back) the rest of the request is its
+   * answer, and KeyBusySheet's progress shows instead.
+   */
+  const [busy, setBusy] = useState<KeyBusy | null>(keyBusy());
+  useEffect(() => onKeyBusy(setBusy), []);
+  const pressed = !!busy && busy.press && busy.pressed && !busy.done;
   const hard = !!c && activeBackend() === 'usb';
-  usePressSound(hard && since !== null ? since : null, 'press');
+  usePressSound(hard && !pressed && since !== null ? since : null, 'press');
   /* a hard key's only: the soft key's wait has its own sheet with its button (PressSheet, from the firmware's record) */
-  if (!c || !hard) return null;
+  if (!c || !hard || pressed) return null;
   return (
     <Sheet tone="press" title="Press the key" countdown={since !== null ? {since, seconds: KEY_WAIT_S} : null}>
       <PressIcon />
