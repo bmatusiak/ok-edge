@@ -608,7 +608,13 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
     };
     const noCheckpoint = () => reach(Object.assign(new Error('this device needs a checkpoint - certify to start'), {code: 'EDGE_NO_CHECKPOINT', why: 'no-top'}));
     if (!source.warmUp) throw noCheckpoint();
-    await source.warmUp().catch((e: any) => { throw e?.code === 'EDGE_NO_CHECKPOINT' ? reach(e) : e; });
+    await source.warmUp().catch((e: any) => {
+      if (e?.code !== 'EDGE_NO_CHECKPOINT') throw e;
+      /* the cold boot: the login card offered again - its certify's gate token enables Edge here (loginCard.offerCardForGate) */
+      const open = require('./bucketStore').tradeBucket();
+      if (open?.identity && source.deviceId) require('./loginCard').offerCardForGate(open.identity, toHex(source.deviceId), e.why ?? 'no checkpoint');
+      throw reach(e);
+    });
     head = await source.head();
     if (!head.head) throw noCheckpoint();
     lap('warm-up');

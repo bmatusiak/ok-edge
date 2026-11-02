@@ -160,6 +160,21 @@ export function offerNewCard(identity: string, device: string): void {
   setOffer({identity, device, state: 'offered', why: 'the login changed since this card was made'});
 }
 
+/*
+ * EDGE NOT ENABLED HERE (WARM_GATE; Brad, 2026-11-01: "the login identity card holds cold boot for edge to warm up - if
+ * the key has no identity on the mcp/webapp it creates one there"): a host that holds none of the chain, with no card
+ * top whose gate token the key takes, gets the card offered again - its certify (a press) carries a fresh token, filed
+ * as the card's top at once (makeCard), and Edge warms from it. Once per session for each key.
+ */
+const gateOffered = new Set<string>();
+export function offerCardForGate(identity: string, device: string, why: string): void {
+  const k = `${identity.toLowerCase()}:${device.toLowerCase()}`;
+  if (gateOffered.has(k) || offer) return;
+  gateOffered.add(k);
+  console.log(`[card] Edge is not enabled on this host (${why}) - the login card offered again: one press, and its checkpoint enables Edge here`);
+  setOffer({identity, device, state: 'offered', why: 'Edge needs a recent checkpoint of this key on this device: certify the card once (a press) and Edge is enabled here'});
+}
+
 /** Not now: the next login runs manually again, and offers it again. */
 export function dismissCardOffer(): void {
   setOffer(null);
