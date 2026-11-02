@@ -24,6 +24,8 @@ const CHANNELS = new Set([
   /* the hard key's older links, openings and notes from the shared records (electron/desktop/hosting.js) */
   /* this identity's bucket, opened once and kept with the CLI's in ~/.onlykey-js (node-onlykey-lib bucket/cli/home.js) */
   'okedge:bucketHas', 'okedge:bucketKeep', 'okedge:bucketRead', 'okedge:bucketMergeIn',
+  /* the computer's one id and name in the room - the CLI's too (node-onlykey-lib bucket/cli/home.js thisDevice) */
+  'okedge:roomDevice',
   /* the key's site: the window opens there (electron/main.js THE PAGE RUNS AT THE KEY'S SITE) */
   'okedge:keySite',
   /* which key the page has open, so a CLI reaches the same one (electron/desktop/hosting.js) */

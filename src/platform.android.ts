@@ -45,5 +45,7 @@ export const TEST_BUILD_BANNER: string = "TEST BUILD - debugging lock OFF: with 
 export const ACTIVITY_NOTE: string | null = null;
 /* how this device is named to the others in its room (src/serverRoom.ts; the key in use is added there) */
 export function deviceName(): string { return 'Phone'; }
+/* the computer's shared id and name (the desktop app's - platform.desktop.ts); this device keeps its own */
+export async function computerDevice(): Promise<{id: string; name: string} | null> { return null; }
 /* the login's reason, as the key's log keeps it */
 export function loginReason(): string { return 'log in: the phone app'; }

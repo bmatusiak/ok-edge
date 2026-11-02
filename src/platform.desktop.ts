@@ -55,5 +55,10 @@ export const TEST_BUILD_BANNER: string = "TEST BUILD - not a release";
 export const ACTIVITY_NOTE: string | null = null;
 /* how this device is named to the others in its room (src/serverRoom.ts; the key in use is added there) */
 export function deviceName(): string { return 'Desktop'; }
+/*
+ * THE COMPUTER IN THE ROOM (S5b, 2026-11-02): this app and `onlykey-js --service` are one device - one id and one name,
+ * the CLI's (~/.onlykey-js/device.json, node-onlykey-lib bucket/cli/home.js thisDevice), read by the main process.
+ */
+export async function computerDevice(): Promise<{id: string; name: string} | null> { return bridge!.invoke('okedge:roomDevice') as Promise<{id: string; name: string}>; }
 /* the login's reason, as the key's log keeps it */
 export function loginReason(): string { return 'log in: the desktop app'; }

@@ -27,7 +27,7 @@ import {adoptProof, handleTrade, proofMaterial, type Me} from './bucketTrade';
 import {saveTradedBucket, tradeBucket} from './bucketStore';
 import {RULES, storeItems} from './bucketRules';
 import {bucketTraded} from './bucketEvents';
-import {deviceName, shell} from './platform';
+import {computerDevice, deviceName, shell} from './platform';
 import {activeBackend} from './hooks/KeyContext';
 import {attachAgents, detachAgents} from './mcpAgents';
 import {ioPulse} from './btActivity';
@@ -200,6 +200,14 @@ export async function setServerUrl(url: string | null): Promise<void> {
 
 /* how this device shows in the room: one id for good (this device's storage), a name that says what it is */
 export async function thisDevice(): Promise<RoomPeer> {
+  const keyWord = activeBackend() === 'usb' ? 'hard key' : 'soft key';
+  /*
+   * THE COMPUTER IS ONE DEVICE (S5b, 2026-11-02): the desktop app and `onlykey-js --service` share the CLI's id and the
+   * computer's name, so the room sees the same device whichever serves (node-onlykey-lib bucket/cli/roomservice.js names
+   * itself the same way)
+   */
+  const computer = await computerDevice();
+  if (computer) return {id: computer.id, name: `${computer.name} (${keyWord})`, kind: shell};
   let id = await AsyncStorage.getItem(DEVICE_KEY);
   if (!id || !/^[0-9a-f]{16}$/.test(id)) {
     id = Array.from(randomBytes(8), b => b.toString(16).padStart(2, '0')).join('');
@@ -209,7 +217,7 @@ export async function thisDevice(): Promise<RoomPeer> {
    * this device's kind (platform deviceName) and THE KEY IN USE - the desktop on key 3 called itself "Desktop (soft key)"
    * when the name was fixed per shell (2026-10-30)
    */
-  return {id, name: `${deviceName()} (${activeBackend() === 'usb' ? 'hard key' : 'soft key'})`, kind: shell};
+  return {id, name: `${deviceName()} (${keyWord})`, kind: shell};
 }
 
 let room: any = null;

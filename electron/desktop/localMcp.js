@@ -48,12 +48,18 @@ async function start() {
 
 async function stop() {
   try { require('node-onlykey-lib/desktop/trust').removeLocalMcp({ what: 'desktop' }); } catch { /* none */ }
+  if (starting) await starting;
   if (server) await server.close().catch(() => undefined);
   server = null;
+  starting = null;
 }
 
 module.exports = {
-  start,
+  /*
+   * NOT STARTED WITH THE APP: it is this computer's local MCP only while this app is the computer's member
+   * (electron/desktop/member.js - an `onlykey-js --service` that served steps down first, and gives 8650 back)
+   */
+  serve: start,
   stop,
   syncHandlers: {
     'okedge:localMcp': () => (server ? server.url : null),

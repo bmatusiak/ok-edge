@@ -52,6 +52,8 @@ export function deviceName(): string {
   const browser = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
   return `${browser} web app`;
 }
+/* the computer's shared id and name (the desktop app's - platform.desktop.ts); this device keeps its own */
+export async function computerDevice(): Promise<{id: string; name: string} | null> { return null; }
 /* the login's reason, as the key's log keeps it: which browser, at which site */
 export function loginReason(): string {
   const ua = String(globalThis.navigator?.userAgent ?? '');

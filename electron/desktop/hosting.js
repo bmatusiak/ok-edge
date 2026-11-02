@@ -138,5 +138,7 @@ module.exports = {
      */
     'okedge:bucketRead': (identity, net) => fileSide().read(identity, net),
     'okedge:bucketMergeIn': (identity, net, text) => fileSide().mergeIn(identity, net, text),
+    /* the computer's one id and name in the room, the same `onlykey-js --service` joins with (S5b) */
+    'okedge:roomDevice': () => { const d = bucketHome().thisDevice(); return { id: d.id, name: d.name }; },
   },
 };
