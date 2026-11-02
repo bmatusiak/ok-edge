@@ -15,6 +15,7 @@ import {Btn} from './components';
 import {Locate} from './PressSheet';
 import {Sheet} from './Sheet';
 import {PressIcon} from './PressIcon';
+import {useTapWanted} from './tapWanted';
 import {usePressSince} from './SheetCountdown';
 import {theme} from './theme';
 import {consentRefusal} from '../debugGuard';
@@ -137,6 +138,7 @@ export function EdgeRequestSheet() {
   const left = useSecondsLeft(s && (s.phase === 'ask' || s.phase === 'press') ? s.until : null);
   /* the press phase: from when it began to the request's deadline, along the bottom */
   const pressSince = usePressSince(s?.phase === 'press');
+  const askSince = usePressSince(s?.phase === 'ask');
   /*
    * NO DOUBLE TAPS (Brad, 2026-10-04: a tap on Approve took a moment to register, the
    * timer ticked, a second tap landed on the next step by accident). The buttons start
@@ -152,6 +154,9 @@ export function EdgeRequestSheet() {
     return () => clearTimeout(t);
   }, [s?.phase, s?.ask]);
   const off = !ready || acting;
+  /* the person's answer is waited for (not the key's press): the drive's signal (tapWanted) - no icon */
+  const asked = s?.ask;
+  useTapWanted(s?.phase === 'ask' && !off && consentRefusal() === null, asked ? (asked.kind === 'identity' ? 'agent identity' : `budget ask "${asked.view?.reason}"`) : '', asked?.blocked ? ['Decline'] : ['Approve', 'Decline']);
   const act = (fn: () => void) => () => {
     if (off) return;
     setActing(true);
@@ -181,7 +186,9 @@ export function EdgeRequestSheet() {
 
   return (
     /* closable only when done; extraBottom: in debug builds React Native's warning toasts sit along the bottom and catch taps (2026-10-04) */
-    <Sheet tone="edge" onClose={s.phase === 'done' ? closeSheet : undefined} extraBottom={48} countdown={pressSince !== null && s.phase === 'press' ? {since: pressSince, seconds: Math.max(1, Math.round((s.until - pressSince) / 1000))} : null}>
+    <Sheet tone="edge" onClose={s.phase === 'done' ? closeSheet : undefined} extraBottom={48} countdown={pressSince !== null && s.phase === 'press' ? {since: pressSince, seconds: Math.max(1, Math.round((s.until - pressSince) / 1000))}
+      /* the answer has a timer too, so it gets the bar (Brad, 2026-11-01: "if it has a timer it gets a timer progress bar") */
+      : askSince !== null && s.phase === 'ask' ? {since: askSince, seconds: Math.max(1, Math.round((s.until - askSince) / 1000))} : null}>
             {/* the testnet (src/net.ts): a throwaway key - said before anything is approved */}
             {currentNet() === 'test' ? <Text style={[styles.title, {color: theme.io}]}>TESTNET</Text> : null}
             {a.kind === 'identity' ? (

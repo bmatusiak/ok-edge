@@ -14,6 +14,8 @@
  *   budget {times}    one budget approved and its three signs (flows.budget)
  *   goto: <tab>       the tab through the menu, the app's own flag saying it shows
  *   waitForLog        a line the app logs (a regex) - events, not the screen: Maestro has no log
+ *   waitForTap        a sheet waiting for the person's tap (the app's "[tap] wanted: <what> - choices ...", src/ui/tapWanted.ts);
+ *                     `what` a regex its words must match, `timeout` in ms - the flow's next tapOn answers it
  *   machine           an action of a machine the drive reaches (targets.js): keys, key-state, tool, hex, flash ...
  *
  * WHAT IS OURS UNDER MAESTRO'S NAMES (not exactly how Maestro does it):
@@ -275,6 +277,22 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
       case 'goto':
         await d.goto(String(a));
         return;
+      case 'waitForTap': {
+        /* a sheet asks the person (Approve / Decline): the app's own signal, not a guess from the screen - signal only, the flow taps */
+        const spec = typeof a === 'string' ? { what: a } : (a || {});
+        const life = Math.max(1, Math.round((spec.timeout || 60000) / 1000));
+        const want = spec.what ? new RegExp(spec.what) : null;
+        const re = /^\[tap\] wanted: (.*) - choices (.*)$/;
+        const hit = (l) => { const m = l.match(re); return m && (!want || want.test(m[1])) ? m : null; };
+        const early = seen.find((x) => x.at >= prevStart && hit(x.l));
+        /* d.until returns the matching line only for a regex goal: the wait's words in a lookahead */
+        const goal = new RegExp(`^\\[tap\\] wanted: ${spec.what ? `(?=.*(?:${spec.what}))` : ''}`);
+        const got = early ? early.l : await d.until(goal, { life, fail: [] }).catch((e) => { throw new Error(`no tap wanted${spec.what ? ` (/${spec.what}/)` : ''}: ${e.message.split('\n')[0]}`); });
+        const m = hit(String(got));
+        if (m) say(`a tap is wanted: ${m[1]} - ${m[2]}`);
+        if (spec.as) output[spec.as] = m ? m[1] : got;
+        return;
+      }
       case 'waitForLog': {
         const spec = typeof a === 'string' ? { pattern: a } : a;
         const life = Math.max(1, Math.round((spec.timeout || 60000) / 1000));

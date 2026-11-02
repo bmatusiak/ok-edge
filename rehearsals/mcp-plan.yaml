@@ -1,8 +1,8 @@
 # An agent's plan, run on this device (the MCP plan, Step 4b). The agent's side runs beside it
 # (tools/box/mcp-plan-agent.js <mcp url> <identity>: a plan of one sign and one placeholder, submitted once accepted,
 # filled when the plan pauses for it). Here the owner's side: accept the agent in the Edge tab's Agents rows, then the
-# Edge sheet asks one budget sized to the plan - Approve, and the drive presses the test key once - each item signs as
-# one paid use with its receipt, and the plan ends done with its budget ended.
+# Edge sheet asks one budget sized to the plan (its "[tap] wanted" signal) - Approve, and the drive presses the test key
+# once - each item signs as one paid use with its receipt, and the plan ends done with its budget ended.
 name: Run an MCP plan
 tags:
   - agents
@@ -12,9 +12,10 @@ tags:
 - tapOn:
     text: "Accept"
     timeout: 60
-- tapOn:
-    text: "Approve"
-    timeout: 60
+- waitForTap:
+    what: 'budget ask'
+    timeout: 120000
+- tapOn: "Approve"
 - waitForLog: '\[mcp\] plan \S+: budget \d+ open'
 - waitForLog:
     pattern: '\[mcp\] plan \S+: (done|ended|failed|declined)'
