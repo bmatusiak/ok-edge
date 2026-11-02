@@ -174,7 +174,7 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
   }
   fileWhy = '';
   const hex = (b: Uint8Array | null | undefined) => (b ? toHex(b) : '');
-  const seals = (mirror.seals ?? []) as {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array}[];
+  const seals = (mirror.seals ?? []) as {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array; ended?: number[]}[];
   const anchor = checkpoint?.signaturePq?.length ? checkpoint : [...seals].reverse().find(s => s.signaturePq?.length) ?? null;
   await fileCardTop(source, mirror, anchor).catch((e: unknown) => console.log(`[card] top not filed - ${String((e as Error)?.message ?? e)}`));
   const own = await require('./edgeDevices').ownStatement(toHex(source.deviceId));
@@ -185,9 +185,19 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
     lastSeen: mirror.lastSeen ? {seq: mirror.lastSeen.seq, head: hex(mirror.lastSeen.head)} : null,
     ...(mirror.publicKey ? {publicKey: hex(mirror.publicKey)} : {}),
     ...(mirror.publicKeyPq ? {publicKeyPq: hex(mirror.publicKeyPq)} : {}),
-    seals: seals.map(s => ({seq: s.seq, head: hex(s.head), signature: hex(s.signature), ...(s.signaturePq?.length ? {signaturePq: hex(s.signaturePq)} : {})})),
+    seals: seals.map(s => ({seq: s.seq, head: hex(s.head), signature: hex(s.signature), ...(s.signaturePq?.length ? {signaturePq: hex(s.signaturePq)} : {}), ...(s.ended?.length ? {ended: s.ended} : {})})),
     openings: await source.openingWords().catch(() => []),
-    notes: {reasons: Object.fromEntries(Object.entries(mirror.reasons ?? {}).map(([k, v]) => [k, (v as {text: string}).text])), messages: mirror.messages ?? {}, seen: mirror.seen ?? {}},
+    notes: {
+      reasons: Object.fromEntries(Object.entries(mirror.reasons ?? {}).map(([k, v]) => [k, (v as {text: string}).text])), messages: mirror.messages ?? {}, seen: mirror.seen ?? {},
+      /*
+       * WHAT ONLY THIS DEVICE KNEW, FILED TOO (S4 step 4, 2026-11-02): who wrote each reason and when, the refused TX starts,
+       * where the copy began trusting the key, the budgets each seal closed - so the bucket holds the whole log, and the
+       * mirror can stop being the only place they live (the lib's copyfile / logblocks keep and merge them)
+       */
+      who: Object.fromEntries(Object.entries(mirror.reasons ?? {}).map(([k, v]) => [k, {computer: (v as {computer: string}).computer, at: (v as {at: number}).at}])),
+    },
+    ...(mirror.anchor ? {anchor: {seq: mirror.anchor.seq, head: hex(mirror.anchor.head)}} : {}),
+    ...(mirror.refusals?.length ? {refusals: mirror.refusals} : {}),
     ...(anchor ? {checkpoint: {seq: anchor.seq, head: hex(anchor.head), signature: hex(anchor.signature), signaturePq: hex(anchor.signaturePq ?? null)}} : {}),
     ...(own ? {statement: {deviceId: own.deviceId, publicKey: own.publicKey, publicKeyPq: own.publicKeyPq, seq: own.seq, nametag: own.nametag, signature: own.signature, signaturePq: own.signaturePq}} : {}),
   };
