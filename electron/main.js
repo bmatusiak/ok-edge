@@ -193,9 +193,16 @@ app.whenReady().then(() => {
  * quitting and be stopped by force - and what the page had just stored, the identity's sealed bucket, the agent
  * identity, never reached the disk). Flushed here, before anything that can hang.
  */
+const flushStorage = () => { try { session.defaultSession.flushStorageData(); } catch (e) { console.error(`[storage] flush: ${e.message}`); } };
 app.on('window-all-closed', () => {
-  try { session.defaultSession.flushStorageData(); } catch (e) { console.error(`[storage] flush: ${e.message}`); }
+  flushStorage();
   app.quit();
 });
+/*
+ * AND ON EVERY OTHER WAY OUT (2026-11-02, Windows: the server set in the Server panel was gone after each restart): app.quit()
+ * - the drive's quit, a menu's Quit - does not emit window-all-closed, so nothing was flushed before the processes ended.
+ * before-quit comes first on every path.
+ */
+app.on('before-quit', flushStorage);
 /* desktop.json leaves with the app, so the CLI goes back to the key directly */
 app.on('will-quit', () => { desktopModules.stop().catch(() => {}); });
