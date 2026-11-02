@@ -27,7 +27,7 @@ import {budgetStatus} from '../budgetStatus';
 import {openBudget} from '../edgeNav';
 import {currentNet} from '../net';
 import {identity as identityLib} from 'node-onlykey-lib/edge';
-import {DEVICE_WORD, shell} from '../platform';
+import {DEVICE_WORD} from '../platform';
 import {usePressSound} from './pressSound';
 import {activeBackend} from '../hooks/KeyContext';
 
@@ -210,7 +210,7 @@ export function EdgeRequestSheet() {
                   </Text>
                 ) : null}
                 <Text style={styles.dim}>
-                  {`${shell === 'android' ? 'Every computer paired with this phone' : `Every agent that asks this ${DEVICE_WORD}`} uses it: the same ssh and gpg keys. Approving is a tap - the key already signed the certificate on the computer.`}
+                  {`Every agent that asks this ${DEVICE_WORD} uses it: the same ssh and gpg keys. Approving is a tap - the key already signed the certificate on the computer.`}
                 </Text>
               </>
             ) : (

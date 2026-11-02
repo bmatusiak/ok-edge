@@ -18,11 +18,10 @@
  * the Requests switch.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {approve as approveLib, chain, identity as identityLib, note as noteLib, request as requestLib, sync as syncLib} from 'node-onlykey-lib/edge';
+import {approve as approveLib, identity as identityLib, note as noteLib, request as requestLib} from 'node-onlykey-lib/edge';
 import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
-import {addNote, loadMirror, sync as syncCopy, takeOwnLinks} from './edgeStore';
-import {ownStatement, receiveLog, loadHeld} from './edgeDevices';
+import {addNote, sync as syncCopy} from './edgeStore';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
@@ -291,138 +290,6 @@ async function handleNote(msg: any, from: string): Promise<unknown | null> {
 }
 
 /*
- * onlykey-js edge sync phase 2 (Brad, 2026-10-05): a place that keeps copies fills this
- * phone's copy. Since 2026-10-08 the gate is who asks (computerOf: the cli pair until
- * 2026-10-30, the desktop's own CLI since), not a place on the KEY's list
- * (R20). HAVE is a read (what this copy holds); LINKS parts are staged in memory,
- * changing nothing. COMMIT: this phone's OWN links are merged into a candidate, checked
- * (R27) and kept at once - no sheet, no press, no link on the key (until 2026-10-08 a
- * sync took Yes, a press and a sync link). OFFER: another device's log is HELD until
- * the person approves it from the Edge tab's banner.
- */
-/* one sync's parts, by sid, in memory only (nothing changes until its COMMIT or OFFER) */
-const syncStaged = new Map<string, {peer: string; computer: string; links: Map<number, any[]>; linkParts: number; chain: string | null}>();
-async function handleSync(msg: any, seen: Set<string>, computer: {id: string; name: string}): Promise<unknown | null> {
-  const checked = syncLib.verify(msg, {seen});
-  /* one line per sync message: a message dropped here gets no answer, and the computer waits */
-  console.log(`[edge] sync message ${msg?.type}${msg?.payload?.chain ? ` (device ${String(msg.payload.chain).slice(0, 8)})` : ''}: ${checked.ok ? 'checked' : `dropped (${checked.reason})`}`);
-  if (!checked.ok) return null;
-  seen.add(String(msg.nonce).toLowerCase());
-  soft = soft ?? (await SoftKeyEdge.open());
-  if (!soft) return {ok: false, refusal: 'invalid', detail: "this device's key has no Edge"};
-  /*
-   * WHICH COMPUTER IS THE PAIRING (Brad, 2026-10-11: "checking every field in a token means
-   * nothing if we never check the signature"): `computer` is who asks (computerOf - the CLI
-   * behind the desktop's trusted local socket) - that is what says who sent it,
-   * and its name is the one the banner shows. The message's own signature is checked against a
-   * key the message itself carries (msg.peer), so it proves only that the message is whole, not
-   * who sent it; a sync's parts must all come from one computer. What it brings of
-   * another device is HELD.
-   */
-  const peer = String(msg.peer).toLowerCase();
-  if (String(msg.payload.deviceId).toLowerCase() !== toHexId(soft.deviceId)) {
-    return {ok: false, refusal: 'invalid', detail: "those links are another chain's, not this device's key"};
-  }
-  const p = msg.payload;
-  if (msg.type === syncLib.GIVE_TYPE) {
-    /*
-     * This phone's copy of its OWN chain - history only, no press (a computer keeps
-     * copies anyway). From the copy as it is NOW (the key's newest included), BATCH at
-     * a time.
-     */
-    const {mirror} = await syncCopy(soft);
-    const from = mirror.links.filter((r: any) => seqOfLink(r) >= p.from);
-    const batch = from.slice(0, syncLib.BATCH);
-    const hex = (b: Uint8Array) => toHexId(b);
-    const next = from.length > batch.length ? seqOfLink(from[batch.length]) : null;
-    /*
-     * BLOCKS (BLOCKS.md, Brad 2026-10-07): with the last batch, the key's seals
-     * (the checkpoints that close each block) - what a computer needs to cut its copy
-     * into JSON blocks, each checked there against the key's own public key - and this
-     * phone's own latest statement (its NAMETAG, 2026-10-08): what lets that computer
-     * offer this phone's log to your other devices.
-     */
-    /* this device's nametag, when the person set one (none: no statement, and the computer shows it UNNAMED) */
-    const own = next === null ? await ownStatement() : null;
-    const blocks = next === null ? {
-      /* [seq, head, sig, sigPq?]: only the newest seal carries its ML-DSA-65 half (one hybrid anchor per copy, 2026-10-10) */
-      seals: (mirror.seals ?? []).map(s => (s.signaturePq ? [s.seq, hex(s.head), hex(s.signature), hex(s.signaturePq)] : [s.seq, hex(s.head), hex(s.signature)])),
-      /* the statement fully hybrid: both checkpoint keys named, both owner signatures */
-      ...(own ? {statement: {deviceId: own.deviceId, publicKey: own.publicKey, publicKeyPq: own.publicKeyPq, seq: own.seq, nametag: own.nametag, signature: own.signature, signaturePq: own.signaturePq}} : {}),
-      /* the budgets' opening words: full cards on your other devices, checked there against this log (2026-10-09) */
-      openings: await soft.openingWords().catch(() => []),
-      /* its notes - the intent of each use, each receipt's message - checked against the chain's hashes wherever shown */
-      notes: {reasons: Object.fromEntries(Object.entries(mirror.reasons ?? {}).map(([k, v]) => [k, (v as {text: string}).text])), messages: mirror.messages ?? {}, seen: mirror.seen ?? {}},
-    } : {};
-    return {ok: true, links: batch.map((r: any) => [hex(r.link), hex(r.head), r.reveal ? hex(r.reveal) : null]), next, ...blocks};
-  }
-  /* HAVE / LINKS / OFFER for ANOTHER device's chain: what this phone holds of it (merged or held) */
-  const other = p.chain ? String(p.chain).toLowerCase() : null;
-  if (other && other === toHexId(soft.deviceId)) return {ok: false, refusal: 'invalid', detail: "that is this device's own chain"};
-  if (msg.type === syncLib.HAVE_TYPE && other) {
-    const merged = (await loadMirror(fromHexId(other))).links.map((r: any) => seqOfLink(r));
-    const heldOne = (await loadHeld()).find(h => h.deviceId === other);
-    const heldSeqs = heldOne ? heldOne.records.map(([l]) => seqOfLink({link: fromHexId(l)})) : [];
-    return {ok: true, ranges: syncLib.rangesOf([...new Set([...merged, ...heldSeqs])].sort((a, b) => a - b))};
-  }
-  if (msg.type === syncLib.HAVE_TYPE) {
-    const {mirror} = await syncCopy(soft); /* what this copy holds NOW, the key's newest included */
-    return {ok: true, ranges: syncLib.rangesOf(mirror.links.map((r: any) => seqOfLink(r)))};
-  }
-  let st = syncStaged.get(p.sid);
-  if (!st) {
-    st = {peer, computer: computer.id, links: new Map(), linkParts: 0, chain: null};
-    syncStaged.set(p.sid, st);
-  }
-  if (st.peer !== peer || st.computer !== computer.id) return {ok: false, refusal: 'invalid', detail: 'a part of another sync'};
-  if ((st.chain ?? null) !== (p.chain ?? null) && st.links.size) return {ok: false, refusal: 'invalid', detail: 'a part of another chain'};
-  st.chain = p.chain ?? null;
-  if (msg.type === syncLib.LINKS_TYPE) {
-    st.links.set(p.part, syncLib.recordsOf(msg));
-    st.linkParts = p.parts;
-    return {ok: true, staged: st.links.size};
-  }
-  if (msg.type === syncLib.OFFER_TYPE) {
-    /*
-     * ANOTHER DEVICE'S LOG (Brad, 2026-10-24: "i should not be asked to merge anything.. i should
-     * just open a log and see everything"): merged at once when its signatures check
-     * (edgeDevices.receiveLog), listed as new in your log for you to notice and mark seen; one that
-     * does not check is kept apart and listed as a warning.
-     */
-    syncStaged.delete(p.sid);
-    if (st.links.size !== p.linkParts) return {ok: false, refusal: 'invalid', detail: `parts missing (links ${st.links.size}/${p.linkParts}) - sync again`};
-    const offered = [...st.links.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, r]) => r);
-    /* what this phone already holds of that chain (merged, or held before), with what came now */
-    const before = [...(await loadMirror(fromHexId(String(p.chain)))).links];
-    const heldBefore = (await loadHeld()).find(h => h.deviceId === String(p.chain).toLowerCase());
-    if (heldBefore) for (const [l, hd, r] of heldBefore.records) before.push({link: fromHexId(l), head: fromHexId(hd), reveal: r ? fromHexId(r) : null});
-    const all = syncLib.merge(syncLib.merge([], before).links, offered);
-    const c = p.checkpoint;
-    const st2 = p.statement;
-    /* hybrid (2026-10-10): the offer's checkpoint is that log's newest - both halves - and its statement names both checkpoint keys (lib sync.verify checked the lengths) */
-    const r = await receiveLog({
-      deviceId: fromHexId(String(p.chain)), publicKey: fromHexId(st2.publicKey), publicKeyPq: fromHexId(st2.publicKeyPq), records: all.links,
-      checkpoint: {seq: c.seq, head: fromHexId(c.head), signature: fromHexId(c.signature), signaturePq: fromHexId(c.signaturePq)},
-      statement: {
-        deviceId: fromHexId(String(p.chain)), publicKey: fromHexId(st2.publicKey), publicKeyPq: fromHexId(st2.publicKeyPq), seq: st2.seq ?? null, nametag: st2.nametag,
-        signature: fromHexId(st2.signature), signaturePq: fromHexId(st2.signaturePq),
-      },
-      from: computer.name,
-      openings: Array.isArray(p.openings) ? p.openings : [],
-      notes: p.notes && typeof p.notes === 'object' ? p.notes : null,
-    });
-    return {ok: true, held: r.held, count: offered.length};
-  }
-  if (st.chain) return {ok: false, refusal: 'invalid', detail: "another device's links end with an offer, not a commit"};
-  /* COMMIT: every part here; this phone's own links merge (its own key's, nothing new to trust) */
-  syncStaged.delete(p.sid);
-  if (st.links.size !== p.linkParts) return {ok: false, refusal: 'invalid', detail: `parts missing (links ${st.links.size}/${p.linkParts}) - sync again`};
-  const offered = [...st.links.entries()].sort((a, b) => a[0] - b[0]).flatMap(([, r]) => r);
-  /* the same rules wherever this copy is filled from (edgeStore.takeOwnLinks): here a computer that asks */
-  const t = await takeOwnLinks(soft, offered);
-  return t.ok ? {ok: true, count: t.count, seq: null} : {ok: false, refusal: t.refusal, detail: t.detail};
-}
-/*
  * THE AGENT IDENTITY (SPEC H7; Brad, 2026-10-20: "computer sets, phone keeps"). From a computer
  * that asks (computerOf) only, well formed and new (the nonce, as a request's). GET is a read: the record
  * this phone keeps, or none - every agent's start asks it. SET goes on the Edge sheet: the
@@ -456,19 +323,10 @@ async function handleIdentity(msg: any, seen: Set<string>, from: string): Promis
   return {ok: true};
 }
 
-const toHexId = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
-const fromHexId = (h: string) => Uint8Array.from((String(h).match(/../g) ?? []).map(x => parseInt(x, 16)));
-const seqOfLink = (r: any) => chain.decodeLink(r.link).seq;
 
 async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknown | null> {
   const seen = await loadSeen();
   try {
-    /* the Key Chain list is not Edge's (Brad, 2026-10-08: "Move it out of Edge"): Edge's sync carries device logs only */
-    if ([syncLib.HAVE_TYPE, syncLib.LINKS_TYPE, syncLib.COMMIT_TYPE, syncLib.GIVE_TYPE, syncLib.OFFER_TYPE].includes(msg?.type)) {
-      /* a sync is taken only from a computer that asks (computerOf) - none behind this link, no answer (as a request below) */
-      const pc = await computerOf(from);
-      return pc ? await handleSync(msg, seen, {id: pc.id, name: pc.name}) : null;
-    }
     if (identityLib.TYPES.includes(msg?.type)) return await handleIdentity(msg, seen, from);
     if (msg?.type !== requestLib.TYPE) return null;
     /* the Requests switch is off: refused unread */
