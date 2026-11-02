@@ -8,7 +8,8 @@
  * One ask at a time: set while the key waits, cleared when it answered or gave up. HostChallengeSheet.tsx shows it,
  * wherever the person is.
  */
-export type HostChallenge = {digits: number[]; what: string};
+/* screen: raised by a screen for its whole operation (askPress) - not by the lib at the key's challenge */
+export type HostChallenge = {digits: number[]; what: string; screen?: boolean};
 
 let current: HostChallenge | null = null;
 const listeners = new Set<(c: HostChallenge | null) => void>();
@@ -45,7 +46,7 @@ export function clearHostChallenge(): void {
 }
 
 export function askPress(what: string): () => void {
-  const ask: HostChallenge = {digits: [], what};
+  const ask: HostChallenge = {digits: [], what, screen: true};
   set(ask);
   /* only its own ask: the key's press may have cleared it already (keyBusy), and a later ask is another's */
   return () => { if (current === ask) set(null); };

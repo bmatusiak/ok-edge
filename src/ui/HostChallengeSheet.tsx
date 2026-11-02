@@ -11,7 +11,7 @@ import {usePressSound} from './pressSound';
 import {theme} from './theme';
 import {hostChallenge, onHostChallenge, type HostChallenge} from '../hostChallenge';
 import {activeBackend} from '../hooks/KeyContext';
-import {keyBusy, onKeyBusy, type KeyBusy} from '../keyBusy';
+import {keyBusy, onKeyBusy, viaTunnel, type KeyBusy} from '../keyBusy';
 
 /*
  * THE KEY'S 20 SECONDS (Brad, 2026-10-31: "dont we have a press sheet with a timer for 20 seconds, i think thats the hold
@@ -28,6 +28,12 @@ const KEY_WAIT_S = 20;
  */
 export function hostSheetShows(c: HostChallenge | null, busy: KeyBusy | null): boolean {
   if (!c || activeBackend() !== 'usb') return false;
+  /*
+   * A SCREEN'S ASK WAITS FOR THE KEY'S WAIT (Brad, 2026-11-01: "the progress timer 20 sec is running before the press is
+   * needed"): the login raises its ask before its budget request has even begun - over the tunnel the sheet (and its
+   * 20 s) come when the key has the request's last chunk, and go when its answer comes.
+   */
+  if (c.screen && viaTunnel()) return !!busy && busy.asks;
   return !(busy && busy.press && !busy.done && !busy.asks);
 }
 

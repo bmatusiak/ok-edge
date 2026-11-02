@@ -43,7 +43,7 @@ export type KeyBusy = {
   since: number;
   limitMs: number | null;
 };
-type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number};
+type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number; answered?: boolean};
 /* the request in progress: when it began and its limit (said at its begin) */
 let began = {id: -1, at: 0, limitMs: null as number | null};
 /*
@@ -51,6 +51,14 @@ let began = {id: -1, at: 0, limitMs: null as number | null};
  * the next one waits for the press. A request with no plan yet: after its first ceremony, as before.
  */
 const pressAtOf = new Map<number, number>();
+/* the requests whose press was already said (the lib's answered comes on every step after it) */
+const saidPressed = new Set<number>();
+/*
+ * this app reaches its key through the WebAuthn tunnel (a request came that way): a screen's press ask then waits for the
+ * key's own wait (asks) - HostChallengeSheet hostSheetShows
+ */
+let tunnelSeen = false;
+export const viaTunnel = () => tunnelSeen;
 
 const SHOW_AFTER_MS = 250;
 /*
@@ -146,6 +154,7 @@ export function noteTunnel(e: TunnelEvent) {
   if (e.phase === 'end' && e.ok) require('./idleTimer').touch('key');
   if (e.phase === 'begin') {
     pressAtOf.clear();
+    saidPressed.clear();
     began = {id: e.id, at: Date.now(), limitMs: e.limitMs ?? null};
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     ops += 1;
@@ -154,10 +163,18 @@ export function noteTunnel(e: TunnelEvent) {
   if (Number.isInteger(e.pressAt)) pressAtOf.set(e.id, e.pressAt as number);
   const pressAt = pressAtOf.get(e.id) ?? 1;
   const steps = Math.max(e.steps || 1, e.step, 1);
+  /*
+   * PRESSED IS THE KEY'S ANSWER, NOT A STEP COUNT (2026-11-01: a waiting key answers "not yet" to every poll after the
+   * request's last chunk - each poll is a step - so "the step after pressAt" was taken as the press while the key still
+   * waited, and the press sheet went for its 26 s): the lib says when a poll first brought the answer (okcrypto answered).
+   */
+  const isPress = e.msg === OKEDGE && EDGE_PRESSED.has(e.slot);
+  const answered = !!e.answered;
+  if (e.via !== 'direct') tunnelSeen = true;
   const b: KeyBusy = {
     what: whatOf(e.msg, e.slot), step: e.step, steps, ops, opsDone, waiting: e.waiting ?? 0,
-    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), pressed: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.step > pressAt,
-    asks: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.phase === 'step' && e.step === pressAt, done: false, via: e.via ?? 'tunnel',
+    press: isPress, pressed: isPress && answered,
+    asks: isPress && e.phase === 'step' && e.step >= pressAt && !answered, done: false, via: e.via ?? 'tunnel',
     since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
   };
   if (e.phase === 'end') {
@@ -189,7 +206,8 @@ export function noteTunnel(e: TunnelEvent) {
    * proof, the rows - one press among dozens of requests), so a sheet hidden only while this request was pressed came
    * back with the next one and covered the progress. The key has its press: nothing waits on the person now.
    */
-  if (b.press && e.phase === 'step' && e.step === pressAt + 1) {
+  if (b.pressed && !saidPressed.has(e.id)) {
+    saidPressed.add(e.id);
     console.log(`[keybusy] pressed - the key answers: ${b.what}`);
     require('./hostChallenge').clearHostChallenge();
   }
