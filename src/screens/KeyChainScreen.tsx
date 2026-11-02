@@ -1375,7 +1375,7 @@ export function KeyChainScreen({
         title={`On this Key — ${keyName}`}
         right={
           <View style={styles.headerButtons}>
-            <Btn title={adding && scope === 'key' ? 'Close' : '+ Add'} tone="primary" onPress={() => openEditor('key', false)} />
+            <Btn title={adding && scope === 'key' ? 'Close' : '+ Add'} label={adding && scope === 'key' ? undefined : 'Add a key to this Key'} tone="primary" onPress={() => openEditor('key', false)} />
           </View>
         }>
         {inConfig ? (
@@ -1430,7 +1430,7 @@ export function KeyChainScreen({
         title="On this App"
         right={
           <View style={styles.headerButtons}>
-            <Btn title={adding && scope === 'app' ? 'Close' : '+ Add'} tone="primary" onPress={() => openEditor('app', false)} />
+            <Btn title={adding && scope === 'app' ? 'Close' : '+ Add'} label={adding && scope === 'app' ? undefined : 'Add a key to this App'} tone="primary" onPress={() => openEditor('app', false)} />
           </View>
         }>
         {entries.length ? (

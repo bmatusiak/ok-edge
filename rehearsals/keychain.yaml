@@ -12,11 +12,8 @@ env:
 - runFlow: login.yaml
 - goto: Key Chain
 - waitForAnimationToEnd
-# "On this App"'s "+ Add" (the drive lists controls as they registered: index 1 is "On this Key"'s) - its editor
-# offers Derive, which the key's does not
-- tapOn:
-    text: "\\+ Add"
-    index: 0
+# "On this App"'s "+ Add", by its screen-reader name (the two "+ Add" buttons look the same) - its editor offers Derive
+- tapOn: "Add a key to this App"
 - waitForAnimationToEnd
 - assertVisible: "Derive"
 # a label of this run's own, so a second run is a new key, not "Already in the App"
