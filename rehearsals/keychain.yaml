@@ -5,6 +5,9 @@ appId: com.okrn
 name: Key Chain keeps every key
 tags:
   - keychain
+# the soft keys' testing PIN - login.yaml's own is the hard keys' (a caller's env wins)
+env:
+  PIN: "1234561"
 ---
 - runFlow: login.yaml
 - goto: Key Chain
