@@ -307,10 +307,20 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
          * waiting. `failOn` names another failure; `failOn: none` waits as before.
          */
         const failRe = spec.failOn === 'none' ? null : new RegExp(spec.failOn || '\\[timeline\\] \\d+ end #\\d+ .* failed|the key stopped waiting for the press');
-        const failedEarly = failRe && seen.find((x) => x.at >= prevStart && failRe.test(x.l));
-        if (failedEarly) throw new Error(`no log line /${spec.pattern}/ - the app failed first: ${failedEarly.l.slice(0, 200)}`);
+        /*
+         * A FAILURE THE APP HANDLES IS GIVEN GRACE_MS (box desktop, 2026-11-01: a plan's budget end "failed" - the key had
+         * already ended it, which the lib takes as done - and the plan's "done" came 1 ms later; the wait had stopped on
+         * the failure): the wanted line within GRACE_MS of a failure passes the step; past it, the failure ends it.
+         */
+        const GRACE_MS = 3000;
         let stopFail = false;
-        const failed = failRe ? d.until(failRe, { life, fail: [] }).then((l) => { if (!stopFail) throw new Error(`no log line /${spec.pattern}/ - the app failed: ${String(l).slice(0, 200)}`); }, () => new Promise(() => {})) : new Promise(() => {});
+        const graceThen = (l, at = Date.now()) => new Promise((_, rej) => setTimeout(() => {
+          if (!stopFail) rej(new Error(`no log line /${spec.pattern}/ - the app failed: ${String(l).slice(0, 200)}`));
+        }, Math.max(0, at + GRACE_MS - Date.now())));
+        const failedEarly = failRe && seen.find((x) => x.at >= prevStart && failRe.test(x.l));
+        const failed = !failRe ? new Promise(() => {})
+          : failedEarly ? graceThen(failedEarly.l, failedEarly.at)
+          : d.until(failRe, { life, fail: [] }).then((l) => graceThen(l), () => new Promise(() => {}));
         /*
          * AND WHEN THE APP GOES IDLE WITHOUT IT (Brad, 2026-11-01: "i see it, doing nothing, waiting, i have enough time
          * to complain before you got the results back"): the watchdog's quiet is reset by every line, and the gadget's
