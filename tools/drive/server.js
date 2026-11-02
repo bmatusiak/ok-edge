@@ -168,6 +168,8 @@ function pressWhenAsked(app) {
     const colour = led[1];
     if (!waiting(colour) || touched || codeOpen || pressing) return;
     touched = true;
+    /* one wait, one press: the icon's line for this same wait must not press again (shared guard, below) */
+    iconAnswered = true;
     pressing = true;
     try {
       const s = await procFor(app, 'key-state');
@@ -194,8 +196,13 @@ function pressWhenAsked(app) {
     /* one icon press per key request: two sheets showing the icon for one wait must not press twice - a stray press on an
        unlocked key types a slot. The app's next request step ("[timeline] begin/end") opens it again. */
     if (/^\[timeline\] \d+ (begin|end) /.test(l)) { iconAnswered = false; return; }
-    if (icon && (codeOpen || iconAnswered)) return;
-    if (icon) iconAnswered = true;
+    /*
+     * ONE GUARD FOR BOTH TRIGGERS (box web app, 2026-11-01: the press icon and the gadget's waiting LED each pressed the
+     * same wait - two presses at 20:25:22, and the key's next wait in that loss went unanswered until it gave up). A press
+     * from either marks the step answered for both, until the app's next request step.
+     */
+    if (icon && (codeOpen || iconAnswered || touched)) return;
+    if (icon) { iconAnswered = true; touched = true; }
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
     if (outside) {
       if (pressing) return;
