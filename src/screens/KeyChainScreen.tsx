@@ -430,11 +430,16 @@ export function KeyChainScreen({
     setError(null);
     setStatus(null);
     try {
+      /*
+       * new or not is told against the list as it was BEFORE this derive: the soft key records the derive it answers
+       * (keyChainRecorder) before this save runs, so against the list now it would always read as already here
+       */
+      const before = entriesRef.current;
       const {okcrypto} = await getKey();
       const entry = await keychain.derive.derivePublic(okcrypto, {scheme: d.scheme, type: d.type, label: d.label.trim(), ...(d.version ? {version: d.version} : {})});
       const made = keychain.list.createEntry(entry);
-      let added = 0;
-      await saveEntries(cur => { const m = keychain.list.merge(cur, [made]); added = m.added; return m.entries; });
+      const added = keychain.list.merge(before, [made]).added;
+      await saveEntries(cur => keychain.list.merge(cur, [made]).entries);
       setStatus(added ? `Derived and kept in the App: ${d.label.trim()}.` : 'Already in the App.');
       setOpen(made.id);
       return true;
