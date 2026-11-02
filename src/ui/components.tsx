@@ -287,21 +287,27 @@ export function Segmented<T extends string>({
 }) {
   return (
     <View style={styles.segmented}>
-      {options.map(option => {
-        const active = option === value;
-        return (
-          <Pressable
-            key={option}
-            disabled={readOnly}
-            onPress={() => onChange?.(option)}
-            style={[styles.segment, active && styles.segmentActive]}>
-            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-              {option}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {options.map(option => (
+        <Segment key={option} option={option} active={option === value} readOnly={readOnly} onPress={() => onChange?.(option)} />
+      ))}
     </View>
+  );
+}
+
+/* one segment - a control the drive taps by its label, as a Btn (2026-11-01: the Edge tab's Budgets / Presses could not be tapped by a rehearsal) */
+function Segment({option, active, readOnly, onPress}: {option: string; active: boolean; readOnly: boolean; onPress: () => void}) {
+  useDriveControl(option, !readOnly, onPress);
+  return (
+    <Pressable
+      disabled={readOnly}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={option}
+      style={[styles.segment, active && styles.segmentActive]}>
+      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+        {option}
+      </Text>
+    </Pressable>
   );
 }
 

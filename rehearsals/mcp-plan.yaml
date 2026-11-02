@@ -9,6 +9,8 @@ tags:
   - edge
 ---
 - goto: Edge
+# the Agents rows are on the Budgets view (the tab may have been left on Presses)
+- tapOn: "Budgets"
 - tapOn:
     text: "Accept"
     timeout: 60
