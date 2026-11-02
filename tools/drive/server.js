@@ -859,6 +859,8 @@ function dialRemote(url, again = false) {
  * --remote, this machine's own targets. A remote not connected yet is waited for, by its hello, under a watchdog.
  */
 const remoteHellos = new EventEmitter();
+/* how long a machine may take with an action before the watchdog: a build or a check 30 min (a cold Gradle build, the lib's whole suite), the CLI or a flash 10, the rest 2 - one rule for both ways an action is asked */
+const lifeOf = (action) => (action === 'build' || action === 'hex' || action === 'check' ? 30 * 60 : action === 'cli' || action === 'flash' ? 10 * 60 : 120);
 async function proc(action, target, args = {}) {
   if (REMOTES.length) {
     for (const u of REMOTES) dialRemote(u);
@@ -875,8 +877,8 @@ async function proc(action, target, args = {}) {
   for (const r of remotes.values()) {
     if (r.ws.readyState !== 1 || !r.targets.includes(target)) continue;
     const id = r.nextId++;
-    /* the machine's answer, under its watchdog: 2 minutes, a build 30 (a cold Gradle build is long) */
-    const life = action === 'build' || action === 'hex' || action === 'check' ? 30 * 60 : action === 'cli' || action === 'flash' ? 10 * 60 : 120;
+    /* the machine's answer, under its watchdog (lifeOf) */
+    const life = lifeOf(action);
     const reply = await new Promise((resolve) => {
       const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${r.machine} did not answer "${action} ${target}" in ${life} s` }); }, life * 1000);
       r.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });
@@ -916,7 +918,8 @@ async function procFor(app, action, args = {}) {
   if (!r) return { ok: false, why: `${via}, the machine ${app.shell} runs on, is not connected`, where: via };
   const id = r.nextId++;
   const reply = await new Promise((resolve) => {
-    const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${via} did not answer "${action} ${app.shell}" in 120 s` }); }, 120000);
+    const life = lifeOf(action);
+    const dog = setTimeout(() => { r.waiting.delete(id); resolve({ ok: false, why: `WATCHDOG: ${via} did not answer "${action} ${app.shell}" in ${life} s` }); }, life * 1000);
     r.waiting.set(id, (m) => { clearTimeout(dog); resolve(m); });
     r.ws.send(JSON.stringify({ t: 'proc', id, action, target: app.shell, args }));
   });
