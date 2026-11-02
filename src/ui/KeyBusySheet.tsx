@@ -39,7 +39,9 @@ export function KeyBusySheet() {
   /* the step in progress, counted from 1 (the bar fills by the steps done) */
   const step = `This request: step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`;
   return (
-    <Sheet title={b.press && !b.done ? 'Press your OnlyKey' : 'Working with your key'} countdown={pressSince !== null ? {since: pressSince, seconds: 25} : null}>
+    <Sheet title={b.press && !b.done ? 'Press your OnlyKey' : 'Working with your key'} countdown={pressSince !== null ? {since: pressSince, seconds: 25}
+      /* the request's own limit while it runs (Brad, 2026-11-01: the sheet sat "just inactive" while a read hung 30 s; "if it has a timer it gets a timer progress bar") */
+      : !b.done && b.limitMs ? {since: b.since, seconds: Math.max(1, Math.round(b.limitMs / 1000))} : null}>
       {b.press && !b.done ? <PressIcon /> : null}
       <Text style={styles.counts}>{queue.join(' · ')}</Text>
       <View style={styles.track}>

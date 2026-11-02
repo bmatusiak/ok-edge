@@ -27,8 +27,13 @@ export type KeyBusy = {
   done: boolean;
   /* how the request went: through the WebAuthn tunnel (a browser window a step), or straight to the key (the phone's soft key, a USB key) */
   via: 'tunnel' | 'direct';
+  /* when this request began, and how long the key is given to answer it - the sheet counts it down (null: not said) */
+  since: number;
+  limitMs: number | null;
 };
-type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'};
+type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null};
+/* the request in progress: when it began and its limit (said at its begin) */
+let began = {id: -1, at: 0, limitMs: null as number | null};
 
 const SHOW_AFTER_MS = 250;
 /*
@@ -97,10 +102,10 @@ export function noteSettle(e: {ms: number; why?: string}) {
  * Edge requests on one key run one at a time (the plugin's lane), so one counter names them.
  */
 let edgeOp = 0;
-export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: boolean; waiting?: number}) {
+export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: boolean; waiting?: number; limitMs?: number}) {
   if (EDGE_PRESSED.has(e.sub)) return;
   if (e.phase === 'begin') edgeOp += 1;
-  noteTunnel({phase: e.phase, id: edgeOp, msg: OKEDGE, slot: e.sub, step: e.phase === 'end' ? 1 : 0, steps: 1, ok: e.ok, waiting: e.waiting, via: 'direct'});
+  noteTunnel({phase: e.phase, id: edgeOp, msg: OKEDGE, slot: e.sub, step: e.phase === 'end' ? 1 : 0, steps: 1, ok: e.ok, waiting: e.waiting, via: 'direct', limitMs: e.limitMs ?? null});
 }
 
 /*
@@ -123,6 +128,7 @@ export function noteTunnel(e: TunnelEvent) {
   /* the key answered: activity for the idle timer (src/idleTimer.ts - "if the key is detected as still responding") */
   if (e.phase === 'end' && e.ok) require('./idleTimer').touch('key');
   if (e.phase === 'begin') {
+    began = {id: e.id, at: Date.now(), limitMs: e.limitMs ?? null};
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     ops += 1;
     inFlight = true;
@@ -131,6 +137,7 @@ export function noteTunnel(e: TunnelEvent) {
   const b: KeyBusy = {
     what: whatOf(e.msg, e.slot), step: e.step, steps, ops, opsDone, waiting: e.waiting ?? 0,
     press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), done: false, via: e.via ?? 'tunnel',
+    since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
   };
   if (e.phase === 'end') {
     inFlight = false;
