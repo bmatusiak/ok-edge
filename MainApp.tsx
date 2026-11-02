@@ -644,6 +644,12 @@ function Shell() {
     if (passed) void endSession('another key');
     setPassed(false);
     closeBucket();
+    /*
+     * AND NOTHING OF THE OLD KEY STAYS (box desktop, 2026-11-02: the gadget came onto the USB, the desktop's soft key
+     * ended and a USB key became the door - but the Edge session opened on the soft key kept asking it, "firmware is not
+     * running", every few seconds): the same clean-up as an unplug (src/keyGone.ts)
+     */
+    forgetKeyState();
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
   }, [doorKey]);
   useEffect(() => {
