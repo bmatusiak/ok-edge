@@ -217,16 +217,18 @@ function pressWhenAsked(app) {
     const led = l.match(/^\[main\] \[gadget\] led (#[0-9a-f]{6})/);
     if (!led) return;
     const colour = led[1];
-    if (!waiting(colour) || touched || codeOpen || pressing) return;
+    if (!waiting(colour) || codeOpen || pressing) return;
     /*
-     * TWO KINDS OF WAIT, TWO GUARDS (box web app, 2026-11-01 22:05: a login card's certify over WebAuthn needed a browser
-     * touch - LED yellow-green #525c00 - and then the Edge press - LED plain yellow #525200, "[keybusy] the key waits for its
-     * press"; one guard for both took the touch as the answer and the press never came). The LED answers the touches;
-     * plain yellow is the Edge press, the press icon's and [keybusy]'s to answer (their own guard, below).
+     * TWO KINDS OF WAIT, A GUARD EACH (box web app, 2026-11-01: a login card's certify over WebAuthn needed a browser
+     * touch - LED yellow-green #525c00 - and then the Edge press - LED plain yellow #525200; one guard for both took the
+     * touch as the answer and the press never came; and a login budget's Edge press shows only the plain yellow, no icon
+     * or [keybusy] line, so the LED must answer it too). Plain yellow is the Edge press: one guard with the press icon and
+     * [keybusy] (iconAnswered, below) - whichever says it first presses, once. Any other waiting colour is a touch.
      */
     const [lr, lg] = [1, 3].map((i) => parseInt(colour.slice(i, i + 2), 16));
-    if (lr === lg && lr > 0x30) return;
-    touched = true;
+    const edgePress = lr === lg && lr > 0x30;
+    if (edgePress ? iconAnswered : touched) return;
+    if (edgePress) iconAnswered = true; else touched = true;
     pressing = true;
     try {
       const s = await procFor(app, 'key-state');
