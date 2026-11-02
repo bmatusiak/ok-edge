@@ -45,8 +45,10 @@ export function clearHostChallenge(): void {
 }
 
 export function askPress(what: string): () => void {
-  set({digits: [], what});
-  return () => set(null);
+  const ask: HostChallenge = {digits: [], what};
+  set(ask);
+  /* only its own ask: the key's press may have cleared it already (keyBusy), and a later ask is another's */
+  return () => { if (current === ask) set(null); };
 }
 
 export function challengeOpts(what: string): {opts: {confirm: (a: {digits?: number[]}) => void}; done: () => void} {

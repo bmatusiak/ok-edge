@@ -21,25 +21,34 @@ import {keyBusy, onKeyBusy, type KeyBusy} from '../keyBusy';
  */
 const KEY_WAIT_S = 20;
 
+/*
+ * IS THE PRESS SHEET UP (KeyBusySheet steps aside while it is): a press request's chunks are progress, and its sheet
+ * shows on the last one, when the key waits (keyBusy asks) - not while the request is still going out, and not once the
+ * key has the press. An ask with no Edge press request in flight (a derive's code, a key straight on USB) shows as asked.
+ */
+export function hostSheetShows(c: HostChallenge | null, busy: KeyBusy | null): boolean {
+  if (!c || activeBackend() !== 'usb') return false;
+  return !(busy && busy.press && !busy.done && !busy.asks);
+}
+
 export function HostChallengeSheet() {
   const [c, setC] = useState<HostChallenge | null>(hostChallenge());
   useEffect(() => onHostChallenge(setC), []);
-  /* when this wait began: a new challenge is a new wait */
-  const [since, setSince] = useState<number | null>(null);
-  useEffect(() => { setSince(c ? Date.now() : null); }, [c]);
   /*
-   * ONLY WHILE THE PRESS IS ASKED (Brad, 2026-11-01: "we send a ctap knowing a button press needs to happen, so we display
-   * the sheet for that request - after that, we hide the press sheet, and show the working with key progress sheet"): once
-   * the key has the press (keyBusy pressed - the ceremony after the press wait came back) the rest of the request is its
-   * answer, and KeyBusySheet's progress shows instead.
+   * ONLY WHILE THE KEY WAITS FOR THE PRESS (Brad, 2026-11-01: "we send a ctap knowing a button press needs to happen, so
+   * we display the sheet for that request - after that, we hide the press sheet, and show the working with key progress
+   * sheet"; "show the press sheet on the last chunk"): the request's chunks going out and its answer coming back are
+   * KeyBusySheet's progress (hostSheetShows).
    */
   const [busy, setBusy] = useState<KeyBusy | null>(keyBusy());
   useEffect(() => onKeyBusy(setBusy), []);
-  const pressed = !!busy && busy.press && busy.pressed && !busy.done;
-  const hard = !!c && activeBackend() === 'usb';
-  usePressSound(hard && !pressed && since !== null ? since : null, 'press');
+  const shows = hostSheetShows(c, busy);
+  /* when this wait began: the sheet coming up is the key's wait starting - the key's 20 s run from there */
+  const [since, setSince] = useState<number | null>(null);
+  useEffect(() => { setSince(shows ? Date.now() : null); }, [shows, c]);
+  usePressSound(shows && since !== null ? since : null, 'press');
   /* a hard key's only: the soft key's wait has its own sheet with its button (PressSheet, from the firmware's record) */
-  if (!c || !hard || pressed) return null;
+  if (!c || !shows) return null;
   return (
     <Sheet tone="press" title="Press the key" countdown={since !== null ? {since, seconds: KEY_WAIT_S} : null}>
       <PressIcon />

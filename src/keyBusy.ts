@@ -30,6 +30,12 @@ export type KeyBusy = {
    * with key progress sheet"). The rest of the request is its answer being collected - no press is asked any more.
    */
   pressed: boolean;
+  /*
+   * the key waits for the press NOW: it has the request's last chunk (pressAt) and no press yet (Brad, 2026-11-01: "so we
+   * show the progress for the press request call, show the press sheet on the last chunk") - the chunks before it are
+   * progress like any other request's, and no press is asked before the key can take it
+   */
+  asks: boolean;
   done: boolean;
   /* how the request went: through the WebAuthn tunnel (a browser window a step), or straight to the key (the phone's soft key, a USB key) */
   via: 'tunnel' | 'direct';
@@ -150,13 +156,14 @@ export function noteTunnel(e: TunnelEvent) {
   const steps = Math.max(e.steps || 1, e.step, 1);
   const b: KeyBusy = {
     what: whatOf(e.msg, e.slot), step: e.step, steps, ops, opsDone, waiting: e.waiting ?? 0,
-    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), pressed: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.step > pressAt, done: false, via: e.via ?? 'tunnel',
+    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), pressed: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.step > pressAt,
+    asks: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.phase === 'step' && e.step === pressAt, done: false, via: e.via ?? 'tunnel',
     since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
   };
   if (e.phase === 'end') {
     inFlight = false;
     opsDone += 1;
-    if (current) set({...b, step: steps, opsDone, done: true});
+    if (current) set({...b, step: steps, opsDone, asks: false, done: true});
     hideTimer = setTimeout(() => {
       hideTimer = null;
       if (inFlight) return;
@@ -176,7 +183,16 @@ export function noteTunnel(e: TunnelEvent) {
    */
   if (b.press && e.phase === 'step' && e.step === pressAt) console.log(`[keybusy] the key waits for its press: ${b.what}`);
   /* and once it has it: the press sheet goes, the progress stays (KeyBusySheet, HostChallengeSheet) */
-  if (b.press && e.phase === 'step' && e.step === pressAt + 1) console.log(`[keybusy] pressed - the key answers: ${b.what}`);
+  /*
+   * THE PRESS ASK ENDS WITH IT (Brad, 2026-11-01: "its sending a stream of ctap calls, but not showing the ctap
+   * progress"): a screen's ask is raised for its whole operation (the login's bucket open: a budget, a derive, the
+   * proof, the rows - one press among dozens of requests), so a sheet hidden only while this request was pressed came
+   * back with the next one and covered the progress. The key has its press: nothing waits on the person now.
+   */
+  if (b.press && e.phase === 'step' && e.step === pressAt + 1) {
+    console.log(`[keybusy] pressed - the key answers: ${b.what}`);
+    require('./hostChallenge').clearHostChallenge();
+  }
   if (current) { set(b); return; }
   if (!showTimer) {
     showTimer = setTimeout(() => {
