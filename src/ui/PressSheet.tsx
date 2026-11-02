@@ -39,6 +39,7 @@ import {useQuietMotion} from './CountdownBar';
 import {DEVICE_WORD} from '../platform';
 import {usePressSound} from './pressSound';
 import {PressIcon} from './PressIcon';
+import {usePressSince} from './SheetCountdown';
 
 /* the core firmware closes every wait at 20 s (okcore.cpp Usertimeout) */
 const WAIT_MS = 20_000;
@@ -148,6 +149,12 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
   const showDerive = !showFido && !showVendor && !!derive;
   /* the desktop's and the browser's press sound (the phone's is native): while the sheet waits for its press */
   usePressSound((showFido || showVendor || showDerive) && !pressed ? since : null, 'press');
+  /*
+   * EVERY PRESS SHEET HAS A TIMER, SO IT HAS THE BAR (Brad, 2026-11-01: "all press sheet have a timer so they get a timer
+   * progress bar"): from the wait's own start, or - a wait that came without one - from when this sheet opened
+   */
+  const openedAt = usePressSince(showFido || showVendor || showDerive);
+  const barSince = since || openedAt;
   if (!showFido && !showVendor && !showDerive) return null;
   const exact = Math.max(0, Math.ceil((since + (showDerive ? DERIVE_WAIT_MS : WAIT_MS) - now) / 1000));
   const left = quiet ? Math.ceil(exact / 5) * 5 : exact;
@@ -194,7 +201,7 @@ export function PressSheet({waiting, fido}: {waiting: KeyWaiting | null; fido: F
   return (
     /* not dismissable: it goes when the key stops waiting. extraBottom: in debug builds React Native's warning toasts sit along the bottom and catch taps.
        tone: yellow for an Edge approval, red for every other press */
-    <Sheet tone={showVendor && wait!.w.what === 'edge' ? 'edge' : 'press'} extraBottom={48} countdown={since && !pressed ? {since, seconds: 20} : null}>
+    <Sheet tone={showVendor && wait!.w.what === 'edge' ? 'edge' : 'press'} extraBottom={48} countdown={barSince && !pressed ? {since: barSince, seconds: 20} : null}>
             {currentNet() === 'test' ? <Text style={[styles.title, {color: theme.io}]}>TESTNET</Text> : null}
             {showDerive ? (
               <DeriveBody d={derive!} />
