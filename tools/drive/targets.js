@@ -942,6 +942,16 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
+      /*
+       * A TEST AGENT'S PLAN ON THIS MACHINE (the air-gapped dev loop, plan step 4): tools/box/mcp-plan-agent.js against
+       * the desktop app's local MCP here (its record) for that identity - its output in its own tab, its last lines back
+       */
+      if (action === 'plan-agent') {
+        if (!/^[0-9a-f]{64}$/i.test(String(args.identity || ''))) return { ok: false, why: 'plan-agent: the identity public key (64 hex)' };
+        const r = await streamIn(EDGE, NODE, [path.join(EDGE, 'tools/box/mcp-plan-agent.js'), String(args.url || 'desktop'), String(args.identity)], { timeout: 10 * 60000, ...shown('plan-agent') });
+        const tail = r.out.split(/\r?\n/).filter(Boolean).slice(-6).join(' | ');
+        return r.ok ? { ok: true, what: tail } : { ok: false, why: `plan-agent: ${tail}` };
+      }
       if (action === 'tool') return target === 'firmware' ? boxTool(args) : { ok: false, why: 'tool belongs to the firmware target' };
       if (action === 'hex') return target === 'firmware' ? hexFor(args) : { ok: false, why: 'hex belongs to the firmware target' };
       if (action === 'flash') return target === 'firmware' ? flashKey(args) : { ok: false, why: 'flash belongs to the firmware target' };

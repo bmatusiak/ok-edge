@@ -31,6 +31,8 @@ async function start() {
      */
     server = await app.services.mcpLocalhost.start({ host: '127.0.0.1', port: 0, env: { REQUIRE_LOGIN: '0', OPEN_JOIN: '1' } });
     console.log(`[local-mcp] ready on ${server.url}`);
+    /* where it runs, for the agents on this computer (its port is a new one each start): ~/.onlykey-js/local-mcp-desktop.json */
+    try { require('node-onlykey-lib/desktop/trust').writeLocalMcp({ url: server.url, what: 'desktop' }); } catch (e) { console.log(`[local-mcp] its record was not written: ${e && e.message || e}`); }
   })().catch((e) => {
     /* the app runs without it (no local agents, no local self-auth) - said once, not hidden */
     console.log(`[local-mcp] did not start: ${e && e.message || e}`);
@@ -39,6 +41,7 @@ async function start() {
 }
 
 async function stop() {
+  try { require('node-onlykey-lib/desktop/trust').removeLocalMcp({ what: 'desktop' }); } catch { /* none */ }
   if (server) await server.close().catch(() => undefined);
   server = null;
 }

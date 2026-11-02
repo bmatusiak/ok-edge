@@ -41,5 +41,11 @@ const s = await app.services.mcpLocalhost.start({
   plain: at('--plain-port') ? Number(at('--plain-port')) : null, ble,
 });
 console.log(`local MCP ready on ${s.url}${s.plainUrl ? ` and ${s.plainUrl}` : ''}${s.ble ? `, and over Bluetooth as ${s.ble.host}` : ''}`);
+/*
+ * WITH BLUETOOTH, IT SAYS WHERE IT RUNS (~/.onlykey-js/local-mcp-ble.json): onlykey-js --ble on this machine finds it at
+ * whatever port it took. Only this kind writes it - the box's stand-in (no --ble) is the web app's server, not this one.
+ */
+const trust = s.ble ? (await import('node-onlykey-lib/desktop/trust')).default : null;
+if (trust) trust.writeLocalMcp({ url: s.plainUrl || s.url, what: 'ble' });
 /* Ctrl+C / a stop: the Bluetooth links closed first, so the phone advertises again at once */
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { s.close().finally(() => process.exit(sig === 'SIGINT' ? 130 : 143)); });
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { if (trust) trust.removeLocalMcp({ what: 'ble' }); s.close().finally(() => process.exit(sig === 'SIGINT' ? 130 : 143)); });

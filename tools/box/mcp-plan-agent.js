@@ -14,8 +14,10 @@
 const { execFileSync } = require('child_process');
 const path = require('path');
 
-const [url, identity, ssh = 'ssh://test@example.com'] = process.argv.slice(2);
-if (!url || !/^[0-9a-f]{64}$/i.test(identity || '')) { console.error('mcp-plan-agent.js <mcp url> <identity public key hex> [ssh identity]'); process.exit(2); }
+const [given, identity, ssh = 'ssh://test@example.com'] = process.argv.slice(2);
+/* "desktop": the desktop app's local MCP on this machine, wherever it runs now (node-onlykey-lib desktop/trust.js record) */
+const url = given === 'desktop' ? (require('node-onlykey-lib/desktop/trust').readLocalMcp(undefined, 'desktop') || {}).url : given;
+if (!url || !/^[0-9a-f]{64}$/i.test(identity || '')) { console.error('mcp-plan-agent.js <mcp url | desktop> <identity public key hex> [ssh identity]  (desktop: no local MCP running here)'); process.exit(2); }
 const AGENT = path.join(__dirname, 'mcp-agent.js');
 const env = { ...process.env, MCP_AGENT_STATE: process.env.MCP_AGENT_STATE || '/tmp/mcp-plan-agent.json' };
 const call = (tool, args) => {

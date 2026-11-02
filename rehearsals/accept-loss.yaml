@@ -10,9 +10,9 @@ tags:
 - login: {}
 - goto: Edge
 - extendedWaitUntil:
-    visible: "This (computer|device|phone) cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+    visible: "This (computer|device|phone|browser) cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
     timeout: 60000
-- copyTextFrom: "This (computer|device|phone) cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
+- copyTextFrom: "This (computer|device|phone|browser) cannot reach the key's newest links \\(#\\d+–#\\d+\\)"
 - evalScript: '${output.range = maestro.copiedText.match(/\((#\d+–#\d+)\)/)[1]}'
 - tapOn: "Accept loss of ${output.range}…"
 - tapOn: "Yes, accept loss of ${output.range}"
