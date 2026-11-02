@@ -82,8 +82,22 @@ function loginState(app) {
  * on its buttons, ended by the LED's next colour. Never pressed on an unlocked key - a press there types a slot into
  * whatever has the focus. Only a key its machine names a testnet one.
  */
+/*
+ * UNLOCKED IS GREEN, NOT "NOT DARK" (box, 2026-11-02 01:49; Brad: "webapp can not detect if the key is locked or not" - only
+ * the machine holding the key sees it, by its LED): the key's yellow-green "waiting for a touch" (#525c00) read as unlocked
+ * a second before the PIN finished, Log in was tapped on a locked key, and its first request hung for minutes. Green: no
+ * red, no blue, green past 0x40 (the steady unlocked colour is #00af00; its fade-in starts near black). Dark: locked.
+ * Anything else (a touch wait, a fade) is neither - waited out.
+ */
+const GREEN = /led #00[4-9a-f][0-9a-f]00\b/;
+const DARK = /led #000000\b/;
 async function unlockOutsideKey(d, pin) {
-  const s = await d.machine('key-state');
+  let s = await d.machine('key-state');
+  /* neither green nor dark: the LED is showing something else (a touch wait, a fade) - read again, 10 s at most */
+  for (let i = 0; s.ok && !GREEN.test(s.what) && !DARK.test(s.what) && i < 10; i++) {
+    await new Promise((ok) => setTimeout(ok, 1000));
+    s = await d.machine('key-state');
+  }
   if (!s.ok) throw new Error(`the web app's key: ${s.why}`);
   if (!/\btestnet\b/.test(s.what)) throw new Error(`the web app's key is not a testnet one (${s.what}) - the drive does not unlock it`);
   if (!/: connected;/.test(s.what)) throw new Error(`the web app's key: ${s.what}`);
@@ -108,10 +122,11 @@ async function unlockOutsideKey(d, pin) {
     }
     throw new Error('hard key 2 did not read unlocked within 20 s of its PIN - nothing more is pressed');
   }
-  if (!/led #000000/.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
+  if (GREEN.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
+  if (!DARK.test(s.what)) throw new Error(`the web app's key: its LED is neither green (unlocked) nor dark (locked) after 10 s - ${s.what.replace(/^.*?: /, '')}; nothing pressed`);
   d.say('its key is locked (dark) - its PIN on its buttons');
   /* the web app's stream carries the gadget's "[gadget] led" lines; the desktop's does not - it reads the LED its machine holds */
-  const lit = d.app.shell === 'webapp' ? d.until(/\[gadget\] led #(?!000000)/, { life: 20, fail: [] }) : null;
+  const lit = d.app.shell === 'webapp' ? d.until(/\[gadget\] led #00[4-9a-f][0-9a-f]00\b/, { life: 20, fail: [] }) : null;
   const r = await d.machine('press', d.app.shell, { buttons: pin.split('') });
   if (!r.ok) throw new Error(`the web app's key: ${r.why}`);
   if (lit) await lit;
@@ -119,7 +134,7 @@ async function unlockOutsideKey(d, pin) {
     /* the machine's last LED seen, read every second - its own record, never a request to the key - 20 s at most */
     for (let i = 0; ; i++) {
       const n = await d.machine('key-state');
-      if (n.ok && /led #(?!000000)/.test(n.what)) break;
+      if (n.ok && GREEN.test(n.what)) break;
       if (i >= 20) throw new Error(`the gadget stayed dark 20 s after its PIN - one wrong attempt; not tried again`);
       await new Promise((ok) => setTimeout(ok, 1000));
     }
