@@ -395,7 +395,7 @@ const recentOf = (tab) => { const a = [...everyApp].find((x) => tabName(x) === t
  * "instead of being done and sending the result, it's streaming it to the gui" - a 300-line answer drawn line by line
  * in every window held the run's end until the last was written).
  */
-function driveFor(app, say, answer = () => {}) {
+function driveFor(app, say, answer = () => {}, run = null) {
   const lastLines = [];
   const remember = (l) => { lastLines.push(l); if (lastLines.length > 8) lastLines.shift(); };
   app.on('log', remember);
@@ -536,7 +536,7 @@ function driveFor(app, say, answer = () => {}) {
     expected.delete(app.shell);
     app.off('log', remember);
     say(`${next.shell} is back (${next.net})`);
-    return driveFor(next, say);
+    return driveFor(next, say, answer, run);
   }
 
   /*
@@ -579,6 +579,16 @@ function driveFor(app, say, answer = () => {}) {
   /* every machine at once - this one and each connected remote (run.js doctor) */
   const everywhere = (action, args = {}) => procAll(action, args);
   const api = { app, say, answer, until, tap, fill, fillFile, step, goto, restarted, start, stop, restart, up, machine, everywhere, has: (l) => app.has(l), shot: (name) => shotOf(app, name), holdPress: (on) => { pressHeld = !!on; say(on ? 'the Edge press is held: the key waits on its own' : 'the Edge press is pressed again'); } };
+  /*
+   * THE CALLER WENT, THE RUN STOPS (2026-11-02: a login whose run.js was stopped went on in here - tapping and pressing,
+   * mixed into the next run's lines, until its own watchdog). Every move a script makes goes through this handle, so each
+   * checks first: once the caller's socket closed, the next move throws and the script ends there.
+   */
+  if (run) {
+    for (const [k, v] of Object.entries(api)) {
+      if (typeof v === 'function') api[k] = (...a) => { if (run.cancelled) throw new Error('the caller went (run.js stopped) - no further moves'); return v(...a); };
+    }
+  }
   return api;
 }
 
@@ -941,8 +951,14 @@ function control(ws) {
     bus.on('app-line', onAppLine);
     const started = new Date();
     let reason = '';
-    const run = { script: String(m.script), quietSince: Date.now() };
+    const run = { script: String(m.script), quietSince: Date.now(), cancelled: false };
     running.add(run);
+    /* the caller (run.js) gone mid-run: the script stops at its next move (driveFor) */
+    ws.once('close', () => {
+      if (!running.has(run)) return;
+      run.cancelled = true;
+      line(`[${m.script}] the caller went - the run stops at its next move`);
+    });
     /*
      * THE CALLER GETS THE END, NOT EVERY LINE (Brad, 2026-11-01: "drive server has been FILLING up your context faster
      * then expected ... have it give log file name, so you can look in it instead of getting the entire log sent to
@@ -968,7 +984,7 @@ function control(ws) {
       for (const k of Object.keys(require.cache)) if (k.startsWith(__dirname) && k !== __filename && !/targets.js$/.test(k)) delete require.cache[k];
       const say = (t) => line(`[${m.script}] ${t}`);
       say(`start on ${app.shell} (${app.net})${m.args && m.args.length ? ` - ${m.args.join(' ')}` : ''}`);
-      await require(file)(driveFor(app, say, (t) => answered.push(String(t))), m.args || []);
+      await require(file)(driveFor(app, say, (t) => answered.push(String(t)), run), m.args || []);
       say('FINISHED');
       code = 0;
     } catch (e) {
