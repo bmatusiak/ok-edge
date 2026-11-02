@@ -142,7 +142,7 @@ module.exports = {
     },
     'okedge:bucketMergeIn': (identity, net, text) => {
       const lib = require('node-onlykey-lib/bucket');
-      const rules = require('node-onlykey-lib/bucket/cli/trade').storeRules();
+      const rules = require('node-onlykey-lib/bucket/src/store-rules').storeRules();
       const home = bucketHome();
       const report = home.update(home.identityFile(identity, net), (b) => {
         const { bucket, report: r } = lib.merge(b, lib.parse(text), { rules });
