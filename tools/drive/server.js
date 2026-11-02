@@ -154,6 +154,30 @@ function pickApp(name) {
 /* every hello, for a script waiting on an app to come back after a restart */
 const hellos = new EventEmitter();
 
+/*
+ * A KEY REQUEST STUCK, SAID WHILE IT IS STUCK (Brad, 2026-11-01: the red flag he raised was the sheet showing progress
+ * talking to the key - the desktop's read of a public key from the gadget hung 30 s before it failed, and nothing said so
+ * meanwhile): an app's request ("[timeline] begin #N") with no end after STUCK_MS, and no press asked for it - a press is
+ * the person's wait, not a stall - is one drive line, which wakes the agent (wake.js "stuck"). Said once per request.
+ */
+const STUCK_MS = 10000;
+const PRESS_WAIT = /^\[press\] (icon up|key waits|sheet up)|^\[keybusy\] the key waits for its press/;
+function watchStuck(app) {
+  const open = new Map();
+  app.on('log', (l) => {
+    const t = /^\[timeline\] \d+ (begin|end) #(\d+)\s*(.*)$/.exec(l);
+    if (t && t[1] === 'begin') {
+      const what = t[3].replace(/ steps=.*$/, '');
+      open.set(t[2], setTimeout(() => { open.delete(t[2]); line(`[${tabName(app)}] key request stuck ${STUCK_MS / 1000} s: #${t[2]} ${what}`); }, STUCK_MS));
+      return;
+    }
+    if (t) { clearTimeout(open.get(t[2])); open.delete(t[2]); return; }
+    /* a press asked: the open requests wait for the person - not stuck */
+    if (PRESS_WAIT.test(l)) { for (const timer of open.values()) clearTimeout(timer); open.clear(); }
+  });
+  app.on('close', () => { for (const timer of open.values()) clearTimeout(timer); open.clear(); });
+}
+
 /* THE SESSION PRESSER: every press sheet, whenever it comes, while the app is on the testnet (13) */
 function pressWhenAsked(app) {
   let pressing = false;
@@ -565,6 +589,7 @@ function attachApp(sock) {
       /* what its process said while it started (#3) begins its record */
       if (outBefore.has(app.shell)) { app.recent.unshift(...outBefore.get(app.shell)); outBefore.delete(app.shell); }
       pressWhenAsked(app);
+      watchStuck(app);
       line(`app connected: ${app.shell} (${app.os}, ${app.net})${sock.via ? ` via ${sock.via}` : ''}`);
       hellos.emit('hello', app);
       return;
