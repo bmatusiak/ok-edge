@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Press by hand</title>
+<style>
+  body { margin: 0; padding: 12px; background: #1d1d1f; color: #eee; font: 13px system-ui, sans-serif; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  button { flex: 1; height: 40px; font-size: 14px; border: 0; border-radius: 6px; cursor: pointer; }
+  #send { background: #c0392b; color: #fff; }
+  #close { background: #444; color: #eee; }
+  #said { min-height: 2.6em; color: #bbb; }
+</style>
+</head>
+<body>
+<div id="said">One press (button 1) on the web app's key. Close leaves the key alone.</div>
+<div class="row"><button id="send">Send press</button><button id="close">Close</button></div>
+<script>
+/*
+ * A PRESS BY HAND (Brad, 2026-11-01: "this small dialog opens, i put it off to the side, 2 buttons on it, send and
+ * close"): one window that stays where it is put. Send press asks the drive-remote on this machine to press - it holds
+ * the gadget's one controller socket (tools/drive/remote.js /press; the gadget's console takes no presses, a release
+ * build). Close closes this window only.
+ */
+const fs = require('fs');
+const http = require('http');
+const os = require('os');
+const path = require('path');
+const app = (nw.App.argv.find((a) => a.startsWith('--app=')) || '--app=webapp').slice(6);
+let token = '';
+try { token = fs.readFileSync(path.join(os.homedir(), '.onlykey-drive-token'), 'utf8').trim(); } catch { /* said below */ }
+const said = document.getElementById('said');
+const send = document.getElementById('send');
+const stamp = () => new Date().toTimeString().slice(0, 8);
+send.onclick = () => {
+  if (!token) { said.textContent = 'no drive token (~/.onlykey-drive-token)'; return; }
+  send.disabled = true;
+  said.textContent = `${stamp()} pressing...`;
+  const q = new URLSearchParams({ token, app });
+  http.get({ host: '127.0.0.1', port: 8791, path: `/press?${q}`, timeout: 20000 }, (res) => {
+    let body = '';
+    res.on('data', (c) => { body += c; });
+    res.on('end', () => { said.textContent = `${stamp()} ${body || `HTTP ${res.statusCode}`}`; send.disabled = false; });
+  }).on('error', (e) => { said.textContent = `${stamp()} no drive-remote here: ${e.message}`; send.disabled = false; });
+};
+document.getElementById('close').onclick = () => nw.Window.get().close();
+</script>
+</body>
+</html>

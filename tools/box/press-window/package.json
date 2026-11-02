@@ -1,0 +1,5 @@
+{
+  "name": "okedge-press-window",
+  "main": "index.html",
+  "window": { "title": "Press by hand", "width": 340, "height": 120, "resizable": true, "always_on_top": true }
+}
