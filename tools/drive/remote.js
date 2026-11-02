@@ -92,8 +92,13 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
       else if (m.t === 'proc') {
         line(`${m.action} ${m.target}`);
         const r = await targets.act(m.action, m.target, m.args || {}).catch((e) => ({ ok: false, why: e.message }));
-        /* last words are long: the server keeps them; here, their size */
-        line(`${m.action} ${m.target}: ${!r.ok ? r.why : m.action === 'last-words' ? `${String(r.what).split('\n').length} lines sent` : r.what}`);
+        /*
+         * a long answer is the server's to keep; here, its size (Brad, 2026-11-02, watching the remote: a window picture's
+         * base64 was written whole into this log and window - 33 of them, each a screenshot as text, which any read of
+         * this log would carry)
+         */
+        const what = String(r.what);
+        line(`${m.action} ${m.target}: ${!r.ok ? r.why : m.action === 'last-words' ? `${what.split('\n').length} lines sent` : what.length > 300 ? `${what.length} chars sent` : what}`);
         toServer({ t: 'proc-reply', id: m.id, ...r });
       }
     });
