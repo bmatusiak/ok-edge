@@ -26,7 +26,7 @@
   nav button .dot.up { color: var(--ok); }
   nav button .dot.run { color: var(--warn); }
   nav button .dot.fail { color: var(--bad); }
-  /* a command's tab (a build, the CLI): a terminal's look */
+  /* a command's output (a build, a test, the CLI): a terminal's look */
   .log.cli { background: #07090b; color: #c8d3c0; font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; line-height: 1.35; }
   /*
    * THE BUTTONS NEVER LEAVE THE WINDOW (Brad, 2026-11-01: "the drive server did not like being resized, and is hiding
@@ -55,6 +55,13 @@
   .item.new .name { color: var(--warn); }
   button { font: inherit; color: var(--text); background: #2b4a66; border: 1px solid var(--accent); border-radius: 4px; padding: 3px 12px; cursor: pointer; }
   button:active { background: var(--accent); }
+  /* a group tab's runs, in the bar where an app's pictures are (builds, tests, cli): one row each, newest first */
+  .run { padding: 4px 6px; margin: 0 0 4px; border: 1px solid #2a313b; border-radius: 4px; cursor: pointer; }
+  .run.on { border-color: var(--accent); background: #1d2733; }
+  .run .what { word-break: break-all; }
+  .run .meta { color: var(--dim); font-size: 11px; }
+  .run .dot { margin-right: 6px; color: var(--dim); }
+  .run .dot.up { color: var(--ok); } .run .dot.run { color: var(--warn); } .run .dot.fail { color: var(--bad); }
   .hidden { display: none !important; }
 </style>
 </head>

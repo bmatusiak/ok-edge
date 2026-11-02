@@ -57,7 +57,7 @@ function tabOf(name, kind = 'app') {
   button.onclick = () => show(name);
   $('tabs').appendChild(button);
   const log = document.createElement('div');
-  log.className = `log hidden${kind === 'cmd' ? ' cli' : ''}`;
+  log.className = 'log hidden';
   $('logs').appendChild(log);
   const shots = document.createElement('div');
   shots.className = 'shots hidden';
@@ -85,11 +85,16 @@ function show(name) {
   current = name;
   for (const [n, t] of tabs) {
     t.button.classList.toggle('on', n === name);
-    t.log.classList.toggle('hidden', n !== name);
+    t.log.classList.toggle('hidden', n !== name || t.kind === 'group');
     t.shots.classList.toggle('hidden', n !== name);
+    if (t.kind === 'group') for (const r of t.runs || []) r.log.classList.toggle('hidden', n !== name || r !== t.selected);
   }
   const t = tabs.get(name);
-  if (follow) t.log.scrollTop = t.log.scrollHeight;
+  const shown = t.kind === 'group' ? t.selected : t;
+  if (follow && shown) shown.log.scrollTop = shown.log.scrollHeight;
+  /* a build or a test has no screen: no picture to take there */
+  $('shotNow').classList.toggle('hidden', t.kind === 'group');
+  if (t.kind === 'group') { $('shotsHead').textContent = 'runs, newest first - click one for its output'; return; }
   $('shotNow').title = name === DRIVE ? 'a picture of every connected app and a sample of the log, now' : `a picture of ${name} and a sample of its log, now`;
   $('shotsHead').textContent = name === DRIVE ? 'every picture, newest first' : name === RUNS_TAB ? 'click a run: its pictures and samples' : `${name}'s pictures, newest first`;
 }
@@ -103,7 +108,10 @@ function show(name) {
 const pending = new Map();
 let frame = 0;
 function addLine(name, l) {
-  const t = tabOf(name);
+  addLineTo(tabOf(name), l);
+}
+/* a sink is anything with a log: an app's tab, or one run in a group tab */
+function addLineTo(t, l) {
   let q = pending.get(t);
   if (!q) { q = []; pending.set(t, q); }
   q.push(l);
@@ -123,7 +131,7 @@ function drawLines() {
     t.log.appendChild(batch);
     let extra = t.log.childElementCount - MAX_LINES;
     while (extra-- > 0) t.log.firstChild.remove();
-    if (follow && t === tabs.get(current)) t.log.scrollTop = t.log.scrollHeight;
+    if (follow && !t.log.classList.contains('hidden')) t.log.scrollTop = t.log.scrollHeight;
   }
   pending.clear();
 }
@@ -255,21 +263,65 @@ show(DRIVE);
 mod.bus.on('line', (l) => { addLine(DRIVE, l); showStatus(); });
 mod.bus.on('app-line', (shell, l) => addLine(shell, l));
 /*
- * COMMAND TABS (Brad, 2026-10-31: "a build output tab and a tab style for cli commands"): a build or a CLI run on a
- * machine, live in a tab of its own with a terminal's look - "$ command" first, its output as it comes, "exit N" last.
- * Its dot: running (amber), done (green), failed (red). The same command again reuses its tab, under a rule.
+ * COMMAND RUNS IN GROUP TABS, ONE SET PER HOST (Brad, 2026-10-31: "a build output tab and a tab style for cli commands";
+ * 2026-11-02: "a tab for each test and build will be bulky, so 1 builds and 1 tests ... the bar for photos can be
+ * container for each test/build instead of a photo, its a test - like a tab in tabs"; "and thats per host, so tests
+ * (HOST)"): every build on a host in "builds (HOST)", every check in "tests (HOST)", every CLI run in "cli (HOST)". The
+ * bar lists the runs, newest first, each with its dot - running (amber), passed (green), failed (red) - and a click
+ * shows its output, a terminal's look: "$ command" first, its lines as they come, "exit N" last. A new run is shown as
+ * it starts while the window follows. The last RUNS_KEPT of each stay.
  */
+const RUNS_KEPT = 30;
+const groupOf = (name, machine) => `${/^(build|hex)\b/.test(name) ? 'builds' : /^check\b/.test(name) ? 'tests' : 'cli'} (${machine})`;
+const liveRun = new Map(); /* a command's name on a host -> its run now */
+function selectRun(t, run) {
+  t.selected = run;
+  for (const r of t.runs) { r.item.classList.toggle('on', r === run); r.log.classList.toggle('hidden', current !== t.name || r !== run); }
+  if (follow) run.log.scrollTop = run.log.scrollHeight;
+}
+function startRun(name, ev, machine) {
+  const group = groupOf(name, machine);
+  const t = tabOf(group, 'group');
+  if (!t.runs) { t.runs = []; t.selected = null; t.name = group; }
+  const log = document.createElement('div');
+  log.className = 'log cli hidden';
+  $('logs').appendChild(log);
+  const item = document.createElement('div');
+  item.className = 'run';
+  const dot = document.createElement('span');
+  dot.className = 'dot run';
+  dot.textContent = '●';
+  const what = document.createElement('span');
+  what.className = 'what';
+  what.textContent = name;
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const started = new Date();
+  meta.textContent = `${started.toTimeString().slice(0, 8)} · running`;
+  item.append(dot, what, meta);
+  const run = { log, item, dot, meta, started, group };
+  item.onclick = () => selectRun(t, run);
+  t.shots.prepend(item);
+  t.runs.unshift(run);
+  while (t.runs.length > RUNS_KEPT) { const old = t.runs.pop(); old.log.remove(); old.item.remove(); }
+  t.dot.className = 'dot run';
+  liveRun.set(`${machine}|${name}`, run);
+  if (follow || !t.selected) selectRun(t, run);
+  addLineTo(run, `${started.toTimeString().slice(0, 8)} $ ${ev.cmd}`);
+  return run;
+}
 mod.bus.on('cmd', (name, ev, machine) => {
-  const t = tabOf(name, 'cmd');
-  const stamp = new Date().toTimeString().slice(0, 8);
-  if (ev.t === 'start') {
-    if (t.log.childElementCount) addLine(name, '──────────');
-    addLine(name, `${stamp} $ ${ev.cmd}    (${machine})`);
-    t.dot.className = 'dot run';
-  } else if (ev.t === 'line') addLine(name, ev.text);
+  const key = `${machine}|${name}`;
+  const run = ev.t === 'start' ? startRun(name, ev, machine) : liveRun.get(key) || startRun(name, { cmd: name }, machine);
+  if (ev.t === 'line') addLineTo(run, ev.text);
   else if (ev.t === 'end') {
-    addLine(name, `${stamp} exit ${ev.code} ${ev.code === 0 ? '✓' : '✗'}`);
-    t.dot.className = `dot ${ev.code === 0 ? 'up' : 'fail'}`;
+    const ok = ev.code === 0;
+    addLineTo(run, `${new Date().toTimeString().slice(0, 8)} exit ${ev.code} ${ok ? '✓' : '✗'}`);
+    run.dot.className = `dot ${ok ? 'up' : 'fail'}`;
+    const secs = Math.round((Date.now() - run.started) / 1000);
+    run.meta.textContent = `${run.started.toTimeString().slice(0, 8)} · ${ok ? 'passed' : 'failed'} in ${secs >= 60 ? `${Math.floor(secs / 60)}m ${secs % 60}s` : `${secs}s`}`;
+    tabs.get(run.group).dot.className = `dot ${ok ? 'up' : 'fail'}`;
+    liveRun.delete(key);
   }
 });
 mod.bus.on('shot', (file, shell) => addShot(file, shell));

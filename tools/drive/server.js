@@ -758,7 +758,7 @@ wss.on('connection', (ws, req) => {
  */
 const TOKEN = (process.env.DRIVE_TOKEN || (() => { try { return fs.readFileSync(path.join(require('os').homedir(), '.onlykey-drive-token'), 'utf8'); } catch { return ''; } })()).trim();
 const remotes = new Map(); /* url -> {ws, machine, targets, waiting} */
-const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l), (name, ev) => cmdEvent('this machine', name, ev));
+const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l), (name, ev) => cmdEvent(require('os').hostname(), name, ev));
 
 /*
  * A TARGET'S OWN OUTPUT (drive debugging #3) - the desktop's main process (the soft key host, IPC), the web app's
