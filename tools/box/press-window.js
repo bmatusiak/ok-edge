@@ -15,7 +15,8 @@ const path = require('path');
 
 const i = process.argv.indexOf('--app');
 const app = i >= 0 ? process.argv[i + 1] : 'webapp';
-const nw = require(path.join(__dirname, '../drive/node_modules/nw')).findpath();
+(async () => {
+const nw = await require(path.join(__dirname, '../drive/node_modules/nw')).findpath();
 const child = spawn(nw, [path.join(__dirname, 'press-window'), `--app=${app}`], {
   detached: true,
   stdio: 'ignore',
@@ -23,3 +24,4 @@ const child = spawn(nw, [path.join(__dirname, 'press-window'), `--app=${app}`], 
 });
 child.unref();
 console.log(`press window open for ${app} (pid ${child.pid}) - Send press presses its key, Close closes only the window`);
+})();
