@@ -13,7 +13,7 @@
  * chain's own self-press links.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {approve as approveLib, chain, client as clientLib, codes, grants as grantsLib, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
+import {approve as approveLib, budgetbook as budgetbookLib, chain, client as clientLib, codes, grants as grantsLib, request as requestLib, receipts, sync as syncLib} from 'node-onlykey-lib/edge';
 
 /*
  * THE TESTING IDENTITY: the tab's test budget (EdgeScreen) and its test sign (agentSign) name this one identity, so
@@ -265,8 +265,23 @@ function receipted(mirror: {links: {link: Uint8Array}[]}, uses: number[]): numbe
 }
 const PICKUP_MAX = 8;
 const REGISTRY = (): string => edgeKey('budgets.');
-/* one budget's record on this phone - its own budgets, and (since 2026-10-09) your other devices' checked openings */
-export const budgetRecordKey = (deviceIdHex: string, grantId: number): string => REGISTRY() + deviceIdHex.toLowerCase() + '.' + grantId;
+/*
+ * THE BUDGET BOOK (S4 step 7, 2026-11-02): this host's record of each budget it approved - its own, and (since
+ * 2026-10-09) your other devices' checked openings - is the lib's book (edge/src/budgetbook.js) over this app's storage,
+ * the same keys as before (<budgets.><device>.<grantId>): one owner for the reads and writes that were raw in 15 places.
+ */
+const book = budgetbookLib.createBudgetBook({
+  kv: {
+    getItem: (k: string) => AsyncStorage.getItem(k),
+    setItem: (k: string, v: string) => AsyncStorage.setItem(k, v),
+    getAllKeys: () => AsyncStorage.getAllKeys(),
+    getMany: (ks: string[]) => AsyncStorage.getMany(ks),
+  },
+  prefix: REGISTRY,
+});
+export const budgetBook = book;
+/* one budget's record key - its own budgets, and your other devices' checked openings */
+export const budgetRecordKey = (deviceIdHex: string, grantId: number): string => book.key(deviceIdHex, grantId);
 
 /*
  * What this phone keeps of a budget it approved: the request, G, and the
@@ -614,17 +629,12 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const out: EdgeBudget[] = [];
     /* a budget that was live at the last look and is not now: stamp when it was seen gone (the log's 'lasted') */
     for (const gone of this.lastLive.filter(id => !(h.live as number[]).includes(id))) {
-      const key = REGISTRY() + toHex(this.deviceId) + '.' + gone;
-      const raw = await AsyncStorage.getItem(key);
-      if (raw) {
-        const kept = JSON.parse(raw) as Kept;
-        if (!kept.endedAt) await AsyncStorage.setItem(key, JSON.stringify({...kept, endedAt: Date.now()}));
-      }
+      const kept = await book.get(toHex(this.deviceId), gone) as Kept | null;
+      if (kept && !kept.endedAt) await book.patch(toHex(this.deviceId), gone, {endedAt: Date.now()});
     }
     this.lastLive = [...(h.live as number[])];
     for (const id of h.live as number[]) {
-      const raw = await AsyncStorage.getItem(REGISTRY() + toHex(this.deviceId) + '.' + id);
-      out.push(this.budgetFrom(id, raw ? JSON.parse(raw) : null, mirror));
+      out.push(this.budgetFrom(id, await book.get(toHex(this.deviceId), id) as Kept | null, mirror));
     }
     /* an open budget holds the idle check off until it ends (src/idleTimer.ts) - with the latest end the key will let it run to */
     require('./idleTimer').setBudgetsOpen(out.map(b => b.endsAt ?? Date.now() + DEFAULT_LIFETIME_MINUTES * 60000));
@@ -673,28 +683,22 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     if (mirror.publicKey && !own) return {...evaluate(mirror, null), verdict: {kind: 'tampered', seq: -1, reason: "the stored public key is not this device's"}};
     const last = (mirror.merged ?? [])[(mirror.merged ?? []).length - 1];
     if (!last || !mirror.publicKey) return evaluate(mirror, null);
-    const prefix = REGISTRY() + deviceIdHex.toLowerCase() + '.';
-    const keys = (await this.storageKeys()).filter(key => key.startsWith(prefix));
     const openings: Record<number, unknown> = {};
-    for (const [key, raw] of Object.entries(await AsyncStorage.getMany([...keys]))) {
-      const rec: Kept | null = JSON.parse(raw || 'null');
-      if (rec && rec.signature) openings[Number(key.slice(prefix.length))] = openingOf(rec);
+    for (const {grantId, record} of await book.list(deviceIdHex, {keys: [...await this.storageKeys()]})) {
+      const rec = record as Kept;
+      if (rec.signature) openings[grantId] = openingOf(rec);
     }
     return evaluate(mirror, {seq: last.seq, head: last.head, ringFrom: last.seq + 1}, [], {publicKey: mirror.publicKey, publicKeyPq: mirror.publicKeyPq ?? null, openings, checkpoint: {seq: last.seq, head: last.head, signature: last.signature, signaturePq: last.signaturePq ?? null}});
   }
 
   /* every budget with a record on this phone for that device and not live now, newest first */
   private async historyOf(deviceIdHex: string, mirror: Awaited<ReturnType<typeof loadMirror>>, live: Set<number>, other = false): Promise<EdgeBudget[]> {
-    const prefix = REGISTRY() + deviceIdHex.toLowerCase() + '.';
-    const keys = (await this.storageKeys()).filter(k => k.startsWith(prefix));
     /* how each budget ended, from its grant-end link's decision byte (the key writes completed / revoked / settled) */
     const ends = new Map(mirror.links.map(r => chain.decodeLink(r.link)).filter(f => f.op === OP.GRANT_END).map(f => [f.grantId, f.decision] as const));
     const out: EdgeBudget[] = [];
-    for (const k of keys) {
-      const id = Number(k.slice(prefix.length));
-      if (!Number.isInteger(id) || live.has(id)) continue;
-      const raw = await AsyncStorage.getItem(k);
-      const b = this.budgetFrom(id, raw ? JSON.parse(raw) : null, mirror, other);
+    for (const {grantId: id, record} of await book.list(deviceIdHex, {keys: [...await this.storageKeys()]})) {
+      if (live.has(id)) continue;
+      const b = this.budgetFrom(id, record as Kept, mirror, other);
       b.endedHow = ends.has(id) ? endName(ends.get(id)) : b.endsAt && Date.now() > b.endsAt ? 'expired' : 'lost when the key locked or restarted';
       /* like a block: the links it spans - its opening to the last link that names it (a use, its end) or answers one of its uses (a receipt) */
       const decoded = mirror.links.map(r => chain.decodeLink(r.link));
@@ -725,14 +729,12 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * against this log (devices.checkOpenings). Only openings kept with their signature.
    */
   async openingWords(): Promise<Record<string, unknown>[]> {
-    const prefix = REGISTRY() + toHex(this.deviceId) + '.';
-    const keys = (await this.storageKeys()).filter(key => key.startsWith(prefix));
     const out: Record<string, unknown>[] = [];
-    for (const [key, raw] of Object.entries(await AsyncStorage.getMany([...keys]))) {
-      const kept: Kept | null = JSON.parse(raw || 'null');
-      if (!kept || !kept.signature) continue;
+    for (const {grantId, record} of await book.list(toHex(this.deviceId), {keys: [...await this.storageKeys()]})) {
+      const kept = record as Kept;
+      if (!kept.signature) continue;
       out.push({
-        grantId: Number(key.slice(prefix.length)), reason: kept.reason, scopes: kept.scopes, uses: kept.uses, lifetime: kept.lifetime ?? 0,
+        grantId, reason: kept.reason, scopes: kept.scopes, uses: kept.uses, lifetime: kept.lifetime ?? 0,
         genesis: kept.genesis, signature: kept.signature, ...(kept.opened ? {opened: kept.opened} : {}), ...(kept.from ? {from: kept.from} : {}),
       });
     }
@@ -829,8 +831,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const dev = toHex(this.deviceId);
     let found: {grantId: number; kept: Kept} | null = null;
     for (const id of [...(h.live ?? [])].sort((a: number, b: number) => b - a)) {
-      const raw = await AsyncStorage.getItem(REGISTRY() + dev + '.' + id);
-      const kept = raw ? (JSON.parse(raw) as Kept) : null;
+      const kept = await book.get(dev, id) as Kept | null;
       if (kept && kept.scopes.some(sc => sc.slot === 222 && sc.identity === TESTING_IDENTITY)) { found = {grantId: id, kept}; break; }
     }
     if (!found) throw new Error('edge: no live budget for the testing identity on this key - request one first');
@@ -862,13 +863,10 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const h = await this.keyHead();
     const mirror = await this.mirrorNow();
     const fields = mirror.links.map(r => chain.decodeLink(r.link));
-    const prefix = REGISTRY() + toHex(this.deviceId) + '.';
     const out: EdgeEnded[] = [];
-    for (const k of await this.storageKeys()) {
-      if (!k.startsWith(prefix)) continue;
-      const grantId = Number(k.slice(prefix.length));
-      const kept: Kept | null = JSON.parse((await AsyncStorage.getItem(k)) || 'null');
-      if (!kept || kept.continued || kept.dismissed || !kept.opened || (h.live as number[]).includes(grantId)) continue;
+    for (const {grantId, record} of await book.list(toHex(this.deviceId), {keys: [...await this.storageKeys()]})) {
+      const kept = record as Kept;
+      if (kept.continued || kept.dismissed || !kept.opened || (h.live as number[]).includes(grantId)) continue;
       if (fields.some(f => f.op === codes.OP.GRANT_END && f.grantId === grantId)) continue;
       const spent = fields.filter(f => f.grantId === grantId && f.decision === DECISION.SELF_PRESS);
       const scopes = kept.scopes
@@ -883,9 +881,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   }
 
   async dismissEnded(grantId: number) {
-    const k = REGISTRY() + toHex(this.deviceId) + '.' + grantId;
-    const kept: Kept | null = JSON.parse((await AsyncStorage.getItem(k)) || 'null');
-    if (kept) await AsyncStorage.setItem(k, JSON.stringify({...kept, dismissed: true}));
+    await book.patch(toHex(this.deviceId), grantId, {dismissed: true});
   }
 
   /**
@@ -898,7 +894,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const live = await this.budgets();
     const out: {identity?: string; slot: number; usesLeft: number; endsAt?: number; grantId: number; sameComputer: boolean}[] = [];
     for (const b of live) {
-      const kept: Kept | null = JSON.parse((await AsyncStorage.getItem(REGISTRY() + toHex(this.deviceId) + '.' + b.grantId)) || 'null');
+      const kept = await book.get(toHex(this.deviceId), b.grantId) as Kept | null;
       for (const want of msg.scopes as any[]) {
         const op = want.op === 'sign' ? codes.OP.SIGN : want.op === 'decrypt' ? codes.OP.DECRYPT : want.op;
         const sc: any = b.scopes.find((x: any) => x.op === op && x.slot === want.slot && (x.identity || '') === (want.identity || ''));
@@ -919,9 +915,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       id: this.nextRequest++, from: 'this device (Continue)', reason: `continues #${grantId}: ${e.reason}`,
       scopes: e.scopes, ttlMinutes: e.minutesLeft,
     });
-    const k = REGISTRY() + toHex(this.deviceId) + '.' + grantId;
-    const kept: Kept = JSON.parse((await AsyncStorage.getItem(k)) || 'null');
-    await AsyncStorage.setItem(k, JSON.stringify({...kept, continued: true}));
+    await book.patch(toHex(this.deviceId), grantId, {continued: true});
   }
 
   /* the soft key's own buttons press for every request that waits on one */
@@ -960,11 +954,9 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     let kept = openingsKept.get(id);
     if (!kept) {
       kept = new Map();
-      const prefix = REGISTRY() + id + '.';
-      const keys = (await this.storageKeys()).filter(k => k.startsWith(prefix));
-      for (const [k, raw] of Object.entries(await AsyncStorage.getMany([...keys]))) {
-        const rec: Kept | null = JSON.parse(raw || 'null');
-        if (rec && rec.signature) kept.set(Number(k.slice(prefix.length)), openingOf(rec));
+      for (const {grantId, record} of await book.list(id, {keys: [...await this.storageKeys()]})) {
+        const rec = record as Kept;
+        if (rec.signature) kept.set(grantId, openingOf(rec));
       }
       openingsKept.set(id, kept);
     }
@@ -1105,7 +1097,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       signature: typeof g.checkpoint.signature === 'string' ? g.checkpoint.signature : toHex(g.checkpoint.signature),
       lifetime: o.lifetime, opened: Date.now(), ...(o.computer ? {computer: o.computer} : {}),
     };
-    await AsyncStorage.setItem(REGISTRY() + toHex(this.deviceId) + '.' + g.grantId, JSON.stringify(kept));
+    await book.put(toHex(this.deviceId), g.grantId, kept);
     openingsKept.get(toHex(this.deviceId))?.set(g.grantId, openingOf(kept)); /* the memory follows our own write */
   }
 
@@ -1151,15 +1143,13 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   /* the budgets this device opened for a computer, for a continue: {from, scopes} by id (loaded by loadAgentBudgets) */
   private keptSync = new Map<number, {from: string; scopes: any[]}>();
   async loadAgentBudgets() {
-    const prefix = REGISTRY() + toHex(this.deviceId) + '.';
     this.keptSync.clear();
-    for (const k of await AsyncStorage.getAllKeys()) {
-      if (!k.startsWith(prefix)) continue;
-      const kept: Kept | null = JSON.parse((await AsyncStorage.getItem(k)) || 'null');
-      if (kept?.computer) {
+    for (const {grantId, record} of await book.list(toHex(this.deviceId))) {
+      const kept = record as Kept;
+      if (kept.computer) {
         /* the request's own words for the ops: a continue's scopes are compared with them */
         const scopes = kept.scopes.map((sc: any) => ({...sc, op: sc.op === codes.OP.SIGN ? 'sign' : sc.op === codes.OP.DECRYPT ? 'decrypt' : sc.op}));
-        this.keptSync.set(Number(k.slice(prefix.length)), {from: kept.computer, scopes});
+        this.keptSync.set(grantId, {from: kept.computer, scopes});
       }
     }
   }

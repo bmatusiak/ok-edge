@@ -442,16 +442,15 @@ export async function waitingCount(): Promise<number> {
 /* records: what to check them against - by default this phone's copy of that log; the desktop passes its copy with the links being offered (edgeSoftKey.takeShared) */
 export async function keepOpenings(deviceIdHex: string, publicKey: Uint8Array, openings: unknown[], records?: EdgeLinkRecord[]): Promise<number> {
   if (!openings.length) return 0;
-  const {budgetRecordKey} = require('./edgeSoftKey');
+  const {budgetBook} = require('./edgeSoftKey');
   if (!records) records = (await logFor(deviceIdHex)).links;
   const good = (devicesLib as any).checkOpenings({deviceId: fromHex(deviceIdHex), publicKey, records, openings}) as any[];
   for (const o of good) {
-    const key = budgetRecordKey(deviceIdHex, o.grantId);
-    const was = JSON.parse((await AsyncStorage.getItem(key)) || 'null');
-    await AsyncStorage.setItem(key, JSON.stringify({
+    const was = await budgetBook.get(deviceIdHex, o.grantId);
+    await budgetBook.put(deviceIdHex, o.grantId, {
       ...(was ?? {}), v: 1, reason: o.reason, scopes: o.scopes, uses: o.uses, genesis: o.genesis, signature: o.signature,
       lifetime: o.lifetime, ...(o.opened ? {opened: o.opened} : {}), from: o.from ?? '',
-    }));
+    });
   }
   return good.length;
 }
