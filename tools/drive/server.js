@@ -266,18 +266,19 @@ function pressWhenAsked(app) {
      * one guard for the two, until the app's next request step. The LED's browser touches are a different wait with their
      * own guard (above). A code's "key waits: ... - buttons" is under neither - its digits are what the key asked for.
      */
+    /*
+     * THE WEB APP'S KEY WAITS LATER THAN ITS SHEET SAYS (box web app, 2026-11-01 22:17:22: the press icon and "key waits ...
+     * buttons any" showed as the login budget's request began, the drive pressed, and the key - still taking the request
+     * over WebAuthn - was not waiting yet; [keybusy] said it waited a second later, the guard held, the key gave up): over
+     * the tunnel only [keybusy] and the plain-yellow LED mean the key waits now - the others are passed over before any
+     * guard is marked. Elsewhere the icon does.
+     */
+    if (app.shell === 'webapp' && (icon || /^\[press\] key waits: .* - buttons any$/.test(l))) return;
     if (icon && (codeOpen || iconAnswered)) return;
     if (icon) iconAnswered = true;
     if (edgeWait && (codeOpen || iconAnswered)) return;
     if (edgeWait) iconAnswered = true;
     /* "key waits: ... - buttons any" names the same Edge press: the same guard; a code's digits are pressed as given */
-    /*
-     * THE WEB APP'S KEY WAITS LATER THAN ITS SHEET SAYS (box web app, 2026-11-01 22:17:22: the press icon and "key waits ...
-     * buttons any" showed as the login budget's request began, the drive pressed, and the key - still taking the request
-     * over WebAuthn - was not waiting yet; [keybusy] said it waited a second later, the guard held, the key gave up): over
-     * the tunnel only [keybusy] and the plain-yellow LED mean the key waits now. Elsewhere the icon does.
-     */
-    if (app.shell === 'webapp' && (icon || /^\[press\] key waits: .* - buttons any$/.test(l))) return;
     const anyPress = /^\[press\] key waits: .* - buttons any$/.test(l);
     if (anyPress && iconAnswered) return;
     if (anyPress) iconAnswered = true;
