@@ -5,51 +5,32 @@
  * the core and websocket to host the mcp and authenticate itself, like it was talking to the remote mcp"; "local only,
  * only need plain, no cert needed, we point the desktop app to localhost for the mcp").
  *
- * The mcp-server Rectify app (node-onlykey-lib mcp/: mcp-core + mcp-localhost - the same `onlykey-js --service` hosts) in this main process, on http:// and ws:// at
- * 127.0.0.1:8650 (PORT, below) - never another interface. The same routes and the same logic as the hosted one: /mcp for agents
- * on this machine, /ws/<identity> where this app joins - with no proof (below) - to hear their plans and answer them. It
- * keeps no sealed copy - the bucket stays in its file (hosting.js).
+ * This computer's local MCP is node-onlykey-lib's (mcp/localhost/computer.js: the mcp-server Rectify app on
+ * 127.0.0.1:8650, no proof asked, its record in ~/.onlykey-js) - the same `onlykey-js --service` hosts when this app is
+ * not open. Here it runs in the main process while this app is the computer's member (member.js).
  *
  *   okedge:localMcp (sync)  -> the server's base URL (http://127.0.0.1:8650), or null while it is not up
  */
-/*
- * ONE ADDRESS, ALWAYS (Brad, 2026-11-02: "80 = http web, 65 = OK" - OK on a phone keypad; "8650 - web is surrounded around ok", as 8065 is Mattermost's default): an agent's MCP config names a URL -
- * Claude Code's `claude mcp add --transport http okedge http://127.0.0.1:8650/mcp` - so the port cannot be a new one each
- * start. Taken by something else, the local MCP does not start and says so (no other port: an agent would not find it).
- */
-const PORT = 8650;
 let server = null;
 let starting = null;
 
 async function start() {
   if (starting) return starting;
   starting = (async () => {
-    const Rectify = require('@bmatusiak/rectify');
     /* the server's source is ESM (node-onlykey-lib mcp/package.json); the main process is CommonJS */
-    const core = (await import('node-onlykey-lib/mcp/core')).default;
-    const localhost = (await import('node-onlykey-lib/mcp/localhost')).default;
-    const app = Rectify.build([core, localhost]);
-    await app.start();
-    /*
-     * NO AUTH HERE (Brad, 2026-11-01: "the local mcp has no auth, but it still will communicate with the desktop app for
-     * the planner and budget calls"): the login proves the key to the user's server, or the app checks it itself; this
-     * room only carries this computer's agents to this app - any well-formed join for the identity enters (OPEN_JOIN).
-     */
-    server = await app.services.mcpLocalhost.start({ host: '127.0.0.1', port: PORT, env: { REQUIRE_LOGIN: '0', OPEN_JOIN: '1' } });
+    const { startComputerMcp } = await import('node-onlykey-lib/mcp/computer');
+    server = await startComputerMcp({ log: (l) => console.log(`[local-mcp] ${l}`) });
     console.log(`[local-mcp] ready on ${server.url}`);
-    /* where it runs, for the agents and the CLI on this computer: ~/.onlykey-js/local-mcp-desktop.json */
-    try { require('node-onlykey-lib/desktop/trust').writeLocalMcp({ url: server.url, what: 'desktop' }); } catch (e) { console.log(`[local-mcp] its record was not written: ${e && e.message || e}`); }
   })().catch((e) => {
     /* the app runs without it (no local agents, no local self-auth) - said once, not hidden */
-    console.log(`[local-mcp] did not start: ${e && e.code === 'EADDRINUSE' ? `127.0.0.1:${PORT} is taken by another program` : e && e.message || e}`);
+    console.log(`[local-mcp] did not start: ${e && e.message || e}`);
   });
   return starting;
 }
 
 async function stop() {
-  try { require('node-onlykey-lib/desktop/trust').removeLocalMcp({ what: 'desktop' }); } catch { /* none */ }
   if (starting) await starting;
-  if (server) await server.close().catch(() => undefined);
+  if (server) await server.close();
   server = null;
   starting = null;
 }

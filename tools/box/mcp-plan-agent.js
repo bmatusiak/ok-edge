@@ -15,9 +15,9 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 
 const [given, identity, ssh = 'ssh://test@example.com'] = process.argv.slice(2);
-/* "desktop": the desktop app's local MCP on this machine, wherever it runs now (node-onlykey-lib desktop/trust.js record) */
-const url = given === 'desktop' ? (require('node-onlykey-lib/desktop/trust').readLocalMcp(undefined, 'desktop') || {}).url : given;
-if (!url || !/^[0-9a-f]{64}$/i.test(identity || '')) { console.error('mcp-plan-agent.js <mcp url | desktop> <identity public key hex> [ssh identity]  (desktop: no local MCP running here)'); process.exit(2); }
+/* "computer": this computer's local MCP - the desktop app's or onlykey-js --service's (node-onlykey-lib desktop/trust.js record) */
+const url = given === 'computer' ? (require('node-onlykey-lib/desktop/trust').readLocalMcp(undefined, 'computer') || {}).url : given;
+if (!url || !/^[0-9a-f]{64}$/i.test(identity || '')) { console.error('mcp-plan-agent.js <mcp url | computer> <identity public key hex> [ssh identity]  (computer: no local MCP running here)'); process.exit(2); }
 const AGENT = path.join(__dirname, 'mcp-agent.js');
 /* its name (MCP_AGENT_NAME - a run's own, so the owner's flow accepts this agent and no other) and its own state file: a new agent each name */
 const NAME = process.env.MCP_AGENT_NAME || 'mcp-plan-agent';
