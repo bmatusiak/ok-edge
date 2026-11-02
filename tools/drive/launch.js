@@ -59,7 +59,21 @@ function stop() {
         portClosed(r.mode === 'server' ? 8790 : 8791, until).then(() => resolve(`drive ${r.mode} stopped (pid ${r.pid})`));
         return;
       }
-      if (Date.now() > until) { resolve(`drive ${r.mode} (pid ${r.pid}) did not stop in 20 s`); return; }
+      /*
+       * NOT STOPPED IN 20 s: ended, its whole tree, by its pid (2026-11-01: a window locked up under a flood of lines
+       * outlived the 20 s, the restart went on, and the new server crashed on the port the old one still held)
+       */
+      if (Date.now() > until) {
+        if (!r.forced) {
+          r.forced = true;
+          if (process.platform === 'win32') require('child_process').spawnSync('taskkill', ['/PID', String(r.pid), '/T', '/F'], { windowsHide: true });
+          else { try { process.kill(r.pid, 'SIGKILL'); } catch { /* gone */ } }
+          setTimeout(check, 500);
+          return;
+        }
+        resolve(`drive ${r.mode} (pid ${r.pid}) did not stop, even forced`);
+        return;
+      }
       setTimeout(check, 250);
     };
     check();
