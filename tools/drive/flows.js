@@ -93,8 +93,13 @@ const GREEN = /led #00[4-9a-f][0-9a-f]00\b/;
 const DARK = /led #000000\b/;
 async function unlockOutsideKey(d, pin) {
   let s = await d.machine('key-state');
-  /* neither green nor dark: the LED is showing something else (a touch wait, a fade) - read again, 10 s at most */
-  for (let i = 0; s.ok && !GREEN.test(s.what) && !DARK.test(s.what) && i < 10; i++) {
+  /*
+   * neither green nor dark: the LED is showing something else (a touch wait, a fade) - read again, 10 s at most. The
+   * gadget's only: a hard key's state names no LED, and each of its reads is an OKCONNECT and a console probe - ten of
+   * them ran into the Windows web app's first CTAP requests (2026-11-02, blue-key: "transit authentication failed or a
+   * stale reply", seen on its firmware console between the browser's packets).
+   */
+  for (let i = 0; s.ok && !/^hard key 2/.test(s.what) && !GREEN.test(s.what) && !DARK.test(s.what) && i < 10; i++) {
     await new Promise((ok) => setTimeout(ok, 1000));
     s = await d.machine('key-state');
   }

@@ -143,10 +143,11 @@ bus.on('app-line', (tab, l) => {
 /* an app's key request that ended failed, or a press the key stopped waiting for (the app's own lines) */
 const STOPPED_RE = /^\[timeline\] \d+ end #\d+ .* failed|the key stopped waiting for the press/;
 const tabName = (app) => `${app.shell} (${(app.ws && app.ws.via) || HOST})`;
+const HERE_WORDS = ['windows', 'local', 'here'];
 function pickApp(name) {
   if (!name || !String(name).includes('@')) return apps.get(name);
   const [shell, where] = String(name).toLowerCase().split('@');
-  const here = ['windows', 'local', 'here'].includes(where);
+  const here = HERE_WORDS.includes(where);
   const remote = ['linux', 'box', 'remote'].includes(where);
   const hits = [...everyApp].filter((a) => a.shell === shell && !a.closed && (here ? !(a.ws && a.ws.via) : remote ? !!(a.ws && a.ws.via) : String((a.ws && a.ws.via) || '').toLowerCase().includes(where)));
   return hits[hits.length - 1];
@@ -267,6 +268,8 @@ function pressWhenAsked(app) {
     const icon = l.match(/^\[press\] icon up \(usb\)(?:: (.*))?$/);
     /* one icon press per key request: two sheets showing the icon for one wait must not press twice - a stray press on an
        unlocked key types a slot. The app's next request step ("[timeline] begin/end") opens it again. */
+    /* a request's begin: the key's console lines that count for its press are from here on (targets.js consoleSaid) */
+    if (/^\[timeline\] \d+ begin /.test(l)) app.opBeganAt = Date.now();
     if (/^\[timeline\] \d+ (begin|end) /.test(l)) { iconAnswered = false; return; }
     /*
      * THE EDGE PRESS: the press icon and the web app's "[keybusy] the key waits for its press" both name the same wait -
@@ -281,6 +284,14 @@ function pressWhenAsked(app) {
      * guard is marked. Elsewhere the icon does.
      */
     if (app.shell === 'webapp' && (icon || /^\[press\] key waits: .* - buttons any$/.test(l))) return;
+    /*
+     * ...AND A CODE TOO (Windows web app, 2026-11-02: a derive's "key waits ... buttons 1 6 6" came as its request began,
+     * the drive typed the code while the chunks still went out - one every 2.4 s there - and the key waited out its 20 s):
+     * a web app's code is pressed when its sheet shows it ("[press] code shows", on the request's last chunk).
+     */
+    if (app.shell === 'webapp' && /^\[press\] key waits: .* - buttons [1-6]( [1-6])*$/.test(l)) return;
+    const shown = app.shell === 'webapp' && l.match(/^\[press\] code shows: (.*) - buttons ([1-6](?: [1-6])*)$/);
+    if (shown) l = `[press] key waits: ${shown[1]} - buttons ${shown[2]}`;
     if (icon && (codeOpen || iconAnswered)) return;
     if (icon) iconAnswered = true;
     if (edgeWait && (codeOpen || iconAnswered)) return;
@@ -290,7 +301,9 @@ function pressWhenAsked(app) {
     if (anyPress && iconAnswered) return;
     if (anyPress) iconAnswered = true;
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
-    if (outside && pressHeld && outside[2] === 'any') { line(`[${app.shell}] held: ${outside[1]} - not pressed`); return; }
+    /* --by-hand: every press on the key outside the app is the person's, a code's too (2026-11-02: blue-key on Windows - is a
+       press that lands while the key waits taken?) */
+    if (outside && pressHeld) { line(`[${app.shell}] held: ${outside[1]}${outside[2] === 'any' ? '' : ` (code ${outside[2]})`} - not pressed`); return; }
     if (outside) {
       /* a press in progress (a touch) is waited for, not a reason to drop this one - the key would wait out its 25 s */
       while (pressing) await new Promise((r) => setTimeout(r, 100));
@@ -307,13 +320,28 @@ function pressWhenAsked(app) {
          * The web app cannot probe its key (the browser speaks FIDO2 only): its machine's echo probe is the proof there
          * (targets.js keyState, hardkey-press.js --probe) - a hard key only by its echo, the gadget by being the gadget.
          */
-        if (app.net !== 'test') {
+        /*
+         * ASKED ONCE PER APP CONNECTION (2026-11-02, blue-key on Windows: the check before each press - an OKCONNECT and a
+         * console probe - reached the key in the middle of the web app's request): which key it is does not change while
+         * the app is connected; a key swapped for another is another connection.
+         */
+        if (app.net !== 'test' && !app.keyIsTest) {
           if (app.flags.consoleAnswers !== true && app.shell !== 'webapp') { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
           const s = await procFor(app, 'key-state');
           if (!(s.ok && /debug console answers|the testnet soft key \(gadget\)/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
+          app.keyIsTest = true;
         }
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
-        const r = await procFor(app, 'press', { buttons });
+        /* a web app's code on a hard key: pressed when the key's console says it waits, not when the sheet shows - its DEBUG
+           "Send device update" (fido2's wait: a derive) or "done_process_packets" (okcore's confirmation: a sign or decrypt) */
+        const after = app.shell === 'webapp' && outside[2] !== 'any' ? 'Send device update|done_process_packets' : null;
+        /*
+         * how long ago the request began - an age, not a time: the key's machine may be a drive-remote with its own clock.
+         * No slack before it: the app says its begin before any byte reaches the key, and an earlier line is the request
+         * before's (2026-11-02: with 0.5 s, a sign's press matched the derive's "Send device update").
+         */
+        const sinceAge = after && app.opBeganAt ? Date.now() - app.opBeganAt : 0;
+        const r = await procFor(app, 'press', { buttons, after, sinceAge });
         line(r.ok ? `[${app.shell}] pressed: ${r.what} - ${outside[1]}` : `[${app.shell}] press refused: ${r.why}`);
       } finally { pressing = false; }
       return;
@@ -521,10 +549,13 @@ function driveFor(app, say, answer = () => {}, run = null) {
   async function restarted(act, { life = 90 } = {}) {
     const back = new Promise((resolve, reject) => {
       const dog = setTimeout(() => { hellos.off('hello', onHello); reject(failure(`WATCHDOG: ${app.shell} did not come back in ${life} s`)); }, life * 1000);
-      const onHello = (a) => { if (a.shell === app.shell && a !== app) { clearTimeout(dog); hellos.off('hello', onHello); resolve(a); } };
+      /* the same machine's app: one named @windows (or met with no drive-remote between) comes back here, not on the box */
+      const local = HERE_WORDS.includes(app.where) || (!app.where && !!app.ws && !app.ws.via);
+      const sameMachine = (a) => !local || !(a.ws && a.ws.via);
+      const onHello = (a) => { if (a.shell === app.shell && a !== app && sameMachine(a)) { clearTimeout(dog); hellos.off('hello', onHello); resolve(a); } };
       hellos.on('hello', onHello);
       /* waiting with nothing to set off (a page that reloaded itself): a newer connection already up is the one */
-      const now = apps.get(app.shell);
+      const now = local ? pickApp(`${app.shell}@here`) : apps.get(app.shell);
       if (!act && now && now !== app && now.ready && !now.closed) onHello(now);
     });
     back.catch(() => {});
@@ -546,7 +577,13 @@ function driveFor(app, say, answer = () => {}, run = null) {
    */
   async function procOrThrow(action, target) {
     if (action === 'stop' || action === 'restart') expectGone(target);
-    const r = await proc(action, target);
+    /*
+     * THIS MACHINE'S APP, ON THIS MACHINE (Brad, 2026-11-02: blue-key on Windows for a web-app pass): the run's app named
+     * @windows/@local/@here, or connected straight to this server (no drive-remote between), is started and stopped
+     * here - with remotes given, proc alone sends every target to the remote that has it.
+     */
+    const here = target === app.shell && (HERE_WORDS.includes(app.where) || (!app.where && !!app.ws && !app.ws.via));
+    const r = here ? { ...(await localTargets.act(action, target, {})), where: 'this machine' } : await proc(action, target);
     if (!r.ok) throw failure(`${action} ${target} (${r.where}): ${r.why}`);
     say(`${action} ${target} on ${r.where}: ${r.what}`);
   }
@@ -975,9 +1012,10 @@ function control(ws) {
       for (const u of REMOTES) dialRemote(u);
       const shell = String(m.app || [...apps.keys()][0] || 'desktop').split('@')[0];
       /* desktop@linux: that machine's app only - never another machine's with the same name (pickApp) */
-      if (m.app && String(m.app).includes('@') && !pickApp(m.app)) throw new Error(`no ${m.app} connected - its app must be up (a run for one machine never starts or drives another's)`);
-      /* a shell not connected yet gets a handle too: its script may start it (d.up(), d.start()) */
-      const app = pickApp(m.app || shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true });
+      /* run.js start brings that machine's app up, so it alone may name one not connected yet */
+      if (m.app && String(m.app).includes('@') && !pickApp(m.app) && m.script !== 'start') throw new Error(`no ${m.app} connected - its app must be up (a run for one machine never starts or drives another's)`);
+      /* a shell not connected yet gets a handle too: its script may start it (d.up(), d.start()) - on the machine it names */
+      const app = pickApp(m.app || shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true, where: String(m.app || '').toLowerCase().split('@')[1] || '' });
       shotApp = app;
       /* every run loads the scripts and what they require (flows.js) as they are now - a cached flows.js ran an old login
        * for runs after it was changed (2026-10-31) */

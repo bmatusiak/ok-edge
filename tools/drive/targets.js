@@ -76,14 +76,15 @@ function standinPid() {
     return pid;
   } catch { return null; }
 }
-async function ensureStandin(line) {
-  if (!LINUX || !STANDIN_ON) return null;
+/* anyOs: the web app's own stand-in, on Windows too - the Windows desktop never gets one (it runs red-key on the user's server) */
+async function ensureStandin(line, { anyOs = false } = {}) {
+  if ((!LINUX && !anyOs) || !STANDIN_ON) return null;
   const up = standinPid();
   if (up) return `the stand-in server runs (pid ${up})`;
   const certs = path.join(ROOT, 'devcert');
   const server = launch('server-dev', NODE, [path.join(EDGE, 'mcp-server/src/localhost/main.js'), '--host', '127.0.0.1', '--port', '443',
     '--assets', path.join(EDGE, 'docs'), '--sealed', '--tls-key', path.join(certs, 'apps.crp.to.key'), '--tls-cert', path.join(certs, 'apps.crp.to.crt'),
-    '--plain-port', STANDIN_PLAIN, '--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN || '1'}`]);
+    '--plain-port', STANDIN_PLAIN, '--var', `REQUIRE_LOGIN=${process.env.DRIVE_REQUIRE_LOGIN || '1'}`], {}, { shell: false });
   server.unref();
   fs.writeFileSync(STANDIN_PID, String(server.pid));
   const ready = await new Promise((resolve) => {
@@ -95,10 +96,11 @@ async function ensureStandin(line) {
   return `the stand-in server started (pid ${server.pid})`;
 }
 
-function launch(name, cmd, args, env = {}) {
+/* shell: Windows needs one for npm's .cmd files; an .exe whose arguments hold spaces (Chrome's --host-resolver-rules) goes without */
+function launch(name, cmd, args, env = {}, { shell = !LINUX } = {}) {
   try { fs.mkdirSync(LOGS, { recursive: true }); } catch { /* the log is a nicety */ }
   const out = fs.openSync(path.join(LOGS, `${name}.log`), 'w');
-  return spawn(cmd, args, { cwd: EDGE, env: { ...process.env, ...env }, detached: LINUX, stdio: ['ignore', out, out], shell: !LINUX, windowsHide: false });
+  return spawn(cmd, args, { cwd: EDGE, env: { ...process.env, ...env }, detached: LINUX, stdio: ['ignore', out, out], shell, windowsHide: false });
 }
 
 /*
@@ -123,6 +125,13 @@ function follow(name, onLine) {
     rest = lines.pop();
     for (const l of lines) if (l.trim()) onLine(l.replace(/\r$/, ''));
   };
+  /*
+   * WINDOWS DOES NOT SAY A FILE GREW while its writer holds it open (2026-11-02: the stand-in's "ready on" sat in its log
+   * and fs.watch never fired) - there the file's size is checked (fs.watchFile, 250 ms); Linux keeps inotify's event.
+   */
+  if (!LINUX) {
+    try { fs.watchFile(file, { interval: 250 }, read); read(); return { close: () => fs.unwatchFile(file, read) }; } catch { return null; }
+  }
   try { const w = fs.watch(file, read); read(); return w; } catch { return null; }
 }
 
@@ -175,7 +184,8 @@ function runIn(cwd, cmd, args, timeout) {
  * web app restart is a page reload, not a key unplugged.
  */
 /* which key the web app uses - switched at run time with useKey (run.js key use hard|gadget); DRIVE_WEBAPP_KEY sets the start */
-let KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' ? 'hard' : 'gadget';
+/* Windows has no gadget (a Linux USB gadget): its web app always uses the hard key on its USB */
+let KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' || !LINUX ? 'hard' : 'gadget';
 /* the site the box's keys carry (ctap_bridge's default) - where "Go to <site>" sends the web app */
 const KEY_SITE = process.env.DRIVE_KEY_SITE || 'ok-edge.bmatusiak.workers.dev';
 /* the web app's processes, by their command lines: its browser profile, its local Worker (wrangler dev, workerd) */
@@ -241,6 +251,45 @@ function gadget() {
 let gadgetHost = null;
 let gadgetUp = false;
 let gadgetLed = { hex: null, at: 0 };
+
+/*
+ * THE HARD KEY'S DEBUG CONSOLE, HELD WHILE THE WEB APP RUNS ON IT (Brad, 2026-11-02: "its a debug key right? can you
+ * overlay the firmware output and the app output?"): every line, timed, in logs/webapp-console.log beside the app's log -
+ * and the press's signal. A code is pressed on the key's own word that it waits; over WebAuthn that word can come before
+ * the sheet shows the code (a sign: the key primes its confirmation inside the last packet's ceremony) or after it (a
+ * derive: the key waits inside its last packet's ceremony), so the lines are kept, not only listened for.
+ */
+let consoleProc = null;
+let consoleWatch = null;
+const consoleLines = [];
+const consoleWaiters = new Set();
+function holdConsole() {
+  if (consoleProc && !exited(consoleProc)) return;
+  consoleProc = launch('webapp-console', NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), '--watch'], {}, { shell: false });
+  consoleWatch = follow('webapp-console', (l) => {
+    const at = Date.now();
+    consoleLines.push({ at, l });
+    if (consoleLines.length > 4000) consoleLines.splice(0, consoleLines.length - 4000);
+    for (const w of [...consoleWaiters]) w(at, l);
+  });
+}
+function dropConsole() {
+  if (consoleWatch) consoleWatch.close();
+  consoleWatch = null;
+  if (consoleProc && !exited(consoleProc)) try { consoleProc.kill(); } catch { /* gone */ }
+  consoleProc = null;
+  consoleLines.length = 0;
+}
+/* a console line matching re since `since` (ms epoch), or the next one - null after `life` ms */
+function consoleSaid(re, since, life) {
+  const seen = consoleLines.find((x) => x.at >= since && re.test(x.l));
+  if (seen) return Promise.resolve(seen);
+  return new Promise((resolve) => {
+    const dog = setTimeout(() => { consoleWaiters.delete(on); resolve(null); }, life);
+    function on(at, l) { if (re.test(l)) { clearTimeout(dog); consoleWaiters.delete(on); resolve({ at, l }); } }
+    consoleWaiters.add(on);
+  });
+}
 let gadgetOut = () => {};
 function holdGadget(onOut) {
   gadgetOut = onOut;
@@ -498,8 +547,12 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     },
     webapp: {
       /* the box's web app: docs/ served as https://apps.crp.to:8443 and Chromium on the box screen (as tools/box/webapp.sh did) */
+      /*
+       * ON WINDOWS TOO (Brad, 2026-11-02: "do all the heavy work on linux and bring it to windows for a pass to see how
+       * ctap messages respond"): the same stand-in and names, Chrome for Chromium, and the hard key on this USB (no
+       * gadget). The dev certificate is the box's (copied to ../devcert); its CA is in the Windows user's Root store.
+       */
       async start() {
-        if (!LINUX) return 'the web app target is the Linux box\'s';
         /* its key first: the gadget held and running, whatever else already runs */
         if (KEY === 'gadget') {
           const held = holdGadget((l) => out('webapp', l));
@@ -520,18 +573,20 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
          * Bound to 127.0.0.1: local-only testing - nothing on the LAN reaches it (the browser here maps both names to it).
          */
         /* the web app's server: the box's stand-in (ensureStandin) - mcp-server's localhost service, shared with the desktop */
-        const serverNote = await ensureStandin(line);
+        const serverNote = await ensureStandin(line, { anyOs: true });
         if (!serverNote) return 'the web app needs the stand-in server (DRIVE_STANDIN is 0)';
         const certs = path.join(ROOT, 'devcert');
         const spki = fs.readFileSync(path.join(certs, 'apps.crp.to.spki'), 'utf8').trim();
         /* --disable-popup-blocking: a drive's tap is not a person's gesture, and "Go to <site>" opens a tab (window.open) - only this test profile */
-        const browser = launch('webapp-chromium', 'chromium-browser', ['--test-type', '--remote-debugging-port=9333', '--disable-popup-blocking',
+        const chrome = LINUX ? 'chromium-browser' : process.env.DRIVE_CHROME || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+        const browser = launch('webapp-chromium', chrome, ['--test-type', '--remote-debugging-port=9333', '--disable-popup-blocking',
           `--host-resolver-rules=MAP apps.crp.to 127.0.0.1, MAP ${KEY_SITE} 127.0.0.1`,
           `--ignore-certificate-errors-spki-list=${spki}`, `--user-data-dir=${path.join(ROOT, 'webapp-chromium')}`, '--no-first-run', '--new-window', 'https://apps.crp.to/'],
-        { DISPLAY: process.env.DRIVE_DISPLAY || ':10' });
+        { DISPLAY: process.env.DRIVE_DISPLAY || ':10' }, { shell: false });
         running.set('webapp', [browser]);
         followOut('webapp', 'webapp-chromium');
-        return `started at https://apps.crp.to/ (the key's site ${KEY_SITE} on ${serverNote}; ${keyNote})`;
+        if (KEY === 'hard') holdConsole();
+        return `started at https://apps.crp.to/ (the key's site ${KEY_SITE} on ${serverNote}; ${keyNote}${KEY === 'hard' ? '; its console in logs/webapp-console.log' : ''})`;
       },
       /*
        * THE BROWSER'S WINDOW, PICTURED BY ITS MACHINE (Brad, 2026-10-31: "the webapp screenshot does not see the security
@@ -574,7 +629,13 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
        * the browser, so this machine presses it - the gadget soft key through the emulator's own socket, or hard key 2
        * through its DEBUG console (DRIVE_WEBAPP_KEY=hard; tools/box/hardkey-press.js). buttons: ['1'] or a code.
        */
-      async press({ buttons = ['1'] } = {}) {
+      /*
+       * after: a hard key's press waits for its own console line saying it waits (2026-11-02, blue-key on Windows: a
+       * WebAuthn ceremony takes 2.4 s there and the host cannot see inside it - a code pressed when the sheet showed
+       * reached the key 1.3 s before the request did, and was lost). Not seen in 25 s: nothing is pressed.
+       */
+      async press({ buttons = ['1'], after = null, sinceAge = 0 } = {}) {
+        const since = sinceAge ? Date.now() - sinceAge : Date.now();
         const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
         if (!b.length) b.push('1');
         if (KEY === 'gadget') {
@@ -591,12 +652,21 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
           for (const x of b) gadgetHost.press(Number(x), 'tap');
           return `pressed ${b.join(' ')} on the gadget soft key`;
         }
-        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...b], 70000);
-        return r.ok ? `pressed ${b.join(' ')} on the hard key` : `press failed: ${r.out.split('\n').pop()}`;
+        /* the held console: its word since this request began (`since`), or the next one; not held: the press tool listens */
+        let waitFor = [];
+        let said = '';
+        if (after && consoleProc && !exited(consoleProc)) {
+          const seen = await consoleSaid(new RegExp(after), since, 25000);
+          if (!seen) return `press failed: the key's console did not say /${after}/ within 25 s - nothing pressed`;
+          said = ` (its console said "${seen.l.trim().slice(0, 40)}" ${Math.max(0, Date.now() - seen.at)} ms before)`;
+        } else if (after) waitFor = [`--after=${after}`, '--timeout=25'];
+        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...waitFor, ...b], 70000);
+        return r.ok ? `pressed ${b.join(' ')} on the hard key${said || (after ? ` (when its console said /${after}/)` : '')}` : `press failed: ${r.out.split('\n').pop()}`;
       },
       async stop() {
         const c = running.get('webapp') || [];
         running.delete('webapp');
+        dropConsole();
         const r = [];
         for (const x of c) r.push(await stopChild(x, line, 'webapp'));
         /*
