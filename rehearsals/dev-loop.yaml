@@ -8,7 +8,9 @@ tags:
   - agents
   - edge
 ---
-- login: {}
+# the desktop's own testnet soft key - its own chain, its local MCP - never the box's shared gadget
+- login:
+    key: soft
 - goto: Edge
 - tapOn: "Budgets"
 - runScript: scripts/plan-agent-start.js

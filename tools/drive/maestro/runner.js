@@ -268,7 +268,8 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
       }
       /* ---- ours ---- */
       case 'login':
-        d = await login(d, a && a.pin ? { pin: String(a.pin) } : {});
+        /* key: soft - the desktop's own testnet soft key, never the gadget (the dev loop's key) */
+        d = await login(d, { ...(a && a.pin ? { pin: String(a.pin) } : {}), ...(a && a.key ? { key: String(a.key) } : {}) });
         listen();
         return;
       case 'budget':

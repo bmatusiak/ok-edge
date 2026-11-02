@@ -142,7 +142,9 @@ async function onGadget(d) {
  * logged in to the soft key, as a state machine: look, take the one move that state calls for, wait for the state to
  * change, look again - from the login screen, the keypad, the identity check, a failed try, another tab
  */
-async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
+/* key: 'soft' - the desktop logs in on its own testnet soft key even while the box's gadget is up (onGadget is not asked) */
+async function loginMoves(d, { pin = TEST_PIN, life = 180, key = null } = {}) {
+  const gadget = (dd) => (key === 'soft' ? Promise.resolve(false) : onGadget(dd));
   const until = Date.now() + life * 1000;
   for (let moves = 0; moves < 12; moves++) {
     const left = Math.max(5, Math.round((until - Date.now()) / 1000));
@@ -177,7 +179,7 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
     }
     else if (now === 'login screen') {
       /* the web app's chain is its key's - the gadget is a testnet key: unlocked from its machine, then Log in */
-      if (d.app.shell === 'webapp' || await onGadget(d)) { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
+      if (d.app.shell === 'webapp' || await gadget(d)) { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
     }
     else if (now === 'bypass' && pin !== TEST_PIN) {
       /* the bypass types TEST_PIN, not this key's: the keypad with its own PIN */
@@ -210,7 +212,7 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
       });
       continue;
     }
-    else if (now === 'keypad' && await onGadget(d)) await unlockOutsideKey(d, pin);
+    else if (now === 'keypad' && await gadget(d)) await unlockOutsideKey(d, pin);
     else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
     else if (now === 'elsewhere') await d.goto('This Key');
     /*
