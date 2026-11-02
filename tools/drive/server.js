@@ -1012,8 +1012,8 @@ function control(ws) {
       for (const u of REMOTES) dialRemote(u);
       const shell = String(m.app || [...apps.keys()][0] || 'desktop').split('@')[0];
       /* desktop@linux: that machine's app only - never another machine's with the same name (pickApp) */
-      /* run.js start brings that machine's app up, so it alone may name one not connected yet */
-      if (m.app && String(m.app).includes('@') && !pickApp(m.app) && m.script !== 'start') throw new Error(`no ${m.app} connected - its app must be up (a run for one machine never starts or drives another's)`);
+      /* run.js start and rebuild bring that machine's app up, so they alone may name one not connected yet */
+      if (m.app && String(m.app).includes('@') && !pickApp(m.app) && !['start', 'rebuild'].includes(String(m.script))) throw new Error(`no ${m.app} connected - its app must be up (a run for one machine never starts or drives another's)`);
       /* a shell not connected yet gets a handle too: its script may start it (d.up(), d.start()) - on the machine it names */
       const app = pickApp(m.app || shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true, where: String(m.app || '').toLowerCase().split('@')[1] || '' });
       shotApp = app;
