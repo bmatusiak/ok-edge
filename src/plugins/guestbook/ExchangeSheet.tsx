@@ -3,6 +3,7 @@ import {Animated, Dimensions, PixelRatio, StyleSheet, Text, TextInput, View} fro
 import {useActiveKey, useBackend} from '../../hooks/KeyContext';
 import {Choice} from '../../screens/keychain/shared';
 import {Btn} from '../../ui/components';
+import {PressIcon} from '../../ui/PressIcon';
 import {CountdownBar} from '../../ui/CountdownBar';
 import {Sheet} from '../../ui/Sheet';
 import {theme} from '../../ui/theme';
@@ -237,9 +238,9 @@ export function ExchangeSheet({
           {backend === 'embedded' ? (
             <Text style={styles.line}>Confirm on the press sheet when it opens.</Text>
           ) : view.digits?.length ? (
-            <Text style={styles.line}>Press any button on your OnlyKey. If it asks for a code, press {view.digits.join(' - ')}.</Text>
+            <><PressIcon /><Text style={styles.line}>Press any button on your OnlyKey. If it asks for a code, press {view.digits.join(' - ')}.</Text></>
           ) : (
-            <Text style={styles.line}>Press a button on your OnlyKey when it asks.</Text>
+            <><PressIcon /><Text style={styles.line}>Press a button on your OnlyKey when it asks.</Text></>
           )}
         </>
       ) : null}

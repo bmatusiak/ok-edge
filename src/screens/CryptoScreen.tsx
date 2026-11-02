@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {AppState, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {Btn, Section, Segmented} from '../ui/components';
+import {PressIcon} from '../ui/PressIcon';
 import {NOT_IN_CONFIG_MODE, ON, type ConfigState} from '../ui/configModeNotes';
 import {missingNote, supports} from '../firmwareFeatures';
 import {recordNamed} from '../keyChainRecorder';
@@ -670,6 +671,7 @@ export function CryptoScreen({
 
       {waiting ? (
         <Section title="The key is waiting for a button">
+          <PressIcon />
           <Text style={styles.body}>
             Press any button to approve this derivation. The app will not press
             it for you — a presence check the software answers on your behalf is
