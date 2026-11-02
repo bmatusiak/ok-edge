@@ -36,5 +36,6 @@ testnet soft key) through the room - 56 items, every store the same after. Where
 | the build | `CI=1 node mcp-server/build-webapp.js` for the release build Cloudflare makes | the same, in Workers Builds |
 | Durable Objects | miniflare's local SQLite; idle sockets are not really hibernated | hibernation on Cloudflare |
 
-The CLI on the box: `printf "<PIN>\n" | NODE_EXTRA_CA_CERTS=… onlykey-js --soft-key --test-mode bucket sync --server https://localhost:8787 --test-mode`
-(the desktop app not running: `--soft-key` boots its soft key).
+The CLI on the box: `NODE_EXTRA_CA_CERTS=… onlykey-js --test-mode bucket sync --server https://localhost:8787` - through
+the desktop app while it runs (its soft key included: the soft key is the app's alone since 2026-11-02), else a hard key
+on USB.

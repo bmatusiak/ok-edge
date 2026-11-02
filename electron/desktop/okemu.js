@@ -96,26 +96,11 @@ const dirFor = (slot) => (slot ? path.join(app.getPath('userData'), 'okemu', slo
 const needRunning = () => { if (!runningDir) throw new Error('firmware is not running'); };
 
 /*
- * WHERE THIS SOFT KEY LIVES, FOR THE CLI (Brad, 2026-10-25: "--soft-key will boot the same softkey the desktop app
- * does"). The app's storage sits in Electron's profile, whose folder name is not one a CLI can know, so each start
- * writes it to the shared home: ~/.onlykey-js/softkey.json, per net (the slot's -test suffix), with the emulator build
- * it loaded - `onlykey-js --soft-key` boots exactly this soft key when the app is not running.
+ * THE SOFT KEY IS THIS APP'S ALONE (Brad, 2026-11-02: "lets turn off --soft-key for cli, and leave it a desktop only
+ * feature" - a soft key needs button presses, and this app has them): `onlykey-js` reaches it only through this app
+ * while it runs (hosting.js), so nothing here tells the CLI where it lives (~/.onlykey-js/softkey.json is no longer
+ * written or read).
  */
-function recordForCli(slot, dir) {
-  try {
-    const home = path.join(require('os').homedir(), '.onlykey-js');
-    const file = path.join(home, 'softkey.json');
-    let rec = {};
-    try { rec = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* none yet */ }
-    const net = /-test$/.test(slot) ? 'test' : 'live';
-    const emulator = path.resolve(process.env.OKEDGE_EMULATOR || path.join(__dirname, '..', '..', '..', 'node-onlykey-emulator'));
-    rec[net] = { storageDir: dir, emulator, slot, at: new Date().toISOString() };
-    fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(file, `${JSON.stringify(rec, null, 2)}\n`, { mode: 0o600 });
-  } catch (e) {
-    console.error(`[okemu] could not record the soft key for the CLI: ${e.message}`);
-  }
-}
 
 /* a start that fails says why in this process's log too - the page shows only that it failed */
 async function start(storageSlot = '') {
@@ -133,7 +118,6 @@ async function startOnce(storageSlot) {
     fs.mkdirSync(dir, { recursive: true });
     await call('start', dir);
     runningDir = dir;
-    recordForCli(storageSlot, dir);
     return { started: true, message: '', storageDir: dir };
   } catch (e) {
     return { started: false, message: e.message, storageDir: dir };
