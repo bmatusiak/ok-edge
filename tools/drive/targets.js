@@ -955,9 +955,13 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
    *                      127.0.0.1:8787 (kept certificates: REQUIRE_LOGIN 0) and ended after
    */
   const LIB = path.join(ROOT, 'node-onlykey-lib');
+  /* the counts, and each failing test BY NAME (node --test's ✖ lines, once each) - a count alone says nothing to fix */
   const verdict = (r) => {
-    const tail = r.out.split(/\r?\n/).filter((l) => /^ℹ (tests|pass|fail|skipped)|^not ok|error TS\d+/.test(l)).slice(-8);
-    return tail.length ? tail.join(' | ') : r.out.split(/\r?\n/).slice(-4).join(' | ');
+    const lines = r.out.split(/\r?\n/);
+    const failed = [...new Set(lines.filter((l) => /^✖ /.test(l) && !/^✖ failing tests/.test(l)).map((l) => l.replace(/ \([\d.]+m?s\)$/, '')))].slice(0, 5);
+    const tail = lines.filter((l) => /^ℹ (tests|pass|fail|skipped)|^not ok|error TS\d+/.test(l)).slice(-8);
+    const said = [...tail, ...failed];
+    return said.length ? said.join(' | ') : lines.slice(-4).join(' | ');
   };
   async function check(args = []) {
     const [what, ...rest] = args;
