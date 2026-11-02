@@ -18,7 +18,12 @@ const KINDS = {
   picture: /picture asked from the .+ window|\] picture: .*-seen-by-(?!error)/, /* Brad's "Picture now", with its files */
   bootloader: /BOOTLOADER MODE|left bootloader mode/,                          /* a key in HalfKay, and out of it */
   error: /\] ERROR |\bFATAL\b|unhandled rejection/,                             /* an app's error, crash or LogBox */
-  app: /app connected|app disconnected|drive server gone|remote .* (connected|gone)/, /* apps and remotes coming and going */
+  /*
+   * apps and remotes GOING, not coming (Brad, 2026-11-02: "make sure it's not filling up your context with unnecessary
+   * stuff"): every restart and rebuild reconnects 2-4 apps, and a reconnect is nothing to act on - an app gone that the
+   * drive did not ask, a drive server or a remote lost, is
+   */
+  app: /gone - not asked by the drive|app disconnected|drive server gone|drive-remote .* gone/,
   /* a change the key monitor saw ("hard (usb …", "no OnlyKey") - not run.js keys' own answer ("hard key - usb …") */
   keys: /\[keys\] [^:]+: (no OnlyKey|[a-z]+ \((usb|OnlyKey) )/,
   /* a drive script ending - not the agent's own queries (log, state, find, doctor, shot): those it already waits on */
