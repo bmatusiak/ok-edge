@@ -13,7 +13,7 @@
  *     hashes to its receipt link.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {block, chain, codes, copy, grants, historystore, sync as syncLib, receipts, verdict as verdictLib} from 'node-onlykey-lib/edge';
+import {block, chain, chainstate as chainstateLib, codes, copy, grants, historystore, sync as syncLib, receipts, verdict as verdictLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import type {EdgeCopyKey, EdgeLinkRecord, EdgeSource} from './edge/types';
 import {raiseAlarms} from './edgeAlerts';
@@ -267,7 +267,7 @@ export async function saveMirror(m: Mirror): Promise<void> {
   const id = toHex(m.deviceId);
   console.log(`[edge] the stored copy of ${id.slice(0, 8)} was changed outside this session - not written over; the next sync reads it back and checks it`);
   verifiedNow.delete(id);
-  answers.delete(id);
+  chain_.forget(id);
 }
 
 export async function forgetMirror(deviceId: Uint8Array): Promise<void> {
@@ -361,65 +361,37 @@ export type ChainAnswer = {
   ms: number;
 };
 type ChainEvent = 'checked' | 'changed' | 'sealed';
-const answers = new Map<string, ChainAnswer>();
-const asking = new Map<string, Promise<ChainAnswer>>();
-const chainListeners: Record<ChainEvent, Set<(a: ChainAnswer) => void>> = {checked: new Set(), changed: new Set(), sealed: new Set()};
-function emitChain(ev: ChainEvent, a: ChainAnswer) {
-  /* a listener's failure is its own: it never breaks the check that told it */
-  for (const fn of [...chainListeners[ev]]) {
-    try { fn(a); } catch (e) { console.warn(`[edge] chain state: a '${ev}' listener threw: ${String(e)}`); }
-  }
-}
+/* the answers, their events and the one-check-at-a-time are the lib's (S4 step 9: edge/src/chainstate.js); the check is this file's sync */
+const chain_ = chainstateLib.createChainState();
 function record(deviceId: Uint8Array, mirror: Mirror, view: EdgeView, ms: number, sealsBefore: number) {
-  const id = toHex(deviceId);
-  const prev = answers.get(id);
-  const seen = mirror.lastSeen;
-  /* a head only from a check that vouched for it now: lastSeen can be an older sync's, and a tampered copy offers none */
-  const vouched = view.verdict.kind === 'verified' || view.verdict.kind === 'gap';
-  const head = vouched && seen && view.headSeq !== null && seen.seq === view.headSeq ? {seq: seen.seq, head: seen.head} : null;
-  const a: ChainAnswer = {deviceId: id, view, head, ok: view.verdict.kind === 'verified' && head !== null, path: lastCheck, at: Date.now(), ms};
-  answers.set(id, a);
-  emitChain('checked', a);
-  if (!prev || prev.view.verdict.kind !== view.verdict.kind) emitChain('changed', a);
-  if ((mirror.seals?.length ?? 0) > sealsBefore) emitChain('sealed', a);
+  chain_.record(toHex(deviceId), {view, lastSeen: mirror.lastSeen, sealed: (mirror.seals?.length ?? 0) > sealsBefore, path: lastCheck, ms});
 }
 export const chainState = {
   /** watch the chain: returns the unsubscribe */
   on(ev: ChainEvent, fn: (a: ChainAnswer) => void): () => void {
-    chainListeners[ev].add(fn);
-    return () => { chainListeners[ev].delete(fn); };
+    return chain_.on(ev, fn);
   },
   /** the last answer, no I/O (null before the first check this session) */
   current(deviceId: Uint8Array): ChainAnswer | null {
-    return answers.get(toHex(deviceId)) ?? null;
+    return chain_.current(toHex(deviceId)) as ChainAnswer | null;
   },
   /**
-   * Is the copy valid, up to the key's live head? From memory when nothing
-   * changed; else one sync (queued with every other) - never a second check
-   * while one runs.
+   * Is the copy valid, up to the key's live head? From memory when nothing changed - the key's head is the one the
+   * last answer vouched for and the stored copy is the one checked then; else one sync (queued with every other) -
+   * never a second check while one runs.
    */
   validity(source: EdgeSource): Promise<ChainAnswer> {
     const id = toHex(source.deviceId);
-    const running = asking.get(id);
-    if (running) return running;
-    const p = (async () => {
-      const t0 = Date.now();
-      const prev = answers.get(id);
-      const head = await source.head();
-      if (prev?.head && prev.head.seq === head.seq && toHex(prev.head.head) === toHex(head.head)) {
+    return chain_.validity(id, {
+      unchanged: async (prev: ChainAnswer) => {
+        const head = await source.head();
+        if (!prev.head || prev.head.seq !== head.seq || toHex(prev.head.head) !== toHex(head.head)) return false;
         const was = verifiedNow.get(id);
         const m = await loadMirror(source.deviceId);
-        if (was && was.seq === head.seq && was.head === toHex(head.head) && sameAsKept(m.links, was)) {
-          const a: ChainAnswer = {...prev, path: 'skipped', at: Date.now(), ms: Date.now() - t0};
-          answers.set(id, a);
-          return a;
-        }
-      }
-      await sync(source);
-      return answers.get(id)!;
-    })().finally(() => asking.delete(id));
-    asking.set(id, p);
-    return p;
+        return !!was && was.seq === head.seq && was.head === toHex(head.head) && sameAsKept(m.links, was);
+      },
+      check: () => sync(source),
+    }) as Promise<ChainAnswer>;
   },
 };
 
@@ -800,7 +772,7 @@ function sealDue(mirror: Mirror, live: number[]): boolean {
 export function forgetVerifiedFor(deviceId: Uint8Array) {
   verifiedNow.delete(toHex(deviceId));
   history.drop(deviceId); /* from storage, as at a start: an edit made there shows now */
-  answers.delete(toHex(deviceId));
+  chain_.forget(toHex(deviceId));
 }
 
 /** Verify a mirror against a live head (no I/O): the verdict and the rows to draw. */
