@@ -12,6 +12,18 @@ env:
 - runFlow: login.yaml
 - goto: Key Chain
 - waitForAnimationToEnd
-- tapOn: "Add a key"
+# "On this App" - the second "+ Add" (the first is "On this Key")
+- tapOn:
+    text: "\\+ Add"
+    index: 1
 - waitForAnimationToEnd
-- takeScreenshot: keychain-add
+# a label of this run's own, so a second run is a new key, not "Already in the App"
+- evalScript: '${output.label = "kc-rehearsal-" + Date.now()}'
+- tapOn: "label \\(e.g. example.com\\)"
+- inputText: "${output.label}"
+- tapOn: "Derive and keep"
+- assertVisible:
+    text: "Derived and kept in the App: ${output.label}\\."
+    timeout: 60
+- assertVisible: "${output.label}"
+- takeScreenshot: keychain-kept
