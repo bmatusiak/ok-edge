@@ -1,0 +1,4 @@
+# Open the Edge tab (its Agents rows: what an agent is given, the agents waiting, the plans).
+name: The Edge tab
+---
+- goto: Edge

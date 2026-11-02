@@ -50,8 +50,9 @@ async function runOne(plan: Plan): Promise<void> {
   if (running.has(plan.id)) return;
   const listeners = new Set<(e: PlanEvent) => void>();
   running.set(plan.id, listeners);
-  const say = (line: string) => console.log(`[mcp plan] ${line}`);
-  say(`${plan.id}: "${plan.title}" from ${plan.agent.name} - ${plan.items.length} item(s), waiting for your approval`);
+  /* one tag for this file's lines and the lib runner's (which start "plan <id>:") */
+  const say = (line: string) => console.log(`[mcp] ${line}`);
+  say(`plan ${plan.id}: "${plan.title}" from ${plan.agent.name} - ${plan.items.length} item(s), waiting for your approval`);
   try {
     const app = await getOnlyKey(activeBackend());
     /* the sheet names the agent that built the plan, as a computer's request names that computer */
@@ -92,9 +93,9 @@ async function runOne(plan: Plan): Promise<void> {
       },
       log: say,
     });
-    say(`${plan.id}: ${end}${claimed ? '' : ' (not run here)'}`);
+    if (!claimed) say(`plan ${plan.id}: ${end} - not run here`);
   } catch (e) {
-    say(`${plan.id}: not run - ${String((e as Error)?.message ?? e)}`);
+    say(`plan ${plan.id}: not run - ${String((e as Error)?.message ?? e)}`);
   } finally {
     running.delete(plan.id);
     withdrawn.delete(plan.id);

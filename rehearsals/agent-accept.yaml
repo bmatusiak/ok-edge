@@ -1,0 +1,9 @@
+# Accept the agent waiting in the Edge tab's Agents list (the MCP plan, Step 4a): its plans can then be submitted.
+name: Accept the waiting agent
+tags:
+  - agents
+---
+- goto: Edge
+- tapOn:
+    text: "Accept"
+    timeout: 20
