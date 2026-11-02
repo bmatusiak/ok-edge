@@ -82,6 +82,11 @@ async function start(mode, rest) {
   const logs = process.env.DRIVE_LOGS || path.join(os.homedir(), process.platform === 'linux' ? 'project/onlykey/logs' : 'drive-logs');
   fs.mkdirSync(logs, { recursive: true });
   const out = fs.openSync(path.join(logs, `drive-nw-${mode}.log`), 'a');
+  /*
+   * THE SERVER'S LOG WHERE wake.js READS IT (2026-11-01: a server started without DRIVE_LOG wrote to
+   * ~/project/onlykey/logs while the wake watcher read ~/drive-logs - Brad's signals reached nobody)
+   */
+  if (mode === 'server' && !env.DRIVE_LOG) env.DRIVE_LOG = path.join(logs, 'drive-server.log');
   const child = spawn(nwBin, [__dirname, mode, ...rest], { detached: true, stdio: ['ignore', out, out], env, windowsHide: false });
   child.unref();
   fs.writeFileSync(PIDFILE, JSON.stringify({ pid: child.pid, mode }));
