@@ -100,7 +100,12 @@ const SIBLING_RING = '#c4a1ff';
 /* the newest of an anchor's group shown at first */
 const SIBLING_FIRST = 5;
 
-const seenText = (ms?: number) => (ms ? `seen ${new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})} · ` : '');
+/*
+ * WHEN, WITH ITS DAY (Brad, 2026-11-02: "i see time, but not dates" - a list of presses spans days and devices): the
+ * date and the time, in this device's own words
+ */
+const when = (ms: number) => new Date(ms).toLocaleString([], {year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+const seenText = (ms?: number) => (ms ? `seen ${when(ms)} · ` : '');
 const elapsed = (ms: number) => {
   const sec = Math.max(0, Math.floor(ms / 1000));
   return sec < 3600 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : `${Math.floor(sec / 3600)} h ${Math.floor((sec % 3600) / 60)} min`;
@@ -215,7 +220,7 @@ function DeviceRow({device: c, link: l}: {device: YourDevice; link: DeviceLink})
           </View>
           <View style={styles.linkText}>
             <Text style={styles.op}>{`${deviceName(c)} · ${opName(l.op)}${l.op === OP.SIGN || l.op === OP.DECRYPT ? ` · slot ${l.slot}` : ''}`}</Text>
-            <Text style={styles.dim}>{`${l.seenAt ? `seen here ${new Date(l.seenAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})} via sync` : 'via sync'}${l.flags & FLAG.PRESS_OBSERVED ? ' · pressed' : ''}`}</Text>
+            <Text style={styles.dim}>{`${l.seenAt ? `seen here ${when(l.seenAt)} via sync` : 'via sync'}${l.flags & FLAG.PRESS_OBSERVED ? ' · pressed' : ''}`}</Text>
           </View>
         </View>
       </View>
@@ -633,7 +638,7 @@ function BudgetView({b, edge, onBack, other}: {b: EdgeBudget; edge: ReturnType<t
       <Text style={[styles.verdict, {color: line.color}]}>{line.text}</Text>
       <Text style={styles.dim}>
         {v?.headSeq !== null && v?.headSeq !== undefined ? `Key's head: #${v.headSeq}` : 'Key not read yet'}
-        {v?.lastSync ? ` · last sync ${new Date(v.lastSync).toLocaleTimeString()} (this ${DEVICE_WORD}'s clock)` : ''}
+        {v?.lastSync ? ` · last sync ${when(v.lastSync)} (this ${DEVICE_WORD}'s clock)` : ''}
       </Text>
       {edge.error ? <Text style={[styles.dim, {color: theme.error}]}>{edge.error}</Text> : null}
       {other ? <Text style={styles.dim}>{`On ${other.name}`}</Text> : null}
@@ -1097,7 +1102,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
           {refusedByKey > 0 ? `⚠ The key refused ${refusedByKey} TX start${refusedByKey === 1 ? '' : 's'} since it started` : 'Refused TX starts reported by an agent'}
         </Text>
         {reported.map((r, i) => (
-          <Text key={i} style={styles.dim}>{`${new Date(r.at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} · head #${r.seq} · the agent says: “${r.status}”`}</Text>
+          <Text key={i} style={styles.dim}>{`${when(r.at)} · head #${r.seq} · the agent says: “${r.status}”`}</Text>
         ))}
         <Text style={styles.dim}>A refused TX start writes no link. If you did not expect one, hold the budget.</Text>
       </View>
