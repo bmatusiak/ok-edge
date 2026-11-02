@@ -35,7 +35,8 @@ $('mode').textContent = `drive ${mode} - ${require('os').hostname()}`;
 document.title = `OnlyKey drive ${mode}`;
 
 function classOf(l) {
-  if (/FAIL|failed|refused|stalled|STOPPED|no picture|wrong token/i.test(l)) return 'fail';
+  /* a test count of none failed ("ℹ fail 0") is not a failure */
+  if (/\bFAIL|failed|refused|stalled|STOPPED|no picture|wrong token/i.test(l.replace(/\bfail 0\b/gi, ''))) return 'fail';
   if (/PASS|passed|\bdone\b|FINISHED/i.test(l)) return 'pass';
   if (/\[press\]|press(ed)?\b/i.test(l)) return 'press';
   if (/^\S+ (run|=>|<=)/.test(l)) return 'run';
