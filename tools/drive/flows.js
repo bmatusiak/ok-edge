@@ -333,4 +333,16 @@ async function restore(d, { backup, passphraseFile, passphraseKey = 'passphrase'
   return d;
 }
 
-module.exports = { login, budget, restore, testingMode, LOGGED_IN };
+/*
+ * THE WEB APP'S KEY READY BEFORE A RUN USES IT (Brad, 2026-11-02: "webapp, if key is locked, won't respond for webapp -
+ * so you need to make sure, externally, before using webapp, the key state"): the server asks this before a login,
+ * rehearsal or budget run on the web app - the key's machine reads its LED, and a dark (locked) testnet key gets its PIN.
+ * The key locks itself after a while unused (the box gadget's ~30 min, 2026-11-02 00:36), so a run that starts later
+ * would otherwise send its first request to a locked key, which never answers it.
+ */
+async function keyReady(d, pin = TEST_PIN) {
+  if (d.app.shell !== 'webapp') return;
+  await unlockOutsideKey(d, pin);
+}
+
+module.exports = { login, budget, restore, testingMode, keyReady, LOGGED_IN };

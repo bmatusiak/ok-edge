@@ -984,6 +984,11 @@ function control(ws) {
       for (const k of Object.keys(require.cache)) if (k.startsWith(__dirname) && k !== __filename && !/targets.js$/.test(k)) delete require.cache[k];
       const say = (t) => line(`[${m.script}] ${t}`);
       say(`start on ${app.shell} (${app.net})${m.args && m.args.length ? ` - ${m.args.join(' ')}` : ''}`);
+      /* the web app's key, checked from outside before a run that uses it: a locked key never answers the page (flows keyReady) */
+      if (app.shell === 'webapp' && !app.closed && ['login', 'rehearse', 'budget'].includes(String(m.script))) {
+        const p = (m.args || []).indexOf('--pin');
+        await require('./flows').keyReady(driveFor(app, say, () => {}, run), p >= 0 ? m.args[p + 1] : undefined);
+      }
       await require(file)(driveFor(app, say, (t) => answered.push(String(t)), run), m.args || []);
       say('FINISHED');
       code = 0;
