@@ -37,9 +37,14 @@ export type KeyBusy = {
   since: number;
   limitMs: number | null;
 };
-type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null};
+type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number};
 /* the request in progress: when it began and its limit (said at its begin) */
 let began = {id: -1, at: 0, limitMs: null as number | null};
+/*
+ * where the request's press wait is: the ceremonies done when the key has the whole request (okcrypto's plan, pressAt) -
+ * the next one waits for the press. A request with no plan yet: after its first ceremony, as before.
+ */
+const pressAtOf = new Map<number, number>();
 
 const SHOW_AFTER_MS = 250;
 /*
@@ -134,15 +139,18 @@ export function noteTunnel(e: TunnelEvent) {
   /* the key answered: activity for the idle timer (src/idleTimer.ts - "if the key is detected as still responding") */
   if (e.phase === 'end' && e.ok) require('./idleTimer').touch('key');
   if (e.phase === 'begin') {
+    pressAtOf.clear();
     began = {id: e.id, at: Date.now(), limitMs: e.limitMs ?? null};
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     ops += 1;
     inFlight = true;
   }
+  if (Number.isInteger(e.pressAt)) pressAtOf.set(e.id, e.pressAt as number);
+  const pressAt = pressAtOf.get(e.id) ?? 1;
   const steps = Math.max(e.steps || 1, e.step, 1);
   const b: KeyBusy = {
     what: whatOf(e.msg, e.slot), step: e.step, steps, ops, opsDone, waiting: e.waiting ?? 0,
-    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), pressed: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.step >= 2, done: false, via: e.via ?? 'tunnel',
+    press: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot), pressed: e.msg === OKEDGE && EDGE_PRESSED.has(e.slot) && e.step > pressAt, done: false, via: e.via ?? 'tunnel',
     since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
   };
   if (e.phase === 'end') {
@@ -161,13 +169,14 @@ export function noteTunnel(e: TunnelEvent) {
   }
   latest = b;
   /*
-   * THE KEY WAITS FOR ITS PRESS once the request's first ceremony is done - said once per operation in the log, the
-   * moment a press can land (before it, a press reaches a key not yet asked: lost, or typed as slot 1). The box's
-   * flow presses on this line (tools/box/webapp-edge-budget.sh).
+   * THE KEY WAITS FOR ITS PRESS once it has the whole request (pressAt: its request packets sent - okcrypto's plan) -
+   * said once per operation in the log, the moment a press can land (before it, a press reaches a key not yet asked:
+   * lost, or typed as slot 1; 2026-11-01: a 22-ceremony budget opening was said to wait after its first packet). The
+   * drive presses on this line.
    */
-  if (b.press && e.phase === 'step' && e.step === 1) console.log(`[keybusy] the key waits for its press: ${b.what}`);
+  if (b.press && e.phase === 'step' && e.step === pressAt) console.log(`[keybusy] the key waits for its press: ${b.what}`);
   /* and once it has it: the press sheet goes, the progress stays (KeyBusySheet, HostChallengeSheet) */
-  if (b.press && e.phase === 'step' && e.step === 2) console.log(`[keybusy] pressed - the key answers: ${b.what}`);
+  if (b.press && e.phase === 'step' && e.step === pressAt + 1) console.log(`[keybusy] pressed - the key answers: ${b.what}`);
   if (current) { set(b); return; }
   if (!showTimer) {
     showTimer = setTimeout(() => {
