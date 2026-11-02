@@ -1004,8 +1004,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * happens off key - this ensures the blocks are the user's, and not forged, marking the ones that are"; "so the enabled
    * gate enough? yes, we just need to be close to the head to enable it"): the key's own head, which it gives only to a
    * host that proved it holds the chain (PROVE_HEAD) or showed a gate token of its own within 1024 links (WARM - the
-   * login card's top). That head is what GRANT_CREATE and GRANT_RESUME name. The whole copy's check (strictHead, check)
-   * runs off the key for the history - it marks forged blocks there and no longer holds an Approve back.
+   * login card's top). That head is what GRANT_CREATE and GRANT_RESUME name. The whole copy's check (chainState.validity,
+   * the lib's verdict) runs off the key for the history - it marks forged blocks there and no longer holds an Approve back.
    */
   async gate(): Promise<{ok: true; head: Uint8Array} | {ok: false; reason: string}> {
     let h = await this.edge.head();
@@ -1016,27 +1016,6 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       if (!h.head) return {ok: false, reason: why ?? 'no checkpoint of this key is within reach - certify to start'};
     }
     return {ok: true, head: h.head};
-  }
-
-  /*
-   * THE LIBRARY'S STRICT CHECK BEFORE A BUDGET OPENS OR RESUMES (Brad, 2026-10-11: "checking every
-   * field in a token means nothing if we never check the signature"). The one chain state welds
-   * the links and checks the key's checkpoint, but it never checked the budget openings' own
-   * signatures, the self-press spends or the scope rules - so a stored opening edited on the
-   * phone would show as genuine and still pass. lib grants.check runs copy.verifyCopyKept with
-   * the key's public keys, its live head, its checkpoint (both halves) and its ring, keeping
-   * what it verified in memory so the next check reads only new links. Both must pass, at the
-   * same head.
-   */
-  private async strictHead(): Promise<{ok: true; head: Uint8Array} | {ok: false; reason: string}> {
-    const a = await chainState.validity(this);
-    if (!a.ok || !a.head) return {ok: false, reason: a.view.verdict.kind};
-    const mirror = await loadMirror(this.deviceId);
-    /* an anchored copy (a new device): the strict check starts from its anchor too (lib copy.anchor) */
-    const r = await this.edge.grants.check({links: mirror.links, openings: await this.openings(), ...(mirror.anchor ? {anchor: mirror.anchor} : {})}).catch((e: unknown) => ({ok: false, reason: String((e as Error)?.message ?? e)}));
-    if (!r?.ok) return {ok: false, reason: `the strict check: ${r?.reason ?? 'not ok'}${r?.seq !== undefined ? ` at #${r.seq}` : ''}`};
-    if (toHex(r.head) !== toHex(a.head.head)) return {ok: false, reason: 'the key moved during the check - try again'};
-    return {ok: true, head: r.head};
   }
 
   /**
