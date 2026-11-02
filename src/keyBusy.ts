@@ -36,6 +36,13 @@ export type KeyBusy = {
    * progress like any other request's, and no press is asked before the key can take it
    */
   asks: boolean;
+  /*
+   * the key has this request's last chunk and has not answered - for ANY request, Edge's or not (Brad, 2026-11-02, the
+   * Windows web app: "the press key does not appear on the last chunk" - a derive's code sheet came up as its request
+   * began, and its press reached the key while the chunks still went out, a chunk every 2.4 s there). A code asked for the
+   * request in flight shows from here (HostChallengeSheet hostSheetShows).
+   */
+  delivered: boolean;
   done: boolean;
   /* how the request went: through the WebAuthn tunnel (a browser window a step), or straight to the key (the phone's soft key, a USB key) */
   via: 'tunnel' | 'direct';
@@ -43,7 +50,7 @@ export type KeyBusy = {
   since: number;
   limitMs: number | null;
 };
-type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'answered' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number; answered?: boolean};
+type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'answered' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number; answered?: boolean; error?: string};
 /* the request in progress: when it began and its limit (said at its begin) */
 let began = {id: -1, at: 0, limitMs: null as number | null};
 /*
@@ -149,7 +156,7 @@ export function keyGone() {
 
 export function noteTunnel(e: TunnelEvent) {
   if (e.phase === 'begin') timeline(`begin #${e.id} ${whatOf(e.msg, e.slot)}`);
-  if (e.phase === 'end') timeline(`end #${e.id} ${whatOf(e.msg, e.slot)} steps=${e.step} ${e.ok ? 'ok' : 'failed'}`);
+  if (e.phase === 'end') timeline(`end #${e.id} ${whatOf(e.msg, e.slot)} steps=${e.step} ${e.ok ? 'ok' : `failed${e.error ? ` - ${e.error}` : ''}`}`);
   /* the key answered: activity for the idle timer (src/idleTimer.ts - "if the key is detected as still responding") */
   if (e.phase === 'end' && e.ok) require('./idleTimer').touch('key');
   if (e.phase === 'begin') {
@@ -174,13 +181,15 @@ export function noteTunnel(e: TunnelEvent) {
   const b: KeyBusy = {
     what: whatOf(e.msg, e.slot), step: e.step, steps, ops, opsDone, waiting: e.waiting ?? 0,
     press: isPress, pressed: isPress && answered,
-    asks: isPress && e.phase === 'step' && e.step >= pressAt && !answered, done: false, via: e.via ?? 'tunnel',
+    asks: isPress && e.phase === 'step' && e.step >= pressAt && !answered,
+    /* the plan too: a one-packet request the key asks inside (pressAt one less) waits from the moment it is planned */
+    delivered: (e.phase === 'step' || e.phase === 'plan') && e.step >= pressAt && !answered, done: false, via: e.via ?? 'tunnel',
     since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
   };
   if (e.phase === 'end') {
     inFlight = false;
     opsDone += 1;
-    if (current) set({...b, step: steps, opsDone, asks: false, done: true});
+    if (current) set({...b, step: steps, opsDone, asks: false, delivered: false, done: true});
     hideTimer = setTimeout(() => {
       hideTimer = null;
       if (inFlight) return;

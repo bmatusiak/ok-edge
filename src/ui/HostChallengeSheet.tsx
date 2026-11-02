@@ -24,7 +24,8 @@ const KEY_WAIT_S = 20;
 /*
  * IS THE PRESS SHEET UP (KeyBusySheet steps aside while it is): a press request's chunks are progress, and its sheet
  * shows on the last one, when the key waits (keyBusy asks) - not while the request is still going out, and not once the
- * key has the press. An ask with no Edge press request in flight (a derive's code, a key straight on USB) shows as asked.
+ * key has the press. Over the tunnel a code is the request in flight's (a derive's): it shows when the key has that
+ * request's last chunk (keyBusy delivered). A key straight on USB takes a request at once: its asks show as asked.
  */
 export function hostSheetShows(c: HostChallenge | null, busy: KeyBusy | null): boolean {
   if (!c || activeBackend() !== 'usb') return false;
@@ -34,6 +35,7 @@ export function hostSheetShows(c: HostChallenge | null, busy: KeyBusy | null): b
    * 20 s) come when the key has the request's last chunk, and go when its answer comes.
    */
   if (c.screen && viaTunnel()) return !!busy && busy.asks;
+  if (c.digits.length && viaTunnel()) return !!busy && busy.delivered;
   return !(busy && busy.press && !busy.done && !busy.asks);
 }
 
@@ -52,6 +54,8 @@ export function HostChallengeSheet() {
   /* when this wait began: the sheet coming up is the key's wait starting - the key's 20 s run from there */
   const [since, setSince] = useState<number | null>(null);
   useEffect(() => { setSince(shows ? Date.now() : null); }, [shows, c]);
+  /* the moment a code is on screen - the key waits for it now (tools/drive presses a web app's code on this line) */
+  useEffect(() => { if (shows && c && c.digits.length) console.log(`[press] code shows: ${c.what} - buttons ${c.digits.join(' ')}`); }, [shows, c]);
   usePressSound(shows && since !== null ? since : null, 'press');
   /* a hard key's only: the soft key's wait has its own sheet with its button (PressSheet, from the firmware's record) */
   if (!c || !shows) return null;

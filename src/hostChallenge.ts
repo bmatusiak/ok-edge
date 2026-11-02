@@ -40,21 +40,36 @@ function set(c: HostChallenge | null) {
  * 2026-10-31: "i was expecting a press sheet, not it being displayed on the identity page"): the sheet with no code;
  * the returned function clears it.
  */
-/** The key went away: nothing waits on it any more. */
+/*
+ * A CODE OUTRANKS A SCREEN'S ASK (Brad, 2026-11-02, the Windows web app: the login's bucket key code was set, then the
+ * identity check's "Open this identity's bucket" ask replaced it in this one slot - the sheet waited for an Edge press,
+ * the code never showed, and the key gave up at 20 s): a screen's ask, raised for its whole operation, waits behind a
+ * code the key asks for now, and comes back when the code is done.
+ */
+let screenAsk: HostChallenge | null = null;
+
+/** The key went away, or answered the screen's press: nothing waits on it any more. */
 export function clearHostChallenge(): void {
+  screenAsk = null;
   if (current) set(null);
 }
 
 export function askPress(what: string): () => void {
   const ask: HostChallenge = {digits: [], what, screen: true};
-  set(ask);
+  screenAsk = ask;
+  if (!current || current.screen) set(ask);
   /* only its own ask: the key's press may have cleared it already (keyBusy), and a later ask is another's */
-  return () => { if (current === ask) set(null); };
+  return () => {
+    if (screenAsk === ask) screenAsk = null;
+    if (current === ask) set(null);
+  };
 }
 
 export function challengeOpts(what: string): {opts: {confirm: (a: {digits?: number[]}) => void}; done: () => void} {
+  let mine: HostChallenge | null = null;
   return {
-    opts: {confirm: ({digits}) => set({digits: Array.isArray(digits) ? digits : [], what})},
-    done: () => set(null),
+    opts: {confirm: ({digits}) => { mine = {digits: Array.isArray(digits) ? digits : [], what}; set(mine); }},
+    /* its own code only - then the screen's ask it stood in front of, if that is still wanted */
+    done: () => { if (mine && current === mine) set(screenAsk); mine = null; },
   };
 }
