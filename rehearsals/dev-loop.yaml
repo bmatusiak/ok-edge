@@ -1,8 +1,7 @@
 # THE AIR-GAPPED DEV LOOP (the plan's step 4): this computer's desktop app on its testnet soft key, its own local MCP, and
-# a scripted agent - one command, no internet: run.js rehearse --app desktop@box dev-loop. The agent (tools/box/
-# mcp-plan-agent.js, on the app's machine) builds a plan of one sign and one placeholder; the owner's side accepts it,
-# approves its budget on the Edge sheet (one press), and the agent fills the placeholder, reads both signatures and the
-# receipts. The safety net for the structure track: every piece of the MCP plan, end to end, in one run.
+# a scripted agent - one command, no internet: run.js rehearse --app desktop@box dev-loop. The plan itself is plan-run's
+# (an agent's plan of one sign and one placeholder, accepted, approved with one press, signed, done). The safety net for
+# the structure track: every piece of the MCP plan, end to end, in one run.
 name: The air-gapped dev loop
 tags:
   - agents
@@ -21,11 +20,7 @@ tags:
 # the desktop's own testnet soft key - its own chain, its local MCP
 - login:
     key: soft
-- goto: Edge
-- tapOn: "Budgets"
-- runScript: scripts/plan-agent-start.js
-- runFlow: mcp-plan.yaml
-- runScript: scripts/plan-agent-end.js
+- runFlow: plan-run.yaml
 - machine:
     action: use-key
     target: webapp

@@ -948,7 +948,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
        */
       if (action === 'plan-agent') {
         if (!/^[0-9a-f]{64}$/i.test(String(args.identity || ''))) return { ok: false, why: 'plan-agent: the identity public key (64 hex)' };
-        const r = await streamIn(EDGE, NODE, [path.join(EDGE, 'tools/box/mcp-plan-agent.js'), String(args.url || 'desktop'), String(args.identity)], { timeout: 10 * 60000, env: { ...process.env, ...(args.name ? { MCP_AGENT_NAME: String(args.name) } : {}) }, ...shown('plan-agent') });
+        const r = await streamIn(EDGE, NODE, [path.join(EDGE, 'tools/box/mcp-plan-agent.js'), String(args.url || (target === 'webapp' ? `http://127.0.0.1:${STANDIN_PLAIN}` : 'desktop')), String(args.identity)], { timeout: 10 * 60000, env: { ...process.env, ...(args.name ? { MCP_AGENT_NAME: String(args.name) } : {}) }, ...shown('plan-agent') });
         const tail = r.out.split(/\r?\n/).filter(Boolean).slice(-6).join(' | ');
         return r.ok ? { ok: true, what: tail } : { ok: false, why: `plan-agent: ${tail}` };
       }
