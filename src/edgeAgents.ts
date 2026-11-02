@@ -484,19 +484,26 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
     await soft.loadAgentBudgets();
     step('budgets');
     /*
-     * R27 BEFORE the sheet: a copy that does not verify cannot open a budget,
-     * so Approve is greyed out with the reason (Brad, 2026-10-03). Decline
-     * still answers, and the agent is told copy_unverified - the reason.
+     * BEFORE the sheet: a device Edge is not enabled on cannot open a budget, so
+     * Approve is greyed out with the reason (Brad, 2026-10-03; the gate since
+     * 2026-11-01, below). Decline still answers, and the agent is told
+     * copy_unverified - the reason.
      */
     /* the copy first brought up to the key's head: links made since the last sync (a register, a direct ssh use) are not a gap */
     /* the copy brought to the key's head once, here (Brad, 2026-10-06: it synced twice before the sheet) */
     await syncCopy(soft).catch(() => undefined);
     step('sync');
-    const copy: any = await soft.check().catch((e: unknown) => ({ok: false, reason: String(e)}));
-    step('check');
-    const blocked = copy.ok
+    /*
+     * THE GATE, NOT THE WHOLE COPY (Brad, 2026-11-01: "verify the WHOLE copy takes a lot of time for the webapp ...
+     * verification happens off key"; "the enabled gate enough? yes"): Approve is off only when the key has not enabled
+     * Edge here - no proof of its head and no card token within its reach (SoftKeyEdge.gate). The copy's own verdict is the
+     * Edge tab's history, which marks what does not verify.
+     */
+    const gate: any = await soft.gate().catch((e: unknown) => ({ok: false, reason: String(e)}));
+    step('gate');
+    const blocked = gate.ok
       ? null
-      : `this device's copy of the chain does not verify (${copy.reason}${copy.seq !== undefined ? ` at #${copy.seq}` : ''}). Sync or settle it on the Edge tab.`;
+      : `Edge is not enabled on this device (${gate.reason}).`;
     let asked: SheetAsk | null = null;
     /* why the plan's claim was refused at Approve (another device was first), shown as the sheet's end */
     let notClaimed: string | null = null;

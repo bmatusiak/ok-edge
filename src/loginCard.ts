@@ -17,7 +17,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {currentNet, edgeKey} from './net';
 
 /* top: the newest checkpoint and the links after it (lib certify.top) - beside the owner-signed part, rebuilt without a press */
-export type CardTop = {checkpoint: {seq: number; head: string; signature: string; signaturePq: string}; links: string[]};
+/* gate: the checkpoint's gate token (WARM_GATE firmware) - with it a top may have no head (a host that never held the chain) */
+export type CardTop = {checkpoint: {seq: number; head?: string; signature?: string; signaturePq?: string; gate?: string}; links: string[]};
 export type CardRecord = {v: number; kind: 'login-card'; thing: {device: string; identity: string; site: string}; certification: Record<string, unknown>; top?: CardTop};
 
 const CARDS = (): string => (currentNet() === 'test' ? 'edge-cards-test' : 'edge-cards');
@@ -80,8 +81,9 @@ export async function cardTop(device: string): Promise<CardTop | null> {
  */
 export async function fileTop(device: string, top: CardTop): Promise<boolean> {
   const inBucket = await bucketCard(device).catch(() => null);
+  /* newer: a later checkpoint; at the same one, more links after it, or the gate token the kept one lacks */
   const newer = (rec: CardRecord | null) => !!rec && (!rec.top || rec.top.checkpoint.seq < top.checkpoint.seq ||
-    (rec.top.checkpoint.seq === top.checkpoint.seq && rec.top.links.length < top.links.length));
+    (rec.top.checkpoint.seq === top.checkpoint.seq && (rec.top.links.length < top.links.length || (!rec.top.checkpoint.gate && !!top.checkpoint.gate))));
   let filed = false;
   if (newer(inBucket)) {
     await require('./bucketStore').writeEntries(CARDS(), {[device.toLowerCase()]: JSON.stringify({...inBucket, top})});
@@ -136,6 +138,8 @@ export async function makeCard(): Promise<void> {
     /* its link into this copy now, while the session still welds it (as after a card login - IdentityCheckScreen) */
     try {
       const s = await require('./edgeSoftKey').SoftKeyEdge.open();
+      /* the certify's gate token into the card's top first: a host with none of the chain warms from it (WARM_GATE) */
+      if (s) await require('./edgeSoftKey').fileCardTopNow(s).catch((e: unknown) => console.log(`[card] top not filed - ${String((e as Error)?.message ?? e)}`));
       if (s) await require('./edgeStore').sync(s);
     } catch (e: unknown) {
       console.log(`[card] the card's link is NOT in this copy yet - ${String((e as Error)?.message ?? e)}`);

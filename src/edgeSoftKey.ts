@@ -116,12 +116,26 @@ export function fileOwnLog(source: SoftKeyEdge, mirror: any, checkpoint: EdgeCop
  * start's, a proven head: edge.newestCheckpoint) or this filing's anchor - and the copy's links after it, oldest first,
  * as far as they run without a gap.
  */
-type Cp = {seq: number; head: Uint8Array | null; signature: Uint8Array; signaturePq?: Uint8Array | null};
+/*
+ * AND ITS GATE TOKEN (WARM_GATE; Brad, 2026-11-01: "the identity login card is the most updated card in the mcp - after
+ * every checkpoint, it needs to update the identity card"): every checkpoint carries one, and a newer token whose head
+ * this host never held (its certify, a cold host's) is a top of its own - the next cold host warms from it, no press.
+ */
+type Cp = {seq: number; head: Uint8Array | null; signature: Uint8Array; signaturePq?: Uint8Array | null; gate?: Uint8Array};
 async function fileCardTop(source: SoftKeyEdge, mirror: any, anchor: Cp | null): Promise<void> {
   const seen: Cp | null = source.newestCheckpoint();
-  const cp = [seen, anchor].filter((c): c is Cp => !!c?.head && !!c.signaturePq?.length).sort((a, b) => b.seq - a.seq)[0];
-  if (!cp) return;
+  const withHead = [seen, anchor].filter((c): c is Cp => !!c?.head && !!c.signaturePq?.length).sort((a, b) => b.seq - a.seq)[0];
+  const gateOnly = source.newestGate();
   const {certify} = require('node-onlykey-lib/edge');
+  if (gateOnly && (!withHead || gateOnly.seq > withHead.seq)) {
+    if (await require('./loginCard').fileTop(toHex(source.deviceId), certify.top({seq: gateOnly.seq, gate: gateOnly.gate}))) {
+      console.log(`[card] top filed: the gate token of checkpoint #${gateOnly.seq} (no head held here)`);
+      require('./serverRoom').bucketChanged();
+    }
+    return;
+  }
+  const cp = withHead;
+  if (!cp) return;
   const links: Uint8Array[] = [];
   for (const r of mirror.links as EdgeLinkRecord[]) {
     const seq = chain.decodeLink(r.link).seq;
@@ -136,6 +150,15 @@ async function fileCardTop(source: SoftKeyEdge, mirror: any, anchor: Cp | null):
   }
 }
 
+/*
+ * THE TOP RIGHT AFTER A CERTIFY (a cold host's login card): its sync stops at the warm-up while the card has no top yet,
+ * so the certify's gate token is filed here first - then the sync warms from it.
+ */
+export async function fileCardTopNow(source: SoftKeyEdge): Promise<void> {
+  const mirror = await loadMirror(source.deviceId).catch(() => ({links: []}));
+  await fileCardTop(source, mirror, null);
+}
+
 async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeCopyKey['checkpoint']): Promise<void> {
   const {storeEntries, writeEntries} = require('./bucketStore');
   const {logblocks} = require('node-onlykey-lib/edge');
@@ -143,6 +166,8 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
   const have: Record<string, string> | null = await storeEntries(store);
   /* why nothing was filed, said once each time it changes (a sync that files nothing says nothing else) */
   const why = !have ? 'no bucket is open here' : !mirror.links.length ? 'this copy holds no links' : '';
+  /* a host with no copy still keeps the card's top: its own checkpoints' gate tokens (fileCardTop) */
+  if (have && !mirror.links.length) await fileCardTop(source, mirror, null).catch((e: unknown) => console.log(`[card] top not filed - ${String((e as Error)?.message ?? e)}`));
   if (why) {
     if (fileWhy !== why) { fileWhy = why; console.log(`[edge] this key's log: not filed - ${why}`); }
     return;
@@ -435,6 +460,11 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * top, or it is more than 1024 links back, or it ends before the key's ring.
    */
   /** the newest checkpoint this connection saw with its head (lib edge.newestCheckpoint), or null */
+  /* the newest gate token this connection saw, head or not (a cold host's certify) - for the card's top */
+  newestGate(): {seq: number; gate: Uint8Array} | null {
+    return typeof this.edge.newestGate === 'function' ? this.edge.newestGate() : null;
+  }
+
   newestCheckpoint(): {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq: Uint8Array} | null {
     return typeof this.edge.newestCheckpoint === 'function' ? this.edge.newestCheckpoint() : null;
   }
@@ -966,11 +996,30 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     return {ok: false, reason: v.kind, seq: v.seq ?? v.from, to: v.to};
   }
 
-  /* R27 for Approve and resume: the head the strict check verified, or a refusal */
+  /* Approve and resume: the head the warm-up gate gave (gate below), or a refusal */
   private async verifiedHead(): Promise<Uint8Array> {
-    const s = await this.strictHead();
-    if (!s.ok) throw new Error(`edge: this device's copy of the chain does not verify (${s.reason}) - sync or settle it first`);
-    return s.head;
+    const g = await this.gate();
+    if (!g.ok) throw new Error(`edge: Edge is not enabled on this device (${g.reason})`);
+    return g.head;
+  }
+
+  /*
+   * THE GATE FOR A BUDGET (Brad, 2026-11-01: "verify the WHOLE copy takes a lot of time for the webapp"; "verification
+   * happens off key - this ensures the blocks are the user's, and not forged, marking the ones that are"; "so the enabled
+   * gate enough? yes, we just need to be close to the head to enable it"): the key's own head, which it gives only to a
+   * host that proved it holds the chain (PROVE_HEAD) or showed a gate token of its own within 1024 links (WARM - the
+   * login card's top). That head is what GRANT_CREATE and GRANT_RESUME name. The whole copy's check (strictHead, check)
+   * runs off the key for the history - it marks forged blocks there and no longer holds an Approve back.
+   */
+  async gate(): Promise<{ok: true; head: Uint8Array} | {ok: false; reason: string}> {
+    let h = await this.edge.head();
+    if (h.seq === null) return {ok: false, reason: 'the key has no chain yet'};
+    if (!h.head) {
+      const why = await this.warmUp().then(() => null, (e: any) => String(e?.message ?? e));
+      h = await this.edge.head();
+      if (!h.head) return {ok: false, reason: why ?? 'no checkpoint of this key is within reach - certify to start'};
+    }
+    return {ok: true, head: h.head};
   }
 
   /*
@@ -1065,9 +1114,9 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       from: o.computer,
       seen: o.seen,
       ask: o.ask,
-      /* the one chain state AND the library's strict check (strictHead): only a copy both verify gives a head */
+      /* the warm-up gate (gate above): the head the key gave this host - the whole copy's check is the history's, off the key */
       verifyCopy: async () => {
-        const s = await this.strictHead();
+        const s = await this.gate();
         if (!s.ok) console.log(`[edge] approve: refused - ${s.reason}`);
         /* a refusal: approveRequest looks at ok first, so the empty head is never used */
         return s.ok ? {ok: true, head: s.head} : {ok: false, head: new Uint8Array(0)};
