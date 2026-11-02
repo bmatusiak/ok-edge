@@ -55,9 +55,10 @@ function loginState(app) {
   if (app.top && !f.busy) { const c = ['Close menu', 'Close Edge Management'].find((l) => app.has(l)); if (c) return `close:${c}`; }
   /*
    * A FINISHED SHEET LEFT OPEN (box web app, 2026-11-01: an Edge request's "copy_unverified" end sat on top and the
-   * accept-loss flow's login waited on it for minutes): its only control is Close - nothing is being answered there
+   * accept-loss flow's login waited on it for minutes): every control on it is Close (its ▼ handle and its button are
+   * both "Close") - nothing is being answered there
    */
-  if (app.top && !f.busy && app.controls.length === 1 && app.has('Close')) return 'close:Close';
+  if (app.top && !f.busy && app.controls.length && app.controls.every((c) => c.label === 'Close')) return 'close:Close';
   if (f.busy || app.top) return null;
   if (f.identityCheck) {
     /* a key whose site is not this page's: its "Go to <site>" is the move (the deployed flow - apps.crp.to first) */
