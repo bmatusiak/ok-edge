@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Btn, Section, Segmented} from '../ui/components';
@@ -15,7 +15,7 @@ import NativeShare from 'okedge-native/specs/NativeShare';
 import {supports} from '../firmwareFeatures';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const keychain = require('node-onlykey-lib/keychain');
-import {applyHeldKeyChain, holdForBucket, keychainList, onKeyChainRecorded, updateKeyChainList} from '../keyChainRecorder';
+import {applyHeldKeyChain, keychainList, onKeyChainRecorded, saveKeyChainList, updateKeyChainList} from '../keyChainRecorder';
 import {
   type Probe, type Entry, type Job, type DeviceType, type HostType, type RemoveTarget, SLOTS, slotName, DEVICE_TYPES, KIND_TITLE,
   TYPE_INFO, KIND_INFO, SCHEME_INFO, labelText, slotOutcome, Choice, type Progress, ProgressList,
@@ -127,6 +127,9 @@ export function KeyChainScreen({
 
   const [slots, setSlots] = useState<Probe[] | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
+  /* the list as drawn, for a save the closed bucket cannot read (saveEntries fallback) */
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
   const [copies, setCopies] = useState<Copy[]>([]);
   const [pgpTodo, setPgpTodo] = useState<PgpTodo | null>(null);
   /* The digits the key is waiting for while it signs (any one press when it is set to press). */
@@ -196,16 +199,18 @@ export function KeyChainScreen({
    * 'saved', or 'held': the bucket is closed (config mode locks the key), so the list waits on this phone and is merged
    * in when the bucket is open again (keyChainRecorder holdForBucket) - never dropped, never reported as saved.
    */
-  const saveEntries = useCallback(async (next: Entry[]): Promise<'saved' | 'held'> => {
-    setEntries(next);
-    try {
-      await keychainList.setItem('list', keychain.list.serialize(next));
-      return 'saved';
-    } catch (e) {
-      await holdForBucket(next);
-      if ((e as {code?: string})?.code !== 'EBUCKET_CLOSED') setError(`Key Chain could not save the list (${String((e as Error)?.message ?? e)}); it is kept on this ${DEVICE_WORD} and added when it can be.`);
-      return 'held';
-    }
+  /*
+   * change: the list as it is NOW -> the new list (keyChainRecorder saveKeyChainList: in the queue with the soft key's
+   * recorded derives, so neither writes over the other - the review's Key Chain writer race). Never a list made from
+   * the one this tab drew.
+   */
+  const saveEntries = useCallback(async (change: (current: Entry[]) => Entry[] | null): Promise<'saved' | 'held'> => {
+    const r = await saveKeyChainList(change as (e: any[]) => any[] | null, entriesRef.current);
+    setEntries(r.entries as Entry[]);
+    if (r.state !== 'held') return 'saved';
+    const e = r.error as {code?: string; message?: string} | undefined;
+    if (e?.code !== 'EBUCKET_CLOSED') setError(`Key Chain could not save the list (${String(e?.message ?? e)}); it is kept on this ${DEVICE_WORD} and added when it can be.`);
+    return 'held';
   }, []);
   /* anything held while the bucket was closed goes in as soon as this tab can write (a restart, an unlock) */
   useEffect(() => {
@@ -228,7 +233,7 @@ export function KeyChainScreen({
 
   /* The remove Wizard's phone-side removal: the list entry and/or copies, at once. */
   const removeNow = useCallback(async (entryId: string | null, copyIds: string[]) => {
-    if (entryId) await saveEntries(entries.filter(x => x.id !== entryId));
+    if (entryId) await saveEntries(cur => cur.filter(x => x.id !== entryId));
     for (const id of copyIds) await removeCopy(id);
     setOpen(null);
     setStatus('Removed from the App.');
@@ -388,7 +393,7 @@ export function KeyChainScreen({
         publicKey: signKey.publicKey,
         pgp: cert.armored,
       });
-      await saveEntries(keychain.list.merge(entries, [made]).entries);
+      await saveEntries(cur => keychain.list.merge(cur, [made]).entries);
       await AsyncStorage.removeItem(PGP_TODO_KEY).catch(() => {});
       setPgpTodo(null);
       setStatus(`Your PGP public key is in "On this App" (fingerprint ${cert.fingerprint.slice(-16)}). Share it so people can encrypt to you.`);
@@ -424,8 +429,8 @@ export function KeyChainScreen({
       const {okcrypto} = await getKey();
       const entry = await keychain.derive.derivePublic(okcrypto, {scheme: d.scheme, type: d.type, label: d.label.trim(), ...(d.version ? {version: d.version} : {})});
       const made = keychain.list.createEntry(entry);
-      const {entries: next, added} = keychain.list.merge(entries, [made]);
-      await saveEntries(next);
+      let added = 0;
+      await saveEntries(cur => { const m = keychain.list.merge(cur, [made]); added = m.added; return m.entries; });
       setStatus(added ? `Derived and kept in the App: ${d.label.trim()}.` : 'Already in the App.');
       setOpen(made.id);
       return true;
@@ -522,7 +527,7 @@ export function KeyChainScreen({
       if (wiped.length) {
         /* Only now that the OnlyKey's key is gone does the App let go of it. */
         const gone = new Set(wiped.map(j => j.removeEntry).filter(Boolean));
-        if (gone.size) await saveEntries(entries.filter(e => !gone.has(e.id)));
+        if (gone.size) await saveEntries(cur => cur.filter(e => !gone.has(e.id)));
         for (const id of new Set(wiped.flatMap(j => j.removeCopies || []))) await removeCopy(id);
         const next = (slots || []).map(p => (wiped.some(j => j.slot === p.slot) ? {...p, kind: 'empty', label: '', publicKey: undefined} : p));
         setSlots(next);
@@ -593,7 +598,7 @@ export function KeyChainScreen({
           type: h.type,
           publicKey: key.publicKey,
         });
-        await saveEntries(keychain.list.merge(entries, [made]).entries);
+        await saveEntries(cur => keychain.list.merge(cur, [made]).entries);
       }
       setStatus(
         h.slot !== null
@@ -655,7 +660,7 @@ export function KeyChainScreen({
         pgp: publicArmored,
         slots: loaded.map(l => l.slot),
       });
-      const pgpSaved = await saveEntries(keychain.list.merge(entries, [made]).entries);
+      const pgpSaved = await saveEntries(cur => keychain.list.merge(cur, [made]).entries);
       setWritten(true);
       setStatus(`PGP key made and loaded: ${loaded.map(l => `${l.role} in ${slotName(l.slot)}`).join(', ')}. ${pgpSaved === 'saved' ? 'Its public key is in "On this App"' : `Its public key is kept on this ${DEVICE_WORD} and goes into Key Chain when the bucket is open again (after the restart)`}. Restart to finish.`);
       return true;
@@ -694,8 +699,8 @@ export function KeyChainScreen({
        * merge keeps what any device knew, so a dropped entry came back from the next sync (keychain list.present)
        */
       const now = new Date().toISOString();
-      const kept = entries.map(x => (x.type === 'composite' && (x.slots || []).includes(g.slot) && keychain.list.present(x) ? {...x, gone: now} : x));
-      const pqcSaved = await saveEntries(keychain.list.merge(kept, [entry]).entries);
+      const pqcSaved = await saveEntries(cur => keychain.list.merge(
+        cur.map(x => (x.type === 'composite' && (x.slots || []).includes(g.slot) && keychain.list.present(x) ? {...x, gone: now} : x)), [entry]).entries);
       setWritten(true);
       setStatus(`+PQC PGP key made and loaded in ${slotName(g.slot)}. ${pqcSaved === 'saved' ? 'Its public key is in Key Chain' : `Its public key is kept on this ${DEVICE_WORD} and goes into Key Chain when the bucket is open again (after the restart)`}. Restart to finish.`);
       return true;
@@ -779,8 +784,8 @@ export function KeyChainScreen({
         });
       }
       const made = keychain.list.createEntry(keychain.pgpImport.entryFor(info, match, proven));
-      const {entries: next, added} = keychain.list.merge(entries, [made]);
-      await saveEntries(next);
+      let added = 0;
+      await saveEntries(cur => { const m = keychain.list.merge(cur, [made]); added = m.added; return m.entries; });
       const where = [match.signSlot, match.ecdhSlot].filter((n): n is number => n !== null).map(slotName).join(' and ');
       setStatus(!added ? 'Already in the App.' : prove ? `Kept, linked to ${where}: the OnlyKey proved its keys.` : "Kept as someone else's key - for encrypting to them.");
       setPgpText('');
@@ -804,8 +809,9 @@ export function KeyChainScreen({
       const picked = await NativeShare.pickTextFile('application/json');
       if (!picked.picked) return;
       const incoming = keychain.list.parse(picked.content);
-      const {entries: next, added, kept} = keychain.list.merge(entries, incoming);
-      await saveEntries(next);
+      let added = 0;
+      let kept = 0;
+      await saveEntries(cur => { const m = keychain.list.merge(cur, incoming); added = m.added; kept = m.kept; return m.entries; });
       setStatus(`Imported ${added}${kept ? ` (${kept} already here)` : ''}.`);
     } catch (e) {
       setError(String((e as Error)?.message ?? e));

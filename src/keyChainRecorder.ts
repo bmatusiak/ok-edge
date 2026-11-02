@@ -196,6 +196,39 @@ export function updateKeyChainList(fn: (entries: any[]) => any[] | null): Promis
 }
 
 /*
+ * THE KEY CHAIN TAB'S OWN CHANGES, IN THE SAME QUEUE (the structure track S9, 2026-11-02 - the review's Key Chain writer
+ * race): the tab wrote a whole list made from the list it had drawn, so a derive the soft key recorded meanwhile was
+ * written over - gone from the list. Now the tab says what to change (fn: the list as it is NOW -> the new list, or null
+ * for no change) and it is applied here, in the queue with the derives. Refused because the bucket is closed (config
+ * mode): the result is held and merged in later (holdForBucket) - never dropped. `fallback`: the list to change when the
+ * closed bucket cannot be read either (the tab's own).
+ */
+export function saveKeyChainList(fn: (entries: any[]) => any[] | null, fallback: any[] = []):
+  Promise<{state: 'saved' | 'held' | 'same'; entries: any[]; error?: unknown}> {
+  const run = queue.then(async () => {
+    let current: any[];
+    try {
+      const raw = await keychainList.getItem('list');
+      current = raw ? keychain.list.parse(raw) : [];
+    } catch {
+      current = fallback;
+    }
+    const next = fn(current);
+    if (!next) return {state: 'same' as const, entries: current};
+    try {
+      await keychainList.setItem('list', keychain.list.serialize(next));
+    } catch (error) {
+      await holdForBucket(next);
+      return {state: 'held' as const, entries: next, error};
+    }
+    for (const l of listeners) l();
+    return {state: 'saved' as const, entries: next};
+  });
+  queue = run.catch(() => {});
+  return run;
+}
+
+/*
  * A KEY MADE WHILE THE BUCKET IS CLOSED IS KEPT, NOT LOST (A13, 2026-10-26). Making a key is done in config mode, and
  * config mode locks the key: the bucket the list lives in is closed then, its writes are refused (EBUCKET_CLOSED) - and
  * the Wizard's save swallowed the refusal and said "its public key is in Key Chain". A composite key's certificate is
