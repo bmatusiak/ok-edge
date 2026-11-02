@@ -50,6 +50,7 @@ async function owner(me, name = 'Chromium') {
   const next = (ms) => (inbox.length ? Promise.resolve(inbox.shift()) : c.next(ms));
   return {
     c,
+    you: answer.you,
     /* the next mcp message that matches (others are skipped), or a throw naming what came instead */
     until: async (pred, ms = 5000) => {
       const seen = [];
@@ -208,6 +209,34 @@ test('the run: the owner approves, a placeholder is filled inside the budget, re
   assert.deepEqual(done.results[two.item], { signature: 'sig-B' });
   assert.deepEqual(done.receipts.map((r) => r.seq), [41, 43]);
   ownerA.c.close();
+});
+
+test('one device runs a plan: the first Approve claims it, another device of the identity is refused and hears the claim', async () => {
+  const A = await identity(`mcp A4 ${Date.now()}`);
+  const desk = await owner(A, 'Desktop');
+  const phone = await owner(A, 'Phone');
+  const s = await session();
+  const { agent_id } = await s.tool('hello', { name: 'Claude' });
+  const p = await s.tool('plan_new', { identity: hexOf(A.identityPublicKey), title: 'one device' });
+  await desk.re({ op: 'agent', agent: agent_id, state: 'accepted' });
+  await s.tool('plan_add', { plan_id: p.plan_id, op: 'sign', key: { kind: 'ssh', identity: 'ssh://me@example.com' }, data: 'x', reason: 'r' });
+  /* not submitted yet: nothing to claim */
+  assert.match((await desk.re({ op: 'plan-claim', plan: p.plan_id })).why, /draft, not waiting for approval/);
+  await s.tool('plan_submit', { plan_id: p.plan_id });
+  await desk.until((m) => m.ev === 'submit');
+  await phone.until((m) => m.ev === 'submit');
+  assert.equal((await desk.re({ op: 'plan-claim', plan: p.plan_id })).ev, 'ok');
+  /* the phone hears the claim - its sheet goes - and cannot claim or update it */
+  const claimed = await phone.until((m) => m.ev === 'plan' && m.plan.id === p.plan_id && m.plan.by);
+  assert.equal(claimed.plan.by, desk.you);
+  assert.match((await phone.re({ op: 'plan-claim', plan: p.plan_id })).why, /another of your devices runs it/);
+  assert.match((await phone.re({ op: 'plan', plan: p.plan_id, state: 'declined' })).why, /another of your devices runs it/);
+  /* the claiming device's updates are taken; claiming again is no error */
+  assert.equal((await desk.re({ op: 'plan-claim', plan: p.plan_id })).ev, 'ok');
+  assert.equal((await desk.re({ op: 'plan', plan: p.plan_id, state: 'running' })).ev, 'ok');
+  assert.equal((await s.tool('plan_wait', { plan_id: p.plan_id, seconds: 1 })).state, 'running');
+  desk.c.close();
+  phone.c.close();
 });
 
 test('block takes effect at once: the agent\'s plans go, and new ones are not shown', async () => {

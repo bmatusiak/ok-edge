@@ -141,7 +141,7 @@ export class RoomCore {
       }
       case 'mcp-re': {
         /* the reply carries the device's own id for it (re): the room's broadcasts reach the sender too, before it */
-        const r = await this.fromOwner(me.room, msg);
+        const r = await this.fromOwner(me.room, msg, me.device.id);
         return send(ws, msg.re !== undefined ? { ...r, re: msg.re } : r);
       }
       case 'sealed': {
@@ -420,7 +420,7 @@ export class RoomCore {
    * An owner device's answer ({t:'mcp-re', op}): the agents (list, accept, block, remove), or a plan's progress, which
    * goes on to the agent. Only a joined device gets here (webSocketMessage) - the identity's own key proved it.
    */
-  async fromOwner(roomId, msg) {
+  async fromOwner(roomId, msg, deviceId = null) {
     if (msg.op === 'agents') return { t: 'mcp', ev: 'agents', agents: [...(await this.ctx.storage.list({ prefix: 'agent:' })).values()], plans: await this.plans() };
     if (msg.op === 'agent') {
       if (!AGENT_STATES.includes(msg.state)) return { t: 'error', why: `an agent is ${AGENT_STATES.join(' | ')}` };
@@ -443,9 +443,25 @@ export class RoomCore {
       if (msg.state !== 'accepted') for (const [d] of this.joined()) send(d, { t: 'key-gone', from: a.id });
       return { t: 'mcp', ev: 'ok', op: 'agent' };
     }
+    /*
+     * ONE DEVICE RUNS A PLAN (Step 4b): every device of the identity hears it submitted and shows its sheet; the first
+     * whose owner taps Approve claims it, before the press - so two Approves never open two budgets. The others hear the
+     * claim (the plan, with `by`) and withdraw their sheets; only the claiming device's updates are taken after.
+     */
+    if (msg.op === 'plan-claim') {
+      const plan = await this.ctx.storage.get(`plan:${String(msg.plan || '')}`);
+      if (!plan) return { t: 'error', why: 'no such plan here' };
+      if (plan.by && plan.by !== deviceId) return { t: 'error', why: 'another of your devices runs it' };
+      if (!plan.by && plan.state !== 'submitted') return { t: 'error', why: `the plan is ${plan.state}, not waiting for approval` };
+      plan.by = deviceId;
+      await this.ctx.storage.put(`plan:${plan.id}`, plan);
+      this.tell({ ev: 'plan', plan });
+      return { t: 'mcp', ev: 'ok', op: 'plan-claim' };
+    }
     if (msg.op === 'plan') {
       const plan = await this.ctx.storage.get(`plan:${String(msg.plan || '')}`);
       if (!plan) return { t: 'error', why: 'no such plan here' };
+      if (plan.by && plan.by !== deviceId) return { t: 'error', why: 'another of your devices runs it' };
       const r = await this.env.AGENTS.get(this.env.AGENTS.idFromName(plan.agent.id)).fromRoom(roomId, msg);
       if (!r.ok) return { t: 'error', why: r.why };
       if (msg.state) plan.state = msg.state;
