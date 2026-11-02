@@ -677,7 +677,6 @@ function SettleControls({edge}: {edge: ReturnType<typeof useEdge>}) {
   const [confirming, setConfirming] = useState(false);
   return edge.pressFor === 'settle' ? (
     <>
-      <PressIcon />
       <Text style={[styles.op, {color: theme.warn}]}>Press the key to settle</Text>
       {consentRefusal() ? <Text style={[styles.op, {color: theme.error}]}>{consentRefusal()}</Text> : null}
       <View style={styles.row}>
@@ -884,7 +883,6 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
                 */}
               {gap && edge.pressFor === 'loss' ? (
                 <>
-                  <PressIcon />
                   <Text style={[styles.op, {color: theme.warn}]}>Press the key to accept the loss</Text>
                   <View style={styles.row}>
                     {/* the soft key is pressed here; a hard key on the key itself */}
@@ -952,7 +950,6 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
         <Text style={styles.dim}>Until it passes, every agent request is refused (copy_unverified). Accepting the loss records, with a press, that these links are set aside; the copy is checked after them.</Text>
         {lossRange && edge.pressFor === 'loss' ? (
           <>
-            <PressIcon />
             <Text style={[styles.op, {color: theme.warn}]}>Press the key to accept the loss</Text>
             <View style={styles.row}>{activeBackend() === 'embedded' ? <Btn title="Press the soft key" tone="primary" disabled={consentRefusal() !== null} onPress={() => { if (!consentRefusal()) edge.press(); }} /> : <Text style={styles.dim}>Press the button on your OnlyKey.</Text>}</View>
           </>

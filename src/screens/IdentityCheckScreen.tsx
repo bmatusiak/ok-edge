@@ -30,7 +30,6 @@ import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 import {setDriveFlag} from '../drive/registry';
-import {PressIcon} from '../ui/PressIcon';
 
 /*
  * THE KEY NAMES ANOTHER SITE (Brad, 2026-10-29: "if i go to apps.crp.to, it reads my key and sees i use a private mcp, it
@@ -253,8 +252,6 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
       <View style={styles.action}>
         {open.kind === 'opening' ? <Text style={styles.hint}>Opening this identity's bucket…</Text> : null}
         {/* a hard key's press is asked on the press sheet (askPress, below); the soft key's has its button here */}
-        {/* the animated press icon wherever the key waits (PressIcon - the drive's trigger too) */}
-        {open.kind === 'press' && onPress ? <PressIcon /> : null}
         {open.kind === 'press' && onPress ? <Text style={[styles.hint, styles.press]}>Press the key to open this identity's bucket</Text> : null}
         {open.kind === 'press' && onPress ? <Btn title="Press the soft key" tone="primary" onPress={onPress} /> : null}
         {/* the bucket opens by a decapsulation on slot 128: field 30 decides its press */}

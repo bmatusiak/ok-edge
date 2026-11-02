@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {Btn, KeyValue, Section, StatusPill} from '../ui/components';
-import {PressIcon} from '../ui/PressIcon';
 import {DriveTap, useDriveControl} from '../drive/registry';
 import {bleRoomState, onBleRoomState, retryBleRoom, type BleRoomState} from '../bleRoom';
 import {theme} from '../ui/theme';
@@ -443,7 +442,6 @@ export function BluetoothScreen({
                       * A developer hard key and the soft key both take presses
                       * from the app, so they keep the button.
                       */}
-                    <PressIcon />
                     {canPress ? (
                       <Btn title="Confirm" tone="primary" onPress={fido.confirm} />
                     ) : (

@@ -33,7 +33,6 @@ import {
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import NativeCredProvider from 'okedge-native/specs/NativeCredProvider';
 import {Keypad} from '../ui/Keypad';
-import {PressIcon} from '../ui/PressIcon';
 import {
   dropChannel,
   pressForPresence,
@@ -430,7 +429,6 @@ export default function CredProviderScreen() {
       {presenceAsked && (
         <View style={styles.pinBox}>
           <Text style={styles.label}>The key is waiting for a touch</Text>
-          <PressIcon />
           <Text style={styles.detail}>
             {presenceAsked.canPress
               ? presenceAsked.hard
