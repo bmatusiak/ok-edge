@@ -141,6 +141,12 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180 } = {}) {
   for (let moves = 0; moves < 12; moves++) {
     const left = Math.max(5, Math.round((until - Date.now()) / 1000));
     const now = await d.until((app) => loginState(app) !== null, { life: left, fail: [] }).then(() => loginState(d.app));
+    /*
+     * THE STATE READ AGAIN CAN BE NONE (box desktop, 2026-11-01: the identity check went busy between the wait and the
+     * read - "login: null", the run stopped on null.startsWith, and the login budget's press that came 14 s later was
+     * left unanswered): nothing to do yet - wait for the next state
+     */
+    if (now === null) continue;
     if (now === 'in') {
       d.say(moves ? 'logged in' : 'logged in already');
       /*
