@@ -1,0 +1,16 @@
+# THE BOX DESKTOP ON ITS OWN TESTNET SOFT KEY, LOGGED IN (the dev loop's start, as a flow of its own): the gadget off the
+# USB first - while it is there the desktop takes it as its key - then the desktop started again on its soft key, and
+# logged in. Leaves the gadget off; the flow that runs after it puts it back (use-key gadget).
+name: The box desktop on its testnet soft key
+tags:
+  - edge
+---
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: hard
+- stopApp
+- launchApp
+- login:
+    key: soft
