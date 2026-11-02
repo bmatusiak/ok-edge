@@ -75,7 +75,8 @@ function tabOf(name, kind = 'app') {
   /* an app's tab opens with what it said before the window saw it (the server keeps its last 300 lines) */
   if (kind === 'app' && name !== DRIVE && name !== RUNS_TAB && mod.recentOf) for (const l of mod.recentOf(name)) addLine(name, l);
   /* and with its saved pictures */
-  if (kind === 'app' && name !== DRIVE && name !== RUNS_TAB) for (const p of past) if (p.shell === name) addShotTo(name, p.f, false);
+  /* a saved file names only its shell: shown in each tab of that shell ("desktop (host)") */
+  if (kind === 'app' && name !== DRIVE && name !== RUNS_TAB) for (const p of past) if (p.shell === name || name.startsWith(`${p.shell} (`)) addShotTo(name, p.f, false);
   if (name === current) show(name);
   return t;
 }
@@ -235,8 +236,8 @@ function showStatus() {
     if (!s.apps.length) chips.push(['bad', 'no app connected']);
     const up = new Set();
     for (const a of s.apps) {
-      up.add(a.shell);
-      tabOf(a.shell);
+      up.add(a.tab || a.shell);
+      tabOf(a.tab || a.shell);
       chips.push(['ok', `${a.shell}${a.via ? ` via ${a.via}` : ''}${a.flags && a.flags.phase ? ` - ${a.flags.phase}` : ''}${a.flags && a.flags.key && a.flags.key !== 'unknown' ? ` · its key ${a.flags.key}` : ''}`]);
     }
     for (const [n, t] of tabs) if (t.kind === 'app' && n !== DRIVE && n !== RUNS_TAB) t.dot.classList.toggle('up', up.has(n));

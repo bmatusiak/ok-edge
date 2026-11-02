@@ -116,6 +116,13 @@ let apps = new Map(); /* shell -> App: the newest connection of each shell */
  * part of the remote's host name. A bare shell is the newest, as before.
  */
 const everyApp = new Set();
+/*
+ * AN APP'S TAB IS NAMED WITH ITS HOST (Brad, 2026-11-01: "it has tabs, i dont know what tabs are from what host - so
+ * (HOST) in the tabname will be useful"): "desktop (bmatusiak-ZBOX-MI531)" beside "desktop (nitro16)" - two desktops
+ * no longer write into one tab. The host is the drive-remote's machine, or this one's.
+ */
+const HOST = require('os').hostname();
+const tabName = (app) => `${app.shell} (${(app.ws && app.ws.via) || HOST})`;
 function pickApp(name) {
   if (!name || !String(name).includes('@')) return apps.get(name);
   const [shell, where] = String(name).toLowerCase().split('@');
@@ -254,7 +261,7 @@ async function shotOf(app, name) {
     const file = path.join(SHOTS, `${new Date().toTimeString().slice(0, 8).replace(/:/g, '')}-${app.shell}-${String(name).replace(/[^a-z0-9-]/gi, '_')}.png`);
     fs.writeFileSync(file, Buffer.from(r.png, 'base64'));
     line(`[${app.shell}] picture: ${file}`);
-    bus.emit('shot', file, app.shell);
+    bus.emit('shot', file, tabName(app));
     /* the web app's browser window too, from its machine: Chrome's own dialogs are not the page's (targets.js windowShot) */
     if (app.shell === 'webapp') {
       const w = await proc('window-shot', 'webapp');
@@ -262,7 +269,7 @@ async function shotOf(app, name) {
         const wfile = file.replace(/\.png$/, '-window.png');
         fs.writeFileSync(wfile, Buffer.from(w.what, 'base64'));
         line(`[${app.shell}] its browser window: ${wfile}`);
-        bus.emit('shot', wfile, app.shell);
+        bus.emit('shot', wfile, tabName(app));
       } else line(`[${app.shell}] no picture of its browser window: ${w.why}`);
     }
     return file;
@@ -298,7 +305,8 @@ async function shotNow(by, shell) {
 }
 
 /* an app's kept lines, for its tab when the window opens it */
-const recentOf = (shell) => (apps.get(shell) ? apps.get(shell).recent.slice() : []);
+/* an app's kept lines, by its tab name (shell (host)) */
+const recentOf = (tab) => { const a = [...everyApp].find((x) => tabName(x) === tab && !x.closed); return a ? a.recent.slice() : []; };
 
 /*
  * say: a line for everyone watching (each drive window, its log, every remote's screen, the caller). answer: what a
@@ -538,7 +546,7 @@ function attachApp(sock) {
     if (m.t === 'reply') { const w = app.waiting.get(m.id); if (w) { app.waiting.delete(m.id); w(m); } return; }
     /* the app says it reloads itself (a newer build): its going is expected */
     if (m.t === 'log' && /^\[web\] reloading/.test(String(m.line))) expectGone(app.shell);
-    if (m.t === 'log') { const l = `${stamp()} ${m.line}`; keep(app.recent, l); bus.emit('app-line', app.shell, l); app.emit('log', String(m.line)); return; }
+    if (m.t === 'log') { const l = `${stamp()} ${m.line}`; keep(app.recent, l); bus.emit('app-line', tabName(app), l); app.emit('log', String(m.line)); return; }
     /*
      * AN ERROR IN THE APP (drive debugging #2): logged in its tab, the whole message kept in its lines, and a picture
      * with a log sample at once - one per burst: none is asked while one is on its way (an event, not a clock)
@@ -546,7 +554,7 @@ function attachApp(sock) {
     if (m.t === 'error') {
       const msg = String(m.message || '').split('\n');
       line(`[${app.shell}] ERROR ${m.kind}: ${msg[0].slice(0, 200)}`);
-      for (const l of msg.slice(0, 40)) { const s = `${stamp()} [ERROR ${m.kind}] ${l}`; keep(app.recent, s); bus.emit('app-line', app.shell, s); }
+      for (const l of msg.slice(0, 40)) { const s = `${stamp()} [ERROR ${m.kind}] ${l}`; keep(app.recent, s); bus.emit('app-line', tabName(app), s); }
       app.emit('error-event', m);
       if (!app.picturing) { app.picturing = true; shotNow('error', app.shell).finally(() => { app.picturing = false; }); }
       return;
@@ -592,7 +600,7 @@ async function lastWordsOf(app) {
     '== its live controls', app.liveLabels().join(' | ') || '(none)', '',
     `== its last lines (${app.recent.length})`, ...app.recent, '',
   ].join('\n'));
-  for (const l of words.split('\n').filter((x) => /reason|description|exited|still running|FATAL|signal|Exception/i.test(x)).slice(0, 6)) bus.emit('app-line', app.shell, `${stamp()} [last words] ${l.trim()}`);
+  for (const l of words.split('\n').filter((x) => /reason|description|exited|still running|FATAL|signal|Exception/i.test(x)).slice(0, 6)) bus.emit('app-line', tabName(app), `${stamp()} [last words] ${l.trim()}`);
   line(`[${app.shell}] last words: ${file}`);
   bus.emit('sample', file, app.shell);
 }
@@ -650,13 +658,13 @@ localTargets.watchKeys((keys) => { localKeys = keys; if (keys !== null) keysSaid
 
 /* lines a process wrote before its app connected (its start-up): held, then handed to the app's record when it does */
 const outBefore = new Map(); /* shell -> lines */
-function appOut(shell, l) {
+function appOut(shell, l, via = HOST) {
   const a = apps.get(shell);
   if (!(a && a.net === 'test') && !LIVE_PREFIXES.some((p) => l.startsWith(p))) return;
   const s = `${stamp()} [main] ${l}`;
   if (a) { keep(a.recent, s); a.emit('log', `[main] ${l}`); }
   else { if (!outBefore.has(shell)) outBefore.set(shell, []); keep(outBefore.get(shell), s); }
-  bus.emit('app-line', shell, s);
+  bus.emit('app-line', a ? tabName(a) : `${shell} (${via})`, s);
 }
 
 /*
@@ -692,7 +700,7 @@ function dialRemote(url, again = false) {
     if (m.t === 'app-close') { const s = r.socks.get(m.cid); if (s) { r.socks.delete(m.cid); s.readyState = 3; s.emit('close'); } return; }
     if (m.t === 'proc-reply') { const w = r.waiting.get(m.id); if (w) { r.waiting.delete(m.id); w(m); } return; }
     if (m.t === 'keys') { r.keys = m.keys; keysSaid(r.machine, m.keys); return; }
-    if (m.t === 'app-out') { appOut(String(m.shell), String(m.line)); return; }
+    if (m.t === 'app-out') { appOut(String(m.shell), String(m.line), r.machine); return; }
     if (m.t === 'cmd') cmdEvent(r.machine, String(m.name), m.ev || {});
   });
   ws.on('error', (e) => { if (!again) line(`drive-remote ${url}: ${e.message} - dialing it again every 5 s while it is gone`); });
@@ -903,7 +911,7 @@ function start({ port = 8790, remotes: urls = [] } = {}) {
 /* what the window shows: the apps and remotes connected now */
 function status() {
   return {
-    apps: [...apps.values()].map((a) => ({ shell: a.shell, net: a.net, via: a.ws && a.ws.via, flags: a.flags })),
+    apps: [...everyApp].filter((a) => !a.closed).map((a) => ({ shell: a.shell, tab: tabName(a), net: a.net, via: a.ws && a.ws.via, flags: a.flags })),
     remotes: [...remotes.values()].map((r) => ({ machine: r.machine, up: r.ws.readyState === 1, targets: r.targets, keys: r.keys || null })),
     localKeys,
   };
