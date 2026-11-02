@@ -212,7 +212,13 @@ function pressWhenAsked(app) {
   };
   app.on('log', async (l) => {
     if (/^\[timeline\] \d+ (begin|end) /.test(l)) { touched = false; return; }
-    if (/^\[press\] key waits: /.test(l)) { codeOpen = true; return; }
+    /*
+     * a code to enter opens code entry (no stray touches meanwhile) - "buttons any" is a press, not a code (box web app,
+     * 2026-11-01: the card login's "Open this identity's bucket - buttons any" was taken as code entry, which held back
+     * every other trigger, and the key waited out its 25 s six times)
+     */
+    const waits = l.match(/^\[press\] key waits: .* - buttons (.*)$/);
+    if (waits) { if (waits[1] !== 'any') codeOpen = true; return; }
     if (/^\[press\] key done/.test(l)) { codeOpen = false; return; }
     const led = l.match(/^\[main\] \[gadget\] led (#[0-9a-f]{6})/);
     if (!led) return;
@@ -264,9 +270,14 @@ function pressWhenAsked(app) {
     if (icon) iconAnswered = true;
     if (edgeWait && (codeOpen || iconAnswered)) return;
     if (edgeWait) iconAnswered = true;
+    /* "key waits: ... - buttons any" names the same Edge press: the same guard; a code's digits are pressed as given */
+    const anyPress = /^\[press\] key waits: .* - buttons any$/.test(l);
+    if (anyPress && iconAnswered) return;
+    if (anyPress) iconAnswered = true;
     const outside = l.match(/^\[press\] key waits: (.*) - buttons (.*)$/) || (edgeWait && [l, edgeWait[1], 'any']) || (icon && [l, icon[1] || 'the press icon', 'any']);
     if (outside) {
-      if (pressing) return;
+      /* a press in progress (a touch) is waited for, not a reason to drop this one - the key would wait out its 25 s */
+      while (pressing) await new Promise((r) => setTimeout(r, 100));
       pressing = true;
       try {
         /* a testnet key, or a hard key whose DEBUG console answers - a test hex; a production key has none and is never pressed */
