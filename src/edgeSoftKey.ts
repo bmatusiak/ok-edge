@@ -650,7 +650,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * stood at the last merge. device: its nametag, for the card's corner.
    */
   async deviceBudgets(deviceIdHex: string, device: string): Promise<EdgeBudget[]> {
-    const out = await this.historyOf(deviceIdHex, await loadMirror(fromHex(deviceIdHex)), new Set(), true);
+    const out = await this.historyOf(deviceIdHex, await require('./edgeStore').otherLog(fromHex(deviceIdHex)), new Set(), true);
     return out.map(b => ({...b, device, deviceId: deviceIdHex.toLowerCase()}));
   }
 
@@ -662,7 +662,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * it must verify with both halves, under both of that device's keys kept with the copy.
    */
   async deviceView(deviceIdHex: string): Promise<EdgeView> {
-    const mirror = await loadMirror(fromHex(deviceIdHex));
+    const mirror = await require('./edgeStore').otherLog(fromHex(deviceIdHex));
     /*
      * THE STORED KEY MUST BE THAT DEVICE'S (Brad, 2026-10-11): its public key is read back from
      * storage, so it is checked against the device id it is filed under (chain.deviceIdOf) - a

@@ -12,9 +12,8 @@
  */
 import {useEffect, useState} from 'react';
 import {chain} from 'node-onlykey-lib/edge';
-import {fromHex} from 'node-onlykey-lib/bytes';
-import {loadMirror} from '../edgeStore';
-import {onDevicesChanged, signedNametags} from '../edgeDevices';
+
+import {logFor, onDevicesChanged, signedNametags} from '../edgeDevices';
 
 export type DeviceLink = {seq: number; op: number; slot: number; flags: number; grantId: number; seenAt?: number};
 export type YourDevice = {
@@ -39,7 +38,7 @@ export function useYourDevices(headSeq: number | null | undefined): YourDevice[]
         const out: YourDevice[] = [];
         /* the devices whose signed nametag the bucket holds (edgeDevices.signedNametags) - and their links merged here, if any */
         for (const d of await signedNametags()) {
-          const m = await loadMirror(fromHex(d.deviceId));
+          const m = await logFor(d.deviceId);
           const links = m.links.map(r => {
             const f = chain.decodeLink(r.link);
             return {seq: f.seq, op: f.op, slot: f.slot, flags: f.flags, grantId: f.grantId, seenAt: m.seen[f.seq]};

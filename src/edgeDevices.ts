@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {devices as devicesLib, forks as forksLib, grants as grantsLib, sync as syncLib} from 'node-onlykey-lib/edge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
-import {keepMerged, loadMirror} from './edgeStore';
+import {acceptedPoints, keepAccepted, loadMirror, otherLog} from './edgeStore';
 import type {EdgeLinkRecord} from './edge/types';
 import {currentNet, edgeKey, netTag} from './net';
 
@@ -353,8 +353,7 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
   const name = o.statement?.nametag ?? UNNAMED;
   /* nothing new: a checkpoint this phone has merged already (a computer gives every log it holds, every time) */
   const head = toHex(o.checkpoint.head).toLowerCase();
-  const mirror = await loadMirror(o.deviceId);
-  if ((mirror.merged ?? []).some(m => m.seq > o.checkpoint.seq || (m.seq === o.checkpoint.seq && toHex(m.head).toLowerCase() === head))) return {held: false, count: 0};
+  if ((await acceptedPoints(o.deviceId)).some(m => m.seq > o.checkpoint.seq || (m.seq === o.checkpoint.seq && toHex(m.head).toLowerCase() === head))) return {held: false, count: 0};
   const entry: HeldLog = {
     deviceId: id, publicKey: toHex(o.publicKey), publicKeyPq: hexOf(o.publicKeyPq), from: o.from, at: now,
     records: o.records.map(r => [toHex(r.link), r.head ? toHex(r.head) : '', r.reveal ? toHex(r.reveal) : null]),
@@ -391,17 +390,17 @@ export async function receiveLog(o: {deviceId: Uint8Array; publicKey: Uint8Array
     return {held: true, count: entry.records.length};
   }
   const log = logOf(entry);
-  const had = mirror.links.length;
-  /* the merge point is that log's newest checkpoint: kept with both halves - the copy's hybrid anchor */
-  await keepMerged(log.deviceId, log.publicKey, log.publicKeyPq, log.records, {seq: entry.checkpoint.seq, head: log.checkpoint.head, signature: log.checkpoint.signature, signaturePq: log.checkpoint.signaturePq, at: now});
+  const had = (await otherLog(o.deviceId)).links.length;
+  /* the point accepted is that log's newest checkpoint, kept with both halves - its links are read from the bucket up to it (otherLog) */
+  await keepAccepted(log.deviceId, {seq: entry.checkpoint.seq, head: log.checkpoint.head, signature: log.checkpoint.signature, signaturePq: log.checkpoint.signaturePq, at: now});
   /* an unproven log's statement (an old one, unverifiable today) names nothing of yours: not remembered */
   if (log.statement && v.class !== 'unproven') await AsyncStorage.setItem(DEVICES(), JSON.stringify(devicesLib.remember(await loadDevices(), log.statement)));
   await keepOpenings(id, log.publicKey, entry.openings ?? []);
-  await keepNotes(log.deviceId, entry.notes ?? null);
+  /* its notes are the bucket's (otherLog reads them with its links) - nothing is copied here */
   /* an earlier copy of it that failed a check is answered by this one - and its warning goes with it */
   if (list.some(h => h.deviceId === id)) await saveHeld(list.filter(h => h.deviceId !== id));
   if ((await loadNew()).some(n => n.deviceId === id)) await markSeen(id);
-  const came = Math.max(0, (await loadMirror(o.deviceId)).links.length - had);
+  const came = Math.max(0, (await otherLog(o.deviceId)).links.length - had);
   console.log(`[edge] log of "${v.nametag ?? name}" (${id.slice(0, 8)}): merged, ${came} new link(s)${v.complete ? "" : `, ${v.missing.length} use(s) without their words`}`);
   return {held: true, count: came};
 }
@@ -418,7 +417,7 @@ const logOf = (h: HeldLog) => ({
 async function judge(h: HeldLog, owner?: Awaited<ReturnType<typeof ownerKey>>, known?: Device[]): Promise<HeldView> {
   if (owner === undefined) owner = await ownerKey();
   if (known === undefined) known = await loadDevices();
-  const merged = ((await loadMirror(fromHex(h.deviceId))).merged ?? []).map(m => ({seq: m.seq, head: m.head}));
+  const merged = (await acceptedPoints(fromHex(h.deviceId))).map(m => ({seq: m.seq, head: m.head}));
   /* without the owner keys no label verifies (UNNAMED), and the chain is checked all the same - it needs only its own keys */
   const c = devicesLib.classify({log: logOf(h), ownerKey: owner ? owner.ownerKey : null, ownerKeyPq: owner ? owner.ownerKeyPq : null, known, merged});
   return {
@@ -444,7 +443,7 @@ export async function waitingCount(): Promise<number> {
 export async function keepOpenings(deviceIdHex: string, publicKey: Uint8Array, openings: unknown[], records?: EdgeLinkRecord[]): Promise<number> {
   if (!openings.length) return 0;
   const {budgetRecordKey} = require('./edgeSoftKey');
-  if (!records) records = (await loadMirror(fromHex(deviceIdHex))).links;
+  if (!records) records = (await logFor(deviceIdHex)).links;
   const good = (devicesLib as any).checkOpenings({deviceId: fromHex(deviceIdHex), publicKey, records, openings}) as any[];
   for (const o of good) {
     const key = budgetRecordKey(deviceIdHex, o.grantId);
@@ -477,7 +476,7 @@ export async function keepNotes(deviceId: Uint8Array, notes: HeldLog['notes']): 
  */
 async function completenessOf(h: HeldLog): Promise<{complete: boolean; missing: string[]}> {
   try {
-    const mirror = await loadMirror(fromHex(h.deviceId));
+    const mirror = await otherLog(fromHex(h.deviceId));
     const records = syncLib.merge(mirror.links, recordsOf(h)).links;
     const reasons: Record<string, string> = {};
     for (const [k, v] of Object.entries(mirror.reasons ?? {})) reasons[k] = (v as {text: string}).text;
@@ -512,10 +511,15 @@ function notify(): void {
  * key continued. Device ids lowercase hex; the Edge tab's device filter draws it.
  */
 export type ForkTree = ReturnType<typeof forksLib.forkTree>;
+/* a device's log as this device holds it: its own copy (the mirror, until S4 step 8), another's from the bucket (otherLog) */
+export async function logFor(deviceIdHex: string) {
+  const id = deviceIdHex.toLowerCase();
+  return id === currentDeviceId() ? loadMirror(fromHex(id)) : otherLog(fromHex(id));
+}
 export async function forkTreeOf(deviceIds: string[]): Promise<ForkTree> {
   const chains = [];
   for (const id of [...new Set(deviceIds.map(d => d.toLowerCase()))]) {
-    const m = await loadMirror(fromHex(id)).catch(() => null);
+    const m = await logFor(id).catch(() => null);
     if (m && m.links.length) chains.push({deviceId: id, links: m.links.map(r => ({link: r.link, head: r.head}))});
   }
   return forksLib.forkTree(chains);

@@ -230,6 +230,65 @@ function storedOf(l: EdgeLinkRecord): StoredLink {
   return x;
 }
 
+/*
+ * ANOTHER DEVICE'S LOG IS THE BUCKET'S (S4 step 5, 2026-11-02): its blocks are in the identity bucket's edge-logs already -
+ * every device files its own there - so this device no longer copies them into a mirror of its own. What it keeps per
+ * other device is only WHAT IT ACCEPTED: the signed checkpoints whose log passed the check here (edgeDevices.receiveLog -
+ * devices.classify), the points a later log is checked against (rollback, a changed head). The views read the bucket's
+ * log up to the newest accepted point - never a link past what was checked here.
+ */
+type Accepted = NonNullable<Mirror['merged']>;
+const ACCEPTED_KEY = (idHex: string) => edgeKey(`accepted.${idHex.toLowerCase()}`);
+const toPoint = (p: {seq: number; head: string; signature: string; signaturePq?: string; at: number}) =>
+  ({seq: p.seq, head: fromHex(p.head), signature: fromHex(p.signature), ...(p.signaturePq ? {signaturePq: fromHex(p.signaturePq)} : {}), at: p.at});
+/** The checkpoints of another device this device accepted (oldest first). Before S4 they were its mirror's `merged`: read from there once. */
+export async function acceptedPoints(deviceId: Uint8Array): Promise<Accepted> {
+  const id = toHex(deviceId);
+  const raw = await AsyncStorage.getItem(ACCEPTED_KEY(id));
+  if (raw) return (JSON.parse(raw) as Parameters<typeof toPoint>[0][]).map(toPoint);
+  const legacy = (await readMirror(deviceId)).merged ?? [];
+  if (legacy.length) await saveAccepted(id, legacy);
+  return legacy;
+}
+async function saveAccepted(id: string, points: Accepted): Promise<void> {
+  await AsyncStorage.setItem(ACCEPTED_KEY(id), JSON.stringify(points.map(p => ({
+    seq: p.seq, head: toHex(p.head), signature: toHex(p.signature), ...(p.signaturePq?.length ? {signaturePq: toHex(p.signaturePq)} : {}), at: p.at,
+  }))));
+}
+/** Another device's log passed the check at this checkpoint: kept (by seq; the newest keeps its ML-DSA-65 half). */
+export async function keepAccepted(deviceId: Uint8Array, point: Accepted[number]): Promise<void> {
+  const id = toHex(deviceId);
+  const was = await acceptedPoints(deviceId);
+  if (was.some(p => p.seq === point.seq && toHex(p.head) === toHex(point.head))) return;
+  const all = [...was.filter(p => p.seq !== point.seq), point].sort((a, b) => a.seq - b.seq);
+  await saveAccepted(id, all.map((p, i) => (i === all.length - 1 ? p : (({signaturePq: _older, ...p256}) => p256)(p))));
+}
+/** Another device's log as the open bucket holds it, up to the newest point accepted here (an empty log when none). */
+export async function otherLog(deviceId: Uint8Array): Promise<Mirror> {
+  const merged = await acceptedPoints(deviceId);
+  const empty: Mirror = {deviceId, links: [], messages: {}, lastSeen: null, lastSync: null, setAside: [], seen: {}, reasons: {}, refusals: [], merged};
+  const upTo = merged.length ? merged[merged.length - 1].seq : -1;
+  if (upTo < 0) return empty;
+  const {storeEntries} = require('./bucketStore');
+  const {logblocks, copyfile} = require('node-onlykey-lib/edge');
+  const entries: Record<string, string> | null = await storeEntries(currentNet() === 'test' ? 'edge-logs-test' : 'edge-logs').catch(() => null);
+  const j = entries ? logblocks.join(entries, toHex(deviceId)) : null;
+  if (!j) return empty;
+  const c = copyfile.fromJSON(j, deviceId);
+  const notes = (c.notes ?? {}) as {reasons?: Record<string, string>; messages?: Record<string, string>; seen?: Record<string, number>; who?: Record<string, {computer: string; at: number}>};
+  const num = <T,>(o: Record<string, T> | undefined) => Object.fromEntries(Object.entries(o ?? {}).map(([k, v]) => [Number(k), v])) as Record<number, T>;
+  return {
+    ...empty,
+    links: (c.links as EdgeLinkRecord[]).filter(r => seqOf(r) <= upTo).map(r => ({link: r.link, head: r.head, reveal: r.reveal ?? null})),
+    messages: num(notes.messages),
+    seen: num(notes.seen),
+    reasons: Object.fromEntries(Object.entries(notes.reasons ?? {}).map(([k, text]) => [Number(k), {text, computer: notes.who?.[k]?.computer ?? '', at: notes.who?.[k]?.at ?? 0}])),
+    refusals: c.refusals ?? [],
+    publicKey: c.publicKey ?? null,
+    publicKeyPq: c.publicKeyPq ?? null,
+  };
+}
+
 export async function loadMirror(deviceId: Uint8Array): Promise<Mirror> {
   const kept = inMemory.get(toHex(deviceId));
   if (kept) return cloneMirror(kept);
@@ -780,29 +839,6 @@ export async function takeOwnLinks(source: EdgeSource, offered: EdgeLinkRecord[]
     await sync(source).catch(() => undefined);
   }
   return {ok: true, count: m.added.length};
-}
-
-/**
- * Keep another device's links and the checkpoint they were merged up to - once that device's
- * log checked with your key (edgeDevices.receiveLog). In the sync queue.
- */
-export function keepMerged(chainId: Uint8Array, publicKey: Uint8Array, publicKeyPq: Uint8Array, added: EdgeLinkRecord[], point: NonNullable<Mirror['merged']>[number], now = Date.now()): Promise<void> {
-  const run = syncing.then(() => keepMergedNow(chainId, publicKey, publicKeyPq, added, point, now), () => keepMergedNow(chainId, publicKey, publicKeyPq, added, point, now));
-  syncing = run.catch(() => undefined);
-  return run;
-}
-async function keepMergedNow(chainId: Uint8Array, publicKey: Uint8Array, publicKeyPq: Uint8Array, added: EdgeLinkRecord[], point: NonNullable<Mirror['merged']>[number], now: number): Promise<void> {
-  const mirror = await loadMirror(chainId);
-  const m = syncLib.merge(mirror.links, added);
-  if (m.conflicts.length) throw new Error(`a fork at #${m.conflicts.join(', #')} - nothing kept`);
-  mirror.links = m.links;
-  for (const r of m.added) mirror.seen[seqOf(r)] = mirror.seen[seqOf(r)] ?? now;
-  mirror.publicKey = publicKey;
-  mirror.publicKeyPq = publicKeyPq;
-  /* the point is the held log's newest checkpoint: the copy's hybrid anchor now - the older points keep P-256 only */
-  mirror.merged = oneAnchor([...(mirror.merged ?? []), point]);
-  mirror.lastSync = now;
-  await saveMirror(mirror);
 }
 
 /** Another device's own seen times (its clock) for the links of its log this phone holds - so its log reads the same here as on that device. */
