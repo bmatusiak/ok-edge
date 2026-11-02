@@ -945,6 +945,55 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
   }
 
   /*
+   * THE CHECKS, THROUGH THE DRIVE (Brad, 2026-11-02: "for drive server/remote you can run building and testing through
+   * that, so i can watch and see build and test output"): each in its own tab of this machine's drive window, live, and
+   * its end said to the caller. One name each:
+   *   lib                node-onlykey-lib's whole suite (npm test)
+   *   lib <test files>   only those (node --test), paths in the lib
+   *   tsc                ok-edge's type check (tsc --noEmit)
+   *   server             ok-edge's server tests, against the lib's local server (mcp/localhost/main.js) started for them on
+   *                      127.0.0.1:8787 (kept certificates: REQUIRE_LOGIN 0) and ended after
+   */
+  const LIB = path.join(ROOT, 'node-onlykey-lib');
+  const verdict = (r) => {
+    const tail = r.out.split(/\r?\n/).filter((l) => /^ℹ (tests|pass|fail|skipped)|^not ok|error TS\d+/.test(l)).slice(-8);
+    return tail.length ? tail.join(' | ') : r.out.split(/\r?\n/).slice(-4).join(' | ');
+  };
+  async function check(args = []) {
+    const [what, ...rest] = args;
+    const long = 15 * 60000;
+    let r;
+    if (what === 'lib') {
+      r = rest.length
+        ? await streamIn(LIB, NODE, ['--test', ...rest], { timeout: long, ...shown(`check lib ${rest.join(' ')}`.slice(0, 60)) })
+        : await streamIn(LIB, NPM, ['test'], { timeout: long, ...shown('check lib') });
+    } else if (what === 'tsc') {
+      r = await streamIn(EDGE, NODE, [path.join(EDGE, 'node_modules/typescript/bin/tsc'), '--noEmit', '-p', '.'], { timeout: long, ...shown('check tsc') });
+      if (r.ok && !r.out) r.out = 'tsc: no errors';
+    } else if (what === 'server') {
+      const main = path.join(EDGE, 'node_modules/node-onlykey-lib/mcp/localhost/main.js');
+      const srv = spawn(NODE, [main, '--port', '8787', '--host', '127.0.0.1', '--var', 'REQUIRE_LOGIN=0', '--var', 'LIFETIME_IDENTITIES=*'], { cwd: EDGE, windowsHide: true });
+      const up = await new Promise((resolve) => {
+        let said = '';
+        const t = setTimeout(() => resolve(false), 20000);
+        const hear = (d) => { said += String(d); if (/ready on/.test(said)) { clearTimeout(t); resolve(true); } };
+        srv.stdout.on('data', hear);
+        srv.stderr.on('data', hear);
+        srv.on('exit', () => { clearTimeout(t); resolve(false); });
+      });
+      if (!up) { end(srv, 'SIGTERM'); return { ok: false, why: 'check server: the local server did not start on 127.0.0.1:8787 (taken?)' }; }
+      try {
+        r = await streamIn(EDGE, NPM, ['run', 'server:test'], { timeout: long, ...shown('check server') });
+      } finally {
+        end(srv, 'SIGTERM');
+      }
+    } else {
+      return { ok: false, why: 'check <lib [test files...] | tsc | server>' };
+    }
+    return r.ok ? { ok: true, what: verdict(r) } : { ok: false, why: verdict(r) };
+  }
+
+  /*
    * THE STATE OF EVERYTHING ON THIS MACHINE (Brad, 2026-10-31: "do you have a status or doctor command that tells you
    * the state of everything, like what repos are on the remote, what heads they are on, if they are dirty (and what
    * files are dirty), devices, app pids"): the repos beside ok-edge (branch, head, the dirty files by name), the keys on
@@ -1012,6 +1061,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
+      if (action === 'check') return check(args.argv || []);
       /*
        * A TEST AGENT'S PLAN ON THIS MACHINE (the air-gapped dev loop, plan step 4): tools/box/mcp-plan-agent.js against
        * the desktop app's local MCP here (its record) for that identity - its output in its own tab, its last lines back
