@@ -772,9 +772,30 @@ const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', 
  * 'cmd'): its start and its end are drive lines too, so a run's record and the drive tab say what ran and how it ended.
  * Its output is a debug build's, or the CLI against a testnet key - nothing the live chain says.
  */
+/*
+ * EACH COMMAND'S OUTPUT IN A FILE OF ITS OWN (2026-11-02: the ship proof failed and its words were only in the window's
+ * cli tab - neither Brad after the fact nor Claude could read why): drive-logs/cmds/<time>-<name>.log, every line as it
+ * came; the exit line names the file. The window shows the same lines live (bus 'cmd').
+ */
+const CMD_LOGS = path.join(path.dirname(LOG), 'cmds');
+const cmdFiles = new Map();
 function cmdEvent(machine, name, ev) {
-  if (ev.t === 'start') line(`[${name}] $ ${ev.cmd} (${machine})`);
-  if (ev.t === 'end') line(`[${name}] exit ${ev.code}${ev.code === 0 ? '' : ' - failed'}`);
+  const key = `${machine}|${name}`;
+  if (ev.t === 'start') {
+    line(`[${name}] $ ${ev.cmd} (${machine})`);
+    try { fs.mkdirSync(CMD_LOGS, { recursive: true }); } catch { /* there */ }
+    const file = path.join(CMD_LOGS, `${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}-${String(name).replace(/[^\w.@-]+/g, '_').slice(0, 60)}.log`);
+    const out = fs.createWriteStream(file, { flags: 'a' });
+    out.on('error', () => {});
+    out.write(`$ ${ev.cmd} (${machine})\n`);
+    cmdFiles.set(key, { file, out });
+  }
+  const f = cmdFiles.get(key);
+  if (ev.t === 'line' && f) f.out.write(`${ev.text}\n`);
+  if (ev.t === 'end') {
+    if (f) { f.out.end(`exit ${ev.code}\n`); cmdFiles.delete(key); }
+    line(`[${name}] exit ${ev.code}${ev.code === 0 ? '' : ' - failed'}${f ? ` - its output: ${f.file}` : ''}`);
+  }
   bus.emit('cmd', name, ev, machine);
 }
 
