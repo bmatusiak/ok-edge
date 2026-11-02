@@ -43,7 +43,7 @@ export type KeyBusy = {
   since: number;
   limitMs: number | null;
 };
-type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number; answered?: boolean};
+type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'answered' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number; answered?: boolean};
 /* the request in progress: when it began and its limit (said at its begin) */
 let began = {id: -1, at: 0, limitMs: null as number | null};
 /*
