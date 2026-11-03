@@ -38,7 +38,8 @@ const EMU_REPO = path.resolve(ROOT, '..', 'node-onlykey-emulator');
 const EMU = path.join(EMU_REPO, 'emulator');
 /* the web app's firmware: Edge, the browser's way in, and the derived secrets its stores are encrypted under. Never a softKeyOnly plugin (build-hardkey.sh refuses them) */
 /* version_control: our release on the maintainer's base - the version the key reports and the patches it carries (its version.json) */
-const PLUGINS = ['edge', 'ctap_bridge', 'derive_secret', 'version_control'];
+/* vendor_bridge: the desktop's way to a key on USB (src/transport/vendor-bridge.js in the lib) - on the keys since 2026-10-31 */
+const PLUGINS = ['edge', 'ctap_bridge', 'vendor_bridge', 'derive_secret', 'version_control'];
 /* what the hex is built from, as paths in the emulator repo: a change in any of them is a new build */
 const SOURCE_PATHS = [
   'emulator/scripts/versions/v3.1.0.js',

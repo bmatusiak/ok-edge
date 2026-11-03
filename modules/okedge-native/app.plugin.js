@@ -16,7 +16,12 @@
 const path = require('path');
 const { withSettingsGradle, withGradleProperties } = require('expo/config-plugins');
 
-const PLUGINS = 'config,edge,key_chain,ctap_bridge,derive_secret,version_control';
+/*
+ * vendor_bridge (2026-11-03): the desktop reaches a key on USB through it (node-onlykey-lib src/transport/vendor-bridge.js) -
+ * the hard keys carry it since 2026-10-31; without it here an emulated key on USB (the gadget, the Pi relay key) never
+ * answered the desktop's first request, and soft and hard keys ran different firmware
+ */
+const PLUGINS = 'config,edge,key_chain,ctap_bridge,vendor_bridge,derive_secret,version_control';
 
 const withOkEmuProject = (config) => withSettingsGradle(config, (c) => {
   if (!c.modResults.contents.includes("include ':okemu'")) {
