@@ -169,6 +169,14 @@ test('a budget\'s press sheet that says what the budget is for passes', async ()
   assert.deepEqual(fails, []);
 });
 
+test('press without why, a fast key: the nametag\'s sheet said only "Edge: certifying" and the key answered at once', () => {
+  const { j, fails, say } = inspector();
+  say(`[request] press asked: ${CERTIFY} - a press`, `[press] key waits: ${CERTIFY} - buttons any`, '[press] icon up (usb)', `[request] press done: ${CERTIFY} - answered`);
+  j.stop();
+  assert.equal(fails.length, 1);
+  assert.match(fails[0], /^press without why: the press sheet said only "Edge: certifying/);
+});
+
 test('no progress: requests run after the press and no sheet shows them', async () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)');

@@ -52,7 +52,8 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let iconBackend = null; /* the key a press sheet was last shown for: usb (a hard key), embedded (the soft key) */
   const shownCodes = []; /* the codes sheets showed, with when */
   const openSheets = new Set(); /* the sheets open now, by title (opened: their first height after onShow; closed: their close) */
-  let sheetWords = ''; /* the press sheet's words now (its "[press] key waits: <words> - buttons") */
+  let sheetWords = '';
+  let whyFailed = false; /* said once per press */ /* the press sheet's words now (its "[press] key waits: <words> - buttons") */
   let approvalsOwed = 0; /* the computer's presses approved in the app and not yet asked of the key ([edge] press approved) */
   let wentInWait = false; /* a press sheet went while the key waited for this one press */
   let afterAnswer = null; /* since the key last answered a press: what it answered, the requests begun since (id -> {what, asked}) */
@@ -83,6 +84,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   }
 
   function waits(what) {
+    whyFailed = false;
     wentInWait = false;
     /* the requests running since the last answer asked a press after all: none of them ran under a stale sheet */
     if (afterAnswer) for (const r of afterAnswer.requests.values()) r.asked = true;
@@ -97,6 +99,11 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   }
   function answered(what) {
     if (!waitWhat) return;
+    /* the words the person saw while the key waited, judged when it answered - at any speed (a fast key answered inside the 1 s check) */
+    if (icons > 0 && iconBackend !== 'embedded' && (sheetWords === what || /^Edge: (opening|resuming) a budget$/.test(sheetWords)) && !whyFailed) {
+      whyFailed = true;
+      fail(`press without why: the press sheet said only "${sheetWords}" - not what the press is for`);
+    }
     waitWhat = null;
     afterAnswer = { what, requests: new Map() };
     const n = waitsSeen;
@@ -180,7 +187,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
        */
       later(NO_SHEET_MS, () => {
         if (waitWhat !== m[1] || iconBackend === 'embedded' || !icons) return;
-        if (sheetWords === m[1] || /^Edge: (opening|resuming) a budget$/.test(sheetWords)) fail(`press without why: the press sheet says only "${sheetWords}" - not what the press is for`);
+        if (!whyFailed && (sheetWords === m[1] || /^Edge: (opening|resuming) a budget$/.test(sheetWords))) { whyFailed = true; fail(`press without why: the press sheet says only "${sheetWords}" - not what the press is for`); }
       });
       if (m[2] && iconBackend !== 'embedded') {
         const code = m[2].trim();
