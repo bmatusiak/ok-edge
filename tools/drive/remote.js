@@ -129,10 +129,10 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
 }
 
 /* the window's picture button: the drive server asks the apps (it saves and logs the pictures) */
-function shotNow() {
+function shotNow(tab) {
   if (!server || server.readyState !== 1) { line('no drive server - no picture'); return; }
-  line('picture asked - the drive server saves it');
-  toServer({ t: 'shot-now' });
+  line(`picture asked${tab ? ` of ${tab}` : ''} - the drive server saves it`);
+  toServer({ t: 'shot-now', tab: tab || null });
 }
 
 /* what the window shows */

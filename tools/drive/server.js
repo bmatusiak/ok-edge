@@ -393,7 +393,12 @@ async function shotOf(app, name) {
  * (shell); from the drive's own tab, or a remote's window, every connected app.
  */
 async function shotNow(by, shell) {
-  const targets = [...apps.values()].filter((a) => !shell || a.shell === shell);
+  /*
+   * shell: an app's tab name - "desktop (nitro16)", its kind and machine (Brad, 2026-11-02: "if i select a tab and click
+   * photo, i expect it to snap that app" - the kind alone took the box's desktop too, and a remote window's click took
+   * every app) - or a kind, for the drive's own callers
+   */
+  const targets = [...apps.values()].filter((a) => !shell || tabName(a) === shell || a.shell === shell);
   /* by: the window that asked ('host', a remote's machine) - or 'error', the app's own error (#2) */
   const why = by === 'error' ? 'a picture on an error' : by === 'no-activity' ? 'pictures for "I see no activity"' : `picture asked from the ${by} window`;
   line(`${why}${shell ? ` (${shell})` : ''}`);
@@ -851,7 +856,7 @@ function dialRemote(url, again = false) {
   ws.on('message', (data) => {
     let m;
     try { m = JSON.parse(String(data)); } catch { return; }
-    if (m.t === 'shot-now') { shotNow(r.machine); return; }
+    if (m.t === 'shot-now') { shotNow(r.machine, m.tab || undefined); return; }
     if (m.t === 'remote-hello') { r.machine = m.machine; r.targets = m.targets || []; line(`drive-remote ${r.machine} connected (${r.targets.join(', ')})`); remoteHellos.emit('hello', r); return; }
     if (m.t === 'app-open') {
       const sock = new EventEmitter();

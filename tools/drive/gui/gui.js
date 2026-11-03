@@ -199,7 +199,8 @@ function listPast() {
 let past = [];
 
 /* Brad's button: a picture of what he sees, at the moment he sees it - of the open tab's app, or of every app */
-$('shotNow').onclick = () => (mode === 'remote' ? mod.shotNow() : mod.shotNow('host', current === DRIVE || current === RUNS_TAB ? undefined : current));
+/* the open tab's app (its tab name: kind and machine - two desktops are two tabs), in either mode; the drive's tab: every app */
+$('shotNow').onclick = () => { const tab = current === DRIVE || current === RUNS_TAB ? undefined : current; return mode === 'remote' ? mod.shotNow(tab) : mod.shotNow('host', tab); };
 
 /* Brad's "I see no activity": one line to Claude (server.js noActivity, wake.js "user"); the server's only */
 if (mode === 'server') $('noActivity').onclick = () => mod.noActivity();
