@@ -18,7 +18,7 @@
  * the Requests switch.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {approve as approveLib, identity as identityLib, note as noteLib, request as requestLib} from 'node-onlykey-lib/edge';
+import {approve as approveLib, identity as identityLib, note as noteLib, pressAsk as pressAskLib, request as requestLib} from 'node-onlykey-lib/edge';
 import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {addNote, sync as syncCopy} from './edgeStore';
@@ -65,7 +65,9 @@ export type SheetAsk =
   /* plan: the MCP plan this request is the budget of (mcpPlans.ts) - its sheet goes when another device claims it */
   | {kind: 'request'; computer: string | null; view: any; blocked: string | null; at: number; plan?: string}
   /* SPEC H7 (2026-10-20): a computer sets the agent identity this phone keeps - a tap, no press; `was` = the record it replaces */
-  | {kind: 'identity'; computer: string | null; record: any; was: any | null; blocked: null; at: number};
+  | {kind: 'identity'; computer: string | null; record: any; was: any | null; blocked: null; at: number}
+  /* 2026-11-03: a computer's press, approved here before it reaches the key (lib edge/src/pressask.js) - what it is for, the message, the code */
+  | {kind: 'press'; computer: string | null; what: string; subject: string | null; code: string | null; blocked: null; at: number};
 /* until: when this phase runs out (ms since epoch) - the sheet counts down to it */
 export type SheetState =
   | {phase: 'ask'; ask: SheetAsk; until: number}
@@ -256,7 +258,7 @@ export function handleEdgeMessage(msg: any, from: string, planAsk?: PlanAsk): Pr
   /* B7 stage 2: a note changes nothing, so it never waits behind a sheet */
   if (msg?.type === noteLib.TYPE) return handleNote(msg, from).catch(() => null);
   /* a sheet the person answers: a budget, or the agent identity (a sync is held, never asked - 2026-10-08) */
-  const asks = msg?.type === requestLib.TYPE || msg?.type === identityLib.SET_TYPE;
+  const asks = msg?.type === requestLib.TYPE || msg?.type === identityLib.SET_TYPE || msg?.type === pressAskLib.TYPE;
   if (asks && inFlight) {
     return Promise.resolve({ok: false, refusal: 'busy', detail: 'another request is on this device - ask again when it is answered'});
   }
@@ -339,10 +341,37 @@ async function handleIdentity(msg: any, seen: Set<string>, from: string): Promis
 }
 
 
+/*
+ * A COMPUTER'S PRESS, APPROVED HERE FIRST (Brad, 2026-11-03: "edge gives a prompt sheet, i press approve, and then the key
+ * press - so i press approve on the app, and then on the key, like edge"; "i dont know what i was approving"): the CLI
+ * asks before the request leaves (lib okcrypto beforePress, cli/desktop.js) - the sheet says who asks, what for, the
+ * message the key will sign and its code. Approve: the sheet goes, the request reaches the key and its press sheet follows.
+ * Anything else: the key is never asked. Not behind the Requests switch - it is this computer's own CLI, and it always asks.
+ */
+async function handlePressAsk(msg: any, seen: Set<string>, from: string): Promise<unknown | null> {
+  const computer = await computerOf(from);
+  if (!computer) return null;
+  const checked = pressAskLib.verify(msg, {seen});
+  if (!checked.ok) return checked.reason === 'replayed' ? null : {ok: false, refusal: 'invalid', detail: `not a usable press ask: ${checked.reason}`};
+  seen.add(String(msg.nonce).toLowerCase());
+  if (unattended()) return {ok: false, refusal: 'timeout', detail: UNATTENDED_DETAIL};
+  const asked: SheetAsk = {kind: 'press', computer: computer.name, what: msg.what, subject: msg.subject ?? null, code: msg.code ?? null, blocked: null, at: Date.now()};
+  const a = await askPerson(asked);
+  if (a !== 'approve') {
+    const result = {ok: false as const, refusal: a === 'timeout' ? 'timeout' : 'declined'};
+    show({phase: 'done', ask: asked, result});
+    return result;
+  }
+  console.log(`[edge] press approved: ${msg.what}`);
+  show(null);
+  return {ok: true};
+}
+
 async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknown | null> {
   const seen = await loadSeen();
   try {
     if (identityLib.TYPES.includes(msg?.type)) return await handleIdentity(msg, seen, from);
+    if (msg?.type === pressAskLib.TYPE) return await handlePressAsk(msg, seen, from);
     if (msg?.type !== requestLib.TYPE) return null;
     /* the Requests switch is off: refused unread */
     if (!(await agentRequestsOn())) return null;

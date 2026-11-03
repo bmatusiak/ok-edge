@@ -9,11 +9,21 @@ tags:
   - sheets
 ---
 - runScript: scripts/cli-press-start.js
-# the first signature's press - on a sheet, with its code (the inspector fails "no press sheet" and "no code" itself)
+# APPROVED IN THE APP FIRST, THEN THE KEY (Brad, 2026-11-03: "i press approve on the app, and then on the key, like edge"):
+# each of the certificate's two signatures asks this app first - what it is for, the message - and only then the key; the
+# inspector fails a CLI press that reaches the key with no approval before it, and a press with no sheet or no code
+- waitForTap:
+    what: 'press ask'
+    timeout: 60000
+- tapOn: "Approve"
 - expectSheets:
     sheets:
       - press: ".*the CLI.*"
     timeout: 60000
+- waitForTap:
+    what: 'press ask'
+    timeout: 60000
+- tapOn: "Approve"
 # the identity it made, approved on this app's sheet
 - waitForTap:
     what: 'agent identity'

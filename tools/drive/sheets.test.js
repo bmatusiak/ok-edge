@@ -43,7 +43,7 @@ test('no press sheet: the lib asks a press and nothing on screen asks for it - t
 
 test('no press sheet for a CLI\'s press through the desktop app (its code said)', async () => {
   const { j, fails, say } = inspector();
-  say('[request] press asked: signing (the CLI) - code 3 1 5');
+  say('[edge] press approved: a test signature', '[request] press asked: signing (the CLI) - code 3 1 5');
   await wait(NO_SHEET_MS + 200);
   j.stop();
   assert.match(fails[0] || '', /^no press sheet.*signing \(the CLI\)/);
@@ -51,7 +51,7 @@ test('no press sheet for a CLI\'s press through the desktop app (its code said)'
 
 test('no code: an agent sign wants 5 2 3 and the sheet that shows says only "press" - the Pi login', async () => {
   const { j, fails, say } = inspector();
-  say('[request] press asked: signing (the CLI) - code 5 2 3', '[press] icon up (usb)');
+  say('[edge] press approved: a test signature', '[request] press asked: signing (the CLI) - code 5 2 3', '[press] icon up (usb)');
   await wait(NO_SHEET_MS + 200);
   j.stop();
   assert.equal(fails.length, 1);
@@ -132,6 +132,22 @@ test('the key went and its sheets closed with it: no failure', async () => {
   const { j, fails, say } = inspector();
   say('[sheet] height 420: Agent identity', '[identity] the key went: its state forgotten', '[sheet] closed: Agent identity');
   await wait(1200);
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
+test('press unapproved: a CLI press reaches the key with no approval in the app - "i dont know what i was approving"', () => {
+  const { j, fails, say } = inspector();
+  say('[press] icon up (usb)', '[request] press asked: signing (the CLI) - code 2 4 2', '[press] code shows: signing (the CLI) - buttons 2 4 2');
+  j.stop();
+  assert.ok(fails.some((f) => /^press unapproved/.test(f)), fails.join(' | '));
+});
+
+test('a CLI press approved first, one approval each', () => {
+  const { j, fails, say } = inspector();
+  say("[edge] press approved: sign the agent's PGP certificate", '[press] icon up (usb)', '[request] press asked: signing (the CLI) - code 2 4 2', '[press] code shows: signing (the CLI) - buttons 2 4 2',
+    '[request] press done: signing (the CLI) - answered', '[press] icon down',
+    "[edge] press approved: sign the agent's PGP certificate", '[press] icon up (usb)', '[request] press asked: signing (the CLI) - code 1 1 3', '[press] code shows: signing (the CLI) - buttons 1 1 3');
   j.stop();
   assert.deepEqual(fails, []);
 });

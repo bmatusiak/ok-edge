@@ -14,6 +14,8 @@
  *   idle press sheet   a press sheet up IDLE_MS with no request in flight and no wait
  *   user state exposed a sheet still open KEY_GONE_MS after the key went (Brad, 2026-11-03: the agent identity's sheet stayed
  *                      up after the unplug - "the user state stays exposed, leaking private information")
+ *   press unapproved   a computer's press ("... (the CLI)") reached the key with no approval in the app before it (Brad,
+ *                      2026-11-03: "i press approve on the app, and then on the key, like edge")
  *   no code            the key wants a 3-button code and no sheet shows it within NO_SHEET_MS (a hard key's; the soft
  *                      key's own buttons take its presses)
  *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
@@ -49,6 +51,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let iconBackend = null; /* the key a press sheet was last shown for: usb (a hard key), embedded (the soft key) */
   const shownCodes = []; /* the codes sheets showed, with when */
   const openSheets = new Set(); /* the sheets open now, by title (opened: their first height after onShow; closed: their close) */
+  let approvalsOwed = 0; /* the computer's presses approved in the app and not yet asked of the key ([edge] press approved) */
   let wentInWait = false; /* a press sheet went while the key waited for this one press */
   let afterAnswer = null; /* since the key last answered a press: what it answered, the requests begun since (id -> {what, asked}) */
   const open = new Map(); /* timeline id -> what */
@@ -147,10 +150,16 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
       });
       return;
     }
+    if (/^\[edge\] press approved: /.test(l)) { approvalsOwed += 1; return; }
     /* the truth: what the lib asked of the key (src/requestLog.ts) */
     m = /^\[request\] press asked: (.*?)(?: - code ([1-6 ]+)| - a press)$/.exec(l);
     if (m) {
       waits(m[1]);
+      /* a computer's press: approved in the app first, one approval each */
+      if (/\(the CLI\)$/.test(m[1])) {
+        if (approvalsOwed > 0) approvalsOwed -= 1;
+        else fail(`press unapproved: the computer's press (${m[1]}) reached the key with no approval in the app before it`);
+      }
       /*
        * A CODE THE KEY WANTS IS ON THE SHEET (Brad, 2026-11-02: an agent sign's 5 2 3 reached him only through a terminal):
        * the host sheet says it ("[press] code shows ... - buttons d d d", HostChallengeSheet). Not on the soft key - there
