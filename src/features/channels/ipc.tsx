@@ -57,9 +57,10 @@ function useDesktopHost(): void {
      * messages.
      */
     const conv = createKeyConversation('A command on this computer (onlykey-js) is using your key');
-    const offConnected = bridge.on('okedge:computerConnected', ({connected: c}: {connected: boolean}) => {
+    const offConnected = bridge.on('okedge:computerConnected', ({connected: c, why}: {connected: boolean; why?: string | null}) => {
       setCli({connected: !!c});
-      conv.setConnected(!!c);
+      /* what the CLI says it is doing (its hello's why): its words, quoted, on the sheet while it holds the key */
+      conv.setConnected(!!c, why ? `onlykey-js on this computer: "${why}"` : undefined);
     });
     const offMessage = bridge.on('okedge:edgeMessage', ({id, message, from}: {id: number; message: unknown; from: string}) => {
       ioPulse('ipc');

@@ -58,6 +58,9 @@ export function afterComputer(fn: () => void): void {
 /* who: what holds it, in the person's words - the sheet's reason while its requests run */
 export function createComputerHold(isKeyWaiting?: () => Promise<boolean>, who = "A computer's command is using your key") {
   let held: {release: () => void; timer: ReturnType<typeof setTimeout> | null; since: number; task: () => void} | null = null;
+  /* the reason of the holds from now on (a newly connected computer's own words - keyConversation setConnected) */
+  let whoNow = who;
+  const setWho = (w: string) => { whoNow = w; };
   let holding: Promise<void> | null = null;
   function armRelease() {
     if (!held) return;
@@ -103,7 +106,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>, who = 
     holding = new Promise<void>(ready => {
       const conversation = () => new Promise<void>(release => {
         /* the computer's requests while it holds the key, on the "Working with your key" sheet (keyBusy): who is using it */
-        held = {release, timer: null, since: Date.now(), task: beginKeyTask(who)};
+        held = {release, timer: null, since: Date.now(), task: beginKeyTask(whoNow)};
         heldFrom = Date.now();
         conversing = true;
         console.log('[hold] the computer holds the key');
@@ -124,5 +127,5 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>, who = 
     mine.catch(() => { if (holding === mine) holding = null; });
     return holding;
   }
-  return {armRelease, releaseHold, holdForComputer, isHeld: () => !!held};
+  return {armRelease, releaseHold, holdForComputer, isHeld: () => !!held, setWho};
 }

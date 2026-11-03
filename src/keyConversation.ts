@@ -23,7 +23,8 @@ const QUIET_MAX_MS = 3000;
 
 export type KeyConversation = {
   /** the computer's connection came (true) or went (false): the key is held for it, or let go */
-  setConnected(connected: boolean): void;
+  /* why: what the computer says this connection is for, in the person's words - its hold's reason on the sheet */
+  setConnected(connected: boolean, why?: string): void;
   /** answer one of its host messages: the hold is let go while answering one that uses the key, taken again after */
   answer<T>(fn: () => Promise<T>, usesKey?: boolean): Promise<T>;
   /** before one of its key writes: resolves once the key is the computer's (the session's pipe.beforeWrite) */
@@ -33,7 +34,7 @@ export type KeyConversation = {
 };
 
 /* who: what holds the key, said on the "Working with your key" sheet while its requests run (computerHold) */
-export function createKeyConversation(who?: string): KeyConversation {
+export function createKeyConversation(who = "A computer's command is using your key"): KeyConversation {
   const hold = createComputerHold(undefined, who);
   let connected = false;
   let answering = 0;
@@ -58,8 +59,9 @@ export function createKeyConversation(who?: string): KeyConversation {
       throw e;
     }));
   return {
-    setConnected(c) {
+    setConnected(c, why) {
       connected = !!c;
+      hold.setWho(why ?? who);
       if (connected && !answering) take().catch(() => undefined); /* said in take; its writes are refused */
       if (!connected) hold.releaseHold(' (the computer went away)');
     },
