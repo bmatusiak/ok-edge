@@ -1027,6 +1027,11 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const r = this.requests.find(x => x.id === id);
     if (!r) throw new Error(`edge: no request ${id}`);
     const reasonHash = receipts.messageHash(r.reason);
+    /*
+     * THE PRESS SAYS WHICH BUDGET (Brad, 2026-11-03: "what budget am i pressing for?"; the box's ship rehearsal failed the
+     * same sheet - "Edge: opening a budget" alone): its reason, and who asked, on the press sheet from the moment the key waits
+     */
+    require('./hostChallenge').expectPress(`Open the budget "${r.reason}"${r.from ? ` - asked by ${r.from}` : ''}`);
     const g = await this.edge.grant({
       verifiedHead: await this.verifiedHead(),
       scopes: r.scopes,

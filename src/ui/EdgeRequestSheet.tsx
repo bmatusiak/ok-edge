@@ -290,7 +290,13 @@ export function EdgeRequestSheet() {
             ) : null}
             {s.phase === 'press' ? (
               <>
-                <PressIcon />
+                {/*
+                  * ONE PRESS, ONE SHEET (box ship rehearsal, 2026-11-03: a budget's press on the USB key raised two press icons -
+                  * this sheet's and the key's own press sheet, which says what the press is for - and this one stayed up after
+                  * the key answered): a hard key's press is asked on its press sheet (HostChallengeSheet); here only the soft
+                  * key's, whose button this sheet holds.
+                  */}
+                {activeBackend() === 'usb' ? null : <PressIcon />}
                 <Text style={[styles.op, {color: theme.warn}]}>Press the key to confirm</Text>
                 {left !== null ? (
                   <Text style={[styles.countdown, left <= 15 && {color: theme.error}]}>{`Press within ${mmss(left)}`}</Text>
