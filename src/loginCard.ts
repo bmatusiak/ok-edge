@@ -126,7 +126,11 @@ export async function afterLogin(identity: string, device: string): Promise<void
 }
 
 /** Make it: the key certifies this device's card at a press; filed in the bucket and kept here. */
-export async function makeCard(): Promise<void> {
+export function makeCard(): Promise<void> {
+  /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+  return require('./keyBusy').keyTask(`Making this ${require('./platform').DEVICE_WORD}'s login card`, makeCardNow);
+}
+async function makeCardNow(): Promise<void> {
   const o = offer;
   if (!o) return;
   setOffer({...o, state: 'certifying'});

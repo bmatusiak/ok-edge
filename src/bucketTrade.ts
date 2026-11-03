@@ -47,7 +47,11 @@ export async function proofKept(identity: string): Promise<boolean> {
 }
 
 /* this device's bucket key and certificate for the open bucket's identity: kept sealed, or made once */
-async function ensureMe(): Promise<void> {
+/* under a login, the login's reason; alone (a trade's hello), its own (keyBusy weak) */
+function ensureMe(): Promise<void> {
+  return require('./keyBusy').keyTask("Making this device's bucket key for your server", ensureMeNow, {weak: true});
+}
+async function ensureMeNow(): Promise<void> {
   const open = tradeBucket();
   if (!open) { me = null; return; }
   if (me && me.id === open.identity) return;

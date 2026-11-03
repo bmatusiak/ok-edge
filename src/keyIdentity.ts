@@ -16,6 +16,7 @@ import {activeBackend} from './hooks/KeyContext';
 import {getOnlyKey} from './onlykey';
 import {setKeySite} from './serverRoom';
 import {keySiteRead} from './siteOrigin';
+import {keyTask} from './keyBusy';
 
 export type KeyIdentity =
   /* site: the key's own (ctap_bridge's) - its Edge and bucket are bound to it; null: it names none */
@@ -50,7 +51,11 @@ export function useKeyIdentity(): KeyIdentity | null {
  * Read the active key's bucket identity, Edge identity and nametag, and what this device holds of its bucket.
  * Kept as the latest read. `alive` stops it quietly when its screen is gone.
  */
-export async function readKeyIdentity(alive: () => boolean = () => true): Promise<KeyIdentity | null> {
+export function readKeyIdentity(alive: () => boolean = () => true): Promise<KeyIdentity | null> {
+  /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+  return keyTask('Checking which key this is: its identity and where it syncs', () => readKeyIdentityNow(alive));
+}
+async function readKeyIdentityNow(alive: () => boolean): Promise<KeyIdentity | null> {
   try {
     /*
      * A KEY JUST UNLOCKED IS STILL SETTLING (box, 2026-10-24): the hard key re-connects right after its unlock

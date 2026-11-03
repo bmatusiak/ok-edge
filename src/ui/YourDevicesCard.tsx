@@ -62,7 +62,8 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
       if (!soft) throw new Error('the key did not answer - is it unlocked?');
       /* the press says why (Brad, 2026-11-03: "the press sheet should always say why") - the key's certify of this name */
       const done = askPress(`Certify this ${DEVICE_WORD}'s nametag "${draft.trim()}" - your other devices will see this name`);
-      try { setOwn(await setNametag(soft, draft.trim())); } finally { done(); }
+      /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+      try { setOwn(await require('../keyBusy').keyTask(`Certifying this ${DEVICE_WORD}'s nametag`, () => setNametag(soft, draft.trim()))); } finally { done(); }
       setEditing(false);
     } catch (e: any) {
       setError(String(e?.message ?? e));

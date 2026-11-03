@@ -16,6 +16,7 @@ import {IDLE_END_HERE} from './platform';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {logOut} from './logOut';
+import {keyTask} from './keyBusy';
 
 declare const document: any;
 
@@ -83,7 +84,8 @@ async function expire(): Promise<void> {
     let late: ReturnType<typeof setTimeout> | null = null;
     try {
       await Promise.race([
-        (okcrypto as any).keySite({timeoutMs: CHECK_MS}),
+        /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+        keyTask(`Checking the key is still here after ${Math.round(IDLE_MS / 60000)} minutes with nothing done`, () => (okcrypto as any).keySite({timeoutMs: CHECK_MS})),
         new Promise((_, reject) => { late = setTimeout(() => reject(new Error(`no answer in ${CHECK_MS / 1000} s`)), CHECK_MS + 5000); }),
       ]);
     } finally {

@@ -249,7 +249,11 @@ let loggedIn: {identity: string; url: string; room: any} | null = null;
  * The room joined is this session's room (joinServerRoom takes it: the sealed copy syncs into this bucket). A server
  * that answered and refused the proof, or a key that did not sign, throws - the login fails, nothing checks in its place.
  */
-export async function logIn(identity: string, onPress?: () => void): Promise<'server' | null> {
+export function logIn(identity: string, onPress?: () => void): Promise<'server' | null> {
+  /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+  return require('./keyBusy').keyTask('Logging in to your server: proving this is your key', () => logInNow(identity, onPress));
+}
+async function logInNow(identity: string, onPress?: () => void): Promise<'server' | null> {
   const url = await serverUrl();
   if (!url) {
     if (shell === 'webapp') throw new Error('this page is not on the key\'s site - its server is the one to log in to');

@@ -27,6 +27,7 @@ import {activeBackend} from './hooks/KeyContext';
 import {shell} from './platform';
 import OkEmu from './transport/OkEmu';
 import {chainState, evaluate, loadMirror, ownEnd, takeOffline, type EdgeView} from './edgeStore';
+import {keyTask} from './keyBusy';
 import {keptRun} from './linkStash';
 /* keys whose shared records this app run has offered already (desktop) */
 const takenShared = new Set<string>();
@@ -372,7 +373,11 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   /* why the last open() gave null: 'no-pin' (locked), 'none' (no answer in time), anything else (no Edge) - for a screen that must SAY which */
   static lastProbe: string | null = null;
 
-  static async open(): Promise<SoftKeyEdge | null> {
+  /* a layer under the tasks (a login, the Edge tab, an agent's request): its reason only when it runs alone (keyBusy weak) */
+  static open(): Promise<SoftKeyEdge | null> {
+    return keyTask("Connecting to the key's Edge", () => SoftKeyEdge.openNow(), {weak: true});
+  }
+  private static async openNow(): Promise<SoftKeyEdge | null> {
     const backend = activeBackend();
     const app = await getOnlyKey(backend);
     /* 4 s: right after start the background sync's chain reads go first (lib client.js deviceIdentity, 2026-10-04) */

@@ -79,18 +79,26 @@ export const viaTunnel = () => tunnelSeen;
  * that begins while it runs is said with it. Tasks can overlap (one waits for the key's lane while another's request is
  * on it), so the sheet names every task running, not one picked for the request.
  */
-const tasks = new Map<number, string>();
+/*
+ * weak: a reason of a layer under the tasks (opening the key's Edge, which a login and the Edge tab both do) - said only
+ * when no other task runs, so a login's open reads "Logging in", not "2 things: Logging in · Connecting to Edge".
+ */
+const tasks = new Map<number, {why: string; weak: boolean}>();
 let taskSeq = 0;
-export async function keyTask<T>(why: string, fn: () => Promise<T>): Promise<T> {
+export async function keyTask<T>(why: string, fn: () => Promise<T>, opts: {weak?: boolean} = {}): Promise<T> {
   const id = ++taskSeq;
-  tasks.set(id, why);
+  tasks.set(id, {why, weak: !!opts.weak});
   try {
     return await fn();
   } finally {
     tasks.delete(id);
   }
 }
-const whyNow = (): string[] => [...new Set(tasks.values())];
+const whyNow = (): string[] => {
+  const all = [...tasks.values()];
+  const strong = all.filter(t => !t.weak);
+  return [...new Set((strong.length ? strong : all).map(t => t.why))];
+};
 /* the reasons of the request in progress, taken at its begin (a task that ends while the request runs is still its reason) */
 let beganWhy: {id: number; why: string[]} = {id: -1, why: []};
 

@@ -172,7 +172,8 @@ export async function ownerKey(soft?: {ownerKeys(): Promise<{ownerKey: Uint8Arra
      */
     const src = soft ?? await require('./edgeSoftKey').SoftKeyEdge.open();
     if (!src) return null;
-    const o = await src.ownerKeys();
+    /* once a session; under a task, the task's reason (keyBusy weak) */
+    const o = await require('./keyBusy').keyTask("Reading your key's owner keys (once a session)", () => src.ownerKeys(), {weak: true});
     if (o.ownerKey?.length !== 64 || !o.ownerKeyPq?.length) return null;
     owners.set(dev, o);
     return o;

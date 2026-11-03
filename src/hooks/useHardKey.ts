@@ -309,7 +309,8 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
     setBusy(true);
     try {
       const {device: dev} = await getOnlyKey('usb');
-      const result = await dev.connect();
+      /* under a task, the task's reason; alone, its own (keyBusy weak) */
+      const result = await require('../keyBusy').keyTask('Connecting to your key', () => dev.connect(), {weak: true});
       connectedUnlocked.current = /^UNLOCKED/.test(String(result.status ?? '').trim());
       log('info', `OKCONNECT -> "${String(result.status ?? '').trim()}"`);
       console.log(`[hardkey] OKCONNECT ok: ${JSON.stringify(String(result.status ?? '').trim())}`);
