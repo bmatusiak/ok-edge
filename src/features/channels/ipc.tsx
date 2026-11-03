@@ -23,7 +23,8 @@ import {DESKTOP_FROM, handleEdgeMessage} from '../../edgeAgents';
 import {desktop} from '../../platform';
 import {createKeyConversation} from '../../keyConversation';
 import {ioPulse} from '../../btActivity';
-import {keyGone, noteEdgeRequest, noteTunnel} from '../../keyBusy';
+import {keyGone, noteEdgeRequest, noteTunnel, whatOf} from '../../keyBusy';
+import {computerAsks} from '../../hostChallenge';
 import {sayPress} from '../../requestLog';
 import {theme} from '../../ui/theme';
 import {Btn, Section} from '../../ui/components';
@@ -80,11 +81,17 @@ function useDesktopHost(): void {
      * sheet): the CLI says each request's progress (node-onlykey-lib cli/transport-desktop.js tell), and it is shown as this
      * app's own - the progress, then "Press your OnlyKey" while the key waits. A CLI gone mid-request takes its sheet.
      */
+    /* the CLI's press on the code sheet: its code shown while the key waits, cleared when it is done or the CLI goes */
+    let cliAsk: (() => void) | null = null;
+    const cliDone = () => { if (cliAsk) { cliAsk(); cliAsk = null; } };
     const offBusy = bridge.on('okedge:computerBusy', ({kind, e}: {kind: string; e: any}) => {
-      if (kind === 'press') sayPress(e, 'the CLI');
-      else if (kind === 'tunnel') noteTunnel({...e, via: 'direct'});
+      if (kind === 'press') {
+        sayPress(e, 'the CLI');
+        cliDone();
+        if (e.phase === 'asked') cliAsk = computerAsks(`${whatOf(e.msg, e.slot)} (the CLI)`, e.code);
+      } else if (kind === 'tunnel') noteTunnel({...e, via: 'direct'});
       else if (kind === 'edge') noteEdgeRequest(e);
-      else keyGone();
+      else { cliDone(); keyGone(); }
     });
     return () => { offConnected(); offMessage(); offTalks(); offBusy(); conv.stop(' (the desktop host stopped)'); };
   }, []);

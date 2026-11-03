@@ -49,6 +49,31 @@ test('no press sheet for a CLI\'s press through the desktop app (its code said)'
   assert.match(fails[0] || '', /^no press sheet.*signing \(the CLI\)/);
 });
 
+test('no code: an agent sign wants 5 2 3 and the sheet that shows says only "press" - the Pi login', async () => {
+  const { j, fails, say } = judge();
+  say('[request] press asked: signing (the CLI) - code 5 2 3', '[press] icon up (usb)');
+  await wait(NO_SHEET_MS + 200);
+  j.stop();
+  assert.equal(fails.length, 1);
+  assert.match(fails[0], /^no code: the key wants 5 2 3/);
+});
+
+test('a code the sheet shows (even a moment before the lib\'s line) passes', async () => {
+  const { j, fails, say } = judge();
+  say('[press] icon up (usb)', '[press] code shows: deriving a secret - buttons 3 3 5', '[request] press asked: deriving a secret - code 3 3 5');
+  await wait(NO_SHEET_MS + 200);
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
+test('the soft key\'s code is its own buttons\' - not asked of a sheet', async () => {
+  const { j, fails, say } = judge();
+  say('[press] icon up (embedded)', '[request] press asked: signing - code 1 2 3');
+  await wait(NO_SHEET_MS + 200);
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
 test('stale press sheet: the key answered and the sheet stays - the login on Windows', async () => {
   const { j, fails, say } = judge();
   say('[press] key waits: Open this identity\'s bucket - buttons any', '[press] icon up (usb)', `[timeline] 1 begin #10 ${BUDGET}`,
@@ -75,7 +100,7 @@ test('a new press asked after an answer is not a stale sheet (a derive\'s code a
   const { j, fails, say } = judge();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)');
   await wait(100);
-  say(`[request] press done: ${BUDGET} - answered`, '[request] press asked: deriving a secret - code 3 3 5');
+  say(`[request] press done: ${BUDGET} - answered`, '[request] press asked: deriving a secret - code 3 3 5', '[press] code shows: deriving a secret - buttons 3 3 5');
   await wait(STALE_MS + 200);
   j.stop();
   assert.deepEqual(fails, []);

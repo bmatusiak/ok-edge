@@ -65,6 +65,19 @@ export function askPress(what: string): () => void {
   };
 }
 
+/*
+ * A COMPUTER'S PRESS, ON THIS APP'S SHEET (Brad, 2026-11-02: red-key's 3-button code for an `onlykey-js agent` sign
+ * reached him only through the agent's terminal - the CLI asks the key through this app, so this app shows the code as
+ * it shows its own): the CLI's "press asked" (node-onlykey-lib desktop link, src/features/channels/ipc.tsx) with its code,
+ * or none for a plain press; the returned function clears it at "press done" or when the CLI goes.
+ */
+export function computerAsks(what: string, code: string | null | undefined): () => void {
+  const digits = code ? code.split(' ').map(Number).filter(d => d >= 1 && d <= 6) : [];
+  const mine: HostChallenge = {digits, what};
+  set(mine);
+  return () => { if (current === mine) set(screenAsk); };
+}
+
 export function challengeOpts(what: string): {opts: {confirm: (a: {digits?: number[]}) => void}; done: () => void} {
   let mine: HostChallenge | null = null;
   return {

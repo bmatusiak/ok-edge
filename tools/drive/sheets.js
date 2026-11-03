@@ -12,6 +12,8 @@
  *   stale press sheet  the key answered and the press sheet is still up STALE_MS later, with no new wait
  *   no progress        requests still run NO_PROGRESS_MS after a press and no progress sheet shows
  *   idle press sheet   a press sheet up IDLE_MS with no request in flight and no wait
+ *   no code            the key wants a 3-button code and no sheet shows it within NO_SHEET_MS (a hard key's; the soft
+ *                      key's own buttons take its presses)
  *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
  * The lines it reads: "[request] press asked: <what> - code d d d|a press" and "[request] press done: <what> -
  * answered|no answer" (the truth), "[press] icon up|down" (src/ui/PressIcon.tsx - on every press sheet, nowhere else),
@@ -41,6 +43,8 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
   let progressWhat = '';
   let waitWhat = null; /* the key waits for a press now: what for */
   let waitsSeen = 0; /* waits begun - a later answer checks that none came after it */
+  let iconBackend = null; /* the key a press sheet was last shown for: usb (a hard key), embedded (the soft key) */
+  const shownCodes = []; /* the codes sheets showed, with when */
   const open = new Map(); /* timeline id -> what */
   const timers = new Set();
   const heights = new Map(); /* title -> change times */
@@ -92,7 +96,7 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
 
   function line(raw) {
     const l = String(raw);
-    if (/^\[press\] icon up/.test(l)) { icons += 1; changed(); return; }
+    if (/^\[press\] icon up/.test(l)) { icons += 1; iconBackend = (/\((\w+)\)/.exec(l) || [])[1] || iconBackend; changed(); return; }
     if (/^\[press\] icon down/.test(l)) { icons = Math.max(0, icons - 1); changed(); return; }
     let m = /^\[sheet\] progress up: ?(.*)$/.exec(l);
     if (m) { progress = true; progressWhat = m[1]; changed(); return; }
@@ -113,8 +117,28 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
       return;
     }
     /* the truth: what the lib asked of the key (src/requestLog.ts) */
-    m = /^\[request\] press asked: (.*?)(?: - code [1-6 ]+| - a press)$/.exec(l);
-    if (m) { waits(m[1]); return; }
+    m = /^\[request\] press asked: (.*?)(?: - code ([1-6 ]+)| - a press)$/.exec(l);
+    if (m) {
+      waits(m[1]);
+      /*
+       * A CODE THE KEY WANTS IS ON THE SHEET (Brad, 2026-11-02: an agent sign's 5 2 3 reached him only through a terminal):
+       * the host sheet says it ("[press] code shows ... - buttons d d d", HostChallengeSheet). Not on the soft key - there
+       * the app is the key and its own buttons take the press (PressSheet).
+       */
+      if (m[2] && iconBackend !== 'embedded') {
+        const code = m[2].trim();
+        const what = m[1];
+        const asked = now();
+        later(NO_SHEET_MS, () => {
+          /* shown with it - the app's own code can show a moment before the lib's line */
+          const seen = shownCodes.some((s) => s.code === code && s.t >= asked - NO_SHEET_MS);
+          if (waitWhat === what && !seen) fail(`no code: the key wants ${code} (${what}) and no sheet shows it after ${NO_SHEET_MS / 1000} s`);
+        });
+      }
+      return;
+    }
+    m = /^\[press\] code shows: .* - buttons ([1-6 ]+)$/.exec(l);
+    if (m) { shownCodes.push({ code: m[1].trim(), t: now() }); if (shownCodes.length > 20) shownCodes.shift(); return; }
     m = /^\[request\] press done: (.*) - (answered|no answer)$/.exec(l);
     if (m) { answered(m[1]); return; }
     m = /^\[timeline\] \d+ (begin|end) #(\d+) (.*?)(?: steps=\d+ (ok|failed.*))?$/.exec(l);
