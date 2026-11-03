@@ -111,7 +111,8 @@ function ApprovedBudget({grantId}: {grantId: number}) {
       if (!source || !alive) return;
       const live = await source.budgets(true).catch(() => [] as EdgeBudget[]);
       const now = live.find(x => x.grantId === grantId);
-      const b = now ?? (await source.pastBudgets().catch(() => [] as EdgeBudget[])).find(x => x.grantId === grantId);
+      /* the head last read, not a new read: this redraws on every check (2026-11-03: one head read per sync, for a card) */
+      const b = now ?? (await source.pastBudgets(true).catch(() => [] as EdgeBudget[])).find(x => x.grantId === grantId);
       if (alive && b) setCard({b, live: !!now, view: chainState.current(source.deviceId)?.view ?? null});
     };
     void load();

@@ -702,8 +702,9 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * revoked or ended; every use spent), else from the clock (past its lifetime),
    * else the key lost it with a lock or restart (budgets live in RAM).
    */
-  async pastBudgets(): Promise<EdgeBudget[]> {
-    const h = await this.keyHead();
+  /* useLastHead: the head last read from the key (a card redrawn on every check - EdgeRequestSheet), not a read of its own */
+  async pastBudgets(useLastHead = false): Promise<EdgeBudget[]> {
+    const h = useLastHead && this.sameHead ? this.sameHead.raw : await this.keyHead();
     return this.historyOf(toHex(this.deviceId), await this.mirrorNow(), new Set(h.live as number[]));
   }
 

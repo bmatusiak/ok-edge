@@ -477,7 +477,7 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
       show({
         phase: 'done',
         ask: asked,
-        result: r.ok ? {ok: true, text: `Budget ${r.budget.grantId} is open: ${r.budget.uses} use${r.budget.uses === 1 ? '' : 's'} for ${msg.lifetime} minute${msg.lifetime === 1 ? '' : 's'}`, grantId: r.budget.grantId} : r,
+        result: r.ok ? {ok: true, text: `Budget ${r.budget.grantId} opened: ${r.budget.uses} use${r.budget.uses === 1 ? '' : 's'} for ${msg.lifetime} minute${msg.lifetime === 1 ? '' : 's'}`, grantId: r.budget.grantId} : r,
       });
     }
     return r;
