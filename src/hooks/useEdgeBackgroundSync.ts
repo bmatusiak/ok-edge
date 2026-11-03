@@ -38,6 +38,7 @@ import {chainState, loadMirror, type ChainAnswer} from '../edgeStore';
 import {createWatchRound} from '../edgeWatchRound';
 import {beat, onHoldRequested, onWatchTick, raiseWatchAlarms, takeHoldRequest, watching} from '../edgeAlerts';
 import {SoftKeyEdge} from '../edgeSoftKey';
+import {keyTask} from '../keyBusy';
 import {hasSoftKeyPlugin} from '../buildInfo';
 import {getOnlyKey} from '../onlykey';
 import {transport as oktransport} from 'node-onlykey-lib';
@@ -111,7 +112,7 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
       pending = false;
       try {
         source = await SoftKeyEdge.open(); /* null: locked, or no Edge */
-        if (source && alive) await round.run();
+        if (source && alive) await keyTask("Keeping this device's copy of the key's chain up to date", () => round.run());
       } catch (e) {
         const why = errText(e);
         /*

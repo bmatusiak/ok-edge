@@ -34,7 +34,7 @@ export function KeyBusySheet() {
   useEffect(() => {
     if (progressUp === wasUp.current) return;
     wasUp.current = progressUp;
-    console.log(progressUp ? `[sheet] progress up: ${b?.what ?? ''}` : '[sheet] progress down');
+    console.log(progressUp ? `[sheet] progress up: ${b?.what ?? ''} - why: ${b?.why.length ? b.why.join(' + ') : '(not named)'}` : '[sheet] progress down');
   }, [progressUp, b]);
   /* a host's press sheet (HostChallengeSheet) is on top while the key waits for its press - the rest is this one's progress (Brad, 2026-11-01) */
   if (!b || hostSheetShows(c, b)) return null;
@@ -51,11 +51,14 @@ export function KeyBusySheet() {
   const pct = Math.min(100, Math.round((100 * b.step) / b.steps));
   /* the step in progress, counted from 1 (the bar fills by the steps done) */
   const step = `This request: step ${b.done ? b.steps : Math.min(b.step + 1, b.steps)} of ${b.steps}`;
+  /* what the work is for, first (Brad, 2026-11-03: "why is it working with my key?") - every task running, when they overlap */
+  const why = b.why.length === 1 ? b.why[0] : b.why.length > 1 ? `${b.why.length} things: ${b.why.join(' · ')}` : null;
   return (
     <Sheet title={b.asks ? 'Press your OnlyKey' : 'Working with your key'} countdown={pressSince !== null ? {since: pressSince, seconds: 25}
       /* the request's own limit while it runs (Brad, 2026-11-01: the sheet sat "just inactive" while a read hung 30 s; "if it has a timer it gets a timer progress bar") */
       : !b.done && b.limitMs ? {since: b.since, seconds: Math.max(1, Math.round(b.limitMs / 1000))} : null}>
       {b.asks ? <PressIcon /> : null}
+      {why ? <Text style={styles.why}>{why}</Text> : null}
       <Text style={styles.counts}>{queue.join(' · ')}</Text>
       <View style={styles.track}>
         <View style={[styles.fill, {width: `${queuePct}%`}]} />
@@ -77,6 +80,7 @@ export function KeyBusySheet() {
 }
 
 const styles = StyleSheet.create({
+  why: {color: theme.text, fontSize: 16, fontWeight: '600', marginBottom: 12},
   what: {color: theme.text, fontSize: 16, marginBottom: 12},
   track: {height: 8, borderRadius: 4, backgroundColor: theme.border, overflow: 'hidden'},
   fill: {height: 8, borderRadius: 4, backgroundColor: theme.accent},

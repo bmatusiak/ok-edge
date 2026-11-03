@@ -13,6 +13,7 @@ import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, typ
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {onKeyFree} from '../computerHold';
 import {onBucketTraded} from '../bucketEvents';
+import {keyTask} from '../keyBusy';
 import {hasSoftKeyPlugin} from '../buildInfo';
 import {useBackend} from './KeyContext';
 import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, lookable, offlineView, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
@@ -94,7 +95,7 @@ export function useEdge() {
    * this host holds - the copy checked at its newest checkpoint, the head last seen (SoftKeyEdge.beginRun offline). The
    * copy check is the look's own verdict, not a read of the key's head. An action's run reads the key, once.
    */
-  const run = useCallback(async (work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean} = {}) => {
+  const runNow = useCallback(async (work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean} = {}) => {
     setBusy(true);
     setError(null);
     /* how long each part of an action takes, for the log (Brad, 2026-10-06: presses lag) - times only, nothing sensitive */
@@ -175,9 +176,17 @@ export function useEdge() {
       setBusy(false);
     }
   }, [source]);
+  /*
+   * EVERY RUN SAYS WHAT IT IS FOR (Brad, 2026-11-03: "why is it working with my key?"): the "Working with your key" sheet
+   * names the task (keyBusy keyTask) - each action its own words (runFor), a refresh with no words of its own the default.
+   */
+  const run = useCallback((work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean; why?: string} = {}) =>
+    keyTask(opts.why ?? "Edge: refreshing this device's view of the key's chain", () => runNow(work, opts)), [runNow]);
+  const runFor = useCallback((why: string, work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean} = {}) =>
+    run(work, {...opts, why}), [run]);
 
   /** B1: HEAD, READ what is new, store, verify everything - after this app's own key action. */
-  const sync = useCallback(() => run(async s => (await syncMirror(s)).view), [run]);
+  const sync = useCallback(() => runFor("Bringing this device's copy of the key's chain up to date", async s => (await syncMirror(s)).view), [runFor]);
   /** A look: the copy as this host holds it, checked offline (source() took any log a trade brought) - no key. */
   const look = useCallback(async () => {
     const s = await source();
@@ -186,8 +195,8 @@ export function useEdge() {
       console.log('[edge] look: this copy holds no checkpoint of the key yet - one sync reads it');
       return sync();
     }
-    return run(k => offlineView(k as unknown as Parameters<typeof offlineView>[0]), {offline: true});
-  }, [run, sync, source]);
+    return runFor("Looking at this device's copy of the key's chain", k => offlineView(k as unknown as Parameters<typeof offlineView>[0]), {offline: true});
+  }, [runFor, sync, source]);
   /* a merge or a nametag change (edgeDevices): your other devices' cards and logs are read again at once - no pull needed */
   useEffect(() => {
     if (!wantReal) return undefined;
@@ -203,19 +212,19 @@ export function useEdge() {
    * The Sync button: a full check from the root (Brad, 2026-10-06) - this session's
    * remembered results are dropped first. Pull-down, presses and a computer letting the key go use sync.
    */
-  const fullSync = useCallback(() => run(async s => {
+  const fullSync = useCallback(() => runFor("Checking this device's whole copy of the key's chain (Sync)", async s => {
     forgetVerifiedFor(s.deviceId);
     (s as unknown as {edge?: {grants?: {forget?: () => void}}}).edge?.grants?.forget?.();
     return (await syncMirror(s)).view;
-  }), [run]);
+  }), [runFor]);
   /** Verify the stored copy against the live head WITHOUT reading - shows an edited copy as it is. */
-  const verify = useCallback(() => run(async s => (await chainState.validity(s)).view), [run]);
+  const verify = useCallback(() => runFor("Checking this device's copy against the key", async s => (await chainState.validity(s)).view), [runFor]);
   const tamper = useCallback(
-    (how: Tamper) => run(async s => {
+    (how: Tamper) => runFor("Testing: changing this device's copy", async s => {
       const m = await tamperMirror(s.deviceId, how);
       return m.links.length ? liveView(s, m) : evaluate(m, null);
     }),
-    [run],
+    [runFor],
   );
   /*
    * BLOCKS (BLOCKS.md, Brad 2026-10-07): this key's copy as canonical JSON blocks,
@@ -254,7 +263,7 @@ export function useEdge() {
     setStopping(true);
     const t = Date.now();
     console.log(`[edge] ${what} tapped (budget ${grantId})`);
-    return run(async s => {
+    return runFor(`${what === 'hold' ? 'Holding' : 'Revoking'} budget ${grantId}`, async s => {
       await act(s);
       console.log(`[edge] ${what} on the key ${Date.now() - t} ms after the tap`);
       return (await syncMirror(s)).view;
@@ -262,76 +271,76 @@ export function useEdge() {
       stoppingRef.current = false;
       setStopping(false);
     });
-  }, [run]);
+  }, [runFor]);
   const revoke = useCallback((grantId: number) => stop('revoke', grantId, async s => { await s.revoke(grantId); }), [stop]);
   /* the clasp: Yes sends the request; the key waits for the press; then it is live */
-  const approve = useCallback((id: number) => run(async s => {
+  const approve = useCallback((id: number) => runFor('Opening the budget you approved', async s => {
     try {
       await s.approve(id, () => setPressFor(`r${id}`));
     } finally {
       setPressFor(null);
     }
     return (await syncMirror(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* R15a: hold needs no press; resume runs the copy check, then waits for one */
   const hold = useCallback((grantId: number) => stop('hold', grantId, async s => { await s.hold?.(grantId); }), [stop]);
-  const resume = useCallback((grantId: number) => run(async s => {
+  const resume = useCallback((grantId: number) => runFor(`Resuming budget ${grantId}`, async s => {
     try {
       await s.resume?.(grantId, () => setPressFor(`resume:${grantId}`));
     } finally {
       setPressFor(null);
     }
     return (await syncMirror(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* R18: the person's Yes on screen first (EdgeScreen), then the press */
-  const settle = useCallback(() => run(async s => {
+  const settle = useCallback(() => runFor('Settling what the key is owed', async s => {
     try {
       await s.settle?.(() => setPressFor('settle'));
     } finally {
       setPressFor(null);
     }
     return (await syncMirror(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* Continue: a request for what is left; then Approve is the usual Yes and press */
-  const continueBudget = useCallback((grantId: number) => run(async s => {
+  const continueBudget = useCallback((grantId: number) => runFor(`Continuing budget ${grantId}`, async s => {
     await s.continueBudget?.(grantId);
     return (await chainState.validity(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* 4.7a: an ended AGENT budget only goes away - the agent continues it, not the tab */
-  const dismissEnded = useCallback((grantId: number) => run(async s => {
+  const dismissEnded = useCallback((grantId: number) => runFor(`Putting away ended budget ${grantId}`, async s => {
     await s.dismissEnded?.(grantId);
     return (await chainState.validity(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* R24 / the red banner: Yes on screen, then the press; the key links LOSS {from, to} */
-  const acceptLoss = useCallback((from: number, to: number) => run(async s => {
+  const acceptLoss = useCallback((from: number, to: number) => runFor(`Accepting links #${from}-#${to} as lost`, async s => {
     try {
       await s.acceptLoss?.(from, to, () => setPressFor('loss'));
     } finally {
       setPressFor(null);
     }
     return (await syncMirror(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* testing mode: a sign the open testing budget pays, and its receipt (SoftKeyEdge.budgetSign) */
-  const budgetSign = useCallback(() => run(async s => {
+  const budgetSign = useCallback(() => runFor("Testing: a sign paid by a budget", async s => {
     const k = s as Source & {budgetSign?: (t: string) => Promise<{grantId: number; seq: number; paid: boolean}>};
     const r = await k.budgetSign?.('sign');
     if (r) console.log(`[edge] testing sign #${r.seq}: ${r.paid ? `paid by budget ${r.grantId}` : 'NOT paid by the budget'}, receipt filed`);
     return (await syncMirror(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* testing mode: an agent's pressed sign with no receipt (soft key only) */
-  const agentSign = useCallback(() => run(async s => {
+  const agentSign = useCallback(() => runFor("Testing: an agent's sign", async s => {
     const k = s as Source & {agentSign?: (t: string) => Promise<void>};
     await k.agentSign?.('sign');
     return (await syncMirror(s)).view;
-  }), [run]);
+  }), [runFor]);
   const press = useCallback(async () => {
     const s = await source();
     await s?.press();
   }, [source]);
-  const decline = useCallback((id: number) => run(async s => {
+  const decline = useCallback((id: number) => runFor('Declining a budget request', async s => {
     await s.decline(id);
     return (await chainState.validity(s)).view;
-  }), [run]);
+  }), [runFor]);
   /* the tab opens: a look (B1) - the key is asked by the actions, and by the Sync button */
   useEffect(() => {
     void look();

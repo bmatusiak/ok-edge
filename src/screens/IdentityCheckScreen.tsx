@@ -30,6 +30,7 @@ import {IdentityCard} from '../ui/IdentityCard';
 import {getOnlyKey} from '../onlykey';
 import {activeBackend} from '../hooks/KeyContext';
 import {setDriveFlag} from '../drive/registry';
+import {keyTask} from '../keyBusy';
 
 /*
  * THE KEY NAMES ANOTHER SITE (Brad, 2026-10-29: "if i go to apps.crp.to, it reads my key and sees i use a private mcp, it
@@ -208,8 +209,9 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
    * already keeps its bucket opened (the desktop after its first open) - the app opens by itself. Once per read.
    */
   useEffect(() => {
-    if (read.kind === 'read' && read.bucket === 'sealed' && keptSession()) { void continueKept(); return; }
-    if (read.kind === 'read' && read.bucket === 'kept') void continueAndOpen();
+    /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+    if (read.kind === 'read' && read.bucket === 'sealed' && keptSession()) { void keyTask("Logging in: opening your bucket with this tab's kept login", continueKept); return; }
+    if (read.kind === 'read' && read.bucket === 'kept') void keyTask('Logging in: opening your bucket', continueAndOpen);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [read]);
 
@@ -267,7 +269,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
           title={open.kind === 'failed' ? 'Try again' : action}
           /* on a page that is not the key's own site, the way to the key's site is the main action (apps.crp.to as the shorthand for a private MCP) */
           tone={read.kind === 'read' && wrongSite(read.site) ? undefined : 'primary'}
-          onPress={() => void continueAndOpen()}
+          onPress={() => void keyTask('Logging in: opening your bucket', continueAndOpen)}
           disabled={read.kind === 'checking' || open.kind === 'opening' || open.kind === 'press'}
         />
       </View>

@@ -23,6 +23,7 @@ import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {addNote, sync as syncCopy} from './edgeStore';
 import {afterComputer} from './computerHold';
+import {keyTask} from './keyBusy';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
@@ -422,7 +423,10 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
      */
     /* the copy first brought up to the key's head: links made since the last sync (a register, a direct ssh use) are not a gap */
     /* the copy brought to the key's head once, here (Brad, 2026-10-06: it synced twice before the sheet) */
-    await syncCopy(soft).catch(() => undefined);
+    const s0 = soft;
+    /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+    const forAsk = `Getting ${computer.name}'s budget request ready for you`;
+    await keyTask(forAsk, () => syncCopy(s0)).catch(() => undefined);
     step('sync');
     /*
      * THE GATE, NOT THE WHOLE COPY (Brad, 2026-11-01: "verify the WHOLE copy takes a lot of time for the webapp ...
@@ -430,7 +434,7 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
      * Edge here - no proof of its head and no card token within its reach (SoftKeyEdge.gate). The copy's own verdict is the
      * Edge tab's history, which marks what does not verify.
      */
-    const gate: any = await soft.gate().catch((e: unknown) => ({ok: false, reason: String(e)}));
+    const gate: any = await keyTask(forAsk, () => s0.gate()).catch((e: unknown) => ({ok: false, reason: String(e)}));
     step('gate');
     const blocked = gate.ok
       ? null
@@ -438,7 +442,7 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
     let asked: SheetAsk | null = null;
     /* why the plan's claim was refused at Approve (another device was first), shown as the sheet's end */
     let notClaimed: string | null = null;
-    const r: any = await soft.answerAgent(msg, {
+    const r: any = await keyTask(`${computer.name}'s budget request`, () => s0.answerAgent(msg, {
       seen,
       from: computer.name,
       computer: computer.id,
@@ -457,9 +461,9 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
         return a;
       },
       onPress: () => asked && show({phase: 'press', ask: asked, until: Date.now() + PRESS_WAIT_MS}),
-    });
+    }));
     if (r.dropped) return null;
-    if (r.ok) await syncCopy(soft).catch(() => undefined); /* the opening link, into the tab's copy */
+    if (r.ok) await keyTask(`Taking in the budget ${computer.name} just opened`, () => syncCopy(s0)).catch(() => undefined); /* the opening link, into the tab's copy */
     if (asked && planAsk && withdrawnPlan === planAsk.plan) {
       withdrawnPlan = null;
       show(null);

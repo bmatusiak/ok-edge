@@ -49,6 +49,12 @@ export type KeyBusy = {
   /* when this request began, and how long the key is given to answer it - the sheet counts it down (null: not said) */
   since: number;
   limitMs: number | null;
+  /*
+   * WHY THE KEY IS BUSY (Brad, 2026-11-03: "the Working with your key sheet is not descriptive ... its only telling the
+   * user what the action of a task, but no task title - why is it working with my key?"): the tasks using the key when
+   * this request began (keyTask) - one, said as it is; two that overlap, both, never one guessed for the other; none, [].
+   */
+  why: string[];
 };
 type TunnelEvent = {phase: 'begin' | 'plan' | 'step' | 'answered' | 'end'; id: number; msg: number; slot: number; step: number; steps: number; waiting?: number; ok?: boolean; via?: 'tunnel' | 'direct'; limitMs?: number | null; pressAt?: number; answered?: boolean; error?: string};
 /* the request in progress: when it began and its limit (said at its begin) */
@@ -66,6 +72,27 @@ const saidPressed = new Set<number>();
  */
 let tunnelSeen = false;
 export const viaTunnel = () => tunnelSeen;
+
+/*
+ * THE TASKS USING THE KEY NOW (keyTask): what the sheet says the work is for. A task is the app's reason in the person's
+ * words ("Bringing this computer's copy of the chain up to the key"), set by the code that starts the work - each request
+ * that begins while it runs is said with it. Tasks can overlap (one waits for the key's lane while another's request is
+ * on it), so the sheet names every task running, not one picked for the request.
+ */
+const tasks = new Map<number, string>();
+let taskSeq = 0;
+export async function keyTask<T>(why: string, fn: () => Promise<T>): Promise<T> {
+  const id = ++taskSeq;
+  tasks.set(id, why);
+  try {
+    return await fn();
+  } finally {
+    tasks.delete(id);
+  }
+}
+const whyNow = (): string[] => [...new Set(tasks.values())];
+/* the reasons of the request in progress, taken at its begin (a task that ends while the request runs is still its reason) */
+let beganWhy: {id: number; why: string[]} = {id: -1, why: []};
 
 const SHOW_AFTER_MS = 250;
 /*
@@ -177,7 +204,10 @@ export function keyGone() {
 }
 
 export function noteTunnel(e: TunnelEvent) {
-  if (e.phase === 'begin') timeline(`begin #${e.id} ${whatOf(e.msg, e.slot)}`);
+  if (e.phase === 'begin') {
+    beganWhy = {id: e.id, why: whyNow()};
+    timeline(`begin #${e.id} ${whatOf(e.msg, e.slot)} - why: ${beganWhy.why.length ? beganWhy.why.join(' + ') : '(not named)'}`);
+  }
   if (e.phase === 'end') timeline(`end #${e.id} ${whatOf(e.msg, e.slot)} steps=${e.step} ${e.ok ? 'ok' : `failed${e.error ? ` - ${e.error}` : ''}`}`);
   /* the key answered: activity for the idle timer (src/idleTimer.ts - "if the key is detected as still responding") */
   if (e.phase === 'end' && e.ok) require('./idleTimer').touch('key');
@@ -207,6 +237,7 @@ export function noteTunnel(e: TunnelEvent) {
     /* the plan too: a one-packet request the key asks inside (pressAt one less) waits from the moment it is planned */
     delivered: (e.phase === 'step' || e.phase === 'plan') && e.step >= pressAt && !answered, done: false, via: e.via ?? 'tunnel',
     since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
+    why: beganWhy.id === e.id ? beganWhy.why : whyNow(),
   };
   if (e.phase === 'end') {
     keyAskDone?.();

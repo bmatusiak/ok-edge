@@ -17,6 +17,8 @@
  *   press unapproved   a computer's press ("... (the CLI)") reached the key with no approval in the app before it (Brad,
  *                      2026-11-03: "i press approve on the app, and then on the key, like edge")
  *   press without why  a press sheet (a key on USB) that says only the request's name, not what the press is for
+ *   progress without why the "Working with your key" sheet up with no task named - the step alone, not what the work is
+ *                      for (Brad, 2026-11-03: "its only telling the user what the action of a task, but no task title")
  *   no code            the key wants a 3-button code and no sheet shows it within NO_SHEET_MS (a hard key's; the soft
  *                      key's own buttons take its presses)
  *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
@@ -128,7 +130,14 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
     if (/^\[press\] icon up/.test(l)) { icons += 1; iconBackend = (/\((\w+)\)/.exec(l) || [])[1] || iconBackend; changed(); return; }
     if (/^\[press\] icon down/.test(l)) { icons = Math.max(0, icons - 1); if (!icons) afterAnswer = null; changed(); return; }
     let m = /^\[sheet\] progress up: ?(.*)$/.exec(l);
-    if (m) { progress = true; progressWhat = m[1]; changed(); return; }
+    if (m) {
+      progress = true;
+      /* "<step> - why: <tasks>" (KeyBusySheet): the step is what the other rules name; the tasks must be said */
+      progressWhat = m[1].replace(/ - why: .*$/, '');
+      if (/ - why: \(not named\)$/.test(m[1])) fail(`progress without why: the "Working with your key" sheet showed "${progressWhat}" and not what the work is for`);
+      changed();
+      return;
+    }
     if (/^\[sheet\] progress down/.test(l)) { progress = false; changed(); return; }
     m = /^\[sheet\] height (\d+): (.*)$/.exec(l);
     if (m) {

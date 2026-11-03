@@ -24,7 +24,7 @@ test('a press asked with its sheet, answered, the sheet gone, the progress after
   say(`[timeline] 1 begin #1 ${CERTIFY}`, `[request] press asked: ${CERTIFY} - a press`, '[press] icon up (usb)');
   await wait(200);
   say(`[request] press done: ${CERTIFY} - answered`, '[press] icon down', `[timeline] 2 end #1 ${CERTIFY} steps=2 ok`,
-    '[timeline] 3 begin #2 Edge: reading the chain head', '[sheet] progress up: Edge: reading the chain head');
+    '[timeline] 3 begin #2 Edge: reading the chain head', '[sheet] progress up: Edge: reading the chain head - why: Opening the budget you approved');
   await wait(NO_PROGRESS_MS + 200);
   say('[timeline] 4 end #2 Edge: reading the chain head steps=1 ok', '[sheet] progress down');
   j.stop();
@@ -238,4 +238,13 @@ test('idle press sheet: up with nothing asked of the key', { timeout: IDLE_MS + 
   j.stop();
   assert.equal(fails.length, 1);
   assert.match(fails[0], /^idle press sheet/);
+});
+
+test('a progress sheet that names no task fails: the step alone is not what the work is for', () => {
+  const { j, fails, say } = inspector();
+  say('[timeline] 1 begin #1 Edge: reading the chain head', '[sheet] progress up: Edge: reading the chain head - why: (not named)');
+  say('[timeline] 2 end #1 Edge: reading the chain head steps=1 ok', '[sheet] progress down');
+  say('[timeline] 3 begin #2 Edge: reading the chain head', "[sheet] progress up: Edge: reading the chain head - why: Bringing this device's copy of the key's chain up to date");
+  j.stop();
+  assert.deepEqual(fails, ['progress without why: the "Working with your key" sheet showed "Edge: reading the chain head" and not what the work is for']);
 });
