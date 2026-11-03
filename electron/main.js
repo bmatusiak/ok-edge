@@ -218,5 +218,18 @@ app.on('before-quit', (e) => {
   e.preventDefault();
   setTimeout(() => app.quit(), QUIT_FLUSH_MS);
 });
-/* desktop.json leaves with the app, so the CLI goes back to the key directly */
-app.on('will-quit', () => { desktopModules.stop().catch(() => {}); });
+/*
+ * desktop.json leaves with the app, so the CLI goes back to the key directly - and THEN THE MASTER EXITS (Brad, 2026-11-03:
+ * "electron has a master and gui process ... the close 20 s issue is only closing the gui side"): the window's process
+ * went at once, the master stayed - its own clean-up (the CLI's pipe, the member, the local MCP) started and never waited
+ * for - until a drive ended it 20 s later. Now the clean-up is waited for (STOP_MS at most) and the master exits.
+ */
+const STOP_MS = 3000;
+let stopping = false;
+app.on('will-quit', (e) => {
+  if (stopping) return;
+  stopping = true;
+  e.preventDefault();
+  Promise.race([desktopModules.stop().catch(() => {}), new Promise((ok) => setTimeout(ok, STOP_MS))])
+    .finally(() => app.exit(0));
+});
