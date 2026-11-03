@@ -5,5 +5,7 @@
  * box's (~/scratch/ship-proof: one unsigned commit after origin/main, its remote the box's own sshd).
  */
 const repo = '/home/bmatusiak/scratch/ship-proof';
-drive.say(`the ship: batch 1 of ${repo} (--max 1)`);
-output.__ship = drive.machine('cli', drive.app.shell, { argv: ['edge', '--test-mode', 'control', 'ship', repo, '--max', '1'] }).catch((e) => ({ ok: false, why: e.message }));
+/* COMMITS: the flow's env (ship.yaml, --env COMMITS=N) - the commits ship-proof-commit.js just made */
+const max = String(Math.max(1, parseInt(typeof COMMITS === 'undefined' ? '1' : COMMITS, 10) || 1));
+drive.say(`the ship: batch of ${max} from ${repo} (--max ${max})`);
+output.__ship = drive.machine('cli', drive.app.shell, { argv: ['edge', '--test-mode', 'control', 'ship', repo, '--max', max] }).catch((e) => ({ ok: false, why: e.message }));

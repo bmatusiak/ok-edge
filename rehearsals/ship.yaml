@@ -7,13 +7,18 @@ name: The plan ship
 tags:
   - edge
   - ship
+# COMMITS: how many it ships (--env COMMITS=5): a batch of uses is what left the desktop asking the key ~2,000 times after it
+env:
+  COMMITS: "1"
 ---
-# the commit it ships: one, unsigned, made now - so the flow runs again after a pass
+# the commits it ships, unsigned, made now - so the flow runs again after a pass
 - machine:
     action: tool
     target: firmware
     args:
       name: ship-proof-commit.js
+      argv:
+        - ${COMMITS}
 - runScript: scripts/ship-start.js
 # the budget request reaches this app's Edge sheet: Approve, and the drive presses the test key once
 - waitForTap:
@@ -21,3 +26,5 @@ tags:
     timeout: 120000
 - tapOn: "Approve"
 - runScript: scripts/ship-end.js
+# after it, the app asks the key nothing: its copy takes the ship's links against the key's checkpoint, offline
+- runScript: scripts/ship-quiet.js
