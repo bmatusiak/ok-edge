@@ -8,6 +8,7 @@
  * Bluetooth's: the desktop took it over 2026-10-24 ("1 to 1"), and it is the desktop's alone now.
  */
 import {lane} from 'node-onlykey-lib/transport';
+import {beginKeyTask} from './keyBusy';
 
 /* a computer's conversation holds the key's lane until it has been quiet this long (and nothing waits for a press) */
 const COMPUTER_QUIET_MS = 1500;
@@ -54,8 +55,9 @@ export function afterComputer(fn: () => void): void {
  * lasts until the key has been quiet for COMPUTER_QUIET_MS AND is not waiting for a press, or (sticky) until it is
  * released: the desktop's CLI holds it for its whole connection.
  */
-export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
-  let held: {release: () => void; timer: ReturnType<typeof setTimeout> | null; since: number} | null = null;
+/* who: what holds it, in the person's words - the sheet's reason while its requests run */
+export function createComputerHold(isKeyWaiting?: () => Promise<boolean>, who = "A computer's command is using your key") {
+  let held: {release: () => void; timer: ReturnType<typeof setTimeout> | null; since: number; task: () => void} | null = null;
   let holding: Promise<void> | null = null;
   function armRelease() {
     if (!held) return;
@@ -87,6 +89,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
     holding = null;
     if (heldFrom !== null) heldDone += Date.now() - heldFrom;
     heldFrom = null;
+    h.task();
     h.release();
     /* how long the app's own key reads (the Edge tab's sync) could not get in */
     console.log(`[hold] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
@@ -99,7 +102,8 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
     if (holding) return holding;
     holding = new Promise<void>(ready => {
       const conversation = () => new Promise<void>(release => {
-        held = {release, timer: null, since: Date.now()};
+        /* the computer's requests while it holds the key, on the "Working with your key" sheet (keyBusy): who is using it */
+        held = {release, timer: null, since: Date.now(), task: beginKeyTask(who)};
         heldFrom = Date.now();
         conversing = true;
         console.log('[hold] the computer holds the key');

@@ -277,7 +277,8 @@ export function handleEdgeMessage(msg: any, from: string, planAsk?: PlanAsk): Pr
   /* the time a request spends on the phone, step by step (Brad, 2026-10-06: the A13's slow answers) - times only */
   const arrived = Date.now();
   stepLog = {t0: arrived, at: arrived, parts: []};
-  const run = queue.then(() => { step('queue'); return handle(msg, from, planAsk); }).catch((e: unknown) => {
+  /* a computer's message answered here: its reason on the "Working with your key" sheet, under any of its own (keyBusy weak) */
+  const run = queue.then(() => { step('queue'); return keyTask("Answering a computer's request", () => handle(msg, from, planAsk), {weak: true}); }).catch((e: unknown) => {
     /*
      * Never leave the sheet stuck (it sat on "Press" for good when a press
      * timeout came back as a garbled answer, 2026-10-03): end it with the

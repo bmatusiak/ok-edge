@@ -86,13 +86,18 @@ export const viaTunnel = () => tunnelSeen;
 const tasks = new Map<number, {why: string; weak: boolean}>();
 let taskSeq = 0;
 export async function keyTask<T>(why: string, fn: () => Promise<T>, opts: {weak?: boolean} = {}): Promise<T> {
-  const id = ++taskSeq;
-  tasks.set(id, {why, weak: !!opts.weak});
+  const end = beginKeyTask(why, opts);
   try {
     return await fn();
   } finally {
-    tasks.delete(id);
+    end();
   }
+}
+/* a task that begins and ends in different places (a computer's hold on the key - computerHold.ts): -> its end */
+export function beginKeyTask(why: string, opts: {weak?: boolean} = {}): () => void {
+  const id = ++taskSeq;
+  tasks.set(id, {why, weak: !!opts.weak});
+  return () => { tasks.delete(id); };
 }
 const whyNow = (): string[] => {
   const all = [...tasks.values()];

@@ -56,7 +56,7 @@ function useDesktopHost(): void {
      * (electron/desktop/hosting.js runs the lib's key session); this page holds the key for it and answers its host
      * messages.
      */
-    const conv = createKeyConversation();
+    const conv = createKeyConversation('A command on this computer (onlykey-js) is using your key');
     const offConnected = bridge.on('okedge:computerConnected', ({connected: c}: {connected: boolean}) => {
       setCli({connected: !!c});
       conv.setConnected(!!c);

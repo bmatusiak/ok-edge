@@ -23,7 +23,7 @@ type Client = {send: (obj: object) => void; gone: () => boolean; agent: string; 
 
 /** Serve a joined room's agents on this device's key; -> stop. */
 export function serveKeyAgents(r: any): () => void {
-  const conv = createKeyConversation();
+  const conv = createKeyConversation("A computer's agent is using your key, over Bluetooth");
   const pipeOf = (): any => (activeBackend() === 'usb' ? UsbPipe : OkEmu);
   let current: Client | null = null;
   /* the one being opened: the session says it connected before open() resolves */

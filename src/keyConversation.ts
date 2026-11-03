@@ -32,8 +32,9 @@ export type KeyConversation = {
   stop(why: string): void;
 };
 
-export function createKeyConversation(): KeyConversation {
-  const hold = createComputerHold();
+/* who: what holds the key, said on the "Working with your key" sheet while its requests run (computerHold) */
+export function createKeyConversation(who?: string): KeyConversation {
+  const hold = createComputerHold(undefined, who);
   let connected = false;
   let answering = 0;
   let lastReport = 0;
