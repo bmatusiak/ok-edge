@@ -26,7 +26,7 @@ import {getOnlyKey, type Backend} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {shell} from './platform';
 import OkEmu from './transport/OkEmu';
-import {chainState, evaluate, loadMirror, ownEnd, takeOwnLinks, type EdgeView} from './edgeStore';
+import {chainState, evaluate, loadMirror, ownEnd, takeOffline, type EdgeView} from './edgeStore';
 import {keptRun} from './linkStash';
 /* keys whose shared records this app run has offered already (desktop) */
 const takenShared = new Set<string>();
@@ -172,7 +172,6 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
     if (fileWhy !== why) { fileWhy = why; console.log(`[edge] this key's log: not filed - ${why}`); }
     return;
   }
-  fileWhy = '';
   const hex = (b: Uint8Array | null | undefined) => (b ? toHex(b) : '');
   const seals = (mirror.seals ?? []) as {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array; ended?: number[]}[];
   const anchor = checkpoint?.signaturePq?.length ? checkpoint : [...seals].reverse().find(s => s.signaturePq?.length) ?? null;
@@ -210,6 +209,8 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
     return;
   }
   await writeEntries(store, changed);
+  /* filed: the next 'not filed' or 'already in the bucket' is said again (each was said once while it held) */
+  fileWhy = '';
   console.log(`[edge] this key's log: filed in the bucket (${store}) - ${n} key(s) changed, ${mirror.links.length} link(s) held here`);
   /* the bucket changed: a trade with the devices in the room now, not at the next join */
   require('./serverRoom').bucketChanged();
@@ -225,7 +226,7 @@ async function fileOwnLogNow(source: SoftKeyEdge, mirror: any, checkpoint: EdgeC
  * nets keep the soft key's two slots apart - two chains, two device ids - so this device's log is read from this net's
  * store first, and from the other only when this one holds none of it: never another chain's links.
  */
-function bucketShared(deviceIdHex: string): {mark: string; links: [string, string, string | null][]; openings: unknown[]; notes: any} | null {
+function bucketShared(deviceIdHex: string): {mark: string; links: [string, string, string | null][]; openings: unknown[]; notes: any; checkpoint: {seq: number; head: string; signature: string; signaturePq?: string} | null} | null {
   const {tradeBucket} = require('./bucketStore');
   const {logblocks} = require('node-onlykey-lib/edge');
   const open = tradeBucket();
@@ -248,6 +249,8 @@ function bucketShared(deviceIdHex: string): {mark: string; links: [string, strin
       links: j.links.map((l: {link: string; head: string; reveal?: string}) => [l.link, l.head, l.reveal ?? null] as [string, string, string | null]),
       openings: j.openings ?? [],
       notes: j.notes,
+      /* the key's checkpoint its filer last read (both halves, hex) - what the links are checked against with no key (takeOffline) */
+      checkpoint: j.checkpoint ?? null,
     };
   }
   bucketSharedWhy = `the bucket holds no log for ${deviceIdHex.slice(0, 8)} (${stores.map(s => `${s} ${Object.keys(open.bucket.stores[s] ?? {}).length} keys`).join(', ')})`;
@@ -425,7 +428,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     if (why && saidShared.get(id) !== why) { saidShared.set(id, why); console.log(`[edge] shared records: ${why}`); }
     if (why || !fromBucket) return;
     takenShared.add(`${id}:${fromBucket.mark}`);
-    const shared: {links: [string, string, string | null][]; openings: unknown[]; notes: any} = fromBucket;
+    const shared = fromBucket;
     if (!shared || !shared.links.length) return;
     const offered = shared.links.map(([l, h, r]) => ({link: fromHex(l), head: fromHex(h), reveal: r ? fromHex(r) : null}));
     /*
@@ -434,12 +437,25 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
      * functions for a log a computer brings (edgeDevices) - checked against the copy with these links.
      */
     const {keepOpenings, keepNotes} = require('./edgeDevices');
-    const records = syncLib.merge((await loadMirror(this.deviceId)).links, offered).links;
-    const opened = await keepOpenings(toHex(this.deviceId), (await this.copyKey({checkpoint: false})).publicKey, shared.openings ?? [], records);
+    const mirror = await loadMirror(this.deviceId);
+    const records = syncLib.merge(mirror.links, offered).links;
+    /* the copy's own public key (read from the key at its first sync) - no read of the key here */
+    const publicKey = mirror.publicKey ?? publicKeys.get(id) ?? null;
+    const opened = publicKey ? await keepOpenings(toHex(this.deviceId), publicKey, shared.openings ?? [], records) : 0;
     await keepNotes(this.deviceId, shared.notes);
     console.log(`[edge] shared records: ${opened} budget opening(s) and the notes filed`);
-    const t = await takeOwnLinks(this, offered);
-    console.log(`[edge] shared records: ${t.ok ? `${t.count} link(s) taken` : `nothing taken - ${t.detail}`}`);
+    /*
+     * THE LINKS, CHECKED WITH NO KEY (Brad, 2026-11-03): against the key's checkpoint the filer read (edgeStore.takeOffline)
+     * - this used to check them against the key's live head and then sync from the key, on every refresh. A log with no
+     * checkpoint is not taken: nothing vouches for it.
+     */
+    const cp = shared.checkpoint;
+    const t = cp
+      ? await takeOffline(this.deviceId, offered, {seq: cp.seq, head: fromHex(cp.head), signature: fromHex(cp.signature), signaturePq: cp.signaturePq ? fromHex(cp.signaturePq) : null})
+      : {ok: false as const, why: 'the log came with no checkpoint of the key'};
+    /* not taken: asked again at the next look (the copy may hold the key's public keys by then) */
+    if (!t.ok) takenShared.delete(`${id}:${fromBucket.mark}`);
+    console.log(`[edge] shared records: ${t.ok ? `${t.count} link(s) taken, checked offline up to #${t.through}` : `nothing taken - ${t.why}`}`);
   }
 
   /*
@@ -544,9 +560,14 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    * the storage keys are read once and shared. Outside a run, each call reads
    * fresh, as before. Memory only, for the length of one refresh.
    */
-  private snap: {head?: any; mirror?: Awaited<ReturnType<typeof loadMirror>>; keys?: readonly string[]; checkpoint?: any} | null = null;
-  beginRun() {
-    this.snap = {};
+  private snap: {head?: any; mirror?: Awaited<ReturnType<typeof loadMirror>>; keys?: readonly string[]; checkpoint?: any; offline?: boolean} | null = null;
+  /*
+   * offline: A LOOK, NOT AN ACTION (Brad, 2026-11-03: "this kind of thing can't happen, it makes the product unusable"):
+   * the tab opening, a computer letting the key go, a trade - the head is the one last seen, moved by what the copy holds
+   * (knownHead), and the key is not asked. Actions never run in one: Approve, resume and the rest read the key themselves.
+   */
+  beginRun(opts: {offline?: boolean} = {}) {
+    this.snap = opts.offline ? {offline: true} : {};
   }
   endRun() {
     this.snap = null;
@@ -561,8 +582,48 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
      */
     const snap = this.snap;
     if (!snap) { const h = await this.edge.head(); this.noteHead(h); return h; }
-    if (!snap.head) { snap.head = await this.edge.head(); this.noteHead(snap.head); }
+    if (!snap.head) {
+      if (snap.offline) snap.head = await this.knownHead();
+      else { snap.head = await this.edge.head(); this.noteHead(snap.head); }
+    }
     return snap.head;
+  }
+  /*
+   * THE KEY'S HEAD AS THIS HOST KNOWS IT, NOT ASKED (an offline run): the last HEAD this session read, moved to where the
+   * copy now reaches (a log brought links past it, checked against the key's checkpoint - edgeStore.takeOffline), and a
+   * budget whose end link the copy holds is not live any more. With no HEAD read this session, the live budgets are the
+   * ones this host approved whose end the copy does not hold and whose time is not up - a budget a key restart ended shows
+   * until this app's next own key action reads the key. HEAD's shape: {seq, head, oldest, live, held, owed, refusedTx}.
+   */
+  private async knownHead(): Promise<any> {
+    const mirror = await this.mirrorNow();
+    const base = this.sameHead?.raw ?? null;
+    const fields = mirror.links.map(r => chain.decodeLink(r.link));
+    const ended = new Set(fields.filter(f => f.op === OP.GRANT_END).map(f => f.grantId));
+    const points = [mirror.checkpoint, mirror.lastSeen].filter((p): p is {seq: number; head: Uint8Array} => !!p && !!p.head?.length);
+    const reach = points.reduce<{seq: number; head: Uint8Array} | null>((m, p) => (!m || p.seq > m.seq ? p : m), null);
+    const baseSeq = base && base.seq !== null ? base.seq : -1;
+    const moved = reach && reach.seq > baseSeq ? reach : null;
+    let live: number[];
+    if (base) live = (base.live as number[]).filter(g => !ended.has(g));
+    else {
+      live = [];
+      for (const {grantId, record} of await book.list(toHex(this.deviceId), {keys: [...await this.storageKeys()]})) {
+        const k = record as Kept;
+        if (!k.opened || k.endedAt || ended.has(grantId)) continue;
+        if (Date.now() < k.opened + (k.lifetime || DEFAULT_LIFETIME_MINUTES) * 60000) live.push(grantId);
+      }
+    }
+    return {
+      seq: moved ? moved.seq : base ? base.seq : reach ? reach.seq : null,
+      head: moved ? moved.head : base ? base.head : reach ? reach.head : null,
+      caps: base?.caps,
+      oldest: base?.oldest ?? null,
+      live,
+      held: base ? (base.held as number[]).filter(g => live.includes(g)) : [],
+      owed: base ? base.owed : 0,
+      refusedTx: base?.refusedTx ?? 0,
+    };
   }
   private async mirrorNow() {
     if (!this.snap) return loadMirror(this.deviceId);
@@ -955,6 +1016,10 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       openingsKept.set(id, kept);
     }
     return Object.fromEntries(kept) as Record<number, unknown>;
+  }
+  /* the budgets' opening words this host kept - storage only, for the view with no key (edgeStore.offlineView) */
+  openingsOffline(): Promise<Record<number, unknown>> {
+    return this.openings();
   }
 
   /* R27 anchors for the banner: the KEY's public key (PUBKEY this session) and its checkpoints */

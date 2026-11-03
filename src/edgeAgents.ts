@@ -311,17 +311,17 @@ async function handleNote(msg: any, from: string): Promise<unknown | null> {
    * the sync wait for the conversation's end; the note is answered now, the hold kept (answerUsesKey).
    * KEPT NOW WHEN THE EDGE IS OPEN (red-key, same day: kept only at the end, the Edge tab's own sync ran first and found
    * the copy unchanged - the push's link said "intent unknown, no message synced"): storage only, no key.
+   * NO SYNC PER NOTE (Brad, 2026-11-03: "this kind of thing can't happen, it makes the product unusable"): each note used
+   * to queue a sync of its own - a 255-sign ship left ~2,000 head reads for after it, 13 min on red-key, an hour of
+   * ceremonies on the web app. The computer's links come with the key's checkpoint in its log (a trade - edgeSoftKey
+   * takeShared, checked offline) and the tab looks again when the computer lets the key go (useEdge): nothing here asks it.
    */
   const note = {computer: computer.id, seq: msg.seq, reason: msg.reason, receiptMsg: msg.receiptMsg, txRefused: msg.txRefused};
   const kept = soft ? addNote(soft.deviceId, note).catch(() => undefined) : null;
-  afterComputer(() => void (async () => {
-    await kept;
+  if (!kept) afterComputer(() => void (async () => {
     /* the shared one, not a fresh open per note (each open probes the key and reads its public key) */
     soft = soft ?? (await SoftKeyEdge.open());
-    const s = soft;
-    if (!s) return; /* locked, or no Edge: nothing to keep it with */
-    if (!kept) await addNote(s.deviceId, note).catch(() => undefined);
-    await syncCopy(s).catch(() => undefined); /* the sync, and its alarms */
+    if (soft) await addNote(soft.deviceId, note).catch(() => undefined); /* else locked, or no Edge: nothing to keep it with */
   })().catch(() => undefined));
   return {ok: true};
 }

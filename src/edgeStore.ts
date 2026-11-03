@@ -124,6 +124,13 @@ export type Mirror = {
    * ended: the grant ids not live when the seal was taken (to see a new end).
    */
   seals?: Seal[];
+  /*
+   * THE KEY'S NEWEST SIGNED CHECKPOINT THIS COPY WAS CHECKED UP TO (Brad, 2026-11-03: "the key gives the offline verifier
+   * signed bytes ... to check the entire blockchain from the checkpoint, without having to make a call each time"): both
+   * halves, kept so any later session checks the copy with no key - the links weld up to its head, its signatures verify
+   * under publicKey / publicKeyPq (takeOffline, offlineView).
+   */
+  checkpoint?: {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array} | null;
 };
 
 export type Verdict =
@@ -401,6 +408,91 @@ export function sync(source: EdgeSource, now = Date.now()): Promise<{mirror: Mir
   return run;
 }
 
+type SignedPoint = {seq: number; head: Uint8Array; signature: Uint8Array; signaturePq?: Uint8Array | null};
+
+/*
+ * THIS KEY'S LINKS FROM A LOG SOMEONE BROUGHT, CHECKED WITH NO KEY (Brad, 2026-11-03: "we certify a checkpoint, and the
+ * offline verifier walks up from that to the head"). After a 255-sign ship the desktop asked red-key ~2,000 times for
+ * heads that told it nothing new - each CLI note queued a sync, each sync read the head 7-8 times - and "the webapp would
+ * never be able to handle this kind of operation". The CLI ends every use holding the key's signed checkpoint and files
+ * it with its links in the bucket; here they are welded onto this copy and the checkpoint's two signatures checked under
+ * the public keys the copy already holds (lib sync.anchorCheck: also a rollback or a changed head against the points this
+ * copy kept). Nothing is asked of the key. A log that does not check changes nothing and says why; the copy then waits
+ * for this app's own next key action. -> {ok, count (links added), through} | {ok: false, why}
+ */
+export function takeOffline(deviceId: Uint8Array, offered: EdgeLinkRecord[], checkpoint: SignedPoint, now = Date.now()):
+  Promise<{ok: true; count: number; through: number} | {ok: false; why: string}> {
+  const go = () => takeOfflineNow(deviceId, offered, checkpoint, now);
+  const run = syncing.then(go, go);
+  syncing = run.catch(() => undefined);
+  return run;
+}
+
+async function takeOfflineNow(deviceId: Uint8Array, offered: EdgeLinkRecord[], checkpoint: SignedPoint, now: number):
+  Promise<{ok: true; count: number; through: number} | {ok: false; why: string}> {
+  const mirror = await loadMirror(deviceId);
+  const id = toHex(deviceId);
+  /* the keys to check it under are the ones this copy read from the key itself - a log never brings its own */
+  if (!mirror.publicKey || !mirror.publicKeyPq) return {ok: false, why: "this copy holds no public keys of the key yet (its first sync reads them)"};
+  if (toHex(chain.deviceIdOf(mirror.publicKey)) !== id) return {ok: false, why: "the public key this copy holds is not this device's"};
+  const have = Math.max(mirror.checkpoint?.seq ?? -1, mirror.lastSeen?.seq ?? -1);
+  if (checkpoint.seq <= have) return {ok: true, count: 0, through: have};
+  /* only what the checkpoint vouches for: a link past it waits for the checkpoint after it */
+  const upTo = offered.filter(r => seqOf(r) <= checkpoint.seq);
+  const m = syncLib.merge(mirror.links, upTo);
+  if (m.conflicts.length) return {ok: false, why: `a fork - #${m.conflicts.join(', #')} differ from this copy's`};
+  const points = [mirror.lastSeen, mirror.checkpoint, mirror.anchor, ...(mirror.seals ?? [])].filter((p): p is {seq: number; head: Uint8Array} => !!p && !!p.head?.length);
+  const r = syncLib.anchorCheck({
+    records: m.links, publicKey: mirror.publicKey, publicKeyPq: mirror.publicKeyPq,
+    checkpoint: {seq: checkpoint.seq, head: checkpoint.head, signature: checkpoint.signature, signaturePq: checkpoint.signaturePq ?? new Uint8Array(0)},
+    anchors: points.map(p => ({seq: p.seq, head: p.head})),
+  });
+  if (!r.ok) return {ok: false, why: `${r.alarm}${r.seq !== undefined ? ` at #${r.seq}` : ''}${r.detail ? `: ${r.detail}` : ''}`};
+  mirror.links = m.links;
+  for (const a of m.added) mirror.seen[seqOf(a)] = mirror.seen[seqOf(a)] ?? now;
+  mirror.lastSeen = {seq: checkpoint.seq, head: checkpoint.head};
+  mirror.checkpoint = {seq: checkpoint.seq, head: checkpoint.head, signature: checkpoint.signature, ...(checkpoint.signaturePq?.length ? {signaturePq: checkpoint.signaturePq} : {})};
+  await saveMirror(mirror);
+  return {ok: true, count: m.added.length, through: checkpoint.seq};
+}
+
+/*
+ * THE TAB'S VIEW WITH NO KEY (Brad, 2026-11-03: "without having to make a call each time to verify it live"): this copy
+ * checked at the newest point it can stand on - the head this session verified (the key's own answer, in memory), else
+ * the key's signed checkpoint kept with the copy - under the public keys it holds. The view says how far that reaches
+ * (headSeq); a link the key wrote after it shows once a log with a newer checkpoint comes, or at this app's next own key
+ * action. No I/O but storage.
+ */
+/*
+ * CAN THIS COPY BE LOOKED AT WITH NO KEY? It holds the key's signed checkpoint, or this session verified its head. A copy
+ * with neither (made before copies kept a checkpoint, or brand new) is synced once - that sync asks the key for its
+ * checkpoint and the copy keeps it (syncNow) - and is looked at offline from then on.
+ */
+export async function lookable(deviceId: Uint8Array): Promise<boolean> {
+  const mirror = await loadMirror(deviceId);
+  if (mirror.checkpoint) return true;
+  const was = verifiedNow.get(toHex(deviceId));
+  return !!(mirror.lastSeen && was && was.seq === mirror.lastSeen.seq && was.head === toHex(mirror.lastSeen.head));
+}
+
+export async function offlineView(source: EdgeSource & {openingsOffline?: () => Promise<Record<number, unknown>>}): Promise<EdgeView> {
+  const mirror = await loadMirror(source.deviceId);
+  const id = toHex(source.deviceId);
+  const was = verifiedNow.get(id);
+  const cp = mirror.checkpoint ?? null;
+  const seen = mirror.lastSeen;
+  /* the session's own verified head first: it is the key's answer, as fresh as anything here */
+  const sessionHead = seen && was && was.seq === seen.seq && was.head === toHex(seen.head) ? seen : null;
+  const at = sessionHead ?? (cp ? {seq: cp.seq, head: cp.head} : null);
+  if (!at) return evaluate(mirror, null);
+  const openings = source.openingsOffline ? await source.openingsOffline() : {};
+  const key: EdgeCopyKey | null = mirror.publicKey ? {
+    publicKey: mirror.publicKey, publicKeyPq: mirror.publicKeyPq ?? null, openings,
+    checkpoint: cp && cp.seq === at.seq ? {seq: cp.seq, head: cp.head, signature: cp.signature, signaturePq: cp.signaturePq ?? null} : null,
+  } : null;
+  return evaluate(mirror, {seq: at.seq, head: at.head, ringFrom: at.seq + 1}, [], key);
+}
+
 /**
  * B7 stage 2: keep an EDGE_NOTE from a computer. A note is NOT signed: the link it came
  * over (edgeAgents computerOf) says which computer sent it, and its text is shown only
@@ -613,6 +705,11 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
   }
   /* a budget ended since the last seal: its block is closed - seal it (BLOCKS.md, stage a) */
   if (live && view.verdict.kind === 'verified' && ownKey?.checkpoint) takeSeal(mirror, head, ownKey.checkpoint, live);
+  /* a checkpoint the key signed for the head just verified: the copy keeps it, so the next look needs no key (offlineView) */
+  const cp = ownKey?.checkpoint;
+  if (view.verdict.kind === 'verified' && cp && cp.seq === head.seq && toHex(cp.head) === toHex(head.head) && (mirror.checkpoint?.seq ?? -1) <= cp.seq) {
+    mirror.checkpoint = {seq: cp.seq, head: cp.head, signature: cp.signature, ...(cp.signaturePq?.length ? {signaturePq: cp.signaturePq} : {})};
+  }
   await saveMirror(mirror);
   lap('save');
   /*

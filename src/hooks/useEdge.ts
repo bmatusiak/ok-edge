@@ -12,9 +12,17 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, type EdgeKeyState, type EdgeRequest, type EdgeSource} from '../edge/types';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {onKeyFree} from '../computerHold';
+import {onBucketTraded} from '../bucketEvents';
 import {hasSoftKeyPlugin} from '../buildInfo';
 import {useBackend} from './KeyContext';
-import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
+import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, lookable, offlineView, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
+
+/* a look's copy check: its own verdict (the key's head is not read in a look) - the shape SoftKeyEdge.check gives */
+function copyCheckOf(view: EdgeView | null): EdgeCopyCheck | null {
+  if (!view) return null;
+  const v = view.verdict as {kind: string; seq?: number; from?: number; to?: number};
+  return v.kind === 'verified' ? {ok: true} : {ok: false, reason: v.kind, seq: v.seq ?? v.from, to: v.to};
+}
 import NativeShare from 'okedge-native/specs/NativeShare';
 
 type Source = EdgeSource & EdgeInbox;
@@ -81,7 +89,12 @@ export function useEdge() {
      */
   }, [wantReal, backend]);
 
-  const run = useCallback(async (work: (s: Source) => Promise<EdgeView>) => {
+  /*
+   * offline: A LOOK (Brad, 2026-11-03: "the head ... verified offline"): the work and the refresh after it read only what
+   * this host holds - the copy checked at its newest checkpoint, the head last seen (SoftKeyEdge.beginRun offline). The
+   * copy check is the look's own verdict, not a read of the key's head. An action's run reads the key, once.
+   */
+  const run = useCallback(async (work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean} = {}) => {
     setBusy(true);
     setError(null);
     /* how long each part of an action takes, for the log (Brad, 2026-10-06: presses lag) - times only, nothing sensitive */
@@ -101,8 +114,12 @@ export function useEdge() {
        * budgets and every device's history this computer holds, read as always. It used to end the whole refresh.
        */
       let cold = false;
+      const offline = !!opts.offline;
+      if (offline) (s as unknown as {beginRun?: (o: {offline: boolean}) => void}).beginRun?.({offline: true});
+      let looked: EdgeView | null = null;
       try {
-        setView(await work(s));
+        looked = await work(s);
+        setView(looked);
         setOutOfReach(null);
       } catch (e: any) {
         if (e?.code !== 'EDGE_NO_CHECKPOINT') throw e;
@@ -114,8 +131,8 @@ export function useEdge() {
       }
       const orNone = <T,>(p: Promise<T>, none: T): Promise<T> => (cold ? p.catch(() => none) : p);
       lap('work');
-      /* one head read, one copy load for the rest of this refresh (SoftKeyEdge.beginRun) */
-      (s as unknown as {beginRun?: () => void}).beginRun?.();
+      /* one head read, one copy load for the rest of this refresh (SoftKeyEdge.beginRun) - none in a look */
+      if (!offline) (s as unknown as {beginRun?: () => void}).beginRun?.();
       setBudgets(await orNone(s.budgets(), []));
       lap('budgets');
       /* budget history: what this phone opened that is not live now (soft key only) */
@@ -144,10 +161,10 @@ export function useEdge() {
       setRequests(pending);
       lap('pending');
       /* every sync, not only with a request waiting: a copy that fails the budget rules (R3) must show on the tab, not only on the sheet (2026-10-04) */
-      setCopyCheck(await s.check().catch(() => null));
+      setCopyCheck(offline ? copyCheckOf(looked) : await s.check().catch(() => null));
       lap('check');
       const path = (s as unknown as {edge?: {grants?: {lastPath?: string | null}}}).edge?.grants?.lastPath;
-      console.log(`[edge] run ${Date.now() - t0} ms: ${parts.join(', ')}${path ? ` (copy check: ${path})` : ''}`);
+      console.log(`[edge] ${offline ? 'look' : 'run'} ${Date.now() - t0} ms: ${parts.join(', ')}${path ? ` (copy check: ${path})` : ''}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       /* the panel shows the message only; where it came from goes to the log (a TypeError says nothing without its stack) */
@@ -159,14 +176,29 @@ export function useEdge() {
     }
   }, [source]);
 
-  /** B1: HEAD, READ what is new, store, verify everything. */
+  /** B1: HEAD, READ what is new, store, verify everything - after this app's own key action. */
   const sync = useCallback(() => run(async s => (await syncMirror(s)).view), [run]);
+  /** A look: the copy as this host holds it, checked offline (source() took any log a trade brought) - no key. */
+  const look = useCallback(async () => {
+    const s = await source();
+    /* nothing to stand on offline yet (no checkpoint kept, this session's head unknown): one sync asks the key, once */
+    if (s && !(await lookable(s.deviceId))) {
+      console.log('[edge] look: this copy holds no checkpoint of the key yet - one sync reads it');
+      return sync();
+    }
+    return run(k => offlineView(k as unknown as Parameters<typeof offlineView>[0]), {offline: true});
+  }, [run, sync, source]);
   /* a merge or a nametag change (edgeDevices): your other devices' cards and logs are read again at once - no pull needed */
   useEffect(() => {
     if (!wantReal) return undefined;
     const {onDevicesChanged} = require('../edgeDevices');
-    return onDevicesChanged(() => { void sync(); });
-  }, [sync, wantReal]);
+    return onDevicesChanged(() => { void look(); });
+  }, [look, wantReal]);
+  /* a trade brought a log of this identity's keys (a computer's, after its ship): taken and checked offline (source) */
+  useEffect(() => {
+    if (!wantReal) return undefined;
+    return onBucketTraded(stores => { if (stores.some(st => st.startsWith('edge-logs'))) void look(); });
+  }, [look, wantReal]);
   /**
    * The Sync button: a full check from the root (Brad, 2026-10-06) - this session's
    * remembered results are dropped first. Pull-down, presses and a computer letting the key go use sync.
@@ -300,10 +332,10 @@ export function useEdge() {
     await s.decline(id);
     return (await chainState.validity(s)).view;
   }), [run]);
-  /* the tab opens: sync (B1) */
+  /* the tab opens: a look (B1) - the key is asked by the actions, and by the Sync button */
   useEffect(() => {
-    void sync();
-  }, [sync]);
+    void look();
+  }, [look]);
 
   /*
    * THE CARD FOLLOWS THE KEY, AND THE KEY IS NEVER ASKED ON A TIMER (Brad, 2026-10-29: "re-reads the chain head every
@@ -315,12 +347,12 @@ export function useEdge() {
    */
   useEffect(() => {
     if (!wantReal) return;
-    return onKeyFree(() => { void sync(); });
-  }, [wantReal, sync]);
+    return onKeyFree(() => { void look(); });
+  }, [wantReal, look]);
 
   return {
     view, budgets, past, others, ownName, deviceViews, requests, busy, stopping, error, pressFor, copyCheck, keyState, ended, available: wantReal, fullSync,
-    sync, verify, tamper, request, revoke, approve, press, decline,
+    sync, look, verify, tamper, request, revoke, approve, press, decline,
     hold, resume, settle, agentSign, budgetSign, continueBudget, dismissEnded, acceptLoss, outOfReach, exportBlocks,
   };
 }

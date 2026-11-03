@@ -10,7 +10,7 @@
  * whole tab is testing-mode only. Receipt messages are written by an agent:
  * plain text, never links or markdown.
  */
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {bytes as okbytes} from 'node-onlykey-lib';
 import {BackHandler, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {grants, codes} from 'node-onlykey-lib/edge';
@@ -787,9 +787,18 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
    * while no budget was open, so opening one rendered a hook fewer - React's
    * "Rendered fewer hooks than expected" red box (Brad, 2026-10-03).
    */
+  /*
+   * ON THE TURN TO DONE, A LOOK (2026-11-03): onSheet hands its current state to every new listener, so a sheet left at
+   * done re-ran a sync each time this subscribed; and the agent's own code already brought the copy up to the key after
+   * its grant (edgeAgents: the opening link, synced) - the tab only redraws from what is held.
+   */
+  /* undefined until the first call - the state onSheet hands a new listener, not a turn */
+  const sheetWas = useRef<string | null | undefined>(undefined);
   useEffect(() => onSheet(st => {
-    if (st?.phase === 'done') void edge.sync();
-  }), [edge.sync]); // eslint-disable-line react-hooks/exhaustive-deps
+    const phase = st?.phase ?? null;
+    if (phase === 'done' && sheetWas.current !== undefined && sheetWas.current !== 'done') void edge.look();
+    sheetWas.current = phase;
+  }), [edge.look]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (open) {
     /*
@@ -1194,7 +1203,7 @@ export function EdgeScreen({testingMode = false, focusSeq = null, onFocused, ope
       </View>
       <EdgeList
         items={items.filter(it => it.key === 'status' || it.key === 'merge-banner' || (pane === 'Presses') === (it.key === 's-history' || it.key === 'live-hold' || it.key === 'live-refused' || /^h\d/.test(it.key) || it.key.startsWith('dv-')))}
-        bottomInset={DRAWER_HANDLE} refreshing={edge.busy} onRefresh={edge.sync}
+        bottomInset={DRAWER_HANDLE} refreshing={edge.busy} onRefresh={edge.look}
       />
       <DeviceFilterSheet visible={filterOpen} onClose={() => setFilterOpen(false)} devices={filterDevices} forks={forks} />
       {/* Brad, 2026-10-05: the drawer holds more than agents now */}
