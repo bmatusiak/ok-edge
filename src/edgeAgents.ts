@@ -432,6 +432,8 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
           notClaimed = await planAsk.onApprove().catch((e: unknown) => String((e as Error)?.message ?? e));
           if (notClaimed) return 'decline';
         }
+        /* the press that opens it says which budget (Brad: "what budget am i pressing for?") - the key's press sheet, at its wait */
+        if (a === 'approve') require('./hostChallenge').expectPress(`Open the budget "${view.reason}" - asked by ${computer.name}`);
         return a;
       },
       onPress: () => asked && show({phase: 'press', ask: asked, until: Date.now() + PRESS_WAIT_MS}),
