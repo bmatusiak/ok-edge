@@ -86,6 +86,11 @@ export function keyAsks(what: string): () => void {
  * or none for a plain press; the returned function clears it at "press done" or when the CLI goes.
  */
 export function computerAsks(what: string, code: string | null | undefined): () => void {
+  /*
+   * a key on USB only: the soft key's own press sheet asks for its presses, with its button (PressSheet) - a code sheet here
+   * too was a second ask, for a hard key that is not there (box, 2026-11-03: the drive tried to press one)
+   */
+  if (require('./hooks/KeyContext').activeBackend() !== 'usb') return () => undefined;
   const digits = code ? code.split(' ').map(Number).filter(d => d >= 1 && d <= 6) : [];
   const mine: HostChallenge = {digits, what};
   set(mine);
