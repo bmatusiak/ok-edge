@@ -238,6 +238,8 @@ function pressWhenAsked(app) {
    * key done"): a stray 1 there is a wrong digit. Button 1 - any button is a touch. A testnet key only, by its machine.
    */
   let touched = false;
+  /* the app's requests in flight, by its own [timeline] begin/end - a touch is asked only inside one */
+  const inFlight = new Set();
   let codeOpen = false;
   let iconAnswered = false;
   const waiting = (hex) => {
@@ -245,7 +247,8 @@ function pressWhenAsked(app) {
     return (b > 0x40 && b > r && b > g) || (r > 0x30 && g > 0x30 && b < 0x30);
   };
   app.on('log', async (l) => {
-    if (/^\[timeline\] \d+ (begin|end) /.test(l)) { touched = false; return; }
+    const tl = /^\[timeline\] \d+ (begin|end) #(\d+)/.exec(l);
+    if (tl) { touched = false; if (tl[1] === 'begin') inFlight.add(tl[2]); else inFlight.delete(tl[2]); return; }
     /*
      * a code to enter opens code entry (no stray touches meanwhile) - "buttons any" is a press, not a code (box web app,
      * 2026-11-01: the card login's "Open this identity's bucket - buttons any" was taken as code entry, which held back
@@ -272,6 +275,12 @@ function pressWhenAsked(app) {
      * on USB (2026-11-02: given the gadget, its yellow-green blink before the PIN drew a touch - a 1 typed into the PIN).
      */
     if (!edgePress && app.shell !== 'webapp') return;
+    /*
+     * ...AND ONLY INSIDE ONE OF ITS REQUESTS (2026-11-03, box web app: the gadget's start-up colour #7d3100, a second after
+     * it started, read as a touch wait - a 1 pressed before the PIN, so the PIN went in as 1 + 1234561 and was refused).
+     * The browser asks a touch for a request the app has begun (its [timeline] begin): with none in flight, nothing is.
+     */
+    if (!edgePress && !inFlight.size) return;
     if (edgePress ? iconAnswered : touched) return;
     if (edgePress) iconAnswered = true; else touched = true;
     if (edgePress && pressHeld) { line(`[${app.shell}] held: the key waits for its Edge press (LED ${colour}) - not pressed`); return; }
