@@ -117,7 +117,16 @@ export function computerAsks(what: string, code: string | null | undefined): () 
 export function challengeOpts(what: string): {opts: {confirm: (a: {digits?: number[]}) => void}; done: () => void} {
   let mine: HostChallenge | null = null;
   return {
-    opts: {confirm: ({digits}) => { mine = {digits: Array.isArray(digits) ? digits : [], what}; set(mine); }},
+    /*
+     * NOT ON THE SOFT KEY (box, 2026-11-03: the server login's derive said "key waits ... buttons 2 1 2" while the soft
+     * key's own press sheet asked for it - the drive pressed a hard key that was not there, twice, and the login failed):
+     * the soft key's press sheet (PressSheet) asks for its presses itself, as keyAsks above
+     */
+    opts: {confirm: ({digits}) => {
+      if (require('./hooks/KeyContext').activeBackend() === 'embedded') return;
+      mine = {digits: Array.isArray(digits) ? digits : [], what};
+      set(mine);
+    }},
     /* its own code only - then the screen's ask it stood in front of, if that is still wanted */
     done: () => { if (mine && current === mine) set(screenAsk); mine = null; },
   };
