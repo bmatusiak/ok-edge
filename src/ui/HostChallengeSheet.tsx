@@ -80,8 +80,9 @@ export function HostChallengeSheet() {
 }
 
 const styles = StyleSheet.create({
-  what: {color: theme.text, fontSize: 15, marginBottom: 8},
-  note: {color: theme.textDim, fontSize: 13, lineHeight: 18},
+  /* centred, as the title, the icon and the buttons are (Brad, 2026-11-03: "can we center the other elements so it looks uniform") */
+  what: {color: theme.text, fontSize: 15, marginBottom: 8, textAlign: 'center'},
+  note: {color: theme.textDim, fontSize: 13, lineHeight: 18, textAlign: 'center'},
   digits: {flexDirection: 'row', gap: 16, justifyContent: 'center', marginVertical: 12},
   digit: {color: theme.text, fontSize: 34, fontWeight: '600', fontFamily: theme.mono},
 });

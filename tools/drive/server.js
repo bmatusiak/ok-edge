@@ -376,7 +376,13 @@ function pressWhenAsked(app) {
         if (app.net !== 'test' && !app.keyIsTest) {
           /* the Pi relay key (optional - pikey.js) is a soft key: its machine's word below is the proof, not a console probe */
           const piKeyApp = !(app.ws && app.ws.via) && (require('./pikey').piKeySettings() || {}).for === app.shell;
-          if (app.flags.consoleAnswers !== true && app.shell !== 'webapp' && !piKeyApp) { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
+          /*
+           * ...and an app on another machine of the drive's (the box - every key there is a test key): its machine may hold a
+           * soft key as this app's USB key (the gadget, 2026-11-03), whose word below is the proof. On this machine a key
+           * whose console does not answer is never probed (red-key's rule, above).
+           */
+          const otherMachine = !!(app.ws && app.ws.via);
+          if (app.flags.consoleAnswers !== true && app.shell !== 'webapp' && !piKeyApp && !otherMachine) { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
           const s = await procFor(app, 'key-state');
           if (!(s.ok && /debug console answers|the testnet soft key \((gadget|pi relay)\)/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
           app.keyIsTest = true;
