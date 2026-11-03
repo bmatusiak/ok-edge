@@ -141,7 +141,7 @@ function follow(name, onLine) {
  * {t:'end', code} last - and the drive window gives the command a tab of its own. Its whole output also comes back
  * (out), and it ends under its watchdog. No shell: the command and its arguments as given.
  */
-function streamIn(cwd, cmd, args, { timeout, env, onEvent = () => {} } = {}) {
+function streamIn(cwd, cmd, args, { timeout, idle = false, env, onEvent = () => {} } = {}) {
   return new Promise((resolve) => {
     onEvent({ t: 'start', cmd: [cmd, ...args].join(' ') });
     let all = '';
@@ -150,8 +150,19 @@ function streamIn(cwd, cmd, args, { timeout, env, onEvent = () => {} } = {}) {
     try {
       child = spawn(cmd, args, { cwd, env: env || process.env, windowsHide: true, shell: !LINUX && /\.(cmd|bat)$/i.test(cmd) });
     } catch (e) { onEvent({ t: 'end', code: -1 }); resolve({ ok: false, out: e.message }); return; }
+    /*
+     * idle: the watchdog is a silence, not a total - each line starts it again (red-key, 2026-11-03: a ship of 85 commits
+     * printing a line every ~20 s was ended at 10 min with 28 signed and a receipt owed). Without it, the total time.
+     */
+    let dog = null;
+    const arm = () => {
+      if (!timeout) return;
+      if (dog) clearTimeout(dog);
+      dog = setTimeout(() => { onEvent({ t: 'line', text: `[drive] no end in ${Math.round(timeout / 1000)} s${idle ? ' of silence' : ''} - ended` }); end(child, 'SIGKILL'); }, timeout);
+    };
     const feed = (data) => {
       const text = String(data);
+      if (idle) arm();
       all += text;
       const lines = (rest + text).split(/\r?\n/);
       rest = lines.pop();
@@ -159,7 +170,7 @@ function streamIn(cwd, cmd, args, { timeout, env, onEvent = () => {} } = {}) {
     };
     child.stdout.on('data', feed);
     child.stderr.on('data', feed);
-    const dog = timeout ? setTimeout(() => { onEvent({ t: 'line', text: `[drive] no end in ${Math.round(timeout / 1000)} s - ended` }); end(child, 'SIGKILL'); }, timeout) : null;
+    arm();
     child.on('error', (e) => { all += `\n${e.message}`; onEvent({ t: 'line', text: e.message }); });
     child.on('close', (code) => {
       if (dog) clearTimeout(dog);
@@ -1014,7 +1025,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     const tool = path.join(ROOT, 'node-onlykey-lib', 'cli', 'index.js');
     if (!fs.existsSync(tool)) return { ok: false, why: `no ${tool} on this machine` };
     const name = `cli ${args.join(' ')}`.slice(0, 60);
-    const r = await streamIn(ROOT, NODE, [tool, ...args], { timeout: 10 * 60000, ...shown(name) });
+    /* ten minutes of SILENCE ends it - a ship prints as it goes, however long it runs */
+    const r = await streamIn(ROOT, NODE, [tool, ...args], { timeout: 10 * 60000, idle: true, ...shown(name) });
     return r.ok ? { ok: true, what: r.out.split('\n').slice(-12).join('\n') } : { ok: false, why: `exit not 0: ${r.out.split('\n').slice(-6).join(' | ')}` };
   }
 

@@ -1022,7 +1022,8 @@ function dialRemote(url, again = false) {
  */
 const remoteHellos = new EventEmitter();
 /* how long a machine may take with an action before the watchdog: a build or a check 30 min (a cold Gradle build, the lib's whole suite), the CLI or a flash 10, the rest 2 - one rule for both ways an action is asked */
-const lifeOf = (action) => (action === 'build' || action === 'hex' || action === 'check' ? 30 * 60 : action === 'cli' || action === 'flash' ? 10 * 60 : 120);
+/* cli: a backstop only - its machine ends it after 10 min of silence (targets.js cli), and a ship can run for an hour */
+const lifeOf = (action) => (action === 'cli' ? 4 * 60 * 60 : action === 'build' || action === 'hex' || action === 'check' ? 30 * 60 : action === 'flash' ? 10 * 60 : 120);
 async function proc(action, target, args = {}) {
   if (REMOTES.length) {
     for (const u of REMOTES) dialRemote(u);
