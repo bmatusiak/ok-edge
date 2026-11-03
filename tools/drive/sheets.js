@@ -1,6 +1,6 @@
 'use strict';
 /*
- * THE SHEET JUDGE (Brad, 2026-11-02: "we need to target finding these issues using rehearsals ... i should not be the one
+ * THE SHEET INSPECTOR (Brad, 2026-11-02: "we need to target finding these issues using rehearsals ... i should not be the one
  * finding these problems, the rehearsals should be looking at this as a fail"; "press sheets and progress during an
  * operation is IMPORTANT at this time, as it signals to the user we know what is going to happen BEFORE it will happen").
  *
@@ -37,7 +37,7 @@ const JUMP_MS = 10000;
  * @param {(ev: {kind: 'press'|'progress'|'none', what: string, at: number}) => void} [o.event] what the person sees, as it changes
  * @param {() => number} [o.now]
  */
-function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
+function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let icons = 0;
   let progress = false;
   let progressWhat = '';
@@ -165,4 +165,4 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
   };
 }
 
-module.exports = { createSheetJudge, NO_SHEET_MS, STALE_MS, NO_PROGRESS_MS, IDLE_MS };
+module.exports = { createSheetInspector, NO_SHEET_MS, STALE_MS, NO_PROGRESS_MS, IDLE_MS };

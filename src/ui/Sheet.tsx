@@ -76,7 +76,7 @@ export function Sheet({
   const edge = TONE_COLOR[tone];
   /*
    * A SHEET'S HEIGHT, SAID AS IT CHANGES (Brad, 2026-11-02: the progress sheet rose and fell as its time bar came and
-   * went - "causing it to flicker"): the drive's sheet judge fails a sheet that keeps changing size (tools/drive/sheets.js)
+   * went - "causing it to flicker"): the drive's sheet inspector fails a sheet that keeps changing size (tools/drive/sheets.js)
    */
   const heightWas = React.useRef(0);
   const onLayout = (e: {nativeEvent: {layout: {height: number}}}) => {

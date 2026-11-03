@@ -27,7 +27,7 @@ export function KeyBusySheet() {
   usePressSound(pressSince, 'press');
   /*
    * THE PROGRESS SHEET, SAID WHEN IT SHOWS AND GOES (Brad, 2026-11-02: "the rehearsals should be looking at this as a
-   * fail"): the drive's sheet judge (tools/drive/sheets.js) checks that requests running after a press have it
+   * fail"): the drive's sheet inspector (tools/drive/sheets.js) checks that requests running after a press have it
    */
   const progressUp = !!b && !hostSheetShows(c, b) && !b.asks;
   const wasUp = React.useRef(false);

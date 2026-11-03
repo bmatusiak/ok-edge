@@ -188,13 +188,13 @@ function watchStuck(app) {
 }
 
 /*
- * THE SHEET JUDGE ON EVERY APP (tools/drive/sheets.js; Brad, 2026-11-02: "the rehearsals should be looking at this as a
+ * THE SHEET INSPECTOR ON EVERY APP (tools/drive/sheets.js; Brad, 2026-11-02: "the rehearsals should be looking at this as a
  * fail"): what the person sees against what the key does, on every line the app says - its own and its machine's (the
  * gadget's LED). A failure is one drive line (the running rehearsal fails on it, maestro/runner.js) and a picture.
  */
-function judgeSheets(app) {
-  const { createSheetJudge } = require('./sheets');
-  app.judge = createSheetJudge({
+function inspectSheets(app) {
+  const { createSheetInspector } = require('./sheets');
+  app.inspector = createSheetInspector({
     fail: (why) => {
       line(`[${tabName(app)}] SHEET FAIL: ${why}`);
       app.emit('sheet-fail', why);
@@ -202,8 +202,8 @@ function judgeSheets(app) {
     },
     event: (ev) => app.emit('sheet', ev),
   });
-  app.on('log', (l) => app.judge.line(l));
-  app.on('close', () => app.judge.stop());
+  app.on('log', (l) => app.inspector.line(l));
+  app.on('close', () => app.inspector.stop());
 }
 
 /*
@@ -277,9 +277,9 @@ function pressWhenAsked(app) {
     if (edgePress && pressHeld) { line(`[${app.shell}] held: the key waits for its Edge press (LED ${colour}) - not pressed`); return; }
     /*
      * NEVER A BLIND PRESS (2026-11-02): the LED says the key waits, but the person is asked only by a press sheet - none
-     * up within the judge's time, and the key is left to wait: the judge fails it (no press sheet), the flow stops there.
+     * up within the inspector's time, and the key is left to wait: the inspector fails it (no press sheet), the flow stops there.
      */
-    if (edgePress && !(await app.judge.pressSheet(1000))) { line(`[${app.shell}] not pressed: the key waits for its Edge press (LED ${colour}) and no press sheet asks for it`); return; }
+    if (edgePress && !(await app.inspector.pressSheet(1000))) { line(`[${app.shell}] not pressed: the key waits for its Edge press (LED ${colour}) and no press sheet asks for it`); return; }
     pressing = true;
     try {
       const s = await procFor(app, 'key-state');
@@ -716,7 +716,7 @@ function attachApp(sock) {
       everyApp.add(app);
       /* what its process said while it started (#3) begins its record */
       if (outBefore.has(app.shell)) { app.recent.unshift(...outBefore.get(app.shell)); outBefore.delete(app.shell); }
-      judgeSheets(app);
+      inspectSheets(app);
       pressWhenAsked(app);
       watchStuck(app);
       line(`app connected: ${app.shell} (${app.os}, ${app.net})${sock.via ? ` via ${sock.via}` : ''}`);
@@ -875,7 +875,7 @@ const outBefore = new Map(); /* shell -> lines */
 function appOut(shell, l, via = HOST) {
   /*
    * THE APP OF THIS KIND ON THAT MACHINE (2026-11-02: with the Windows desktop and the box's both connected, apps.get by
-   * kind gave the last one connected - the box's lines went into the Windows app's record, and its judge read them)
+   * kind gave the last one connected - the box's lines went into the Windows app's record, and its inspector read them)
    */
   const a = [...everyApp].find((x) => !x.closed && x.shell === shell && ((x.ws && x.ws.via) || HOST) === via) || null;
   if (!(a && a.net === 'test') && !LIVE_PREFIXES.some((p) => l.startsWith(p))) return;
