@@ -45,6 +45,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let waitsSeen = 0; /* waits begun - a later answer checks that none came after it */
   let iconBackend = null; /* the key a press sheet was last shown for: usb (a hard key), embedded (the soft key) */
   const shownCodes = []; /* the codes sheets showed, with when */
+  let afterAnswer = null; /* since the key last answered a press: what it answered, the requests begun since (id -> {what, asked}) */
   const open = new Map(); /* timeline id -> what */
   const timers = new Set();
   const heights = new Map(); /* title -> change times */
@@ -72,6 +73,8 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   }
 
   function waits(what) {
+    /* the requests running since the last answer asked a press after all: none of them ran under a stale sheet */
+    if (afterAnswer) for (const r of afterAnswer.requests.values()) r.asked = true;
     if (waitWhat) return;
     waitWhat = what;
     waitsSeen += 1;
@@ -84,6 +87,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   function answered(what) {
     if (!waitWhat) return;
     waitWhat = null;
+    afterAnswer = { what, requests: new Map() };
     const n = waitsSeen;
     later(STALE_MS, () => {
       if (icons > 0 && waitsSeen === n && !waitWhat) fail(`stale press sheet: the key answered (${what}) and the press sheet is still up ${STALE_MS / 1000} s later`);
@@ -97,7 +101,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   function line(raw) {
     const l = String(raw);
     if (/^\[press\] icon up/.test(l)) { icons += 1; iconBackend = (/\((\w+)\)/.exec(l) || [])[1] || iconBackend; changed(); return; }
-    if (/^\[press\] icon down/.test(l)) { icons = Math.max(0, icons - 1); changed(); return; }
+    if (/^\[press\] icon down/.test(l)) { icons = Math.max(0, icons - 1); if (!icons) afterAnswer = null; changed(); return; }
     let m = /^\[sheet\] progress up: ?(.*)$/.exec(l);
     if (m) { progress = true; progressWhat = m[1]; changed(); return; }
     if (/^\[sheet\] progress down/.test(l)) { progress = false; changed(); return; }
@@ -143,8 +147,23 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
     if (m) { answered(m[1]); return; }
     m = /^\[timeline\] \d+ (begin|end) #(\d+) (.*?)(?: steps=\d+ (ok|failed.*))?$/.exec(l);
     if (m) {
-      if (m[1] === 'begin') open.set(m[2], m[3]);
-      else open.delete(m[2]);
+      if (m[1] === 'begin') {
+        open.set(m[2], m[3]);
+        if (afterAnswer) afterAnswer.requests.set(m[2], { what: m[3], asked: false });
+      } else {
+        open.delete(m[2]);
+        /*
+         * STALE, BY EVENTS, NOT TIME (Brad, 2026-11-03: "switching to event driven so we dont need to worry about timing";
+         * a fast key answered the login's press and its next requests ran under the press sheet in well under STALE_MS):
+         * a request that began after the key answered, asked no press of its own, and finished with the press sheet
+         * still up ran under a sheet telling the person to press.
+         */
+        const r = afterAnswer && afterAnswer.requests.get(m[2]);
+        if (r && !r.asked && icons > 0 && !waitWhat) {
+          fail(`stale press sheet: "${r.what}" ran and finished after the key answered (${afterAnswer.what}), under a press sheet that still asked to press`);
+          afterAnswer = null;
+        }
+      }
       armIdle();
     }
   }

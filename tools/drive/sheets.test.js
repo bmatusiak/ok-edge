@@ -85,6 +85,25 @@ test('stale press sheet: the key answered and the sheet stays - the login on Win
   assert.ok(fails.some((f) => /^stale press sheet/.test(f)), fails.join(' | '));
 });
 
+test('stale press sheet by events: a fast key\'s next request runs and ends under the press sheet - no waiting needed', () => {
+  const { j, fails, say } = inspector();
+  say('[press] key waits: Open this identity\'s bucket - buttons any', '[press] icon up (usb)', `[timeline] 1 begin #10 ${BUDGET}`,
+    `[request] press asked: ${BUDGET} - a press`, `[request] press done: ${BUDGET} - answered`, `[timeline] 2 end #10 ${BUDGET} steps=2 ok`,
+    '[timeline] 3 begin #11 Edge: reading the chain head', '[timeline] 4 end #11 Edge: reading the chain head steps=1 ok');
+  j.stop();
+  assert.equal(fails.length, 1);
+  assert.match(fails[0], /^stale press sheet: "Edge: reading the chain head" ran and finished after the key answered/);
+});
+
+test('the next request that asks its own code is not run under a stale sheet', () => {
+  const { j, fails, say } = inspector();
+  say('[press] icon up (usb)', `[request] press asked: ${BUDGET} - a press`, `[request] press done: ${BUDGET} - answered`,
+    '[timeline] 1 begin #12 deriving a secret', '[request] press asked: deriving a secret - code 3 3 5', '[press] code shows: deriving a secret - buttons 3 3 5',
+    '[request] press done: deriving a secret - answered', '[timeline] 2 end #12 deriving a secret steps=3 ok', '[press] icon down');
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
 test('no progress: requests run after the press and no sheet shows them', async () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)');
