@@ -19,6 +19,8 @@ tags:
 # the key's press, asked on a press sheet with the certify's words - the inspector fails anything else
 - expectSheets:
     - press: "[Cc]ertif"
+# saved: the editor closes once the key certified the name and it is filed - the name in the field alone is not proof
 - extendedWaitUntil:
-    visible: ".*${output.tag}.*"
+    notVisible: "This computer's nametag"
     timeout: 60000
+- assertVisible: ".*${output.tag}.*"

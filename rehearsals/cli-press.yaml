@@ -18,7 +18,7 @@ tags:
 - tapOn: "Approve"
 - expectSheets:
     sheets:
-      - press: ".*the CLI.*"
+      - press: "sign the agent's PGP certificate.*"
     timeout: 60000
 - waitForTap:
     what: 'press ask'
