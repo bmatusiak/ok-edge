@@ -99,7 +99,9 @@ async function start() {
   if (server) return;
   const { createDesktopServer } = require('node-onlykey-lib/desktop/serve');
   /* a CLI's whole conversation: the page holds the key for it, and lets go only to answer it (useDesktopHost) */
-  server = createDesktopServer({ pipe: cliPipe, hostFor, log: (l) => console.log(`[hosting] ${l}`), onClient: (connected) => send('okedge:computerConnected', { connected }) });
+  server = createDesktopServer({ pipe: cliPipe, hostFor, log: (l) => console.log(`[hosting] ${l}`), onClient: (connected) => send('okedge:computerConnected', { connected }),
+    /* the CLI's request progress - its press waits too - for the page's sheet (src/features/channels/ipc.tsx) */
+    onBusy: (b) => send('okedge:computerBusy', b) });
   await server.start();
 }
 

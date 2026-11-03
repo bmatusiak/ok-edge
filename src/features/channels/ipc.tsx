@@ -23,6 +23,7 @@ import {DESKTOP_FROM, handleEdgeMessage} from '../../edgeAgents';
 import {desktop} from '../../platform';
 import {createKeyConversation} from '../../keyConversation';
 import {ioPulse} from '../../btActivity';
+import {keyGone, noteEdgeRequest, noteTunnel} from '../../keyBusy';
 import {theme} from '../../ui/theme';
 import {Btn, Section} from '../../ui/components';
 import {barStyles, useIoPurple} from '../../ui/statusBar';
@@ -73,7 +74,17 @@ function useDesktopHost(): void {
       ioPulse('ipc');
       void conv.beforeWrite().then(() => desktop!.invoke('okedge:computerHeld', id));
     });
-    return () => { offConnected(); offMessage(); offTalks(); conv.stop(' (the desktop host stopped)'); };
+    /*
+     * THE CLI'S REQUESTS ON THIS APP'S SHEET (Brad, 2026-11-02: the agent identity's certificate waited for a press with no
+     * sheet): the CLI says each request's progress (node-onlykey-lib cli/transport-desktop.js tell), and it is shown as this
+     * app's own - the progress, then "Press your OnlyKey" while the key waits. A CLI gone mid-request takes its sheet.
+     */
+    const offBusy = bridge.on('okedge:computerBusy', ({kind, e}: {kind: string; e: any}) => {
+      if (kind === 'tunnel') noteTunnel({...e, via: 'direct'});
+      else if (kind === 'edge') noteEdgeRequest(e);
+      else keyGone();
+    });
+    return () => { offConnected(); offMessage(); offTalks(); offBusy(); conv.stop(' (the desktop host stopped)'); };
   }, []);
 }
 

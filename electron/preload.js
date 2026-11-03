@@ -41,7 +41,7 @@ const SYNC_CHANNELS = new Set(['NativeOkEmu:isAvailable', 'NativeOkEmu:isRunning
 /* what the main process may push to the page: the native modules' events (src/desktop/specs) */
 const EVENTS = new Set(['NativeOkEmu:onStream', 'NativeOkEmu:onLed', 'NativeOkEmu:onPluginEvent', 'NativeOkEmu:onRestartRequested',
   'NativeUsbHid:onStatus', 'NativeUsbHid:onData',
-  'okedge:edgeMessage', 'okedge:computerTalks', 'okedge:computerConnected']);
+  'okedge:edgeMessage', 'okedge:computerTalks', 'okedge:computerConnected', 'okedge:computerBusy']);
 
 contextBridge.exposeInMainWorld('okedge', {
   invoke(channel, ...args) {
