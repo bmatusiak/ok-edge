@@ -66,7 +66,7 @@ function pageHolds() {
   const id = nextHold++;
   return new Promise((resolve) => {
     /* no page to ask (no window yet): nothing of the page's can be in the way */
-    const timer = setTimeout(() => { holdAcks.delete(id); resolve(); }, 5000);
+    const timer = setTimeout(() => { holdAcks.delete(id); console.log('[hosting] the page did not stand aside in 5 s - the CLI writes anyway'); resolve(); }, 5000);
     holdAcks.set(id, () => { clearTimeout(timer); holdAcks.delete(id); resolve(); });
     send('okedge:computerTalks', { id });
   });

@@ -43,7 +43,7 @@ import {watchLogBox} from './logbox';
  * lines a drive reads, by their prefix - never the firmware's console, raw traffic, or the native log.
  */
 /* [sheet]: what the person sees, for the drive's sheet inspector (tools/drive/sheets.js) - which sheet, its height, no content */
-const LIVE_PREFIXES = ['[press]', '[sheet]', '[request]', '[tap]', '[mcp]', '[key-agent]', '[local-mcp]', '[web]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]', '[key]'];
+const LIVE_PREFIXES = ['[hold]', '[press]', '[sheet]', '[request]', '[tap]', '[mcp]', '[key-agent]', '[local-mcp]', '[web]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]', '[key]'];
 const mayLeave = (line: string, native: boolean) =>
   currentNet() === 'test' || (!native && LIVE_PREFIXES.some(p => line.startsWith(p)));
 

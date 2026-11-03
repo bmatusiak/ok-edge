@@ -68,7 +68,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
     heldFrom = null;
     h.release();
     /* how long the app's own key reads (the Edge tab's sync) could not get in */
-    console.log(`[vendor] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
+    console.log(`[hold] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
     for (const l of [...freeListeners]) l();
   }
   /* sticky: held until releaseHold - a desktop CLI's whole connection (features/channels/ipc.tsx), not until the key is quiet */
@@ -78,7 +78,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
       const conversation = () => new Promise<void>(release => {
         held = {release, timer: null, since: Date.now()};
         heldFrom = Date.now();
-        console.log('[vendor] the computer holds the key');
+        console.log('[hold] the computer holds the key');
         ready();
         if (!sticky) armRelease();
       });
