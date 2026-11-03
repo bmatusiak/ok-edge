@@ -98,6 +98,8 @@ export const whatOf = (msg: number, slot: number) =>
 let current: KeyBusy | null = null;
 let latest: KeyBusy | null = null;
 let inFlight = false;
+/* the press sheet this module raised for a key on USB (hostChallenge keyAsks): cleared when its request ends */
+let keyAskDone: (() => void) | null = null;
 let ops = 0;
 let opsDone = 0;
 let showTimer: ReturnType<typeof setTimeout> | null = null;
@@ -207,6 +209,8 @@ export function noteTunnel(e: TunnelEvent) {
     since: began.id === e.id ? began.at : Date.now(), limitMs: began.id === e.id ? began.limitMs : null,
   };
   if (e.phase === 'end') {
+    keyAskDone?.();
+    keyAskDone = null;
     inFlight = false;
     opsDone += 1;
     if (current) set({...b, step: steps, opsDone, asks: false, delivered: false, done: true});
@@ -227,7 +231,11 @@ export function noteTunnel(e: TunnelEvent) {
    * lost, or typed as slot 1; 2026-11-01: a 22-ceremony budget opening was said to wait after its first packet). The
    * drive presses on this line.
    */
-  if (b.press && e.phase === 'step' && e.step === pressAt) console.log(`[keybusy] the key waits for its press: ${b.what}`);
+  if (b.press && e.phase === 'step' && e.step === pressAt) {
+    console.log(`[keybusy] the key waits for its press: ${b.what}`);
+    /* a key on USB: the one press sheet (hostChallenge keyAsks - one press, one sheet), gone with the request at the latest */
+    if (b.via === 'direct') { keyAskDone?.(); keyAskDone = require('./hostChallenge').keyAsks(b.what); }
+  }
   /* and once it has it: the press sheet goes, the progress stays (KeyBusySheet, HostChallengeSheet) */
   /*
    * THE PRESS ASK ENDS WITH IT (Brad, 2026-11-01: "its sending a stream of ctap calls, but not showing the ctap

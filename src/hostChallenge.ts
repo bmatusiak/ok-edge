@@ -66,6 +66,20 @@ export function askPress(what: string): () => void {
 }
 
 /*
+ * ONE PRESS, ONE SHEET (Brad, 2026-11-03: the card login's one press showed the progress sheet's "Press your OnlyKey",
+ * then the login's "Press the key" replaced it in the same second): a key on USB waits for a plain press - this sheet
+ * shows it, with the request's words, unless a sheet is up already (a screen's ask raised first stays; one raised after
+ * waits in its slot, askPress). keyBusy calls it when the key starts waiting and the returned function when the request
+ * ends; the press itself clears it (keyBusy pressed -> clearHostChallenge).
+ */
+export function keyAsks(what: string): () => void {
+  if (current) return () => undefined;
+  const mine: HostChallenge = {digits: [], what};
+  set(mine);
+  return () => { if (current === mine) set(screenAsk); };
+}
+
+/*
  * A COMPUTER'S PRESS, ON THIS APP'S SHEET (Brad, 2026-11-02: red-key's 3-button code for an `onlykey-js agent` sign
  * reached him only through the agent's terminal - the CLI asks the key through this app, so this app shows the code as
  * it shows its own): the CLI's "press asked" (node-onlykey-lib desktop link, src/features/channels/ipc.tsx) with its code,
