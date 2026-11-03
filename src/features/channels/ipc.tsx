@@ -74,7 +74,11 @@ function useDesktopHost(): void {
      */
     const offTalks = bridge.on('okedge:computerTalks', ({id}: {id: number}) => {
       ioPulse('ipc');
-      void conv.beforeWrite().then(() => desktop!.invoke('okedge:computerHeld', id));
+      /* no hold, no write: the refusal goes back, so the main process does not write after its 5 s wait */
+      void conv.beforeWrite().then(
+        () => desktop!.invoke('okedge:computerHeld', id),
+        (e: unknown) => desktop!.invoke('okedge:computerHeld', id, String((e as Error)?.message ?? e)),
+      );
     });
     /*
      * THE CLI'S REQUESTS ON THIS APP'S SHEET (Brad, 2026-11-02: the agent identity's certificate waited for a press with no

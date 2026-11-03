@@ -308,15 +308,19 @@ async function handleNote(msg: any, from: string): Promise<unknown | null> {
   /*
    * KEPT ONCE THE COMPUTER LETS THE KEY GO (red-key, 2026-11-03: kept and synced at once, each note's copy reads went to
    * the key between the CLI's note and its next request - the push's SSH sign failed). The open (it probes the key) and
-   * the sync wait for the conversation's end; the note is answered now, from storage, the hold kept (answerUsesKey).
+   * the sync wait for the conversation's end; the note is answered now, the hold kept (answerUsesKey).
+   * KEPT NOW WHEN THE EDGE IS OPEN (red-key, same day: kept only at the end, the Edge tab's own sync ran first and found
+   * the copy unchanged - the push's link said "intent unknown, no message synced"): storage only, no key.
    */
   const note = {computer: computer.id, seq: msg.seq, reason: msg.reason, receiptMsg: msg.receiptMsg, txRefused: msg.txRefused};
+  const kept = soft ? addNote(soft.deviceId, note).catch(() => undefined) : null;
   afterComputer(() => void (async () => {
+    await kept;
     /* the shared one, not a fresh open per note (each open probes the key and reads its public key) */
     soft = soft ?? (await SoftKeyEdge.open());
     const s = soft;
     if (!s) return; /* locked, or no Edge: nothing to keep it with */
-    await addNote(s.deviceId, note).catch(() => undefined);
+    if (!kept) await addNote(s.deviceId, note).catch(() => undefined);
     await syncCopy(s).catch(() => undefined); /* the sync, and its alarms */
   })().catch(() => undefined));
   return {ok: true};

@@ -64,10 +64,11 @@ const holdAcks = new Map(); /* id -> resolve */
 let nextHold = 1;
 function pageHolds() {
   const id = nextHold++;
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     /* no page to ask (no window yet): nothing of the page's can be in the way */
     const timer = setTimeout(() => { holdAcks.delete(id); console.log('[hosting] the page did not stand aside in 5 s - the CLI writes anyway'); resolve(); }, 5000);
-    holdAcks.set(id, () => { clearTimeout(timer); holdAcks.delete(id); resolve(); });
+    /* the page refused (it could not take its hold): the write is refused - session.js sends the CLI the error */
+    holdAcks.set(id, (refused) => { clearTimeout(timer); holdAcks.delete(id); if (refused) reject(new Error(String(refused))); else resolve(); });
     send('okedge:computerTalks', { id });
   });
 }
@@ -123,7 +124,8 @@ module.exports = {
     /* the page's active key: 'usb' (a hard key) or 'embedded' (the app's soft key) */
     'okedge:activeKey': (backend) => { activeKey = backend === 'embedded' ? 'embedded' : 'usb'; return activeKey; },
     'okedge:edgeAnswer': (id, answer) => { const done = answers.get(id); if (done) done(answer); return true; },
-    'okedge:computerHeld': (id) => { const done = holdAcks.get(id); if (done) done(); return true; },
+    /* refused: the page could not take its hold - the write is refused, never sent over the page's reads */
+    'okedge:computerHeld': (id, refused) => { const done = holdAcks.get(id); if (done) done(refused); return true; },
     /*
      * THE IDENTITY'S BUCKET IN THE CLI'S FOLDER (Brad, 2026-10-24: "cli and desktop decrypt once, share same bucket
      * stored in filesystem"): the page's identity check opens it once with the key and keeps it here; after that the

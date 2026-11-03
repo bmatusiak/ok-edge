@@ -115,6 +115,9 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
        */
       void lane.inLane(transport, conversation, undefined);
     });
+    /* a hold that failed is not kept: the next take tries afresh, not this rejected one again */
+    const mine = holding;
+    mine.catch(() => { if (holding === mine) holding = null; });
     return holding;
   }
   return {armRelease, releaseHold, holdForComputer, isHeld: () => !!held};

@@ -44,13 +44,22 @@ export function createKeyConversation(): KeyConversation {
     while (Date.now() - lastReport < QUIET_MS && Date.now() < until) await new Promise(r => setTimeout(r, 50));
   };
   let ready: Promise<void> = Promise.resolve();
+  /*
+   * NO HOLD, NO WRITE (red-key, 2026-11-03: one exec's writes went 50 ms after it connected, no "[hold]" line, the Edge
+   * tab's reads in flight - its gpg derive read back wrong and the ship stopped): a hold that could not be taken was
+   * swallowed here and the CLI wrote anyway. Now it is said, and the write is refused (the session sends the CLI the
+   * error) - the CLI stops cleanly instead of talking over the app.
+   */
   const take = () => (ready = getOnlyKey(activeBackend())
     .then(async app => { await hold.holdForComputer(app.transport, connected); await quiet(app.transport); })
-    .catch(() => undefined));
+    .catch((e: unknown) => {
+      console.log(`[hold] could not take the key for the computer: ${String((e as Error)?.message ?? e)}`);
+      throw e;
+    }));
   return {
     setConnected(c) {
       connected = !!c;
-      if (connected && !answering) void take();
+      if (connected && !answering) take().catch(() => undefined); /* said in take; its writes are refused */
       if (!connected) hold.releaseHold(' (the computer went away)');
     },
     async answer(fn, usesKey = true) {
@@ -67,11 +76,16 @@ export function createKeyConversation(): KeyConversation {
         return await fn();
       } finally {
         answering--;
-        if (connected && !answering) void take();
+        if (connected && !answering) take().catch(() => undefined);
       }
     },
-    beforeWrite() {
-      return hold.isHeld() ? ready : take().then(() => { if (!connected) hold.armRelease(); });
+    async beforeWrite() {
+      await (hold.isHeld() ? ready : take().then(() => { if (!connected) hold.armRelease(); }));
+      /* the one way through is the hold: a write with none is refused, said (fail closed) */
+      if (!hold.isHeld()) {
+        console.log('[hold] a computer write with no hold on the key - refused');
+        throw new Error('the desktop app could not hand the key over (no hold) - try again');
+      }
     },
     stop(why) { hold.releaseHold(why); },
   };
