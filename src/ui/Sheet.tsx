@@ -95,7 +95,13 @@ export function Sheet({
     if (!visible || Math.abs(h - heightWas.current) < 1) return;
     say(h);
   };
-  React.useEffect(() => { if (!visible) opened.current = false; }, [visible]);
+  /* and its close, said for an opened sheet - the inspector checks that a key's sheets close with the key (keyGone.ts) */
+  React.useEffect(() => {
+    if (visible || !opened.current) return;
+    opened.current = false;
+    console.log(`[sheet] closed: ${name}`);
+  }, [visible, name]);
+  React.useEffect(() => () => { if (opened.current) console.log(`[sheet] closed: ${name}`); }, [name]);
   return (
     <Modal
       transparent

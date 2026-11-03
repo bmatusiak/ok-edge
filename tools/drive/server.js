@@ -1030,8 +1030,11 @@ async function procFor(app, action, args = {}) {
    * nothing changes.
    */
   const pk = !via && require('./pikey').piKeySettings();
-  if (pk && pk.for === app.shell && pk.firmwareOn && (action === 'press' || action === 'key-state' || action.startsWith('pikey-'))) {
-    if (!action.startsWith('pikey-')) action = `pikey-${action}`;
+  if (pk && pk.for === app.shell && pk.firmwareOn && (action === 'press' || action === 'key-state' || action === 'unplug' || action === 'plug' || action.startsWith('pikey-'))) {
+    /* a flow's unplug and plug (maestro/runner.js unplugKey, plugKey): this key's cable */
+    if (action === 'unplug') action = 'pikey-out';
+    else if (action === 'plug') action = 'pikey-in';
+    else if (!action.startsWith('pikey-')) action = `pikey-${action}`;
     via = pk.firmwareOn;
   }
   if (!via) return { ...(await localTargets.act(action, app.shell, args)), where: 'this machine' };

@@ -14,6 +14,8 @@
  * kept per device id (mirrors, logs) stays: it is that device's, and stored sealed.
  */
 export function forgetKeyState(): void {
+  /* said, so the drive's sheet inspector can check that nothing of the key stays on screen (tools/drive/sheets.js) */
+  console.log('[identity] the key went: its state forgotten');
   require('./hooks/useEdge').forgetEdgeKey();
   require('./edgeAgents').forgetAgentsKey();
   require('./edgeSoftKey').SoftKeyEdge.forgetSession();

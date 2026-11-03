@@ -12,6 +12,8 @@
  *   stale press sheet  the key answered and the press sheet is still up STALE_MS later, with no new wait
  *   no progress        requests still run NO_PROGRESS_MS after a press and no progress sheet shows
  *   idle press sheet   a press sheet up IDLE_MS with no request in flight and no wait
+ *   user state exposed a sheet still open KEY_GONE_MS after the key went (Brad, 2026-11-03: the agent identity's sheet stayed
+ *                      up after the unplug - "the user state stays exposed, leaking private information")
  *   no code            the key wants a 3-button code and no sheet shows it within NO_SHEET_MS (a hard key's; the soft
  *                      key's own buttons take its presses)
  *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
@@ -25,6 +27,7 @@
  */
 
 const NO_SHEET_MS = 1000;
+const KEY_GONE_MS = 1000;
 const STALE_MS = 1000;
 const NO_PROGRESS_MS = 1500;
 const IDLE_MS = 5000;
@@ -45,6 +48,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let waitsSeen = 0; /* waits begun - a later answer checks that none came after it */
   let iconBackend = null; /* the key a press sheet was last shown for: usb (a hard key), embedded (the soft key) */
   const shownCodes = []; /* the codes sheets showed, with when */
+  const openSheets = new Set(); /* the sheets open now, by title (opened: their first height after onShow; closed: their close) */
   let wentInWait = false; /* a press sheet went while the key waited for this one press */
   let afterAnswer = null; /* since the key last answered a press: what it answered, the requests begun since (id -> {what, asked}) */
   const open = new Map(); /* timeline id -> what */
@@ -117,6 +121,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
     m = /^\[sheet\] height (\d+): (.*)$/.exec(l);
     if (m) {
       /* back where it was: A -> B -> A within JUMP_MS - a part of the sheet coming and going (the time bar), not new words */
+      openSheets.add(m[2]);
       const t = now();
       const h = Number(m[1]);
       const list = (heights.get(m[2]) || []).filter((x) => t - x.t < JUMP_MS);
@@ -127,6 +132,19 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
         fail(`sheet jumps: "${m[2]}" went ${list[n - 3].h} -> ${list[n - 2].h} -> ${h} px within ${Math.round((t - list[n - 3].t) / 100) / 10} s`);
         heights.set(m[2], []);
       }
+      return;
+    }
+    m = /^\[sheet\] closed: (.*)$/.exec(l);
+    if (m) { openSheets.delete(m[1]); heights.delete(m[1]); return; }
+    /*
+     * THE KEY WENT: NOTHING OF IT STAYS ON SCREEN (Brad, 2026-11-03: "when unplugging, the user state stays exposed, leaking
+     * private information" - the agent identity's sheet, its labels and certificate, stayed up after the unplug): every
+     * sheet open when the key went closes with it (src/keyGone.ts forgetKeyState)
+     */
+    if (/^\[identity\] the key went/.test(l)) {
+      later(KEY_GONE_MS, () => {
+        if (openSheets.size) fail(`user state exposed: ${[...openSheets].map((s) => `"${s}"`).join(', ')} still open ${KEY_GONE_MS / 1000} s after the key went`);
+      });
       return;
     }
     /* the truth: what the lib asked of the key (src/requestLog.ts) */

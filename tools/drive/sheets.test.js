@@ -119,6 +119,23 @@ test('one press, one sheet: no swap', () => {
   assert.deepEqual(fails, []);
 });
 
+test('user state exposed: the agent identity\'s sheet still open after the key went - the unplug', async () => {
+  const { j, fails, say } = inspector();
+  say('[sheet] height 420: Agent identity', '[identity] the key went: its state forgotten');
+  await wait(1200);
+  j.stop();
+  assert.equal(fails.length, 1);
+  assert.match(fails[0], /^user state exposed: "Agent identity" still open/);
+});
+
+test('the key went and its sheets closed with it: no failure', async () => {
+  const { j, fails, say } = inspector();
+  say('[sheet] height 420: Agent identity', '[identity] the key went: its state forgotten', '[sheet] closed: Agent identity');
+  await wait(1200);
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
 test('no progress: requests run after the press and no sheet shows them', async () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)');

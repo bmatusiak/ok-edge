@@ -1,0 +1,16 @@
+# THE KEY UNPLUGGED: NOTHING OF IT STAYS ON SCREEN (Brad, 2026-11-03: "when unplugging, the user state stays exposed,
+# leaking private information" - the agent identity's sheet, with its labels and certificate, stayed up after the unplug).
+# A sheet left showing the key's things, then the key unplugged: the sheet inspector fails any sheet still open a second
+# after the app says the key went (src/keyGone.ts). Then the key back. Any app whose key the drive can unplug.
+name: Unplugged, nothing of the key stays on screen
+tags:
+  - identity
+  - sheets
+---
+# the agent identity's sheet, left showing "Kept" with the identity's labels and certificate
+- runFlow: cli-press.yaml
+- unplugKey
+- waitForLog:
+    pattern: '\[identity\] the key went'
+    timeout: 20000
+- plugKey

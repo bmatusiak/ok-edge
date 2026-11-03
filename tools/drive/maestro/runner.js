@@ -16,6 +16,7 @@
  *   waitForLog        a line the app logs (a regex) - events, not the screen: Maestro has no log
  *   waitForTap        a sheet waiting for the person's tap (the app's "[tap] wanted: <what> - choices ...", src/ui/tapWanted.ts);
  *                     `what` a regex its words must match, `timeout` in ms - the flow's next tapOn answers it
+ *   unplugKey / plugKey  the app's key unplugged / plugged back - whichever key the drive can (a flow never names it)
  *   expectSheets      the sheets the person sees, in order from the step before: press / progress / none, each
  *                     with a regex of its words (tools/drive/sheets.js - the inspector also fails ANY flow on a sheet failure)
  *   machine           an action of a machine the drive reaches (targets.js): keys, key-state, tool, hex, flash ...
@@ -315,6 +316,17 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
         const m = hit(String(got));
         if (m) say(`a tap is wanted: ${m[1]} - ${m[2]}`);
         if (spec.as) output[spec.as] = m ? m[1] : got;
+        return;
+      }
+      case 'unplugKey':
+      case 'plugKey': {
+        /*
+         * THE APP'S KEY UNPLUGGED, OR PLUGGED BACK (Brad, 2026-11-03: the unplug that showed the user state staying on screen):
+         * whichever key the drive can unplug for this app - a flow never names it; a drive with none says so and the flow stops
+         */
+        const r = await d.machine(name === 'unplugKey' ? 'unplug' : 'plug', d.app.shell, {});
+        if (!r.ok) throw new Error(`${name}: the drive cannot ${name === 'unplugKey' ? 'unplug' : 'plug'} this app's key (${r.why})`);
+        say(`${name}: ${r.what}`);
         return;
       }
       case 'expectSheets': {
