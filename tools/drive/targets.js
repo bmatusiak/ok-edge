@@ -448,7 +448,21 @@ async function stopChild(child, line, name) {
  * every 250 ms under the watchdog - the one place a process's end can only be looked at.
  */
 function strayElectrons() {
-  if (!LINUX) return [];
+  /*
+   * WINDOWS TOO (2026-11-03, finding 1: the Server setting "lost" after some restarts): with none listed here, a drive that
+   * had lost track of the app it started (any drive restart) neither waited for nor ended it - the new copy started while
+   * the old one still held the profile's storage lock, and came up with its storage empty. The app's main process by its
+   * command line (electron.exe ... ok-edge\electron\main.js, not a --type= child).
+   */
+  if (!LINUX) {
+    try {
+      const out = require('child_process').execFileSync('powershell.exe', ['-NoProfile', '-Command',
+        "Get-CimInstance Win32_Process -Filter \"Name='electron.exe'\" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"],
+      { encoding: 'utf8', timeout: 15000, windowsHide: true });
+      const mine = path.join(EDGE, 'electron', 'main.js').toLowerCase();
+      return out.split(/\r?\n/).map((l) => l.split('\t')).filter(([pid, cmd]) => pid && cmd && cmd.toLowerCase().includes(mine)).map(([pid]) => Number(pid)).filter((p) => p && p !== process.pid);
+    } catch { return []; }
+  }
   const out = [];
   for (const d of fs.readdirSync('/proc')) {
     if (!/^\d+$/.test(d) || Number(d) === process.pid) continue;

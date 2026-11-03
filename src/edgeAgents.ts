@@ -82,7 +82,18 @@ let soft: SoftKeyEdge | null = null;
 /* the key went away: its Edge, opened on that key's session, goes with it (src/keyGone.ts) */
 export function forgetAgentsKey(): void {
   soft = null;
+  /*
+   * THE KEY WENT: ITS SHEET GOES (Brad, 2026-11-03: "when unplugging, the user state stays exposed, leaking private
+   * information" - the agent identity's sheet, its labels and certificate, stayed up after the unplug): a question still
+   * asked is declined - the key that would act on it is gone - and whatever the sheet shows closes. The request's own
+   * late result does not bring it back: until a new request asks, the old one's updates are not shown (show).
+   */
+  keyWent = true;
+  if (answer) { const f = answer; answer = null; f('decline'); }
+  if (current) { current = null; attention(null); for (const l of listeners) l(null); }
 }
+/* the key went with a request on the sheet: that request's later updates are not shown - a new ask starts over */
+let keyWent = false;
 
 /*
  * AFTER THE ANSWER (Brad, 2026-10-04): a DECLINE closes itself after 30 s - the
@@ -98,6 +109,10 @@ function unattended(): boolean {
 }
 
 function show(s: SheetState | null) {
+  if (keyWent) {
+    if (s?.phase !== 'ask') return;
+    keyWent = false;
+  }
   if (s?.phase === 'press' && approvedAt) {
     console.log(`[edge] approve -> press asked ${Date.now() - approvedAt} ms`);
     approvedAt = 0;
