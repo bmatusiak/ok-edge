@@ -102,7 +102,7 @@ ipcMain.handle('okedge:keySite', (e, site) => {
  */
 ipcMain.handle('okedge:shot', async (e) => (await e.sender.capturePage()).toPNG().toString('base64'));
 /* the app closes itself for a drive's stop or restart - as a window close would, storage flushed (src/drive/quit.desktop.ts) */
-ipcMain.handle('okedge:quit', () => { setImmediate(() => app.quit()); return true; });
+ipcMain.handle('okedge:quit', () => { console.log('[quit] the page asked to quit'); setImmediate(() => app.quit()); return true; });
 
 /* one channel per thing the page may ask for; preload.js lists the same names */
 ipcMain.handle('okedge:about', () => ({
@@ -195,6 +195,7 @@ app.whenReady().then(() => {
  */
 const flushStorage = () => { try { session.defaultSession.flushStorageData(); } catch (e) { console.error(`[storage] flush: ${e.message}`); } };
 app.on('window-all-closed', () => {
+  console.log('[quit] every window closed');
   flushStorage();
   app.quit();
 });
@@ -212,6 +213,7 @@ app.on('window-all-closed', () => {
 const QUIT_FLUSH_MS = 1500;
 let quitFlushed = false;
 app.on('before-quit', (e) => {
+  console.log(`[quit] before-quit${quitFlushed ? ' (again - going on)' : ' - flushing storage, then quitting'}`);
   if (quitFlushed) return;
   quitFlushed = true;
   flushStorage();
@@ -230,6 +232,7 @@ app.on('will-quit', (e) => {
   if (stopping) return;
   stopping = true;
   e.preventDefault();
-  Promise.race([desktopModules.stop().catch(() => {}), new Promise((ok) => setTimeout(ok, STOP_MS))])
-    .finally(() => app.exit(0));
+  console.log('[quit] will-quit - stopping the desktop modules');
+  Promise.race([desktopModules.stop().then(() => 'stopped').catch((err) => `stop failed: ${err.message}`), new Promise((ok) => setTimeout(() => ok(`not stopped in ${STOP_MS} ms`), STOP_MS))])
+    .then((how) => { console.log(`[quit] desktop modules ${how} - the master exits`); app.exit(0); });
 });

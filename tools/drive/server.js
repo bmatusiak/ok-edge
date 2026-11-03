@@ -857,7 +857,7 @@ const localTargets = createTargets((l) => line(l), (shell, l) => appOut(shell, l
  * holds here too: on the testnet every line; otherwise - the live chain, or the app not connected yet - only a drive's
  * prefixes.
  */
-const LIVE_PREFIXES = ['[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]', '[net]', '[gadget]'];
+const LIVE_PREFIXES = ['[quit]', '[press]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[sync]', '[site]', '[hosting]', '[net]', '[gadget]'];
 /*
  * A COMMAND ON A MACHINE (a build, the lib's CLI - targets.js streamIn), for the drive window's command tabs (bus
  * 'cmd'): its start and its end are drive lines too, so a run's record and the drive tab say what ran and how it ended.
