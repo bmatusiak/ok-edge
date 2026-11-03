@@ -1,0 +1,22 @@
+# A CLI'S PRESS ON THIS APP'S SHEET (Brad, 2026-11-02: the agent identity's certificate waited for presses through the
+# desktop app with no sheet, and its code reached him only through a terminal): the CLI asks the key through this app;
+# the sheet inspector checks each press came on a sheet showing its code, and went when the key answered. Any app with
+# a test key on its USB - the drive presses it when the sheet asks. Testnet only.
+#   run.js rehearse --app desktop@windows cli-press
+name: A CLI's press on the app's sheet
+tags:
+  - edge
+  - sheets
+---
+- runScript: scripts/cli-press-start.js
+# the first signature's press - on a sheet, with its code (the inspector fails "no press sheet" and "no code" itself)
+- expectSheets:
+    sheets:
+      - press: ".*the CLI.*"
+    timeout: 60000
+# the identity it made, approved on this app's sheet
+- waitForTap:
+    what: 'agent identity'
+    timeout: 120000
+- tapOn: "Approve"
+- runScript: scripts/setup-end.js
