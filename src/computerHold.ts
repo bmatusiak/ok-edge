@@ -7,6 +7,7 @@
  * phones are free to become testing over mcp until we rework how ble comes back"). The hold itself was never
  * Bluetooth's: the desktop took it over 2026-10-24 ("1 to 1"), and it is the desktop's alone now.
  */
+import {lane} from 'node-onlykey-lib/transport';
 
 /* a computer's conversation holds the key's lane until it has been quiet this long (and nothing waits for a press) */
 const COMPUTER_QUIET_MS = 1500;
@@ -82,11 +83,13 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
         ready();
         if (!sticky) armRelease();
       });
-      if (typeof transport.exclusive === 'function') {
-        void transport.exclusive(conversation);
-      } else {
-        void conversation();
-      }
+      /*
+       * IN THE KEY'S OWN LANE, the one every lib request waits in (inLane: the transport's exclusive() when it has one, else
+       * the lib's lane for that transport). Box + red-key, 2026-11-03: the USB transport has no exclusive(), and the hold
+       * then ran outside every lane - "the computer holds the key" while the Edge tab's chain reads went on beside the
+       * CLI's ship: red-key's agent key read back wrong, the box's copy "tampered".
+       */
+      void lane.inLane(transport, conversation, undefined);
     });
     return holding;
   }
