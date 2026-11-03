@@ -58,12 +58,13 @@ export function KeyBusySheet() {
       /* the request's own limit while it runs (Brad, 2026-11-01: the sheet sat "just inactive" while a read hung 30 s; "if it has a timer it gets a timer progress bar") */
       : !b.done && b.limitMs ? {since: b.since, seconds: Math.max(1, Math.round(b.limitMs / 1000))} : null}>
       {b.asks ? <PressIcon /> : null}
-      {why ? <Text style={styles.why}>{why}</Text> : null}
+      {/* two lines kept for it, said or not, so the sheet never changes height as the tasks change (the inspector's "sheet jumps") */}
+      <Text style={styles.why} numberOfLines={2}>{why ?? ''}</Text>
       <Text style={styles.counts}>{queue.join(' · ')}</Text>
       <View style={styles.track}>
         <View style={[styles.fill, {width: `${queuePct}%`}]} />
       </View>
-      <Text style={[styles.what, styles.gap]}>{b.done ? `${b.what} - done` : b.what}</Text>
+      <Text style={[styles.what, styles.gap]} numberOfLines={2}>{b.done ? `${b.what} - done` : b.what}</Text>
       <View style={styles.track}>
         <View style={[styles.fill, styles.fillStep, {width: `${pct}%`}]} />
       </View>
@@ -80,8 +81,9 @@ export function KeyBusySheet() {
 }
 
 const styles = StyleSheet.create({
-  why: {color: theme.text, fontSize: 16, fontWeight: '600', marginBottom: 12},
-  what: {color: theme.text, fontSize: 16, marginBottom: 12},
+  why: {color: theme.text, fontSize: 16, lineHeight: 22, height: 44, fontWeight: '600', marginBottom: 12},
+  /* two lines kept: a long step with " - done" wraps, and the sheet must not grow and shrink with it */
+  what: {color: theme.text, fontSize: 16, lineHeight: 22, height: 44, marginBottom: 12},
   track: {height: 8, borderRadius: 4, backgroundColor: theme.border, overflow: 'hidden'},
   fill: {height: 8, borderRadius: 4, backgroundColor: theme.accent},
   counts: {color: theme.textDim, fontSize: 13, marginTop: 8},

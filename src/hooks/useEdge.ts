@@ -188,7 +188,7 @@ export function useEdge() {
   /** B1: HEAD, READ what is new, store, verify everything - after this app's own key action. */
   const sync = useCallback(() => runFor("Bringing this device's copy of the key's chain up to date", async s => (await syncMirror(s)).view), [runFor]);
   /** A look: the copy as this host holds it, checked offline (source() took any log a trade brought) - no key. */
-  const look = useCallback(async () => {
+  const lookOnce = useCallback(async () => {
     const s = await source();
     /* nothing to stand on offline yet (no checkpoint kept, this session's head unknown): one sync asks the key, once */
     if (s && !(await lookable(s.deviceId))) {
@@ -197,6 +197,24 @@ export function useEdge() {
     }
     return runFor("Looking at this device's copy of the key's chain", k => offlineView(k as unknown as Parameters<typeof offlineView>[0]), {offline: true});
   }, [runFor, sync, source]);
+  /*
+   * ONE LOOK AT A TIME, AND ONE AFTER IT (2026-11-03, the box: a look took 6-8 s over every device's chain, and each
+   * computer letting the key go asked for one - a 255-use ship would have queued 255 of them): a look asked while one
+   * runs is the one after it, however many are asked - what changed meanwhile is all in that one.
+   */
+  const looking = useRef<{again: boolean} | null>(null);
+  const look = useCallback(async (): Promise<void> => {
+    if (looking.current) { looking.current.again = true; return; }
+    looking.current = {again: false};
+    try {
+      do {
+        looking.current.again = false;
+        await lookOnce();
+      } while (looking.current.again);
+    } finally {
+      looking.current = null;
+    }
+  }, [lookOnce]);
   /* a merge or a nametag change (edgeDevices): your other devices' cards and logs are read again at once - no pull needed */
   useEffect(() => {
     if (!wantReal) return undefined;
