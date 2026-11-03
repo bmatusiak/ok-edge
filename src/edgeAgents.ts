@@ -348,6 +348,14 @@ async function handleIdentity(msg: any, seen: Set<string>, from: string): Promis
  * message the key will sign and its code. Approve: the sheet goes, the request reaches the key and its press sheet follows.
  * Anything else: the key is never asked. Not behind the Requests switch - it is this computer's own CLI, and it always asks.
  */
+/* the press just approved - its words for the press sheet that follows (src/features/channels/ipc.tsx; every press says why) */
+let approvedPress: {what: string; computer: string; at: number} | null = null;
+export function takeApprovedPress(): {what: string; computer: string} | null {
+  const p = approvedPress;
+  approvedPress = null;
+  return p && Date.now() - p.at < 60_000 ? {what: p.what, computer: p.computer} : null;
+}
+
 async function handlePressAsk(msg: any, seen: Set<string>, from: string): Promise<unknown | null> {
   const computer = await computerOf(from);
   if (!computer) return null;
@@ -363,6 +371,7 @@ async function handlePressAsk(msg: any, seen: Set<string>, from: string): Promis
     return result;
   }
   console.log(`[edge] press approved: ${msg.what}`);
+  approvedPress = {what: msg.what, computer: computer.name, at: Date.now()};
   show(null);
   return {ok: true};
 }

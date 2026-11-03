@@ -157,7 +157,7 @@ test('budget unnamed: the login\'s press sheet says only "Edge: opening a budget
   say(`[request] press asked: ${BUDGET} - a press`, `[press] key waits: ${BUDGET} - buttons any`, '[press] icon up (usb)');
   await wait(NO_SHEET_MS + 200);
   j.stop();
-  assert.ok(fails.some((f) => /^budget unnamed/.test(f)), fails.join(' | '));
+  assert.ok(fails.some((f) => /^press without why/.test(f)), fails.join(' | '));
 });
 
 test('a budget\'s press sheet that says what the budget is for passes', async () => {

@@ -16,7 +16,7 @@
  *                      up after the unplug - "the user state stays exposed, leaking private information")
  *   press unapproved   a computer's press ("... (the CLI)") reached the key with no approval in the app before it (Brad,
  *                      2026-11-03: "i press approve on the app, and then on the key, like edge")
- *   budget unnamed     an Edge budget's press sheet says only "Edge: opening a budget", not what the budget is for
+ *   press without why  a press sheet (a key on USB) that says only the request's name, not what the press is for
  *   no code            the key wants a 3-button code and no sheet shows it within NO_SHEET_MS (a hard key's; the soft
  *                      key's own buttons take its presses)
  *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
@@ -172,11 +172,16 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
        * budget": "what budget am i pressing for?"): the press sheet's words for it - the last "[press] key waits" - are its
        * purpose, not the request's name
        */
-      if (/^Edge: (opening|resuming) a budget$/.test(m[1])) {
-        later(NO_SHEET_MS, () => {
-          if (waitWhat === m[1] && /^Edge: (opening|resuming) a budget$/.test(sheetWords)) fail(`budget unnamed: the press sheet says only "${sheetWords}" - not what the budget is for`);
-        });
-      }
+      /*
+       * ...AND EVERY PRESS SAYS WHY (Brad, 2026-11-03: "we must know what we are pressing for, in every case - we already
+       * know why we are pressing, the press sheet should always say why, so the user is limited to being tricked on what
+       * to press"): on a key on USB, a press sheet whose words are only the request's own name ("signing", "Edge: opening
+       * a budget", "signing (the CLI)") fails - the soft key's own sheet names its slot and label itself
+       */
+      later(NO_SHEET_MS, () => {
+        if (waitWhat !== m[1] || iconBackend === 'embedded' || !icons) return;
+        if (sheetWords === m[1] || /^Edge: (opening|resuming) a budget$/.test(sheetWords)) fail(`press without why: the press sheet says only "${sheetWords}" - not what the press is for`);
+      });
       if (m[2] && iconBackend !== 'embedded') {
         const code = m[2].trim();
         const what = m[1];

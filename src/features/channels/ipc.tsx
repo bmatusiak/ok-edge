@@ -88,7 +88,11 @@ function useDesktopHost(): void {
       if (kind === 'press') {
         sayPress(e, 'the CLI');
         cliDone();
-        if (e.phase === 'asked') cliAsk = computerAsks(`${whatOf(e.msg, e.slot)} (the CLI)`, e.code);
+        /* its words: what was approved for it in the app (every press says why), else the request's name */
+        if (e.phase === 'asked') {
+          const ok = require('../../edgeAgents').takeApprovedPress();
+          cliAsk = computerAsks(ok ? `${ok.what} - from ${ok.computer}` : `${whatOf(e.msg, e.slot)} (the CLI)`, e.code);
+        }
       } else if (kind === 'tunnel') noteTunnel({...e, via: 'direct'});
       else if (kind === 'edge') noteEdgeRequest(e);
       else { cliDone(); keyGone(); }
