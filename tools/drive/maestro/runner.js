@@ -16,6 +16,8 @@
  *   waitForLog        a line the app logs (a regex) - events, not the screen: Maestro has no log
  *   waitForTap        a sheet waiting for the person's tap (the app's "[tap] wanted: <what> - choices ...", src/ui/tapWanted.ts);
  *                     `what` a regex its words must match, `timeout` in ms - the flow's next tapOn answers it
+ *   expectSheets      the sheets the person sees, in order from the step before: press / progress / none, each
+ *                     with a regex of its words (tools/drive/sheets.js - the judge also fails ANY flow on a sheet failure)
  *   machine           an action of a machine the drive reaches (targets.js): keys, key-state, tool, hex, flash ...
  *
  * WHAT IS OURS UNDER MAESTRO'S NAMES (not exactly how Maestro does it):
@@ -85,7 +87,22 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
   const heard = new WeakSet();
   let prevStart = Date.now();
   let stepStart = Date.now();
-  const listen = () => { if (!heard.has(d.app)) { heard.add(d.app); d.app.on('log', (l) => seen.push({ at: Date.now(), l: String(l) })); } };
+  /*
+   * WHAT THE PERSON SAW, AND WHAT THE SHEET JUDGE FAILED (tools/drive/sheets.js; Brad, 2026-11-02: "the rehearsals should
+   * be looking at this as a fail"): each sheet as it came and went, for expectSheets; each failure fails the flow at the
+   * step it came in - the flow's own steps passing is not enough.
+   */
+  const sheetsSeen = [];
+  const sheetFails = [];
+  const sheetWaiters = new Set();
+  const listen = () => {
+    if (heard.has(d.app)) return;
+    heard.add(d.app);
+    d.app.on('log', (l) => seen.push({ at: Date.now(), l: String(l) }));
+    d.app.on('sheet', (ev) => { sheetsSeen.push(ev); for (const w of [...sheetWaiters]) w(); });
+    d.app.on('sheet-fail', (why) => sheetFails.push(why));
+  };
+  const judged = () => { if (sheetFails.length) throw new Error(`SHEET FAIL: ${sheetFails.join(' | ')}`); };
 
   /* ${...}: a name from env, else JavaScript over env, output and maestro */
   const evalIn = (expr, env) => vm.runInNewContext(expr, { ...env, output, maestro, Math, JSON, Number, String, parseInt });
@@ -148,7 +165,11 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
     const f = loadFlow(file);
     const flowEnv = { ...interp(f.config.env || {}, env), ...env };
     say(`flow ${f.config.name || path.basename(file)}${f.config.appId ? ` (${f.config.appId})` : ''} on ${maestro.platform}`);
+    listen();
     await runList(f.commands, flowEnv, f.dir);
+    /* the judge's last word on the flow's last step: its checks run up to NO_PROGRESS_MS after an answer */
+    await new Promise((r) => setTimeout(r, require('../sheets').NO_PROGRESS_MS + 500));
+    judged();
   }
 
   async function run(c, env, dir) {
@@ -158,7 +179,9 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
     const label = raw && typeof raw === 'object' && raw.label;
     try {
       await exec(name, raw, env, dir);
+      judged();
     } catch (e) {
+      if (/^SHEET FAIL/.test(e.message)) throw new Error(`${label || name}: ${e.message}`);
       if (optional) { say(`${label || name}: optional - ${String(e.message).split('\n')[0]}`); return; }
       throw new Error(`${label || name}: ${e.message}`);
     }
@@ -292,6 +315,30 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
         const m = hit(String(got));
         if (m) say(`a tap is wanted: ${m[1]} - ${m[2]}`);
         if (spec.as) output[spec.as] = m ? m[1] : got;
+        return;
+      }
+      case 'expectSheets': {
+        /*
+         * WHAT THE PERSON SEES, IN ORDER, FROM THE STEP BEFORE (Brad, 2026-11-02: "expected after"): each entry "press" /
+         * {press: <regex of its words>}, "progress" / {progress: <regex>}, or "none" - matched against the sheets as the
+         * judge saw them come and go since the previous step began; what has not come yet is waited for (timeout ms, 30 s).
+         */
+        const spec = Array.isArray(a) ? { sheets: a } : (a || {});
+        const want = (spec.sheets || []).map((x) => (typeof x === 'string' ? { kind: x, re: null } : { kind: Object.keys(x)[0], re: new RegExp(String(Object.values(x)[0])) }));
+        const end = Date.now() + (spec.timeout || 30000);
+        let i = sheetsSeen.findIndex((ev) => ev.at >= prevStart);
+        if (i < 0) i = sheetsSeen.length;
+        for (const w of want) {
+          for (;;) {
+            judged();
+            const j = sheetsSeen.slice(i).findIndex((ev) => ev.kind === w.kind && (!w.re || w.re.test(ev.what)));
+            if (j >= 0) { i += j + 1; break; }
+            const left = end - Date.now();
+            if (left <= 0) throw new Error(`expected the ${w.kind} sheet${w.re ? ` (/${w.re.source}/)` : ''} - saw: ${sheetsSeen.filter((ev) => ev.at >= prevStart).map((ev) => `${ev.kind}${ev.what ? ` "${ev.what}"` : ''}`).join(' -> ') || 'no sheet'}`);
+            await new Promise((r) => { const t = setTimeout(done, left); function done() { clearTimeout(t); sheetWaiters.delete(done); r(); } sheetWaiters.add(done); });
+          }
+        }
+        say(`sheets as expected: ${want.map((w) => w.kind).join(' -> ')}`);
         return;
       }
       case 'waitForLog': {

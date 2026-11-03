@@ -180,6 +180,25 @@ function watchStuck(app) {
 }
 
 /*
+ * THE SHEET JUDGE ON EVERY APP (tools/drive/sheets.js; Brad, 2026-11-02: "the rehearsals should be looking at this as a
+ * fail"): what the person sees against what the key does, on every line the app says - its own and its machine's (the
+ * gadget's LED). A failure is one drive line (the running rehearsal fails on it, maestro/runner.js) and a picture.
+ */
+function judgeSheets(app) {
+  const { createSheetJudge } = require('./sheets');
+  app.judge = createSheetJudge({
+    fail: (why) => {
+      line(`[${tabName(app)}] SHEET FAIL: ${why}`);
+      app.emit('sheet-fail', why);
+      shotOf(app, 'sheet-fail').catch(() => undefined);
+    },
+    event: (ev) => app.emit('sheet', ev),
+  });
+  app.on('log', (l) => app.judge.line(l));
+  app.on('close', () => app.judge.stop());
+}
+
+/*
  * THE EDGE PRESS HELD (Brad, 2026-11-01: "lets run it without pressing the key, so i can see how the key is waiting"):
  * while a script holds it, the Edge press is left to the key's own time-out - the browser's touches are still pressed
  * (they carry the request to the key; without them nothing would wait). Ends with the script that held it.
@@ -243,6 +262,11 @@ function pressWhenAsked(app) {
     if (edgePress ? iconAnswered : touched) return;
     if (edgePress) iconAnswered = true; else touched = true;
     if (edgePress && pressHeld) { line(`[${app.shell}] held: the key waits for its Edge press (LED ${colour}) - not pressed`); return; }
+    /*
+     * NEVER A BLIND PRESS (2026-11-02): the LED says the key waits, but the person is asked only by a press sheet - none
+     * up within the judge's time, and the key is left to wait: the judge fails it (no press sheet), the flow stops there.
+     */
+    if (edgePress && !(await app.judge.pressSheet(1000))) { line(`[${app.shell}] not pressed: the key waits for its Edge press (LED ${colour}) and no press sheet asks for it`); return; }
     pressing = true;
     try {
       const s = await procFor(app, 'key-state');
@@ -679,6 +703,7 @@ function attachApp(sock) {
       everyApp.add(app);
       /* what its process said while it started (#3) begins its record */
       if (outBefore.has(app.shell)) { app.recent.unshift(...outBefore.get(app.shell)); outBefore.delete(app.shell); }
+      judgeSheets(app);
       pressWhenAsked(app);
       watchStuck(app);
       line(`app connected: ${app.shell} (${app.os}, ${app.net})${sock.via ? ` via ${sock.via}` : ''}`);
