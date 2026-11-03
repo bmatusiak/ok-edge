@@ -42,7 +42,8 @@ import {watchLogBox} from './logbox';
  * On the testnet every line goes: its keys are throwaway, and that is where a drive works. On the live chain only the
  * lines a drive reads, by their prefix - never the firmware's console, raw traffic, or the native log.
  */
-const LIVE_PREFIXES = ['[press]', '[tap]', '[mcp]', '[key-agent]', '[local-mcp]', '[web]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]', '[key]'];
+/* [sheet]: what the person sees, for the drive's sheet judge (tools/drive/sheets.js) - which sheet, its height, no content */
+const LIVE_PREFIXES = ['[press]', '[sheet]', '[tap]', '[mcp]', '[key-agent]', '[local-mcp]', '[web]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]', '[key]'];
 const mayLeave = (line: string, native: boolean) =>
   currentNet() === 'test' || (!native && LIVE_PREFIXES.some(p => line.startsWith(p)));
 

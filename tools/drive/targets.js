@@ -1061,7 +1061,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'last-words') return { ok: true, what: await lastWords[target]() };
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
-      if (action === 'use-key') return { ok: true, what: await useKey(args.key, line, (l) => out('webapp', l)) };
+      /* the gadget's lines - its LED, the key's own word that it waits - go to the app that took it (the sheet judge reads them) */
+      if (action === 'use-key') return { ok: true, what: await useKey(args.key, line, (l) => out(target === 'desktop' ? 'desktop' : 'webapp', l)) };
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
