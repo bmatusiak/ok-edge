@@ -11,6 +11,9 @@ tags:
 env:
   COMMITS: "1"
 ---
+# the Edge tab open through the ship, as on red-key's Windows desktop: its looks (a computer letting the key go, a trade)
+# run during and after it - and the quiet after the ship counts them
+- goto: Edge
 # the commits it ships, unsigned, made now - so the flow runs again after a pass
 - machine:
     action: tool
