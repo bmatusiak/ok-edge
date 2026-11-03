@@ -65,6 +65,18 @@ export async function certifyKeptIdentity(label: string, onPress?: () => void): 
   return info.label;
 }
 
+/*
+ * THE CARD A BUDGET IS ASKED UNDER, by its label (lib approve.js cardOf): a usable card this identity certified - checked
+ * with the owner keys - or a throw naming why not (none, revoked, expired, unverified, no bucket open).
+ */
+export async function pickCard(label: string): Promise<any> {
+  const e = await entries();
+  if (!e) throw new Error('no identity bucket is open on this device - the agent cards live in it');
+  const owner = await require('./edgeDevices').ownerKey();
+  if (!owner) throw new Error("the key's owner keys could not be read - is it unlocked?");
+  return agentsLib.pick(e, label, owner.ownerKey, owner.ownerKeyPq).card;
+}
+
 /* what a computer's new card shows on the sheet before the press (lib agents.answer's approve) */
 export type CardAsk = {label: string; created: number; expires: number; derive: {ssh?: string; gpg?: string}; committer: {name: string; email: string} | null; fingerprint: string | null};
 

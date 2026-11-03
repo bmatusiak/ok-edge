@@ -272,6 +272,8 @@ export function EdgeRequestSheet() {
                   {/* who asks: the computer behind the link (Brad, 2026-10-08: no agent key - the link says who; edgeAgents computerOf) */}
                   {`From ${a.computer ?? 'a computer'}`}
                 </Text>
+                {/* the agent card it is under (lib approve.js checked every scope against it before this sheet) */}
+                {a.view.card ? <Text style={styles.dim}>{`Under the agent card "${a.view.card}" - its keys only`}</Text> : null}
                 {opened ? null : (<>
                 <View style={styles.reason}>
                   <Text style={styles.op}>{a.view.reason}</Text>
