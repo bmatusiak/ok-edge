@@ -45,6 +45,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let waitsSeen = 0; /* waits begun - a later answer checks that none came after it */
   let iconBackend = null; /* the key a press sheet was last shown for: usb (a hard key), embedded (the soft key) */
   const shownCodes = []; /* the codes sheets showed, with when */
+  let wentInWait = false; /* a press sheet went while the key waited for this one press */
   let afterAnswer = null; /* since the key last answered a press: what it answered, the requests begun since (id -> {what, asked}) */
   const open = new Map(); /* timeline id -> what */
   const timers = new Set();
@@ -73,6 +74,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   }
 
   function waits(what) {
+    wentInWait = false;
     /* the requests running since the last answer asked a press after all: none of them ran under a stale sheet */
     if (afterAnswer) for (const r of afterAnswer.requests.values()) r.asked = true;
     if (waitWhat) return;
@@ -100,6 +102,13 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
 
   function line(raw) {
     const l = String(raw);
+    /*
+     * ONE PRESS, ONE SHEET (Brad, 2026-11-03: yes - the login's one press showed "Press your OnlyKey", then that sheet went
+     * and "Press the key" came in the same second): while the key waits for one press, a press sheet that goes and
+     * another that comes is a swap the person sees
+     */
+    if (/^\[press\] icon up/.test(l) && waitWhat && wentInWait) { fail(`press sheet swapped: one press (${waitWhat}) showed a press sheet, took it away and showed another`); wentInWait = false; }
+    if (/^\[press\] icon down/.test(l) && waitWhat && icons === 1) wentInWait = true;
     if (/^\[press\] icon up/.test(l)) { icons += 1; iconBackend = (/\((\w+)\)/.exec(l) || [])[1] || iconBackend; changed(); return; }
     if (/^\[press\] icon down/.test(l)) { icons = Math.max(0, icons - 1); if (!icons) afterAnswer = null; changed(); return; }
     let m = /^\[sheet\] progress up: ?(.*)$/.exec(l);

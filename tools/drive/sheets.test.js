@@ -104,6 +104,21 @@ test('the next request that asks its own code is not run under a stale sheet', (
   assert.deepEqual(fails, []);
 });
 
+test('press sheet swapped: one press shows "Press your OnlyKey", takes it away, shows "Press the key" - the card login', () => {
+  const { j, fails, say } = inspector();
+  say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)', '[press] icon down', '[press] icon up (usb)');
+  j.stop();
+  assert.equal(fails.length, 1);
+  assert.match(fails[0], /^press sheet swapped/);
+});
+
+test('one press, one sheet: no swap', () => {
+  const { j, fails, say } = inspector();
+  say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)', `[request] press done: ${BUDGET} - answered`, '[press] icon down');
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
 test('no progress: requests run after the press and no sheet shows them', async () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)');
