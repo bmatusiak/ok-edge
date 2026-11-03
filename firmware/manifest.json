@@ -1,5 +1,5 @@
 {
-  "file": "v3.1.0-test-edge-ctap_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-be9b794b3.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-vendor_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-0017-b82316ae5.hex",
   "version": "v3.1.0",
   "release": "v3.1.01",
   "firmware": "80e3ba0",
@@ -8,32 +8,34 @@
     "0012",
     "0013",
     "0015",
-    "0016"
+    "0016",
+    "0017"
   ],
   "plugins": [
     "edge",
     "ctap_bridge",
+    "vendor_bridge",
     "derive_secret",
     "version_control"
   ],
-  "buildHash": "e9b794b30fc2bf64",
+  "buildHash": "82316ae5bbbe76ef",
   "sources": {
     "emulator/scripts/versions/v3.1.0.js": "8bbe16ad44fe",
-    "emulator/scripts/versions/fixes-3.1.0.js": "cdaa307dfad3",
-    "emulator/scripts/versions/patches-3.1.0": "749d26bf5ab5",
+    "emulator/scripts/versions/fixes-3.1.0.js": "a25bea28e52a",
+    "emulator/scripts/versions/patches-3.1.0": "2ad1ecda517c",
     "emulator/package.json": "024ae3bd0f50",
-    "emulator/plugins/edge": "40ba6ed454dc",
-    "emulator/plugins/ctap_bridge": "35ae2f350c51",
-    "emulator/plugins/derive_secret": "758ae9471390",
-    "emulator/plugins/version_control": "58b6a28df1d5"
+    "emulator/plugins/edge": "2a8b41c0621b",
+    "emulator/plugins/ctap_bridge": "e073994ed56c",
+    "emulator/plugins/vendor_bridge": "54974c006958",
+    "emulator/plugins/derive_secret": "ffb51b83a6e1",
+    "emulator/plugins/version_control": "f94f1db30a18"
   },
-  "sourcesFrom": "node-onlykey-emulator 8cee0d1",
-  "emulatorCommit": "e12d990682f27dfa6a1b9c92ab68053023dc22d7",
+  "sourcesFrom": "node-onlykey-emulator bfdfe7d",
+  "emulatorCommit": "bfdfe7d0fc1ff85a19fad55442af7488e3934d11",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
-  "built": "2026-10-30",
-  "tested": true,
-  "sha256": "47de0c41736be6021ef5e5bf8e47d1b3f59bc3237e053523a0eb03e86f94f6d8",
-  "testedOn": "2026-10-31 key 2 (box): kit 01-protocol 07-lib 08-plugins --hardware 179/0 with OKT_FIRMWARE_FIXES=0012,0013,0015,0016 (19-rsa-keys + 43-silent-check rerun 8/0; plugins 25/0 incl. certify)"
+  "built": "2026-11-03",
+  "tested": false,
+  "sha256": "27552c6a390379713a69ebb372808a6262083f5e01fd2b55ec1e3582f61c1731"
 }
