@@ -232,8 +232,14 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       /* and each Edge request that goes straight to the key (the phone's soft key, a USB key): the same sheet */
       if (started.services.edge) started.services.edge.onRequest = noteEdgeRequest;
       /* and every press the lib asks, in the log - beside the sheets, not through them (src/requestLog.ts) */
-      started.services.okcrypto?.on?.('press', (e: PressSaid) => sayPress(e));
-      if (started.services.edge) started.services.edge.onPress = (e: {phase: 'asked' | 'done'; sub: number; ok?: boolean}) => sayPress({phase: e.phase, msg: 0xf8, slot: e.sub, ok: e.ok});
+      /*
+       * AND THE PRESS SHEET GOES WHEN THE KEY ANSWERED (2026-11-03, the box web app: a sign's and a certify's sheet stayed
+       * up after the key's answer while the request's follow-up ran under it - the inspector's "stale press sheet"): the lib's
+       * own "done" ends it, on every path (USB, the WebAuthn tunnel, the soft key) - as keyBusy's "pressed" does on USB
+       */
+      const pressSaid = (e: PressSaid) => { sayPress(e); if (e.phase === 'done' && e.ok) require('./hostChallenge').clearHostChallenge(); };
+      started.services.okcrypto?.on?.('press', pressSaid);
+      if (started.services.edge) started.services.edge.onPress = (e: {phase: 'asked' | 'done'; sub: number; ok?: boolean}) => pressSaid({phase: e.phase, msg: 0xf8, slot: e.sub, ok: e.ok});
       /* and the lib's waits between them, for the timeline (debug builds) */
       started.services.okcrypto?.on?.('settle', noteSettle);
       started.services.identity?.on?.('forgotten', (why: string | null) => {
