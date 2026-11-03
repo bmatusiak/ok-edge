@@ -212,6 +212,8 @@ function inspectSheets(app) {
  * (they carry the request to the key; without them nothing would wait). Ends with the script that held it.
  */
 let pressHeld = false;
+/* how long the first button of a code is given to be the whole answer (a key set to a plain press) - a WebAuthn ceremony is 2.4 s on Windows */
+const FIRST_DIGIT_MS = 3000;
 /* THE SESSION PRESSER: every press sheet, whenever it comes, while the app is on the testnet (13) */
 function pressWhenAsked(app) {
   let pressing = false;
@@ -389,7 +391,27 @@ function pressWhenAsked(app) {
          * before's (2026-11-02: with 0.5 s, a sign's press matched the derive's "Send device update").
          */
         const sinceAge = after && app.opBeganAt ? Date.now() - app.opBeganAt : 0;
-        const r = await procFor(app, 'press', { buttons, after, sinceAge });
+        /*
+         * THE FIRST BUTTON, THEN THE KEY'S ANSWER (Brad, 2026-11-03: "the app does not know if challenge mode is enabled or
+         * not - so 1 3 5 may have been sent, but 1 was only needed ... send first digit and wait to see if it passed, if
+         * not send the other 2"): a key set to a plain press takes the code's first button as its press, and the two after
+         * it are stray presses on a key that waits for nothing - the web app's next request read a stale reply. The lib's
+         * own "press done" says whether the first one was enough.
+         */
+        let r;
+        if (buttons.length > 1) {
+          const answered = new Promise((ok) => {
+            const t = setTimeout(() => { app.off('log', on); ok(false); }, FIRST_DIGIT_MS);
+            function on(x) { if (/^\[request\] press done: /.test(x)) { clearTimeout(t); app.off('log', on); ok(true); } }
+            app.on('log', on);
+          });
+          r = await procFor(app, 'press', { buttons: [buttons[0]], after, sinceAge });
+          if (r.ok && await answered) r = { ...r, what: `${r.what} - the key answered its first button: a plain press, not the code` };
+          else if (r.ok) {
+            const rest = await procFor(app, 'press', { buttons: buttons.slice(1) });
+            r = rest.ok ? { ...rest, what: `${r.what}, then ${rest.what} (the key wanted its code)` } : rest;
+          }
+        } else r = await procFor(app, 'press', { buttons, after, sinceAge });
         line(r.ok ? `[${app.shell}] pressed: ${r.what} - ${outside[1]}` : `[${app.shell}] press refused: ${r.why}`);
       } finally { pressing = false; }
       return;
