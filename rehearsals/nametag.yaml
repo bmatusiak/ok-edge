@@ -1,0 +1,24 @@
+# THIS DEVICE'S NAMETAG - an app's own press: the key certifies the nametag (Edge certify, a press on the key). The sheet
+# inspector checks the press sheet came for it (a key on USB had none until 2026-11-02 - pressed Edge requests were left to
+# a soft key's own button) and went when the key answered. Any key: the drive presses a test key when the sheet asks.
+name: Set this device's nametag
+tags:
+  - edge
+  - sheets
+---
+- goto: Edge
+- tapOn: ".*Edge Management.*"
+- waitForAnimationToEnd
+- tapOn: "(Set|Change) nametag…"
+# a name of this run's own, so each run is a change the key certifies
+- evalScript: '${output.tag = "rehearsal-" + (Date.now() % 100000)}'
+- inputText:
+    text: "${output.tag}"
+    field: "nametag"
+- tapOn: "Save"
+# the key's press, asked on a press sheet with the certify's words - the inspector fails anything else
+- expectSheets:
+    - press: "[Cc]ertif"
+- extendedWaitUntil:
+    visible: ".*${output.tag}.*"
+    timeout: 60000

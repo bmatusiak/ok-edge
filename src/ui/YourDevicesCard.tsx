@@ -17,6 +17,7 @@ import {useYourDevices} from '../hooks/useYourDevices';
 import {Btn, Section} from './components';
 import {theme} from './theme';
 import {DEVICE_WORD} from '../platform';
+import {useDriveField} from '../drive/registry';
 
 const short = (id: string) => `${id.slice(0, 8)}…${id.slice(-8)}`;
 
@@ -24,6 +25,8 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
   const [own, setOwn] = useState<StoredStatement | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  /* the drive fills it by this name (rehearsals/nametag.yaml) - its placeholder is the device's own name, which varies */
+  useDriveField('nametag', setDraft);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const devices = useYourDevices(headSeq);
