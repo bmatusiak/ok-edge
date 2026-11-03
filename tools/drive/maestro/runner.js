@@ -211,7 +211,16 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
         await waitFor(() => (target = controlFor(sel)) !== null, Number(sel.timeout) || 30, `no live control "${sel.text || sel.id}"`);
         for (let i = 0; i < (sel.repeat || 1); i++) {
           if (i) await new Promise((r) => setTimeout(r, sel.delay || 100));
-          await d.tap(target.label);
+          /*
+           * THE LABEL CHANGED UNDER THE TAP (box desktop, 2026-11-03: "(Set|Change) nametag…" matched "Set nametag…" while
+           * the card was still loading; by the tap it read "Change nametag…"): the selector is matched again on the live
+           * controls, once - the same step, its control's newer words
+           */
+          try { await d.tap(target.label); } catch (e) {
+            if (!/no control/.test(e.message)) throw e;
+            await waitFor(() => (target = controlFor(sel)) !== null, Number(sel.timeout) || 30, `no live control "${sel.text || sel.id}"`);
+            await d.tap(target.label);
+          }
         }
         focused = target.label;
         return;

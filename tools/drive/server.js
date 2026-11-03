@@ -214,6 +214,8 @@ function inspectSheets(app) {
 let pressHeld = false;
 /* how long the first button of a code is given to be the whole answer (a key set to a plain press) - a WebAuthn ceremony is 2.4 s on Windows */
 const FIRST_DIGIT_MS = 3000;
+/* a plain press waits for the lib to say the request is on the key - as long as the key itself waits for it */
+const ASKED_MS = 30000;
 /* THE SESSION PRESSER: every press sheet, whenever it comes, while the app is on the testnet (13) */
 function pressWhenAsked(app) {
   let pressing = false;
@@ -248,6 +250,17 @@ function pressWhenAsked(app) {
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
     return (b > 0x40 && b > r && b > g) || (r > 0x30 && g > 0x30 && b < 0x30);
   };
+  /*
+   * THE REQUEST IS ON THE KEY (the lib's "[request] press asked": edge/plugin pressed() once the request is written, okcrypto's
+   * 'press' event) - until then a plain press is lost: the key waits for nothing yet. Box desktop on the gadget, 2026-11-03:
+   * the nametag's sheet ("[press] key waits") is raised at Save, a press 1 s later landed before the certify reached the key,
+   * and the key waited out its 30 s.
+   */
+  let asked = false;
+  app.on('log', (l) => {
+    if (/^\[request\] press asked: /.test(l)) asked = true;
+    else if (/^\[request\] press done: /.test(l)) asked = false;
+  });
   app.on('log', async (l) => {
     const tl = /^\[timeline\] \d+ (begin|end) #(\d+)/.exec(l);
     if (tl) { touched = false; if (tl[1] === 'begin') inFlight.add(tl[2]); else inFlight.delete(tl[2]); return; }
@@ -353,6 +366,15 @@ function pressWhenAsked(app) {
        press that lands while the key waits taken?) */
     if (outside && pressHeld) { line(`[${app.shell}] held: ${outside[1]}${outside[2] === 'any' ? '' : ` (code ${outside[2]})`} - not pressed`); return; }
     if (outside) {
+      /* a plain press on a key outside a browser: when the lib says the request is on the key (asked, above) */
+      if (outside[2] === 'any' && app.shell !== 'webapp' && !asked) {
+        const onKey = await new Promise((ok) => {
+          const t = setTimeout(() => { app.off('log', on); ok(false); }, ASKED_MS);
+          function on(x) { if (/^\[request\] press asked: /.test(x)) { clearTimeout(t); app.off('log', on); ok(true); } }
+          app.on('log', on);
+        });
+        if (!onKey) { line(`[${app.shell}] not pressed: ${outside[1]} - the lib never said the request reached the key`); return; }
+      }
       /* a press in progress (a touch) is waited for, not a reason to drop this one - the key would wait out its 25 s */
       while (pressing) await new Promise((r) => setTimeout(r, 100));
       pressing = true;
