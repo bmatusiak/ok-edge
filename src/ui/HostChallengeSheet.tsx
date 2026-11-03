@@ -63,17 +63,18 @@ export function HostChallengeSheet() {
     <Sheet tone="press" title="Press the key" countdown={since !== null ? {since, seconds: KEY_WAIT_S} : null}>
       <PressIcon />
       <Text style={styles.what}>{c.what}</Text>
-      {c.digits.length ? (
-        <>
-          <Text style={styles.note}>On your OnlyKey, press these buttons in order:</Text>
-          <View style={styles.digits}>
-            {c.digits.map((d, i) => <Text key={i} style={styles.digit}>{d}</Text>)}
-          </View>
-          <Text style={styles.note}>A key set to ask for one press takes any button instead.</Text>
-        </>
-      ) : (
-        <Text style={styles.note}>Press a button on your OnlyKey.</Text>
-      )}
+      {/*
+        * ONE SIZE, CODE OR NOT (Brad, 2026-11-03: yes - the sheet went 196 -> 294 -> 196 px as the login's asks went from a
+        * plain press to a code and back, while it stayed open): the code's row is always there - its buttons, or "any
+        * button" - with a line above and below it, so the sheet keeps its height whichever the key asks
+        */}
+      <Text style={styles.note}>{c.digits.length ? 'On your OnlyKey, press these buttons in order:' : 'On your OnlyKey, press:'}</Text>
+      <View style={styles.digits}>
+        {c.digits.length
+          ? c.digits.map((d, i) => <Text key={i} style={styles.digit}>{d}</Text>)
+          : <Text style={styles.digit}>any button</Text>}
+      </View>
+      <Text style={styles.note}>{c.digits.length ? 'A key set to ask for one press takes any button instead.' : 'One press is all the key asks for here.'}</Text>
     </Sheet>
   );
 }

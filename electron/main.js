@@ -203,6 +203,20 @@ app.on('window-all-closed', () => {
  * - the drive's quit, a menu's Quit - does not emit window-all-closed, so nothing was flushed before the processes ended.
  * before-quit comes first on every path.
  */
-app.on('before-quit', flushStorage);
+/*
+ * ...AND THE QUIT WAITS FOR IT (2026-11-03, Windows: the Server setting written half an hour before was gone after a quit
+ * that took a second, and kept after every quit that hung - Chromium batches and rate-limits its page-storage writes, and
+ * flushStorageData() only starts the write; the process left before it landed). The flush gives no event when it is done,
+ * so the quit is held QUIT_FLUSH_MS after it - the one wait here that has nothing to wait on - then goes on, once.
+ */
+const QUIT_FLUSH_MS = 1500;
+let quitFlushed = false;
+app.on('before-quit', (e) => {
+  if (quitFlushed) return;
+  quitFlushed = true;
+  flushStorage();
+  e.preventDefault();
+  setTimeout(() => app.quit(), QUIT_FLUSH_MS);
+});
 /* desktop.json leaves with the app, so the CLI goes back to the key directly */
 app.on('will-quit', () => { desktopModules.stop().catch(() => {}); });
