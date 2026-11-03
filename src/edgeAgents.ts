@@ -18,7 +18,8 @@
  * the Requests switch.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {approve as approveLib, identity as identityLib, note as noteLib, pressAsk as pressAskLib, request as requestLib} from 'node-onlykey-lib/edge';
+import {agents as agentsLib, approve as approveLib, identity as identityLib, note as noteLib, pressAsk as pressAskLib, request as requestLib} from 'node-onlykey-lib/edge';
+import {answerCardMessage, type CardAsk} from './agentIdentities';
 import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {addNote, sync as syncCopy} from './edgeStore';
@@ -69,7 +70,9 @@ export type SheetAsk =
   /* SPEC H7 (2026-10-20): a computer sets the agent identity this phone keeps - a tap, no press; `was` = the record it replaces */
   | {kind: 'identity'; computer: string | null; record: any; was: any | null; blocked: null; at: number}
   /* 2026-11-03: a computer's press, approved here before it reaches the key (lib edge/src/pressask.js) - what it is for, the message, the code */
-  | {kind: 'press'; computer: string | null; what: string; subject: string | null; code: string | null; blocked: null; at: number};
+  | {kind: 'press'; computer: string | null; what: string; subject: string | null; code: string | null; blocked: null; at: number}
+  /* 2026-11-03: a computer's new agent card (lib agents.js CREATE) - its label and keys, approved here, then certified at a press */
+  | {kind: 'card'; computer: string | null; card: CardAsk; blocked: null; at: number};
 /* until: when this phase runs out (ms since epoch) - the sheet counts down to it */
 export type SheetState =
   | {phase: 'ask'; ask: SheetAsk; until: number}
@@ -269,7 +272,7 @@ export function handleEdgeMessage(msg: any, from: string, planAsk?: PlanAsk): Pr
   /* B7 stage 2: a note changes nothing, so it never waits behind a sheet */
   if (msg?.type === noteLib.TYPE) return handleNote(msg, from).catch(() => null);
   /* a sheet the person answers: a budget, or the agent identity (a sync is held, never asked - 2026-10-08) */
-  const asks = msg?.type === requestLib.TYPE || msg?.type === identityLib.SET_TYPE || msg?.type === pressAskLib.TYPE;
+  const asks = msg?.type === requestLib.TYPE || msg?.type === identityLib.SET_TYPE || msg?.type === pressAskLib.TYPE || msg?.type === agentsLib.CREATE_TYPE;
   if (asks && inFlight) {
     return Promise.resolve({ok: false, refusal: 'busy', detail: 'another request is on this device - ask again when it is answered'});
   }
@@ -364,6 +367,48 @@ async function handleIdentity(msg: any, seen: Set<string>, from: string): Promis
 
 
 /*
+ * A COMPUTER'S AGENT CARDS (Brad, 2026-11-03: "the ai agent creates the card over cli/mcp, providing the label it wants,
+ * the keys it wants to use for future budgets"; "they list in the agent identities section under edge management, and in
+ * storage live next to the blockchain in the edge's bucket"): LIST and GET answered from the store, CREATE shown on the
+ * sheet - its label and keys - and certified by the key at one press (agentIdentities.answerCardMessage, the lib's one
+ * answer). Behind the Requests switch like a budget: a card is what budgets are asked under.
+ */
+async function handleCard(msg: any, seen: Set<string>, from: string): Promise<unknown | null> {
+  const computer = await computerOf(from);
+  if (!computer) return null;
+  const checked = agentsLib.verify(msg, {seen});
+  if (!checked.ok) {
+    return checked.reason === 'malformed' || checked.reason === 'replayed'
+      ? null
+      : {ok: false, refusal: 'invalid', detail: `not a usable agent card: ${checked.reason}`};
+  }
+  seen.add(String(msg.nonce).toLowerCase());
+  if (msg.type === agentsLib.CREATE_TYPE) {
+    if (!(await agentRequestsOn())) return null;
+    if (unattended()) return {ok: false, refusal: 'timeout', detail: UNATTENDED_DETAIL};
+  }
+  let asked: SheetAsk | null = null;
+  const r: any = await answerCardMessage(msg, {
+    who: computer.name,
+    approve: async (card: CardAsk) => {
+      asked = {kind: 'card', computer: computer.name, card, blocked: null, at: Date.now()};
+      if ((await askPerson(asked)) !== 'approve') return false;
+      /* the press says which card (every press says why) - the key's press sheet, at its wait */
+      require('./hostChallenge').expectPress(`Certify the agent card "${card.label}" - asked by ${computer.name}`);
+      return true;
+    },
+    onPress: () => { if (asked) show({phase: 'press', ask: asked, until: Date.now() + PRESS_WAIT_MS}); },
+  }).catch((e: unknown) => ({ok: false, refusal: 'invalid', detail: String((e as Error)?.message ?? e)}));
+  const a = asked as SheetAsk | null;
+  if (a && a.kind === 'card') {
+    show({phase: 'done', ask: a, result: r.ok
+      ? {ok: true, text: `Certified: the agent card "${a.card.label}" - an agent's budgets may name it.`}
+      : {ok: false, refusal: r.refusal, ...(r.detail ? {detail: r.detail} : {})}});
+  }
+  return r;
+}
+
+/*
  * A COMPUTER'S PRESS, APPROVED HERE FIRST (Brad, 2026-11-03: "edge gives a prompt sheet, i press approve, and then the key
  * press - so i press approve on the app, and then on the key, like edge"; "i dont know what i was approving"): the CLI
  * asks before the request leaves (lib okcrypto beforePress, cli/desktop.js) - the sheet says who asks, what for, the
@@ -402,6 +447,7 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
   const seen = await loadSeen();
   try {
     if (identityLib.TYPES.includes(msg?.type)) return await handleIdentity(msg, seen, from);
+    if (agentsLib.TYPES.includes(msg?.type)) return await handleCard(msg, seen, from);
     if (msg?.type === pressAskLib.TYPE) return await handlePressAsk(msg, seen, from);
     if (msg?.type !== requestLib.TYPE) return null;
     /* the Requests switch is off: refused unread */

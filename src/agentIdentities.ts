@@ -65,6 +65,27 @@ export async function certifyKeptIdentity(label: string, onPress?: () => void): 
   return info.label;
 }
 
+/* what a computer's new card shows on the sheet before the press (lib agents.answer's approve) */
+export type CardAsk = {label: string; created: number; expires: number; derive: {ssh?: string; gpg?: string}; committer: {name: string; email: string} | null; fingerprint: string | null};
+
+/*
+ * A COMPUTER'S AGENT-CARD MESSAGES (Brad, 2026-11-03: "the ai agent creates the card over cli/mcp, providing the label it
+ * wants, the keys it wants to use for future budgets"): LIST and GET from this store, checked with the owner keys; CREATE
+ * shown to the person (approve), certified by the key at a press, then written beside the chain - the lib's one answer
+ * (agents.answer), as every host gives it. -> the answer for the computer.
+ */
+export function answerCardMessage(msg: any, o: {who: string; approve: (ask: CardAsk) => Promise<boolean>; onPress: () => void}): Promise<any> {
+  return agentsLib.answer(msg, {
+    entries: async () => entries(),
+    owner: () => require('./edgeDevices').ownerKey(),
+    approve: o.approve,
+    /* what the key work is for, on the "Working with your key" sheet (keyBusy keyTask) */
+    certifyAgent: (info: any) => require('./keyBusy').keyTask(`Certifying ${o.who}'s agent card "${info.label}"`,
+      async () => (await edgeNow()).certifyAgent(info, {onPress: o.onPress})),
+    write,
+  });
+}
+
 /** Revoke one, at a press: it stays listed, archived, and no agent gets it again. */
 export async function revokeAgent(label: string, onPress?: () => void): Promise<void> {
   const e = (await entries()) ?? {};

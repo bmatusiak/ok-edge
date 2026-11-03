@@ -10,7 +10,8 @@
  */
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {answerSheet, closeSheet, onSheet, pressFromSheet, type SheetState} from '../edgeAgents';
+import {answerSheet, closeSheet, onSheet, pressFromSheet, type SheetAsk, type SheetState} from '../edgeAgents';
+import type {CardAsk} from '../agentIdentities';
 import {Btn} from './components';
 import {Locate} from './PressSheet';
 import {Sheet} from './Sheet';
@@ -49,6 +50,30 @@ const IDENTITY_REFUSAL_TEXT: Record<string, string> = {
 
 const refusalText = (refusal: string, kind: string) =>
   (kind === 'identity' ? IDENTITY_REFUSAL_TEXT[refusal] : undefined) ?? REFUSAL_TEXT[refusal] ?? `Refused: ${refusal}`;
+
+/* each ask's words for the drive (useTapWanted, Locate) - one place, by kind; the rehearsals match on them */
+function askWords(a: SheetAsk): {tap: string; approve: string; press: string} {
+  if (a.kind === 'identity') return {tap: 'agent identity', approve: 'agent identity - approve', press: 'agent identity press'};
+  if (a.kind === 'card') return {tap: `agent card "${a.card.label}"`, approve: `agent card "${a.card.label}" - approve`, press: `agent card press "${a.card.label}"`};
+  if (a.kind === 'press') return {tap: `press ask "${a.what}"`, approve: `press ask "${a.what}" - approve`, press: `press "${a.what}"`};
+  return {tap: `budget ask "${a.view?.reason}"`, approve: `budget ask "${a.view?.reason}" - approve`, press: `budget press "${a.view?.reason}"`};
+}
+
+/* a new agent card as the sheet shows it: its label, the keys its budgets may use, its certificate (lib agents.answer) */
+function CardRows({card}: {card: CardAsk}) {
+  const day = (s: number) => new Date(s * 1000).toISOString().slice(0, 10);
+  const rows: [string, string][] = [['label', card.label]];
+  if (card.derive.ssh) rows.push(['ssh', card.derive.ssh]);
+  if (card.derive.gpg !== undefined) rows.push(['gpg', card.derive.gpg]);
+  if (card.committer) rows.push(['committer', `${card.committer.name} <${card.committer.email}>`]);
+  if (card.fingerprint) rows.push(['certificate', identityLib.spacedFingerprint(card.fingerprint)]);
+  rows.push(['made', day(card.created)], ['expires', card.expires ? day(card.created + card.expires) : 'never']);
+  return (
+    <View style={styles.reason}>
+      {rows.map(([k, v]) => <Text key={k} style={styles.op}>{`${k}  ${v}`}</Text>)}
+    </View>
+  );
+}
 
 /* the same rows the CLI prints and Edge Management shows (node-onlykey-lib/edge identity.rows) */
 function IdentityRows({record}: {record: any}) {
@@ -165,7 +190,7 @@ export function EdgeRequestSheet() {
   const off = !ready || acting;
   /* the person's answer is waited for (not the key's press): the drive's signal (tapWanted) - no icon */
   const asked = s?.ask;
-  useTapWanted(s?.phase === 'ask' && !off && consentRefusal() === null, asked ? (asked.kind === 'identity' ? 'agent identity' : asked.kind === 'press' ? `press ask "${asked.what}"` : `budget ask "${asked.view?.reason}"`) : '', asked?.blocked ? ['Decline'] : ['Approve', 'Decline']);
+  useTapWanted(s?.phase === 'ask' && !off && consentRefusal() === null, asked ? askWords(asked).tap : '', asked?.blocked ? ['Decline'] : ['Approve', 'Decline']);
   const act = (fn: () => void) => () => {
     if (off) return;
     setActing(true);
@@ -213,6 +238,14 @@ export function EdgeRequestSheet() {
                 <Text style={styles.dim}>
                   {`Every agent that asks this ${DEVICE_WORD} uses it: the same ssh and gpg keys. Approving is a tap - the key already signed the certificate on the computer.`}
                 </Text>
+              </>
+            ) : a.kind === 'card' ? (
+              <>
+                {/* A COMPUTER'S NEW AGENT CARD (Brad, 2026-11-03): its label and the keys its budgets may use - then one press */}
+                <Text style={[styles.title, {color: theme.warn}]}>Agent card</Text>
+                <Text style={styles.dim}>{`From ${a.computer ?? 'a computer'}: make this agent card - budgets under it may use these keys and no others`}</Text>
+                <CardRows card={a.card} />
+                <Text style={styles.dim}>{`Approve here, then press the key once: it certifies the card. The label "${a.card.label}" cannot change afterwards.`}</Text>
               </>
             ) : a.kind === 'press' ? (
               <>
@@ -277,7 +310,7 @@ export function EdgeRequestSheet() {
             {s.phase === 'ask' && refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
             {s.phase === 'ask' && !acting ? (
               <View style={styles.row}>
-                <Locate what={a.kind === 'identity' ? 'agent identity - approve' : a.kind === 'press' ? `press ask "${a.what}" - approve` : `budget ask "${a.view.reason}" - approve`} live={!(off || refusal !== null || !!a.blocked)}>
+                <Locate what={askWords(a).approve} live={!(off || refusal !== null || !!a.blocked)}>
                 <Btn
                   large
                   title="Approve"
@@ -312,7 +345,7 @@ export function EdgeRequestSheet() {
                     </Text>
                     {refusal ? <Text style={[styles.op, {color: theme.error}]}>{refusal}</Text> : null}
                     <View style={styles.row}>
-                      <Locate what={a.kind === 'identity' ? 'agent identity press' : a.kind === 'press' ? `press "${a.what}"` : `budget press "${a.view.reason}"`} live={!(off || refusal !== null)}>
+                      <Locate what={askWords(a).press} live={!(off || refusal !== null)}>
                         <Btn large title="Press the soft key" tone="primary" disabled={off || refusal !== null} onPress={consent(() => void pressFromSheet())} />
                       </Locate>
                     </View>
