@@ -13,7 +13,7 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {Logo} from '../ui/Logo';
-import {askPress} from '../hostChallenge';
+import {askPress, expectPress} from '../hostChallenge';
 import {Btn} from '../ui/components';
 import {SkipPressHint} from '../ui/SkipPressHint';
 import {theme} from '../ui/theme';
@@ -61,6 +61,9 @@ declare const location: {host: string; hostname: string; search: string; assign(
 declare const navigator: {userAgent?: string} | undefined;
 /* the reason itself: each platform says what it is (platform.*.ts loginReason) */
 
+/* what the login's press pays for (Brad, 2026-11-03: "what budget am i pressing for?") */
+const LOGIN_WHY = "Log in - one budget for this login's own key requests (its bucket key, its identity proof)";
+
 export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: string; onContinue: () => void; onPress?: () => void}) {
   /* a drive waits for the identity check to end before its next move (src/drive/registry.tsx) */
   React.useEffect(() => { setDriveFlag('identityCheck', true); return () => setDriveFlag('identityCheck', false); }, []);
@@ -74,7 +77,7 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
   useEffect(() => {
     if (open.kind !== 'press' || onPress) return;
     /* what the press pays for, as a budget's sheet says it (2026-11-03: "what budget am i pressing for?") */
-    return askPress("Log in - one budget for this login's own key requests (its bucket key, its identity proof)");
+    return askPress(LOGIN_WHY);
   }, [open.kind, onPress]);
   /*
    * STAY LOGGED IN ON THIS TAB (webSession.ts; Brad, 2026-10-29: asked at login): the web app only, unchosen until the
@@ -119,6 +122,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
          * key for the hosted room is made once (proofMaterial) - outside it, so a one-time request never goes on the card.
          */
         const filer = SoftKeyEdge.loginFiler(edge, `this ${DEVICE_WORD} (log in)`);
+        /* the login's budget press says why from the moment the key waits (hostChallenge expectPress) */
+        expectPress(LOGIN_WHY);
         const logged = await (identity as any).login(async () => {
           await open();
         }, {card: kept, reason: loginReason(), onPress: () => setOpen({kind: 'press'}), ...filer,

@@ -69,7 +69,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let lastSeen = 'none';
   function changed() {
     const s = seen();
-    if (s !== lastSeen) { lastSeen = s; event({ kind: s, what: s === 'press' ? pressWhat : s === 'progress' ? progressWhat : '', at: now() }); }
+    if (s !== lastSeen) { lastSeen = s; event({ kind: s, what: s === 'press' ? (sheetWords || pressWhat) : s === 'progress' ? progressWhat : '', at: now() }); }
     if (icons > 0) for (const w of [...sheetWaiters]) w(true);
     armIdle();
   }
@@ -100,7 +100,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   function answered(what) {
     if (!waitWhat) return;
     /* the words the person saw while the key waited, judged when it answered - at any speed (a fast key answered inside the 1 s check) */
-    if (icons > 0 && iconBackend !== 'embedded' && (sheetWords === what || /^Edge: (opening|resuming) a budget$/.test(sheetWords)) && !whyFailed) {
+    if (iconBackend !== 'embedded' && sheetWords && (sheetWords === what || /^Edge: (opening|resuming) a budget$/.test(sheetWords)) && !whyFailed) {
       whyFailed = true;
       fail(`press without why: the press sheet said only "${sheetWords}" - not what the press is for`);
     }

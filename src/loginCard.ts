@@ -132,6 +132,8 @@ export async function makeCard(): Promise<void> {
   setOffer({...o, state: 'certifying'});
   try {
     const {identity} = await require('./onlykey').getOnlyKey(require('./hooks/KeyContext').activeBackend());
+    /* the certify's press says why from the moment the key waits (hostChallenge expectPress; LoginCardSheet's ask after it) */
+    require('./hostChallenge').expectPress(`Certify this ${require('./platform').DEVICE_WORD}'s login card - after this, one press logs in here`);
     const rec = await (identity as any).certifyLoginCard({onPress: () => setOffer({...o, state: 'pressing'})});
     await fileCard(o.identity, rec);
     console.log(`[card] this device's login card certified at #${rec.certification.seq} and filed`);

@@ -77,9 +77,21 @@ export function askPress(what: string): () => void {
  * waits in its slot, askPress). keyBusy calls it when the key starts waiting and the returned function when the request
  * ends; the press itself clears it (keyBusy pressed -> clearHostChallenge).
  */
+/*
+ * THE ASKER SAYS WHY BEFORE IT ASKS (Brad, 2026-11-03: "we already know why we are pressing - the press sheet should always
+ * say why"): a screen about to send a request that waits for a press names it first; the press sheet shows those words the
+ * moment the key waits (keyAsks) - not the request's bare name until the screen's own ask catches up. One use, 60 s.
+ */
+let expected: {what: string; until: number} | null = null;
+export function expectPress(what: string): void {
+  expected = {what, until: Date.now() + 60_000};
+}
+
 export function keyAsks(what: string): () => void {
   if (current) return () => undefined;
-  const mine: HostChallenge = {digits: [], what, key: true};
+  const why = expected && Date.now() < expected.until ? expected.what : null;
+  expected = null;
+  const mine: HostChallenge = {digits: [], what: why ?? what, key: !why};
   set(mine);
   return () => { if (current === mine) set(screenAsk); };
 }
