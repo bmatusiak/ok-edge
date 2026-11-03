@@ -9,7 +9,8 @@
  * wherever the person is.
  */
 /* screen: raised by a screen for its whole operation (askPress) - not by the lib at the key's challenge */
-export type HostChallenge = {digits: number[]; what: string; screen?: boolean};
+/* key: raised for the key's wait with only the request's name (keyAsks) - a screen's own words take its place */
+export type HostChallenge = {digits: number[]; what: string; screen?: boolean; key?: boolean};
 
 let current: HostChallenge | null = null;
 const listeners = new Set<(c: HostChallenge | null) => void>();
@@ -57,7 +58,11 @@ export function clearHostChallenge(): void {
 export function askPress(what: string): () => void {
   const ask: HostChallenge = {digits: [], what, screen: true};
   screenAsk = ask;
-  if (!current || current.screen) set(ask);
+  /*
+   * ...and over the key's own wait (keyAsks), which has only the request's name (Brad, 2026-11-03, the login's press sheet
+   * read "Edge: opening a budget": "what budget am i pressing for?") - the screen says what it is for; the same sheet
+   */
+  if (!current || current.screen || current.key) set(ask);
   /* only its own ask: the key's press may have cleared it already (keyBusy), and a later ask is another's */
   return () => {
     if (screenAsk === ask) screenAsk = null;
@@ -74,7 +79,7 @@ export function askPress(what: string): () => void {
  */
 export function keyAsks(what: string): () => void {
   if (current) return () => undefined;
-  const mine: HostChallenge = {digits: [], what};
+  const mine: HostChallenge = {digits: [], what, key: true};
   set(mine);
   return () => { if (current === mine) set(screenAsk); };
 }

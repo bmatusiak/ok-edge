@@ -73,7 +73,8 @@ export function IdentityCheckScreen({keyName, onContinue, onPress}: {keyName: st
    */
   useEffect(() => {
     if (open.kind !== 'press' || onPress) return;
-    return askPress("Open this identity's bucket");
+    /* what the press pays for, as a budget's sheet says it (2026-11-03: "what budget am i pressing for?") */
+    return askPress("Log in - one budget for this login's own key requests (its bucket key, its identity proof)");
   }, [open.kind, onPress]);
   /*
    * STAY LOGGED IN ON THIS TAB (webSession.ts; Brad, 2026-10-29: asked at login): the web app only, unchosen until the
