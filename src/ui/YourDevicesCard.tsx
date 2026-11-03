@@ -24,6 +24,11 @@ const short = (id: string) => `${id.slice(0, 8)}…${id.slice(-8)}`;
 
 export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined}) {
   const [own, setOwn] = useState<StoredStatement | null>(null);
+  /*
+   * READ YET? (box desktop, 2026-11-03: a named computer's card said it had no nametag and offered "Set nametag…" until its
+   * read finished, then "Change nametag…" - a rehearsal tapped the first): nothing is said of the nametag before it is read
+   */
+  const [read, setRead] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   /* the drive fills it by this name (rehearsals/nametag.yaml) - its placeholder is the device's own name, which varies */
@@ -43,6 +48,7 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
     setDevName(await deviceName());
     setNames(await ownNames());
     setDevId(currentDeviceId());
+    setRead(true);
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => onDevicesChanged(() => { void load(); }), [load]);
@@ -68,13 +74,13 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
   return (
     <>
       <Section title={`This ${DEVICE_WORD}`}>
-        <Text style={styles.op}>{nametagOr(own?.nametag)}</Text>
+        <Text style={styles.op}>{read ? nametagOr(own?.nametag) : 'Reading…'}</Text>
         {names.length > 1 ? <Text style={styles.dim}>{`Earlier: ${names.slice(1).join(', ')}`}</Text> : null}
         {devId ? <Text style={styles.dim}>{`Device ${short(devId)}`}</Text> : null}
         <Text style={styles.dim}>{`Your other devices see this ${DEVICE_WORD} by its nametag. The key certifies it: press the key when it asks.`}</Text>
         {error ? <Text style={[styles.op, {color: theme.error}]}>{error}</Text> : null}
         <View style={styles.row}>
-          <Btn title={own ? 'Change nametag…' : 'Set nametag…'} onPress={() => { setDraft(own?.nametag ?? devName); setEditing(true); }} disabled={busy} />
+          {read ? <Btn title={own ? 'Change nametag…' : 'Set nametag…'} onPress={() => { setDraft(own?.nametag ?? devName); setEditing(true); }} disabled={busy} /> : null}
         </View>
       </Section>
       <Section title={`Your devices${devices.length ? ` (${devices.length})` : ''}`}>
