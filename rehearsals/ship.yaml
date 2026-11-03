@@ -8,6 +8,12 @@ tags:
   - edge
   - ship
 ---
+# the commit it ships: one, unsigned, made now - so the flow runs again after a pass
+- machine:
+    action: tool
+    target: firmware
+    args:
+      name: ship-proof-commit.js
 - runScript: scripts/ship-start.js
 # the budget request reaches this app's Edge sheet: Approve, and the drive presses the test key once
 - waitForTap:
