@@ -20,3 +20,5 @@ tags:
     timeout: 120000
 - tapOn: "Approve"
 - runScript: scripts/setup-end.js
+# the identity sheet says "Kept" and waits for its Close - a rehearsal leaves no sheet behind
+- tapOn: "Close"
