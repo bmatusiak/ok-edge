@@ -154,6 +154,12 @@ async function write(iface, hex) {
 module.exports = {
   shared,
   attach(push) { send = push; },
+  /*
+   * AT QUIT THE KEY IS CLOSED HERE (Windows, 2026-11-03: every restart sat 20 s - the window gone, the master past app.exit,
+   * still alive with its helpers): the page that opens and closes the key is already gone, so its pipe stayed open, and
+   * node-hid's reader held the process.
+   */
+  async stop() { await disconnect(); },
   syncHandlers: {
     'NativeUsbHid:isConnected': () => !!pipe && pipe.isRunning(),
   },
