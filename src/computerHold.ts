@@ -85,9 +85,10 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
       });
       /*
        * IN THE KEY'S OWN LANE, the one every lib request waits in (inLane: the transport's exclusive() when it has one, else
-       * the lib's lane for that transport). Box + red-key, 2026-11-03: the USB transport has no exclusive(), and the hold
-       * then ran outside every lane - "the computer holds the key" while the Edge tab's chain reads went on beside the
-       * CLI's ship: red-key's agent key read back wrong, the box's copy "tampered".
+       * the lib's lane for that transport) - the same call every Edge request makes, so the hold can never take another lane
+       * than theirs. (Checked 2026-11-03: the app's transport is the plugins' own, and it has exclusive(). The collision
+       * red-key showed that night was the key's reports reaching the CLI after a host answer - node-onlykey-lib
+       * desktop/session.js.)
        */
       void lane.inLane(transport, conversation, undefined);
     });
