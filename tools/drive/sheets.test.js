@@ -152,6 +152,23 @@ test('a CLI press approved first, one approval each', () => {
   assert.deepEqual(fails, []);
 });
 
+test('budget unnamed: the login\'s press sheet says only "Edge: opening a budget" - "what budget am i pressing for?"', async () => {
+  const { j, fails, say } = inspector();
+  say(`[request] press asked: ${BUDGET} - a press`, `[press] key waits: ${BUDGET} - buttons any`, '[press] icon up (usb)');
+  await wait(NO_SHEET_MS + 200);
+  j.stop();
+  assert.ok(fails.some((f) => /^budget unnamed/.test(f)), fails.join(' | '));
+});
+
+test('a budget\'s press sheet that says what the budget is for passes', async () => {
+  const { j, fails, say } = inspector();
+  say(`[request] press asked: ${BUDGET} - a press`, `[press] key waits: ${BUDGET} - buttons any`, '[press] icon up (usb)',
+    "[press] key waits: Log in - one budget for this login's own key requests - buttons any");
+  await wait(NO_SHEET_MS + 200);
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
 test('no progress: requests run after the press and no sheet shows them', async () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)');

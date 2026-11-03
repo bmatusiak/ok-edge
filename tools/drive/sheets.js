@@ -16,6 +16,7 @@
  *                      up after the unplug - "the user state stays exposed, leaking private information")
  *   press unapproved   a computer's press ("... (the CLI)") reached the key with no approval in the app before it (Brad,
  *                      2026-11-03: "i press approve on the app, and then on the key, like edge")
+ *   budget unnamed     an Edge budget's press sheet says only "Edge: opening a budget", not what the budget is for
  *   no code            the key wants a 3-button code and no sheet shows it within NO_SHEET_MS (a hard key's; the soft
  *                      key's own buttons take its presses)
  *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
@@ -51,6 +52,7 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
   let iconBackend = null; /* the key a press sheet was last shown for: usb (a hard key), embedded (the soft key) */
   const shownCodes = []; /* the codes sheets showed, with when */
   const openSheets = new Set(); /* the sheets open now, by title (opened: their first height after onShow; closed: their close) */
+  let sheetWords = ''; /* the press sheet's words now (its "[press] key waits: <words> - buttons") */
   let approvalsOwed = 0; /* the computer's presses approved in the app and not yet asked of the key ([edge] press approved) */
   let wentInWait = false; /* a press sheet went while the key waited for this one press */
   let afterAnswer = null; /* since the key last answered a press: what it answered, the requests begun since (id -> {what, asked}) */
@@ -165,6 +167,16 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
        * the host sheet says it ("[press] code shows ... - buttons d d d", HostChallengeSheet). Not on the soft key - there
        * the app is the key and its own buttons take the press (PressSheet).
        */
+      /*
+       * A BUDGET'S PRESS SAYS WHAT THE BUDGET IS FOR (Brad, 2026-11-03, the login's press sheet read only "Edge: opening a
+       * budget": "what budget am i pressing for?"): the press sheet's words for it - the last "[press] key waits" - are its
+       * purpose, not the request's name
+       */
+      if (/^Edge: (opening|resuming) a budget$/.test(m[1])) {
+        later(NO_SHEET_MS, () => {
+          if (waitWhat === m[1] && /^Edge: (opening|resuming) a budget$/.test(sheetWords)) fail(`budget unnamed: the press sheet says only "${sheetWords}" - not what the budget is for`);
+        });
+      }
       if (m[2] && iconBackend !== 'embedded') {
         const code = m[2].trim();
         const what = m[1];
@@ -177,6 +189,8 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
       }
       return;
     }
+    m = /^\[press\] key waits: (.*) - buttons /.exec(l);
+    if (m) { sheetWords = m[1]; return; }
     m = /^\[press\] code shows: .* - buttons ([1-6 ]+)$/.exec(l);
     if (m) { shownCodes.push({ code: m[1].trim(), t: now() }); if (shownCodes.length > 20) shownCodes.shift(); return; }
     m = /^\[request\] press done: (.*) - (answered|no answer)$/.exec(l);
