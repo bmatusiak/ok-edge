@@ -24,6 +24,7 @@ import {desktop} from '../../platform';
 import {createKeyConversation} from '../../keyConversation';
 import {ioPulse} from '../../btActivity';
 import {keyGone, noteEdgeRequest, noteTunnel} from '../../keyBusy';
+import {sayPress} from '../../requestLog';
 import {theme} from '../../ui/theme';
 import {Btn, Section} from '../../ui/components';
 import {barStyles, useIoPurple} from '../../ui/statusBar';
@@ -80,7 +81,8 @@ function useDesktopHost(): void {
      * app's own - the progress, then "Press your OnlyKey" while the key waits. A CLI gone mid-request takes its sheet.
      */
     const offBusy = bridge.on('okedge:computerBusy', ({kind, e}: {kind: string; e: any}) => {
-      if (kind === 'tunnel') noteTunnel({...e, via: 'direct'});
+      if (kind === 'press') sayPress(e, 'the CLI');
+      else if (kind === 'tunnel') noteTunnel({...e, via: 'direct'});
       else if (kind === 'edge') noteEdgeRequest(e);
       else keyGone();
     });

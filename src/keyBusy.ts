@@ -91,7 +91,8 @@ const MSG_WHAT: Record<number, string> = {
   0xe4: 'connecting to the key', 0xec: 'reading a public key', 0xed: 'signing', 0xf0: 'decrypting',
   0xf3: 'collecting an answer', 0xfb: "reading the key's allowed site", 0xfc: 'deriving a secret',
 };
-const whatOf = (msg: number, slot: number) =>
+/* a request in the person's words (src/requestLog.ts says the presses with it) */
+export const whatOf = (msg: number, slot: number) =>
   msg === OKEDGE ? `Edge: ${EDGE_WHAT[slot] ?? `request ${slot}`}` : MSG_WHAT[msg] ?? `request 0x${msg.toString(16)}`;
 
 let current: KeyBusy | null = null;

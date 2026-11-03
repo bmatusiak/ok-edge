@@ -145,6 +145,14 @@ const STOPPED_RE = /^\[timeline\] \d+ end #\d+ .* failed|the key stopped waiting
 const tabName = (app) => `${app.shell} (${(app.ws && app.ws.via) || HOST})`;
 const HERE_WORDS = ['windows', 'local', 'here'];
 function pickApp(name) {
+  /*
+   * A PLAIN NAME IS THIS MACHINE'S APP when two machines have one (2026-11-02: "run.js restart --app desktop" from Windows
+   * restarted the box's desktop - the last one connected - while Brad was on his); the only one of its kind otherwise
+   */
+  if (name && !String(name).includes('@')) {
+    const all = [...everyApp].filter((a) => a.shell === name && !a.closed);
+    if (all.length > 1) return all.filter((a) => !(a.ws && a.ws.via)).pop() || all.pop();
+  }
   if (!name || !String(name).includes('@')) return apps.get(name);
   const [shell, where] = String(name).toLowerCase().split('@');
   const here = HERE_WORDS.includes(where);
@@ -865,7 +873,11 @@ localTargets.watchKeys((keys) => { localKeys = keys; if (keys !== null) keysSaid
 /* lines a process wrote before its app connected (its start-up): held, then handed to the app's record when it does */
 const outBefore = new Map(); /* shell -> lines */
 function appOut(shell, l, via = HOST) {
-  const a = apps.get(shell);
+  /*
+   * THE APP OF THIS KIND ON THAT MACHINE (2026-11-02: with the Windows desktop and the box's both connected, apps.get by
+   * kind gave the last one connected - the box's lines went into the Windows app's record, and its judge read them)
+   */
+  const a = [...everyApp].find((x) => !x.closed && x.shell === shell && ((x.ws && x.ws.via) || HOST) === via) || null;
   if (!(a && a.net === 'test') && !LIVE_PREFIXES.some((p) => l.startsWith(p))) return;
   const s = `${stamp()} [main] ${l}`;
   if (a) { keep(a.recent, s); a.emit('log', `[main] ${l}`); }

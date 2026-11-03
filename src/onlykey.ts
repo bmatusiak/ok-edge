@@ -29,6 +29,7 @@ import OkEmu, {type Iface} from './transport/OkEmu';
 import UsbPipe from './transport/UsbPipe';
 import {KEY_OVER_WEBAUTHN, shell} from './platform';
 import {keyGone, noteEdgeRequest, noteSettle, noteTunnel} from './keyBusy';
+import {sayPress, type PressSaid} from './requestLog';
 
 /**
  * The pipe contract, as `plugins/transport/embedded` defines it.
@@ -230,6 +231,9 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       started.services.okcrypto?.on?.('tunnel', KEY_OVER_WEBAUTHN ? noteTunnel : (e: any) => noteTunnel({...e, via: 'direct'}));
       /* and each Edge request that goes straight to the key (the phone's soft key, a USB key): the same sheet */
       if (started.services.edge) started.services.edge.onRequest = noteEdgeRequest;
+      /* and every press the lib asks, in the log - beside the sheets, not through them (src/requestLog.ts) */
+      started.services.okcrypto?.on?.('press', (e: PressSaid) => sayPress(e));
+      if (started.services.edge) started.services.edge.onPress = (e: {phase: 'asked' | 'done'; sub: number; ok?: boolean}) => sayPress({phase: e.phase, msg: 0xf8, slot: e.sub, ok: e.ok});
       /* and the lib's waits between them, for the timeline (debug builds) */
       started.services.okcrypto?.on?.('settle', noteSettle);
       started.services.identity?.on?.('forgotten', (why: string | null) => {

@@ -4,18 +4,19 @@
  * finding these problems, the rehearsals should be looking at this as a fail"; "press sheets and progress during an
  * operation is IMPORTANT at this time, as it signals to the user we know what is going to happen BEFORE it will happen").
  *
- * One per connected app, on every run. It reads the app's own lines - which sheet is up, what the key is asked - and
- * the key's own word where the drive has one (the gadget's LED: plain yellow is an Edge press waiting), and says FAIL
- * when what the person sees does not match what the key does:
+ * One per connected app, on every run. It reads the app's own lines - which sheet is up, and what the LIB asks of the
+ * key ("[request] press asked|done", src/requestLog.ts: the lib's okcrypto 'press' / edge.onPress, logged beside the
+ * sheets, never through them) - and says FAIL when what the person sees does not match what is asked. Not the key's
+ * LED (Brad, 2026-11-02: "hardkey does not tell us the led, and prod release does not also"):
  *   no press sheet     the key waits for a press and no press sheet is up within NO_SHEET_MS
  *   stale press sheet  the key answered and the press sheet is still up STALE_MS later, with no new wait
  *   no progress        requests still run NO_PROGRESS_MS after a press and no progress sheet shows
  *   idle press sheet   a press sheet up IDLE_MS with no request in flight and no wait
  *   sheet jumps        a sheet that is up changes height JUMPS times within JUMP_MS (a bar coming and going)
- * The lines it reads: "[press] icon up|down" (src/ui/PressIcon.tsx - on every press sheet, nowhere else), "[sheet]
- * progress up|down" (KeyBusySheet), "[sheet] height N: <title>" (Sheet), "[keybusy] the key waits for its press" and
- * "[keybusy] pressed - the key answers" (src/keyBusy.ts), "[press] key waits: ... - buttons" / "[press] key done"
- * (hostChallenge), "[timeline] <ms> begin|end #N <what>" (debug builds), "[main] [gadget] led #rrggbb" (the gadget).
+ * The lines it reads: "[request] press asked: <what> - code d d d|a press" and "[request] press done: <what> -
+ * answered|no answer" (the truth), "[press] icon up|down" (src/ui/PressIcon.tsx - on every press sheet, nowhere else),
+ * "[sheet] progress up|down" (KeyBusySheet), "[sheet] height N: <title>" (Sheet), "[timeline] <ms> begin|end #N <what>"
+ * (the requests in flight - debug builds).
  *
  * It also tells the drive's presser whether a press sheet is up: the drive never presses a key the person was not asked
  * to press (a press on the LED alone hid every missing sheet until 2026-11-02).
@@ -28,13 +29,6 @@ const IDLE_MS = 5000;
 const JUMPS = 3;
 const JUMP_MS = 2000;
 
-/* the Edge requests the key answers only after a press, by the app's words for them (src/keyBusy.ts EDGE_WHAT) */
-const PRESSED_EDGE = /^Edge: (certifying|opening a budget|resuming a budget|settling what is owed|recording a loss)/;
-/* plain yellow - red and green equal and lit, blue dark: the key waits for an Edge press (server.js pressWhenAsked) */
-const edgeYellow = (hex) => {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  return r === g && r > 0x30 && b < 0x30;
-};
 
 /**
  * @param {object} o
@@ -48,7 +42,6 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
   let progressWhat = '';
   let waitWhat = null; /* the key waits for a press now: what for */
   let waitsSeen = 0; /* waits begun - a later answer checks that none came after it */
-  let ledWaiting = false;
   const open = new Map(); /* timeline id -> what */
   const timers = new Set();
   const heights = new Map(); /* title -> change times */
@@ -114,27 +107,16 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
       if (list.length === JUMPS) fail(`sheet jumps: "${m[2]}" changed height ${JUMPS} times within ${JUMP_MS / 1000} s`);
       return;
     }
-    m = /^\[keybusy\] the key waits for its press: (.*)$/.exec(l);
+    /* the truth: what the lib asked of the key (src/requestLog.ts) */
+    m = /^\[request\] press asked: (.*?)(?: - code [1-6 ]+| - a press)$/.exec(l);
     if (m) { waits(m[1]); return; }
-    m = /^\[keybusy\] pressed - the key answers: (.*)$/.exec(l);
+    m = /^\[request\] press done: (.*) - (answered|no answer)$/.exec(l);
     if (m) { answered(m[1]); return; }
-    m = /^\[press\] key waits: (.*) - buttons /.exec(l);
-    if (m) { pressWhat = m[1]; return; }
     m = /^\[timeline\] \d+ (begin|end) #(\d+) (.*?)(?: steps=\d+ (ok|failed.*))?$/.exec(l);
     if (m) {
-      if (m[1] === 'begin') { open.set(m[2], m[3]); armIdle(); return; }
-      const what = open.get(m[2]) || m[3];
-      open.delete(m[2]);
-      /* a pressed Edge request that ended: its press is over, answered or not */
-      if (PRESSED_EDGE.test(what) && waitWhat) answered(what);
+      if (m[1] === 'begin') open.set(m[2], m[3]);
+      else open.delete(m[2]);
       armIdle();
-      return;
-    }
-    m = /^\[main\] \[gadget\] led (#[0-9a-f]{6})/.exec(l);
-    if (m) {
-      const y = edgeYellow(m[1]);
-      if (y && !ledWaiting) { ledWaiting = true; waits('an Edge press (the key\'s LED)'); }
-      else if (!y && ledWaiting) { ledWaiting = false; answered('an Edge press (the key\'s LED)'); }
     }
   }
 
@@ -154,4 +136,4 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
   };
 }
 
-module.exports = { createSheetJudge, edgeYellow, NO_SHEET_MS, STALE_MS, NO_PROGRESS_MS, IDLE_MS };
+module.exports = { createSheetJudge, NO_SHEET_MS, STALE_MS, NO_PROGRESS_MS, IDLE_MS };
