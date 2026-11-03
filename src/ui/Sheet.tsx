@@ -79,12 +79,22 @@ export function Sheet({
    * went - "causing it to flicker"): the drive's sheet inspector fails a sheet that keeps changing size (tools/drive/sheets.js)
    */
   const heightWas = React.useRef(0);
+  /*
+   * ONLY ONCE IT HAS OPENED (Brad, 2026-11-03: "thats animation happening - need to wait for the animation event to end
+   * before checking its size, and watch for size change events after completed animating the open"): the slide-in lays
+   * the sheet out more than once on its way up. onShow ends the open: its height then is where it settled, and only the
+   * changes after it are said. Closing starts over.
+   */
+  const opened = React.useRef(false);
+  const name = typeof title === 'string' ? title : 'sheet';
+  const say = (h: number) => { heightWas.current = h; console.log(`[sheet] height ${h}: ${name}`); };
   const onLayout = (e: {nativeEvent: {layout: {height: number}}}) => {
     const h = Math.round(e.nativeEvent.layout.height);
+    if (!opened.current) { heightWas.current = h; return; }
     if (!visible || Math.abs(h - heightWas.current) < 1) return;
-    heightWas.current = h;
-    console.log(`[sheet] height ${h}: ${typeof title === 'string' ? title : 'sheet'}`);
+    say(h);
   };
+  React.useEffect(() => { if (!visible) opened.current = false; }, [visible]);
   return (
     <Modal
       transparent
@@ -92,6 +102,7 @@ export function Sheet({
       visible={visible}
       statusBarTranslucent
       navigationBarTranslucent
+      onShow={() => { opened.current = true; if (heightWas.current) say(heightWas.current); }}
       onRequestClose={onClose ?? (() => undefined)}>
       {/* an open sheet is the drive's top layer: what is beneath it is covered (src/drive/registry.tsx) */}
       <DriveLayer open={visible} name={typeof title === 'string' ? title : 'sheet'}>
