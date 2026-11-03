@@ -130,14 +130,24 @@ export function noteSettle(e: {ms: number; why?: string}) {
  * AN EDGE REQUEST STRAIGHT TO THE KEY (lib edge.onRequest; Brad, 2026-10-29: the phone shows what the key is doing, as
  * the web app does - "a refresh is just a trigger for the operation, the sheet shows what's happening"): the phone's
  * soft key and a key on USB answer Edge without the tunnel, so its own begin and end feed the same sheet. A request
- * that waits for a press is left to the press sheet this host already shows for it (the soft key's Press button).
+ * that waits for a press on the soft key is left to its own Press button; on a key on USB this sheet asks for it.
  * Edge requests on one key run one at a time (the plugin's lane), so one counter names them.
  */
 let edgeOp = 0;
 export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: boolean; waiting?: number; limitMs?: number}) {
-  if (EDGE_PRESSED.has(e.sub)) return;
+  const pressed = EDGE_PRESSED.has(e.sub);
+  /*
+   * ONLY THE SOFT KEY HAS ITS OWN PRESS SHEET (2026-11-02, Windows, red-key: the nametag's certify waited 30 s for a press
+   * and nothing showed - every pressed Edge request to a key on USB was skipped here, and only a screen that raised its
+   * own ask, the login's, had a sheet). A key on USB has the whole request at once: it waits for the press from the
+   * begin, so the sheet's press wait (asks) starts there.
+   */
+  if (pressed && require('./hooks/KeyContext').activeBackend() === 'embedded') return;
   if (e.phase === 'begin') edgeOp += 1;
-  noteTunnel({phase: e.phase, id: edgeOp, msg: OKEDGE, slot: e.sub, step: e.phase === 'end' ? 1 : 0, steps: 1, ok: e.ok, waiting: e.waiting, via: 'direct', limitMs: e.limitMs ?? null});
+  const base = {id: edgeOp, msg: OKEDGE, slot: e.sub, ok: e.ok, waiting: e.waiting, via: 'direct' as const, limitMs: e.limitMs ?? null};
+  if (e.phase === 'end') { noteTunnel({...base, phase: 'end', step: pressed ? 2 : 1, steps: pressed ? 2 : 1}); return; }
+  noteTunnel({...base, phase: 'begin', step: 0, steps: pressed ? 2 : 1});
+  if (pressed) noteTunnel({...base, phase: 'step', step: 1, steps: 2, pressAt: 1});
 }
 
 /*

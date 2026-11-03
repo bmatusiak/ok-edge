@@ -56,7 +56,7 @@ export function KeyBusySheet() {
       <Text style={styles.counts}>{step}</Text>
       <Text style={styles.note}>
         {b.asks
-          ? 'The key is waiting for you: press it to go on. The browser window that asks for your security key is part of this step.'
+          ? `The key is waiting for you: press it to go on.${b.via === 'direct' ? '' : ' The browser window that asks for your security key is part of this step.'}`
           : b.via === 'direct'
             ? 'This app is talking to your OnlyKey. Wait here until it is done.'
             : 'Each step is one security-key window from your browser - that is this app talking to your OnlyKey. Wait here until it is done.'}
