@@ -59,7 +59,13 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
       })();
     }, COMPUTER_QUIET_MS);
   }
-  function releaseHold(why: string) {
+  /*
+   * ended = the computer's conversation is over, and the key's free listeners (the Edge tab's sync) run. A hold let go
+   * only to ANSWER one of its host messages is not that (red-key, 2026-11-03: each answer started the tab's 24 s sync,
+   * whose chain-head read reached the key between the CLI's note and its push's SSH sign - the sign failed and the
+   * push was refused).
+   */
+  function releaseHold(why: string, ended = true) {
     if (!held) return;
     if (held.timer) clearTimeout(held.timer);
     const h = held;
@@ -70,7 +76,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
     h.release();
     /* how long the app's own key reads (the Edge tab's sync) could not get in */
     console.log(`[hold] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
-    for (const l of [...freeListeners]) l();
+    if (ended) for (const l of [...freeListeners]) l();
   }
   /* sticky: held until releaseHold - a desktop CLI's whole connection (features/channels/ipc.tsx), not until the key is quiet */
   function holdForComputer(transport: any, sticky = false): Promise<void> {

@@ -28,7 +28,7 @@ export type KeyConversation = {
   answer<T>(fn: () => Promise<T>): Promise<T>;
   /** before one of its key writes: resolves once the key is the computer's (the session's pipe.beforeWrite) */
   beforeWrite(): Promise<void>;
-  /** the carrier stopped */
+  /** the carrier stopped (its key is free: the Edge tab syncs) */
   stop(why: string): void;
 };
 
@@ -55,7 +55,8 @@ export function createKeyConversation(): KeyConversation {
     },
     async answer(fn) {
       answering++;
-      hold.releaseHold(' (answering the computer)');
+      /* not the conversation's end: the Edge tab's sync waits for the computer to go (computerHold.releaseHold) */
+      hold.releaseHold(' (answering the computer)', false);
       try {
         return await fn();
       } finally {
