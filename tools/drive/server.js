@@ -412,7 +412,14 @@ function pressWhenAsked(app) {
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
         /* a web app's code on a hard key: pressed when the key's console says it waits, not when the sheet shows - its DEBUG
            "Send device update" (fido2's wait: a derive) or "done_process_packets" (okcore's confirmation: a sign or decrypt) */
-        const after = app.shell === 'webapp' && outside[2] !== 'any' ? 'Send device update|done_process_packets' : null;
+        /*
+         * ...and an Edge press on a key on USB (the desktop's, the phone's): when the key's console says "Edge: waiting for a
+         * press" (its Edge plugin's press_wait) - the lib's "press asked" is said once the request is written, and a budget's
+         * several reports are checked before the key waits (box desktop, 2026-11-03: pressed in that gap, lost, 30 s out)
+         */
+        const after = app.shell === 'webapp'
+          ? (outside[2] !== 'any' ? 'Send device update|done_process_packets' : null)
+          : (outside[2] === 'any' ? 'Edge: waiting for a press' : null);
         /*
          * how long ago the request began - an age, not a time: the key's machine may be a drive-remote with its own clock.
          * No slack before it: the app says its begin before any byte reaches the key, and an earlier line is the request

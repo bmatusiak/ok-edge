@@ -9,13 +9,8 @@ tags:
   - ship
 ---
 - runFlow: desktop-soft-key.yaml
-- runScript: scripts/ship-start.js
-# the budget request reaches this app's Edge sheet: Approve, and the drive presses the test key once
-- waitForTap:
-    what: 'budget ask'
-    timeout: 120000
-- tapOn: "Approve"
-- runScript: scripts/ship-end.js
+# the ship itself, on the soft key this flow put in (ship.yaml - the same on any key)
+- runFlow: ship.yaml
 - machine:
     action: use-key
     target: webapp

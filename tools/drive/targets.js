@@ -323,7 +323,21 @@ function holdGadget(onOut) {
     /* off between blinks is not news: a waiting key blinks */
     if (!/^(#000000 ?)+$/.test(hex)) gadgetOut(`[gadget] led ${hex}`);
   });
-  host.on('log', (m) => { for (const l of String(m.text || '').split('\n')) if (l.trim()) gadgetOut(`[gadget] ${l}`); });
+  /*
+   * ...AND ITS FIRMWARE'S CONSOLE IS THE KEY'S CONSOLE (2026-11-03, box desktop on the gadget: a budget's press sent the
+   * moment the lib said "press asked" was lost - a GRANT_CREATE is several reports and checked before the key waits): kept
+   * where a hard key's DEBUG console lines are, so a press waits for the key's own "Edge: waiting for a press" (press, after)
+   */
+  host.on('log', (m) => {
+    for (const l of String(m.text || '').split('\n')) {
+      if (!l.trim()) continue;
+      gadgetOut(`[gadget] ${l}`);
+      const at = Date.now();
+      consoleLines.push({ at, l });
+      if (consoleLines.length > 4000) consoleLines.splice(0, consoleLines.length - 4000);
+      for (const w of [...consoleWaiters]) w(at, l);
+    }
+  });
   return null;
 }
 
@@ -530,17 +544,20 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         const consoleUp = r.ok && /debug console answers/.test(r.out);
         return consoleUp ? 'hard key: debug console answers (a test hex)' : `hard key: no debug console (a production key, or none) - ${r.out.split('\n').pop() || 'nothing listed'}`;
       },
-      async press({ buttons = ['1'] } = {}) {
-        if (KEY === 'gadget' && gadgetUp) return T.webapp.press({ buttons });
+      async press({ buttons = ['1'], after = null, sinceAge = 0 } = {}) {
+        /* the gadget's own press, with the key's word to wait for (2026-11-03: dropped here, the budget's press went early) */
+        if (KEY === 'gadget' && gadgetUp) return T.webapp.press({ buttons, after, sinceAge });
         const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
         if (!b.length) b.push('1');
         /*
          * NOT BEFORE THE KEY WAITS (box, 2026-11-01: the login budget's press went the moment its sheet showed, before the
          * request was on the key - lost, the login timed out to "Try again"): 800 ms first, as the kit's own Edge tests.
          */
-        await new Promise((ok) => setTimeout(ok, 800));
-        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...b], 70000);
-        return r.ok ? `pressed ${b.join(' ')} on the hard key (debug console)` : `press failed: ${r.out.split(/\r?\n/).pop()}`;
+        /* ...or, given the key's word (an Edge press: "Edge: waiting for a press"), when its console says it - the event, not the wait */
+        if (!after) await new Promise((ok) => setTimeout(ok, 800));
+        const waitFor = after ? [`--after=${after}`, '--timeout=25'] : [];
+        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...waitFor, ...b], 70000);
+        return r.ok ? `pressed ${b.join(' ')} on the hard key (debug console${after ? `, when it said /${after}/` : ''})` : `press failed: ${r.out.split(/\r?\n/).pop()}`;
       },
       async start() {
         const c = running.get('desktop');
@@ -665,8 +682,13 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
             });
           }
           if (!gadgetUp) return 'press failed: the gadget soft key did not connect to this machine in 15 s';
+          /* its firmware's word that it waits, as a hard key's (above, holdGadget's log) */
+          if (after) {
+            const seen = await consoleSaid(new RegExp(after), since, 25000);
+            if (!seen) return `press failed: the gadget's firmware did not say /${after}/ within 25 s - nothing pressed`;
+          }
           for (const x of b) gadgetHost.press(Number(x), 'tap');
-          return `pressed ${b.join(' ')} on the gadget soft key`;
+          return `pressed ${b.join(' ')} on the gadget soft key${after ? ` (when its firmware said /${after}/)` : ''}`;
         }
         /* the held console: its word since this request began (`since`), or the next one; not held: the press tool listens */
         let waitFor = [];

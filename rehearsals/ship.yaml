@@ -1,0 +1,17 @@
+# THE PLAN SHIP ON THE KEY THIS APP HOLDS, whichever it is (2026-11-03: red-key's batch 1 stopped - the app's own sync after
+# the budget opened ran in the middle of the ship's exec on the USB pipe, and the agent's gpg key read back wrong; the
+# proof had run only on the desktop's soft key): `edge control ship --max 1` of the box's scratch repo (one unsigned
+# commit - the run needs one), the budget approved on this app's sheet, the drive's press, the sign, the push, the end.
+#   run.js rehearse --app desktop@box login ship
+name: The plan ship
+tags:
+  - edge
+  - ship
+---
+- runScript: scripts/ship-start.js
+# the budget request reaches this app's Edge sheet: Approve, and the drive presses the test key once
+- waitForTap:
+    what: 'budget ask'
+    timeout: 120000
+- tapOn: "Approve"
+- runScript: scripts/ship-end.js
