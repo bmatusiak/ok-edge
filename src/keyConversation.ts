@@ -24,8 +24,8 @@ const QUIET_MAX_MS = 3000;
 export type KeyConversation = {
   /** the computer's connection came (true) or went (false): the key is held for it, or let go */
   setConnected(connected: boolean): void;
-  /** answer one of its host messages: the hold is let go while answering, taken again after */
-  answer<T>(fn: () => Promise<T>): Promise<T>;
+  /** answer one of its host messages: the hold is let go while answering one that uses the key, taken again after */
+  answer<T>(fn: () => Promise<T>, usesKey?: boolean): Promise<T>;
   /** before one of its key writes: resolves once the key is the computer's (the session's pipe.beforeWrite) */
   beforeWrite(): Promise<void>;
   /** the carrier stopped (its key is free: the Edge tab syncs) */
@@ -53,7 +53,13 @@ export function createKeyConversation(): KeyConversation {
       if (connected && !answering) void take();
       if (!connected) hold.releaseHold(' (the computer went away)');
     },
-    async answer(fn) {
+    async answer(fn, usesKey = true) {
+      /*
+       * AN ANSWER THAT NEVER ASKS THE KEY KEEPS THE HOLD (red-key, 2026-11-03): let go, the app's reads already waiting in
+       * the key's lane went in at once - between the CLI's note and its push's SSH sign, which failed. A note and the
+       * identity read are storage only (edgeAgents.answerUsesKey); a budget's sheet asks the key for its press.
+       */
+      if (!usesKey) return fn();
       answering++;
       /* not the conversation's end: the Edge tab's sync waits for the computer to go (computerHold.releaseHold) */
       hold.releaseHold(' (answering the computer)', false);

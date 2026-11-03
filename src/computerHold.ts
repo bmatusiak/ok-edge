@@ -33,6 +33,16 @@ export function onKeyFree(listener: () => void): () => void {
     freeListeners.delete(listener);
   };
 }
+/* a computer's conversation is on the key: from its hold until it ends (releaseHold, ended) - answers in between included */
+let conversing = false;
+/*
+ * fn once no computer's conversation is on the key: now, or when it ends (red-key, 2026-11-03: each CLI note's copy sync
+ * ran in the middle of the conversation that sent it - its reads went to the key between the CLI's note and its sign)
+ */
+export function afterComputer(fn: () => void): void {
+  if (!conversing) { fn(); return; }
+  const off = onKeyFree(() => { off(); fn(); });
+}
 
 /*
  * THE COMPUTER'S HOLD (owner, 2026-10-03: "fix both races"). The lib's lane (node-onlykey-lib src/transport/lane.js)
@@ -66,7 +76,11 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
    * push was refused).
    */
   function releaseHold(why: string, ended = true) {
-    if (!held) return;
+    /* the computer went while its hold was let go to answer it: its conversation still ends here */
+    if (!held) {
+      if (ended && conversing) { conversing = false; for (const l of [...freeListeners]) l(); }
+      return;
+    }
     if (held.timer) clearTimeout(held.timer);
     const h = held;
     held = null;
@@ -76,7 +90,9 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
     h.release();
     /* how long the app's own key reads (the Edge tab's sync) could not get in */
     console.log(`[hold] the key is free again: the computer held it ${Date.now() - h.since} ms${why}`);
-    if (ended) for (const l of [...freeListeners]) l();
+    if (!ended) return;
+    conversing = false;
+    for (const l of [...freeListeners]) l();
   }
   /* sticky: held until releaseHold - a desktop CLI's whole connection (features/channels/ipc.tsx), not until the key is quiet */
   function holdForComputer(transport: any, sticky = false): Promise<void> {
@@ -85,6 +101,7 @@ export function createComputerHold(isKeyWaiting?: () => Promise<boolean>) {
       const conversation = () => new Promise<void>(release => {
         held = {release, timer: null, since: Date.now()};
         heldFrom = Date.now();
+        conversing = true;
         console.log('[hold] the computer holds the key');
         ready();
         if (!sticky) armRelease();

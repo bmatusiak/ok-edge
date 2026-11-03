@@ -22,6 +22,7 @@ import {approve as approveLib, identity as identityLib, note as noteLib, pressAs
 import {keepIdentity, loadIdentity} from './edgeIdentity';
 import {SoftKeyEdge} from './edgeSoftKey';
 import {addNote, sync as syncCopy} from './edgeStore';
+import {afterComputer} from './computerHold';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
@@ -254,6 +255,15 @@ export function withdrawSheet(plan: string): void {
   answerSheet('decline');
 }
 
+/*
+ * WHETHER ANSWERING msg CAN ASK THE KEY (keyConversation.answer): a note and the identity read are this device's storage
+ * only, so the computer's hold stays on through them; a budget, an identity SET and a press ask put up a sheet whose
+ * press - or whose Edge open - is the key's.
+ */
+export function answerUsesKey(msg: any): boolean {
+  return !(msg?.type === noteLib.TYPE || msg?.type === identityLib.GET_TYPE);
+}
+
 export function handleEdgeMessage(msg: any, from: string, planAsk?: PlanAsk): Promise<unknown | null> {
   /* B7 stage 2: a note changes nothing, so it never waits behind a sheet */
   if (msg?.type === noteLib.TYPE) return handleNote(msg, from).catch(() => null);
@@ -295,14 +305,20 @@ async function handleNote(msg: any, from: string): Promise<unknown | null> {
   if (!noteLib.verify(msg, {seen: notesSeen}).ok) return null;
   notesSeen.add(String(msg.nonce).toLowerCase());
   if (notesSeen.size > 1000) notesSeen.delete(notesSeen.values().next().value as string);
-  /* the shared one, not a fresh open per note (each open probes the key and reads its public key) */
-  soft = soft ?? (await SoftKeyEdge.open());
-  const s = soft;
-  if (!s) return null; /* locked, or no Edge: nothing to keep it with */
-  void (async () => {
-    await addNote(s.deviceId, {computer: computer.id, seq: msg.seq, reason: msg.reason, receiptMsg: msg.receiptMsg, txRefused: msg.txRefused}).catch(() => undefined);
+  /*
+   * KEPT ONCE THE COMPUTER LETS THE KEY GO (red-key, 2026-11-03: kept and synced at once, each note's copy reads went to
+   * the key between the CLI's note and its next request - the push's SSH sign failed). The open (it probes the key) and
+   * the sync wait for the conversation's end; the note is answered now, from storage, the hold kept (answerUsesKey).
+   */
+  const note = {computer: computer.id, seq: msg.seq, reason: msg.reason, receiptMsg: msg.receiptMsg, txRefused: msg.txRefused};
+  afterComputer(() => void (async () => {
+    /* the shared one, not a fresh open per note (each open probes the key and reads its public key) */
+    soft = soft ?? (await SoftKeyEdge.open());
+    const s = soft;
+    if (!s) return; /* locked, or no Edge: nothing to keep it with */
+    await addNote(s.deviceId, note).catch(() => undefined);
     await syncCopy(s).catch(() => undefined); /* the sync, and its alarms */
-  })();
+  })().catch(() => undefined));
   return {ok: true};
 }
 

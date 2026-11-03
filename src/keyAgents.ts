@@ -14,7 +14,7 @@ import {createKeySession} from 'node-onlykey-lib/desktop/session';
 import {OkEmu} from './transport/OkEmu';
 import {UsbPipe} from './transport/UsbPipe';
 import {activeBackend} from './hooks/KeyContext';
-import {AGENT_FROM, handleEdgeMessage} from './edgeAgents';
+import {AGENT_FROM, answerUsesKey, handleEdgeMessage} from './edgeAgents';
 import {createKeyConversation} from './keyConversation';
 import {ioPulse} from './btActivity';
 
@@ -45,7 +45,7 @@ export function serveKeyAgents(r: any): () => void {
     hostFor: () => ({
       send: (message: unknown) => {
         const c = current;
-        return conv.answer(() => handleEdgeMessage(message, `${AGENT_FROM}${c ? `${c.agent}|${c.name}` : 'unknown'}`));
+        return conv.answer(() => handleEdgeMessage(message, `${AGENT_FROM}${c ? `${c.agent}|${c.name}` : 'unknown'}`), answerUsesKey(message));
       },
     }),
     log: (l: string) => console.log(`[key-agent] ${l}`),

@@ -19,7 +19,7 @@
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, Text} from 'react-native';
-import {DESKTOP_FROM, handleEdgeMessage} from '../../edgeAgents';
+import {DESKTOP_FROM, answerUsesKey, handleEdgeMessage} from '../../edgeAgents';
 import {desktop} from '../../platform';
 import {createKeyConversation} from '../../keyConversation';
 import {ioPulse} from '../../btActivity';
@@ -64,7 +64,7 @@ function useDesktopHost(): void {
     const offMessage = bridge.on('okedge:edgeMessage', ({id, message, from}: {id: number; message: unknown; from: string}) => {
       ioPulse('ipc');
       setCli({last: {at: Date.now(), from, what: String((message as {type?: unknown})?.type ?? 'a message')}});
-      void conv.answer(() => handleEdgeMessage(message, `${DESKTOP_FROM}${from}`))
+      void conv.answer(() => handleEdgeMessage(message, `${DESKTOP_FROM}${from}`), answerUsesKey(message))
         .catch((e: unknown) => ({ok: false, refusal: 'invalid', detail: `the desktop app could not answer: ${String((e as Error)?.message ?? e)}`}))
         .then(answer => desktop!.invoke('okedge:edgeAnswer', id, answer ?? null));
     });
