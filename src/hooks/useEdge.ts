@@ -180,9 +180,10 @@ export function useEdge() {
    * EVERY RUN SAYS WHAT IT IS FOR (Brad, 2026-11-03: "why is it working with my key?"): the "Working with your key" sheet
    * names the task (keyBusy keyTask) - each action its own words (runFor), a refresh with no words of its own the default.
    */
-  const run = useCallback((work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean; why?: string} = {}) =>
-    keyTask(opts.why ?? "Edge: refreshing this device's view of the key's chain", () => runNow(work, opts)), [runNow]);
-  const runFor = useCallback((why: string, work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean} = {}) =>
+  /* weak: a look asks the key nothing of its own - its reason only when nothing else uses the key (keyBusy weak) */
+  const run = useCallback((work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean; why?: string; weak?: boolean} = {}) =>
+    keyTask(opts.why ?? "Edge: refreshing this device's view of the key's chain", () => runNow(work, opts), {weak: !!opts.weak}), [runNow]);
+  const runFor = useCallback((why: string, work: (s: Source) => Promise<EdgeView>, opts: {offline?: boolean; weak?: boolean} = {}) =>
     run(work, {...opts, why}), [run]);
 
   /** B1: HEAD, READ what is new, store, verify everything - after this app's own key action. */
@@ -195,7 +196,7 @@ export function useEdge() {
       console.log('[edge] look: this copy holds no checkpoint of the key yet - one sync reads it');
       return sync();
     }
-    return runFor("Looking at this device's copy of the key's chain", k => offlineView(k as unknown as Parameters<typeof offlineView>[0]), {offline: true});
+    return runFor("Looking at this device's copy of the key's chain", k => offlineView(k as unknown as Parameters<typeof offlineView>[0]), {offline: true, weak: true});
   }, [runFor, sync, source]);
   /*
    * ONE LOOK AT A TIME, AND ONE AFTER IT (2026-11-03, the box: a look took 6-8 s over every device's chain, and each
