@@ -143,6 +143,12 @@ bus.on('app-line', (tab, l) => {
 /* an app's key request that ended failed, or a press the key stopped waiting for (the app's own lines) */
 const STOPPED_RE = /^\[timeline\] \d+ end #\d+ .* failed|the key stopped waiting for the press/;
 const tabName = (app) => `${app.shell} (${(app.ws && app.ws.via) || HOST})`;
+/*
+ * THE PRESSER WOULD NOT PRESS A KEY THE DRIVE MAY PRESS (a test key that was not pressed is an error): said, and told to
+ * the runs with that app object - a fail-fast run stops on its own app's only (control), never another machine's. A
+ * production key's "not pressed" is not this: its press is the person's.
+ */
+const declined = (app, text) => { line(`[${app.shell}] ${text}`); bus.emit('declined', app, text); };
 const HERE_WORDS = ['windows', 'local', 'here'];
 function pickApp(name) {
   /*
@@ -303,11 +309,11 @@ function pressWhenAsked(app) {
      * NEVER A BLIND PRESS (2026-11-02): the LED says the key waits, but the person is asked only by a press sheet - none
      * up within the inspector's time, and the key is left to wait: the inspector fails it (no press sheet), the flow stops there.
      */
-    if (edgePress && !(await app.inspector.pressSheet(1000))) { line(`[${app.shell}] not pressed: the key waits for its Edge press (LED ${colour}) and no press sheet asks for it`); return; }
+    if (edgePress && !(await app.inspector.pressSheet(1000))) { declined(app, `not pressed: the key waits for its Edge press (LED ${colour}) and no press sheet asks for it`); return; }
     pressing = true;
     try {
       const s = await procFor(app, 'key-state');
-      if (!(s.ok && /\btestnet\b/.test(String(s.what)))) { line(`[${app.shell}] its key waits for a touch - not pressed: not a testnet key`); return; }
+      if (!(s.ok && /\btestnet\b/.test(String(s.what)))) { declined(app, `its key waits for a touch - not pressed: not a testnet key`); return; }
       const r = await procFor(app, 'press', { buttons: ['1'] });
       line(r.ok ? `[${app.shell}] pressed: ${r.what} - the key waited for a touch (LED ${colour})` : `[${app.shell}] press refused: ${r.why}`);
     } finally { pressing = false; }
@@ -373,7 +379,7 @@ function pressWhenAsked(app) {
           function on(x) { if (/^\[request\] press asked: /.test(x)) { clearTimeout(t); app.off('log', on); ok(true); } }
           app.on('log', on);
         });
-        if (!onKey) { line(`[${app.shell}] not pressed: ${outside[1]} - the lib never said the request reached the key`); return; }
+        if (!onKey) { declined(app, `not pressed: ${outside[1]} - the lib never said the request reached the key`); return; }
       }
       /* a press in progress (a touch) is waited for, not a reason to drop this one - the key would wait out its 25 s */
       while (pressing) await new Promise((r) => setTimeout(r, 100));
@@ -404,9 +410,9 @@ function pressWhenAsked(app) {
            * whose console does not answer is never probed (red-key's rule, above).
            */
           const otherMachine = !!(app.ws && app.ws.via);
-          if (app.flags.consoleAnswers !== true && app.shell !== 'webapp' && !piKeyApp && !otherMachine) { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
+          if (app.flags.consoleAnswers !== true && app.shell !== 'webapp' && !piKeyApp && !otherMachine) { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); bus.emit('person-presses', app); return; }
           const s = await procFor(app, 'key-state');
-          if (!(s.ok && /debug console answers|the testnet soft key \((gadget|pi relay)\)/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
+          if (!(s.ok && /debug console answers|the testnet soft key \((gadget|pi relay)\)/.test(String(s.what)))) { declined(app, `not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
           app.keyIsTest = true;
         }
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
@@ -740,10 +746,21 @@ function driveFor(app, say, answer = () => {}, run = null) {
    * mixed into the next run's lines, until its own watchdog). Every move a script makes goes through this handle, so each
    * checks first: once the caller's socket closed, the next move throws and the script ends there.
    */
+  /*
+   * AND A RUN STOPS AT ITS FIRST ERROR (fail fast, always - run.js --fail-retry N lets N go by): the next move throws it,
+   * and a move already waiting (a d.until of 180 s, a step) ends with it at once - not at its own watchdog.
+   */
   if (run) {
     for (const [k, v] of Object.entries(api)) {
-      if (typeof v === 'function') api[k] = (...a) => { if (run.cancelled) throw new Error('the caller went (run.js stopped) - no further moves'); return v(...a); };
+      if (typeof v !== 'function') continue;
+      api[k] = (...a) => {
+        if (run.cancelled) throw new Error('the caller went (run.js stopped) - no further moves');
+        if (run.failed) throw new Error(`fail-fast: ${run.failed}`);
+        const r = v(...a);
+        return r && typeof r.then === 'function' && run.failing ? Promise.race([r, run.failing]) : r;
+      };
     }
+    api.failRetry = run.failRetry;
   }
   return api;
 }
@@ -1146,11 +1163,32 @@ function control(ws) {
      * keyBusy that writes "[key]": the app's lines cannot count those)
      */
     const keys = { requests: 0, presses: 0 };
-    const onAppLine = (shell, l) => { if (shell === (m.app || shell) && / \[key\] /.test(l)) keys.requests++; };
-    bus.on('app-line', onAppLine);
     const started = new Date();
     let reason = '';
-    const run = { script: String(m.script), quietSince: Date.now(), cancelled: false };
+    /* fail fast always; run.js --fail-retry N lets N errors go by (failRetry) */
+    const run = { script: String(m.script), quietSince: Date.now(), cancelled: false, failRetry: Math.max(0, Number(m.failRetry) || 0), errors: 0, failed: null, failing: null };
+    /* the error past the retries allowed: kept, said, and every move waiting now ends with it (driveFor) */
+    let failNow = () => {};
+    run.failing = new Promise((_, no) => { failNow = no; });
+    run.failing.catch(() => {});
+    const fail = (why) => {
+      if (run.failed) return;
+      if (++run.errors <= run.failRetry) { line(`[${m.script}] error ${run.errors} of ${run.failRetry} allowed (--fail-retry): ${why}`); return; }
+      run.failed = why;
+      line(`[${m.script}] FAIL-FAST: ${why}`);
+      failNow(new Error(`fail-fast: ${why}`));
+    };
+    const onAppLine = (tab, l) => {
+      /* this run's app only (tabName: its shell and machine) - before it is picked, the old count by shell */
+      if (run.app ? tab !== tabName(run.app) : tab !== (m.app || tab)) return;
+      if (/ \[key\] /.test(l)) keys.requests++;
+      /* a press the key asked for and nobody gave: the app's own line - unless its presses are the person's (red-key) */
+      const unanswered = l.match(/\[request\] press done: (.*) - no answer/);
+      if (unanswered && !run.personPresses) fail(`the key's press was never given: ${unanswered[1]}`);
+    };
+    const onPerson = (a) => { if (run.app && a === run.app) run.personPresses = true; };
+    bus.on('person-presses', onPerson);
+    bus.on('app-line', onAppLine);
     running.add(run);
     /* the caller (run.js) gone mid-run: the script stops at its next move (driveFor) */
     ws.once('close', () => {
@@ -1163,7 +1201,13 @@ function control(ws) {
      * then expected ... have it give log file name, so you can look in it instead of getting the entire log sent to
      * you"): the lines go to the window, the log and the run's lines.log; run.js prints the verdict and that file.
      */
-    const watch = (l) => { runLines.push(l); run.quietSince = Date.now(); };
+    const watch = (l) => {
+      runLines.push(l);
+      run.quietSince = Date.now();
+    };
+    /* the drive's presser would not press this run's test key (declined) - its "held:" is a flow holding it on purpose */
+    const onDeclined = (a, text) => { if (run.app && a === run.app) fail(text); };
+    bus.on('declined', onDeclined);
     watchers.add(watch);
     let code = 1;
     let shotApp = null;
@@ -1179,6 +1223,7 @@ function control(ws) {
       /* a shell not connected yet gets a handle too: its script may start it (d.up(), d.start()) - on the machine it names */
       const app = pickApp(m.app || shell) || Object.assign(new App(null, { shell, net: 'none' }), { closed: true, where: String(m.app || '').toLowerCase().split('@')[1] || '' });
       shotApp = app;
+      run.app = app;
       /* every run loads the scripts and what they require (flows.js) as they are now - a cached flows.js ran an old login
        * for runs after it was changed (2026-10-31) */
       for (const k of Object.keys(require.cache)) if (k.startsWith(__dirname) && k !== __filename && !/targets.js$/.test(k)) delete require.cache[k];
@@ -1199,6 +1244,8 @@ function control(ws) {
     } finally {
       running.delete(run);
       bus.off('app-line', onAppLine);
+      bus.off('declined', onDeclined);
+      bus.off('person-presses', onPerson);
       keys.presses = runLines.filter((l) => /\] pressed: /.test(l)).length;
       if (keys.requests || keys.presses) line(`[${m.script}] ${keys.requests} key request(s) without a press, ${keys.presses} press(es)`);
       watchers.delete(watch);

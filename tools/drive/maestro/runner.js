@@ -291,7 +291,8 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
         return;
       }
       case 'retry': {
-        const max = a.maxRetries !== undefined ? Number(a.maxRetries) : 1;
+        /* fail fast: no retry unless the run allows them (run.js --fail-retry N), and never more than the block's own */
+        const max = Math.min(d.failRetry || 0, a.maxRetries !== undefined ? Number(a.maxRetries) : 1);
         for (let n = 0; ; n++) {
           try { await (a.file ? runFile(path.resolve(dir, a.file), env) : runList(raw.commands || [], env, dir)); return; } catch (e) {
             if (n >= max) throw e;

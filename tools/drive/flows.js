@@ -167,6 +167,12 @@ async function onGadget(d) {
 async function loginMoves(d, { pin = TEST_PIN, life = 180, key = null } = {}) {
   const gadget = (dd) => (key === 'soft' ? Promise.resolve(false) : onGadget(dd));
   const until = Date.now() + life * 1000;
+  /*
+   * A STATE COME BACK IS A FAILED MOVE (Brad, 2026-11-03: "button press login is looping, no button press" - Continue,
+   * its press never given, the login back at Continue, every 30 s): the run stops there (fail fast) - run.js
+   * --fail-retry N lets a state come back N times.
+   */
+  const seen = new Map();
   for (let moves = 0; moves < 12; moves++) {
     const left = Math.max(5, Math.round((until - Date.now()) / 1000));
     const now = await d.until((app) => loginState(app) !== null, { life: left, fail: [] }).then(() => loginState(d.app));
@@ -189,6 +195,9 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180, key = null } = {}) {
       return d;
     }
     d.say(`login: ${now}`);
+    const times = (seen.get(now) || 0) + 1;
+    if (times > 1 + (d.failRetry || 0)) throw new Error(`login: "${now}" again after its move - stopped (fail fast; run.js --fail-retry N tries again)`);
+    seen.set(now, times);
     if (now.startsWith('close:')) await d.tap(now.slice(6));
     else if (now === 'card again') { await d.step('the login card', { goal: /\[card\] .*certified at/, act: () => d.tap('Try again') }); continue; }
     else if (now.startsWith('Go to ') || now === 'Reload') {
@@ -205,7 +214,7 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180, key = null } = {}) {
     else if (now === 'bypass' && pin !== TEST_PIN) {
       /* the bypass types TEST_PIN, not this key's: the keypad with its own PIN */
       /* the state stays "bypass" while its button shows: each move ends on its own goal, not on a state change */
-      if (d.app.flags.tab !== 'This Key') { await d.goto('This Key'); continue; }
+      if (d.app.flags.tab !== 'This Key') { seen.delete(now); await d.goto('This Key'); continue; }
       for (const n of pin) await d.tap(`Button ${n}`);
       await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] }).catch(() => {
         throw new Error(`login: the key stayed locked after its PIN on the keypad (--pin ${pin.length} digits) - one wrong attempt; not tried again`);

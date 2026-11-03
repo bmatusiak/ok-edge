@@ -16,7 +16,16 @@ const argv = dd >= 0 ? all.slice(0, dd) : all;
 const passed = dd >= 0 ? all.slice(dd + 1) : [];
 const at = argv.indexOf('--app');
 const app = at >= 0 ? argv[at + 1] : undefined;
-const rest = at >= 0 ? argv.filter((_, i) => i !== at && i !== at + 1) : argv;
+/*
+ * FAIL FAST, ALWAYS (Brad, 2026-11-03: "fail fast should be default, it should always pass on the first try, and
+ * --fail-retry N should be in place for retries" - after a login looped on a press never given): the run stops at its
+ * first press not made or not answered, a login state come back, a retry block's first failure (server.js control).
+ * --fail-retry N lets N of those go by.
+ */
+const fr = argv.indexOf('--fail-retry');
+const failRetry = fr >= 0 ? Number(argv[fr + 1]) : 0;
+if (!Number.isInteger(failRetry) || failRetry < 0) { console.error('--fail-retry N: N a whole number, 0 or more'); process.exit(2); }
+const rest = (at >= 0 ? argv.filter((_, i) => i !== at && i !== at + 1) : argv).filter((_, i, all) => all[i] !== '--fail-retry' && all[i - 1] !== '--fail-retry');
 const [script, ...own] = rest;
 const args = [...own, ...passed];
 if (!script) { console.error('usage: run.js <script> [--app desktop|webapp|android] [args...]'); process.exit(2); }
@@ -32,7 +41,7 @@ if (!require('./wake-mark').wakeWatcher()) {
 }
 
 const ws = new WebSocket(`ws://127.0.0.1:${process.env.DRIVE_PORT || 8790}/control`);
-ws.on('open', () => ws.send(JSON.stringify({ t: 'run', script, app, args })));
+ws.on('open', () => ws.send(JSON.stringify({ t: 'run', script, app, args, failRetry })));
 ws.on('message', (data) => {
   const m = JSON.parse(String(data));
   if (m.t === 'line') console.log(m.line);
