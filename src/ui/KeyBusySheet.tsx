@@ -25,6 +25,17 @@ export function KeyBusySheet() {
   const pressSince = usePressSince(!!b && b.asks);
   /* and rings, as every press sheet (Brad, 2026-11-01: "also audio") */
   usePressSound(pressSince, 'press');
+  /*
+   * THE PROGRESS SHEET, SAID WHEN IT SHOWS AND GOES (Brad, 2026-11-02: "the rehearsals should be looking at this as a
+   * fail"): the drive's sheet judge (tools/drive/sheets.js) checks that requests running after a press have it
+   */
+  const progressUp = !!b && !hostSheetShows(c, b) && !b.asks;
+  const wasUp = React.useRef(false);
+  useEffect(() => {
+    if (progressUp === wasUp.current) return;
+    wasUp.current = progressUp;
+    console.log(progressUp ? `[sheet] progress up: ${b?.what ?? ''}` : '[sheet] progress down');
+  }, [progressUp, b]);
   /* a host's press sheet (HostChallengeSheet) is on top while the key waits for its press - the rest is this one's progress (Brad, 2026-11-01) */
   if (!b || hostSheetShows(c, b)) return null;
   /*

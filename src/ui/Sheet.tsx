@@ -74,6 +74,17 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   const {height} = useWindowDimensions();
   const edge = TONE_COLOR[tone];
+  /*
+   * A SHEET'S HEIGHT, SAID AS IT CHANGES (Brad, 2026-11-02: the progress sheet rose and fell as its time bar came and
+   * went - "causing it to flicker"): the drive's sheet judge fails a sheet that keeps changing size (tools/drive/sheets.js)
+   */
+  const heightWas = React.useRef(0);
+  const onLayout = (e: {nativeEvent: {layout: {height: number}}}) => {
+    const h = Math.round(e.nativeEvent.layout.height);
+    if (!visible || Math.abs(h - heightWas.current) < 1) return;
+    heightWas.current = h;
+    console.log(`[sheet] height ${h}: ${typeof title === 'string' ? title : 'sheet'}`);
+  };
   return (
     <Modal
       transparent
@@ -89,6 +100,7 @@ export function Sheet({
         {onClose ? <DriveTap label="Close" onPress={onClose} /> : null}
         <View
           testID="sheet"
+          onLayout={onLayout}
           style={[
             styles.sheet,
             edge ? {borderTopWidth: 2, borderColor: edge} : styles.plainEdge,

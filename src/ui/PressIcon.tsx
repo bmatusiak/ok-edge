@@ -20,6 +20,8 @@ export function PressIcon({size = 28}: {size?: number}) {
    */
   useEffect(() => {
     console.log(`[press] icon up (${require('../hooks/KeyContext').activeBackend()})`);
+    /* and when it goes: the drive's sheet judge holds a press sheet up from icon up to icon down (tools/drive/sheets.js) */
+    return () => console.log('[press] icon down');
   }, []);
   useEffect(() => {
     if (quiet) return;
