@@ -89,12 +89,19 @@ test('the key\'s LED is no part of it: a gadget line asks nothing', async () => 
   assert.deepEqual(fails, []);
 });
 
-test('sheet jumps: a sheet changing height three times within the window - the time bar coming and going', () => {
+test('sheet jumps: a sheet back at the height it just left - the time bar coming and going', () => {
   const { j, fails, say } = judge();
   say('[sheet] height 300: Working with your key', '[sheet] height 312: Working with your key', '[sheet] height 300: Working with your key');
   j.stop();
   assert.equal(fails.length, 1);
   assert.match(fails[0], /^sheet jumps/);
+});
+
+test('a sheet that grows and stays (new words) does not jump', () => {
+  const { j, fails, say } = judge();
+  say('[sheet] height 300: Working with your key', '[sheet] height 312: Working with your key', '[sheet] height 330: Working with your key');
+  j.stop();
+  assert.deepEqual(fails, []);
 });
 
 test('the presser asks: a press sheet that comes within the time counts, none does not', async () => {

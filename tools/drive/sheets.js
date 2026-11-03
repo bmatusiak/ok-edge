@@ -12,7 +12,7 @@
  *   stale press sheet  the key answered and the press sheet is still up STALE_MS later, with no new wait
  *   no progress        requests still run NO_PROGRESS_MS after a press and no progress sheet shows
  *   idle press sheet   a press sheet up IDLE_MS with no request in flight and no wait
- *   sheet jumps        a sheet that is up changes height JUMPS times within JUMP_MS (a bar coming and going)
+ *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
  * The lines it reads: "[request] press asked: <what> - code d d d|a press" and "[request] press done: <what> -
  * answered|no answer" (the truth), "[press] icon up|down" (src/ui/PressIcon.tsx - on every press sheet, nowhere else),
  * "[sheet] progress up|down" (KeyBusySheet), "[sheet] height N: <title>" (Sheet), "[timeline] <ms> begin|end #N <what>"
@@ -26,8 +26,7 @@ const NO_SHEET_MS = 1000;
 const STALE_MS = 1000;
 const NO_PROGRESS_MS = 1500;
 const IDLE_MS = 5000;
-const JUMPS = 3;
-const JUMP_MS = 2000;
+const JUMP_MS = 10000;
 
 
 /**
@@ -100,11 +99,17 @@ function createSheetJudge({ fail, event = () => {}, now = Date.now }) {
     if (/^\[sheet\] progress down/.test(l)) { progress = false; changed(); return; }
     m = /^\[sheet\] height (\d+): (.*)$/.exec(l);
     if (m) {
+      /* back where it was: A -> B -> A within JUMP_MS - a part of the sheet coming and going (the time bar), not new words */
       const t = now();
-      const list = (heights.get(m[2]) || []).filter((x) => t - x < JUMP_MS);
-      list.push(t);
+      const h = Number(m[1]);
+      const list = (heights.get(m[2]) || []).filter((x) => t - x.t < JUMP_MS);
+      list.push({ t, h });
       heights.set(m[2], list);
-      if (list.length === JUMPS) fail(`sheet jumps: "${m[2]}" changed height ${JUMPS} times within ${JUMP_MS / 1000} s`);
+      const n = list.length;
+      if (n >= 3 && list[n - 1].h === list[n - 3].h && list[n - 2].h !== h) {
+        fail(`sheet jumps: "${m[2]}" went ${list[n - 3].h} -> ${list[n - 2].h} -> ${h} px within ${Math.round((t - list[n - 3].t) / 100) / 10} s`);
+        heights.set(m[2], []);
+      }
       return;
     }
     /* the truth: what the lib asked of the key (src/requestLog.ts) */
