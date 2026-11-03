@@ -18,6 +18,7 @@ import {Btn, Section} from './components';
 import {theme} from './theme';
 import {DEVICE_WORD} from '../platform';
 import {useDriveField} from '../drive/registry';
+import {askPress} from '../hostChallenge';
 
 const short = (id: string) => `${id.slice(0, 8)}…${id.slice(-8)}`;
 
@@ -53,7 +54,9 @@ export function YourDevicesCard({headSeq}: {headSeq: number | null | undefined})
       grants.nametagHash(draft); /* the same rule the key signs under: 1 to 64 characters */
       const soft = await SoftKeyEdge.open();
       if (!soft) throw new Error('the key did not answer - is it unlocked?');
-      setOwn(await setNametag(soft, draft.trim()));
+      /* the press says why (Brad, 2026-11-03: "the press sheet should always say why") - the key's certify of this name */
+      const done = askPress(`Certify this ${DEVICE_WORD}'s nametag "${draft.trim()}" - your other devices will see this name`);
+      try { setOwn(await setNametag(soft, draft.trim())); } finally { done(); }
       setEditing(false);
     } catch (e: any) {
       setError(String(e?.message ?? e));
