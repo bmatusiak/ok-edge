@@ -3,7 +3,7 @@ import {Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vie
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {theme} from './theme';
-import {SheetCountdown} from './SheetCountdown';
+import {SheetCountdown, SheetCountdownFull} from './SheetCountdown';
 import {DriveLayer, DriveTap} from '../drive/registry';
 
 /*
@@ -68,6 +68,7 @@ export function Sheet({
    * the bottom of the sheets"): set while the key waits for a press - from when it began, over the key's wait - in
    * the sheet's own colour (red for a press, yellow for Edge).
    */
+  /* null: this sheet has a bar and no timer runs now - it shows full (SheetCountdownFull); left out: the sheet has no bar */
   countdown?: {since: number; seconds: number} | null;
   children?: React.ReactNode;
 }) {
@@ -123,7 +124,7 @@ export function Sheet({
             {children}
           </ScrollView>
           {footer ? <View style={styles.footer}>{footer}</View> : null}
-          {countdown ? <SheetCountdown since={countdown.since} seconds={countdown.seconds} color={edge ?? theme.error} /> : null}
+          {countdown ? <SheetCountdown since={countdown.since} seconds={countdown.seconds} color={edge ?? theme.error} /> : countdown === null ? <SheetCountdownFull color={edge ?? theme.error} /> : null}
         </View>
       </View>
       </DriveLayer>

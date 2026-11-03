@@ -146,7 +146,16 @@ export function noteEdgeRequest(e: {phase: 'begin' | 'end'; sub: number; ok?: bo
   if (pressed && require('./hooks/KeyContext').activeBackend() === 'embedded') return;
   if (e.phase === 'begin') edgeOp += 1;
   const base = {id: edgeOp, msg: OKEDGE, slot: e.sub, ok: e.ok, waiting: e.waiting, via: 'direct' as const, limitMs: e.limitMs ?? null};
-  if (e.phase === 'end') { noteTunnel({...base, phase: 'end', step: pressed ? 2 : 1, steps: pressed ? 2 : 1}); return; }
+  if (e.phase === 'end') {
+    /*
+     * ITS ANSWER IS THE PRESS (Brad, 2026-11-02, the login on Windows: "i press ... press sheet stays open, progress sheet
+     * does not open to show the continuation"): the key answered, so it had its press - said as one, which takes the press
+     * sheet (a screen's ask too) and leaves the progress of what follows.
+     */
+    if (pressed && e.ok) noteTunnel({...base, phase: 'step', step: 2, steps: 2, answered: true});
+    noteTunnel({...base, phase: 'end', step: pressed ? 2 : 1, steps: pressed ? 2 : 1});
+    return;
+  }
   noteTunnel({...base, phase: 'begin', step: 0, steps: pressed ? 2 : 1});
   if (pressed) noteTunnel({...base, phase: 'step', step: 1, steps: 2, pressAt: 1});
 }

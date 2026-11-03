@@ -53,6 +53,20 @@ export function SheetCountdown({since, seconds, color}: {since: number; seconds:
   );
 }
 
+/*
+ * THE BAR WITH NO TIMER RUNNING: FULL (Brad, 2026-11-03: "everywhere there is an expire bar, show it, dont hide it, then when
+ * its needed use it ... if 0 is empty and 100% is full solid, then when it shown make it 100%"). A bar that came and went
+ * with each request's timer changed the sheet's height - the sheet rose and fell. Shown always, full until a timer runs it
+ * down, the sheet keeps one size.
+ */
+export function SheetCountdownFull({color}: {color: string}) {
+  return (
+    <View style={styles.track} pointerEvents="none" accessibilityLabel="no timer running">
+      <View style={[styles.bar, {backgroundColor: color}]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   track: {alignSelf: 'stretch', height: 3, marginTop: 14, backgroundColor: 'transparent'},
   bar: {width: '100%', height: 3, opacity: 0.85},
