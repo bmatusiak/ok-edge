@@ -259,6 +259,11 @@ function pressWhenAsked(app) {
      */
     const [lr, lg] = [1, 3].map((i) => parseInt(colour.slice(i, i + 2), 16));
     const edgePress = lr === lg && lr > 0x30;
+    /*
+     * A TOUCH IS THE BROWSER'S (WebAuthn): only the web app is asked for one. The desktop speaks to the gadget as a hard key
+     * on USB (2026-11-02: given the gadget, its yellow-green blink before the PIN drew a touch - a 1 typed into the PIN).
+     */
+    if (!edgePress && app.shell !== 'webapp') return;
     if (edgePress ? iconAnswered : touched) return;
     if (edgePress) iconAnswered = true; else touched = true;
     if (edgePress && pressHeld) { line(`[${app.shell}] held: the key waits for its Edge press (LED ${colour}) - not pressed`); return; }
