@@ -25,6 +25,12 @@ export function localMcpUrl(): string | null {
   return LOCAL_MCP_HERE ? invokeSync<string>('okedge:localMcp') : null;
 }
 
+/* host:port with this computer's two names as one (the Server panel takes either) */
+const hostOf = (u: string) => {
+  const {hostname, port} = new URL(u);
+  return `${hostname === 'localhost' ? '127.0.0.1' : hostname}:${port}`;
+};
+
 /** Join the local MCP's room for this identity, once (no proof, nothing asked of the key); its agents shown and answered. */
 export async function joinLocalRoom(identity: string): Promise<void> {
   const url = localMcpUrl();
@@ -32,6 +38,13 @@ export async function joinLocalRoom(identity: string): Promise<void> {
   if (!url || joining || (room && roomFor === id)) return;
   joining = true;
   try {
+    /*
+     * THE USER'S SERVER MAY BE THIS ROOM ITSELF (2026-11-02, Windows: the Server panel set to http://127.0.0.1:8650 for the
+     * batches). Then the server room is already this computer's room, its agents heard there (wireRoom) - a second join as
+     * the same device replaced the proven one (4409) and dropped the sync.
+     */
+    const server = await require('./serverRoom').serverUrl();
+    if (server && hostOf(server) === hostOf(url)) return;
     const held = await (await getOnlyKey(activeBackend())).identity.load();
     if (held.id !== id) return;
     const device = await require('./serverRoom').thisDevice();
