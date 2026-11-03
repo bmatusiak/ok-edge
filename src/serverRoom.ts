@@ -166,9 +166,17 @@ export async function serverUrl(): Promise<string | null> {
     return keySite && location.host.split(':')[0] === keySite ? location.origin : null;
   }
   const override = await AsyncStorage.getItem(SERVER_KEY);
+  /*
+   * WHICH SERVER, SAID WHEN IT CHANGES (2026-11-03, Windows: the Server panel's setting was gone after some restarts and not
+   * others - the login went to the key's own server and was refused): the setting as read, and the page it was read on
+   * (its storage is per origin), once per change - so a lost setting shows at the restart that lost it.
+   */
+  const said = `${override || 'none'} @ ${typeof location !== 'undefined' ? location.origin : 'app'}`;
+  if (said !== lastSaid) { lastSaid = said; console.log(`[room] the server setting: ${override || "none - the key's site"} (read on ${typeof location !== 'undefined' ? location.origin : 'this app'})`); }
   if (override) return override;
   return keySite ? `https://${keySite}` : null;
 }
+let lastSaid = '';
 
 /** Set (or clear, with null) the server the phone/desktop joins; joins it at once when a bucket is open. */
 export async function setServerUrl(url: string | null): Promise<void> {
@@ -176,9 +184,11 @@ export async function setServerUrl(url: string | null): Promise<void> {
     const u = new URL(url);
     if (u.protocol !== 'https:' && !/^(localhost|127\.0\.0\.1)$/.test(u.hostname)) throw new Error('a server address is https:// (http only for this computer itself)');
     await AsyncStorage.setItem(SERVER_KEY, u.origin);
+    console.log(`[room] the server setting set: ${u.origin} (on ${typeof location !== 'undefined' ? location.origin : 'this app'})`);
   } else {
     const typed = await AsyncStorage.getItem(SERVER_KEY);
     await AsyncStorage.removeItem(SERVER_KEY);
+    console.log(`[room] the server setting removed (was ${typed || 'none'})`);
     /*
      * A TYPED SERVER LEFT GOES BACK TO THE KEY'S (Brad, 2026-10-30: the firmware says which server - "directly from
      * the firmware, instead of a flag"). Leaving a testing override (the Pixel on the box's server) left the phone
