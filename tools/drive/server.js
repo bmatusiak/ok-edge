@@ -363,9 +363,11 @@ function pressWhenAsked(app) {
          * the app is connected; a key swapped for another is another connection.
          */
         if (app.net !== 'test' && !app.keyIsTest) {
-          if (app.flags.consoleAnswers !== true && app.shell !== 'webapp') { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
+          /* the Pi relay key (optional - pikey.js) is a soft key: its machine's word below is the proof, not a console probe */
+          const piKeyApp = !(app.ws && app.ws.via) && (require('./pikey').piKeySettings() || {}).for === app.shell;
+          if (app.flags.consoleAnswers !== true && app.shell !== 'webapp' && !piKeyApp) { line(`[${app.shell}] not pressed: the app does not say its key's debug console answers (a production key, or not probed)`); return; }
           const s = await procFor(app, 'key-state');
-          if (!(s.ok && /debug console answers|the testnet soft key \(gadget\)/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
+          if (!(s.ok && /debug console answers|the testnet soft key \((gadget|pi relay)\)/.test(String(s.what)))) { line(`[${app.shell}] not pressed: not a testnet key or a test hex (${s.ok ? s.what : s.why})`); return; }
           app.keyIsTest = true;
         }
         const buttons = outside[2] === 'any' ? ['1'] : outside[2].split(' ');
@@ -989,7 +991,18 @@ async function procAll(action, args = {}) {
  * the remote it came through, else this machine. Never another machine with the same target.
  */
 async function procFor(app, action, args = {}) {
-  const via = app.ws && app.ws.via;
+  let via = app.ws && app.ws.via;
+  /*
+   * THE PI RELAY KEY, IF THIS MACHINE HAS ONE - OPTIONAL (tools/drive/pikey.js; Brad, 2026-11-02: "the drive will see the
+   * pi as an optional tool also"): this machine's ~/.onlykey-drive.json says which app has it on its USB and which
+   * machine runs its firmware; that app's key actions (its state, its presses, the pikey-* ones) go there. No setting:
+   * nothing changes.
+   */
+  const pk = !via && require('./pikey').piKeySettings();
+  if (pk && pk.for === app.shell && pk.firmwareOn && (action === 'press' || action === 'key-state' || action.startsWith('pikey-'))) {
+    if (!action.startsWith('pikey-')) action = `pikey-${action}`;
+    via = pk.firmwareOn;
+  }
   if (!via) return { ...(await localTargets.act(action, app.shell, args)), where: 'this machine' };
   const r = [...remotes.values()].find((x) => x.machine === via && x.ws.readyState === 1);
   if (!r) return { ok: false, why: `${via}, the machine ${app.shell} runs on, is not connected`, where: via };

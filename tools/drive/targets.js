@@ -487,6 +487,8 @@ async function endStrays(line) {
  * for the drive's tab of that app (#3).
  */
 function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
+  /* the Pi relay key, if this machine runs one (off without ~/.onlykey-drive.json piKey - pikey.js) */
+  const piKey = require('./pikey').createPiKey({ EMU, NODE, LOGS, line });
   const running = new Map(); /* target -> its child (or children) */
   const followers = new Map(); /* target -> its output's watcher */
   const followOut = (target, name) => {
@@ -1080,6 +1082,13 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'hex') return target === 'firmware' ? hexFor(args) : { ok: false, why: 'hex belongs to the firmware target' };
       if (action === 'flash') return target === 'firmware' ? flashKey(args) : { ok: false, why: 'flash belongs to the firmware target' };
       if (action === 'window-shot') { if (!t.windowShot) return { ok: false, why: `${target} pictures its whole self` }; const w = await t.windowShot(); return w.png ? { ok: true, what: w.png } : { ok: false, why: w.why }; }
+      /* the Pi relay key - optional (tools/drive/pikey.js): its actions here, where its firmware runs */
+      if (action.startsWith('pikey-')) {
+        const op = action.slice(6);
+        const fn = { start: () => piKey.start(), stop: () => piKey.stop(), state: () => piKey.keyState(), 'key-state': () => piKey.keyState(), press: () => piKey.press(args), in: () => piKey.cable(true), out: () => piKey.cable(false) }[op];
+        if (!fn) return { ok: false, why: `no Pi key action "${op}" (start, stop, state, press, in, out)` };
+        try { return { ok: true, what: await fn() }; } catch (e) { return { ok: false, why: e.message }; }
+      }
       if (action === 'key-state') return t.keyState ? { ok: true, what: await t.keyState() } : { ok: false, why: `${target}'s key is in the app: its flags say its state` };
       if (action === 'press') return t.press ? { ok: true, what: await t.press(args) } : { ok: false, why: `${target}'s key is in the app: the drive taps its own button` };
       return { ok: false, why: `no action "${action}"` };

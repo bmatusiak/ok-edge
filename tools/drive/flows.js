@@ -155,7 +155,8 @@ async function unlockOutsideKey(d, pin) {
 async function onGadget(d) {
   if (d.app.shell !== 'desktop') return false;
   const s = await d.machine('key-state');
-  return s.ok && /\(gadget\): connected;/.test(String(s.what));
+  /* the gadget, or the Pi relay key (optional - tools/drive/pikey.js): a soft key the drive unlocks from outside the app */
+  return s.ok && /\((gadget|pi relay)\): connected;/.test(String(s.what));
 }
 
 /*
