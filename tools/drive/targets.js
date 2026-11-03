@@ -249,6 +249,8 @@ function gadget() {
  * "[gadget]" lines go to the web app's tab (#3's path: the testnet every line, the live chain none).
  */
 let gadgetHost = null;
+/* the gadget firmware's console, followed from its daemon's output (holdGadget) */
+let gadgetConsole = null;
 let gadgetUp = false;
 let gadgetLed = { hex: null, at: 0 };
 
@@ -323,21 +325,25 @@ function holdGadget(onOut) {
     /* off between blinks is not news: a waiting key blinks */
     if (!/^(#000000 ?)+$/.test(hex)) gadgetOut(`[gadget] led ${hex}`);
   });
+  host.on('log', (m) => { for (const l of String(m.text || '').split('\n')) if (l.trim()) gadgetOut(`[gadget] ${l}`); });
   /*
    * ...AND ITS FIRMWARE'S CONSOLE IS THE KEY'S CONSOLE (2026-11-03, box desktop on the gadget: a budget's press sent the
-   * moment the lib said "press asked" was lost - a GRANT_CREATE is several reports and checked before the key waits): kept
-   * where a hard key's DEBUG console lines are, so a press waits for the key's own "Edge: waiting for a press" (press, after)
+   * moment the lib said "press asked" was lost - a GRANT_CREATE is several reports and checked before the key waits): the
+   * daemon prints it to its own output (gadget(): logs/webapp-softkey.log), followed here as it grows and kept where a hard
+   * key's DEBUG console lines are, so a press waits for the key's own "Edge: waiting for a press" (press, after)
    */
-  host.on('log', (m) => {
-    for (const l of String(m.text || '').split('\n')) {
-      if (!l.trim()) continue;
-      gadgetOut(`[gadget] ${l}`);
+  if (!gadgetConsole) {
+    /* what the file held before (follow reads it first, at once) is an older run's: not said now */
+    let primed = false;
+    gadgetConsole = follow('webapp-softkey', (l) => {
+      if (!primed) return;
       const at = Date.now();
       consoleLines.push({ at, l });
       if (consoleLines.length > 4000) consoleLines.splice(0, consoleLines.length - 4000);
       for (const w of [...consoleWaiters]) w(at, l);
-    }
-  });
+    });
+    primed = true;
+  }
   return null;
 }
 
