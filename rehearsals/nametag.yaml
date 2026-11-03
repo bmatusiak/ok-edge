@@ -24,3 +24,6 @@ tags:
     notVisible: "This computer's nametag"
     timeout: 60000
 - assertVisible: ".*${output.tag}.*"
+# done with Edge Management - closed (Brad, 2026-11-03), the next flow starts from the app's own screen
+- tapOn: "Close Edge Management"
+- assertNotVisible: "Close Edge Management"
