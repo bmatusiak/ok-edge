@@ -251,6 +251,27 @@ function gadget() {
 let gadgetHost = null;
 /* the gadget firmware's console, followed from its daemon's output (holdGadget) */
 let gadgetConsole = null;
+/* who waits for the gadget's next LED colour (gadgetWaits) */
+const ledWaiters = new Set();
+/* the Edge plugin's waiting colour (wheel 43): red and green alike, no blue - lit, not off between pulses */
+const edgeYellow = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(String(hex).slice(i, i + 2), 16));
+  return r === g && r > 0x30 && b < 0x30;
+};
+/* the gadget waits for an Edge press: its console's word (a DEBUG build) or its Edge yellow, since `since` - what said it, or null */
+function gadgetWaits(re, since, life) {
+  const said = consoleLines.find((x) => x.at >= since && re.test(x.l));
+  if (said) return Promise.resolve(`its firmware said "${said.l.trim()}"`);
+  if (gadgetLed.at >= since && edgeYellow(gadgetLed.hex)) return Promise.resolve(`its LED went Edge yellow ${gadgetLed.hex}`);
+  return new Promise((resolve) => {
+    const done = (v) => { clearTimeout(dog); consoleWaiters.delete(onLine); ledWaiters.delete(onLed); resolve(v); };
+    const dog = setTimeout(() => done(null), life);
+    function onLine(at, l) { if (re.test(l)) done(`its firmware said "${l.trim()}"`); }
+    function onLed(hex) { if (edgeYellow(hex)) done(`its LED went Edge yellow ${hex}`); }
+    consoleWaiters.add(onLine);
+    ledWaiters.add(onLed);
+  });
+}
 let gadgetUp = false;
 let gadgetLed = { hex: null, at: 0 };
 
@@ -322,6 +343,7 @@ function holdGadget(onOut) {
     const hex = (m.pixels || []).map((p) => `#${[p.r, p.g, p.b].map((v) => v.toString(16).padStart(2, '0')).join('')}`).join(' ');
     if (hex === gadgetLed.hex) return;
     gadgetLed = { hex, at: Date.now() };
+    for (const w of [...ledWaiters]) w(hex);
     /* off between blinks is not news: a waiting key blinks */
     if (!/^(#000000 ?)+$/.test(hex)) gadgetOut(`[gadget] led ${hex}`);
   });
@@ -688,13 +710,21 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
             });
           }
           if (!gadgetUp) return 'press failed: the gadget soft key did not connect to this machine in 15 s';
-          /* its firmware's word that it waits, as a hard key's (above, holdGadget's log) */
-          if (after) {
-            const seen = await consoleSaid(new RegExp(after), since, 25000);
-            if (!seen) return `press failed: the gadget's firmware did not say /${after}/ within 25 s - nothing pressed`;
+          /*
+           * AN EDGE PRESS: WHEN THE KEY WAITS FOR IT (2026-11-03). A hard key says so on its DEBUG console; the gadget's
+           * firmware prints that line only in a DEBUG build (okplugin_edge press_wait), and it is not one - but it reports
+           * its LED, which press_wait turns Edge yellow (fadeon 43: red = green, no blue) the moment it waits. Its word or
+           * its yellow, whichever comes first. Only the timing of this test key's press - the sheet inspector judges by the
+           * lib's lines. A code's console words (a web app's hard key) are not the gadget's: pressed as before.
+           */
+          const edgeWord = !!after && /Edge: waiting for a press/.test(after);
+          let how = '';
+          if (edgeWord) {
+            how = await gadgetWaits(new RegExp(after), since, 25000);
+            if (!how) return `press failed: the gadget did not wait for an Edge press (no /${after}/, no Edge yellow) within 25 s - nothing pressed`;
           }
           for (const x of b) gadgetHost.press(Number(x), 'tap');
-          return `pressed ${b.join(' ')} on the gadget soft key${after ? ` (when its firmware said /${after}/)` : ''}`;
+          return `pressed ${b.join(' ')} on the gadget soft key${how ? ` (when ${how})` : ''}`;
         }
         /* the held console: its word since this request began (`since`), or the next one; not held: the press tool listens */
         let waitFor = [];
