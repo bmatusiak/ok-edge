@@ -1093,7 +1093,12 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     const lines = r.out.split(/\r?\n/);
     const failed = [...new Set(lines.filter((l) => /^✖ /.test(l) && !/^✖ failing tests/.test(l)).map((l) => l.replace(/ \([\d.]+m?s\)$/, '')))].slice(0, 5);
     const tail = lines.filter((l) => /^ℹ (tests|pass|fail|skipped)|^not ok|error TS\d+/.test(l)).slice(-8);
-    const said = [...tail, ...failed];
+    /*
+     * WHY IT FAILED, NOT ONLY WHICH (2026-11-04: "✖ the run: ..." said nothing a fix could start from, and the run's
+     * output is streamed to the drive windows only): each failure's first error line, as node --test prints it
+     */
+    const why = failed.length ? [...new Set(lines.filter((l) => /^\s+(\w*Error)( \[\w+\])?: /.test(l)).map((l) => l.trim().slice(0, 300)))].slice(0, 3) : [];
+    const said = [...tail, ...failed, ...why];
     return said.length ? said.join(' | ') : lines.slice(-4).join(' | ');
   };
   async function check(args = []) {
@@ -1122,7 +1127,12 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       try {
         r = await streamIn(EDGE, NPM, ['run', 'server:test'], { timeout: long, ...shown('check server') });
       } finally {
+        /*
+         * ENDED FOR SURE (Windows, 2026-11-04: taskkill without /F asks a window to close, a hidden node has none - the
+         * server outlived its check and the next one found 8787 taken): a test server has nothing to save
+         */
         end(srv, 'SIGTERM');
+        if (!(await exitOf(srv, 3000))) end(srv, 'SIGKILL');
       }
     } else if (what === 'kit') {
       return kit(rest);
