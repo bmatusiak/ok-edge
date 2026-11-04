@@ -25,6 +25,7 @@ export function LoginScreen({
   onContinue,
   onTesting,
   picked = null,
+  configMode = false,
 }: {
   device: DeviceState;
   attached?: boolean | null;
@@ -40,6 +41,8 @@ export function LoginScreen({
    * button is disabled - after a hot reload the screen shows which one is live and only that.
    */
   picked?: Net | null;
+  /** The key is on its way into config mode (MainApp WANTED / PRE): the button enters it, in red. */
+  configMode?: boolean;
 }) {
   const setup = device === 'uninitialized';
   /* the web app asks its key nothing before Log in (useWebKey armWebKey), so it is waiting for no key here */
@@ -115,9 +118,14 @@ export function LoginScreen({
       ) : null}
 
       <View style={styles.action}>
+        {/*
+          * IN CONFIG MODE IT SAYS SO (Brad, 2026-11-03: "the log in page, when in config mode state, should change the
+          * log in button to 'enter config mode' and the button should be red"): the key locked itself on its way into
+          * config mode, and this tap opens the PIN page that finishes the way in - not a login.
+          */}
         <Btn
-          title={setup ? 'Set up this key' : 'Log in'}
-          tone="primary"
+          title={setup ? 'Set up this key' : configMode ? 'Enter config mode' : 'Log in'}
+          tone={configMode && !setup ? 'danger' : 'primary'}
           onPress={onContinue}
           disabled={picked === 'test'}
         />

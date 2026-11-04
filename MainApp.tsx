@@ -969,6 +969,8 @@ function Shell() {
               device={emu.device}
               attached={keys.attached}
               keyVersion={keys.hard.version}
+              /* on its way into config mode (the key locked for it): "Enter config mode", red (Brad, 2026-11-03) */
+              configMode={configMode === WANTED || configMode === PRE}
               picked={keys.backend === 'embedded' && keys.soft.state === 'running' ? net : null}
               /*
                 Straight to the Testing tab, not This Key. Someone who turns
