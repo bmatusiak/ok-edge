@@ -32,7 +32,8 @@ function ItemRow({item, result}: {item: PlanItem; result?: Plan['results'][strin
   return (
     <View style={styles.item}>
       <Text style={styles.mono} numberOfLines={1}>{what}</Text>
-      <Text style={styles.dim}>{`"${item.reason}" · ${item.fingerprint.slice(0, 16)}`}</Text>
+      {/* a plan the room kept from before fingerprints (2026-11-04) has none: its row still draws */}
+      <Text style={styles.dim}>{`"${item.reason}"${item.fingerprint ? ` · ${item.fingerprint.slice(0, 16)}` : ''}`}</Text>
       {outcome ? <Text style={[styles.dim, {color: result?.refusal ? theme.error : theme.ok}]}>{outcome}</Text> : null}
     </View>
   );

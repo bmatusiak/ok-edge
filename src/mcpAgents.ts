@@ -26,8 +26,9 @@ export type PlanItem = {
   /* ssh / gpg: an agent-derived key by its label; rsa: a stored slot and its size */
   key: {kind: 'ssh' | 'gpg'; identity: string} | {kind: 'rsa'; slot: number; bits: number};
   reason: string;
-  /* the SHA-256 of the data it will sign: the data itself comes once the budget is open (plan_data), never kept here */
-  fingerprint: string;
+  /* the SHA-256 of the data it will sign: the data itself comes once the budget is open (plan_data), never kept here;
+     none on a plan the room kept from before fingerprints */
+  fingerprint?: string;
 };
 export type PlanResult = {item?: number; signature?: string; plaintext?: string; refusal?: string; encoding?: string};
 export type PlanState = 'draft' | 'submitted' | 'running' | 'done' | 'declined' | 'failed' | 'ended';
