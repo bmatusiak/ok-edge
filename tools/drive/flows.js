@@ -91,6 +91,12 @@ function loginState(app) {
  */
 const GREEN = /led #00[4-9a-f][0-9a-f]00\b/;
 const DARK = /led #000000\b/;
+/*
+ * RED, PULSING: UNLOCKED IN CONFIG MODE (box, 2026-11-03, the config-mode rehearsal: the PIN went in after the button-6
+ * hold and the LED faded red #050000..#aa0000 - the key's config-mode colour - and this said "stayed dark - one wrong
+ * attempt" of a right PIN). Any red with no green or blue that is not black.
+ */
+const CONFIG_RED = /led #(?!00)[0-9a-f]{2}0000\b/;
 async function unlockOutsideKey(d, pin) {
   let s = await d.machine('key-state');
   /*
@@ -128,6 +134,7 @@ async function unlockOutsideKey(d, pin) {
     throw new Error('hard key 2 did not read unlocked within 20 s of its PIN - nothing more is pressed');
   }
   if (GREEN.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
+  if (CONFIG_RED.test(s.what)) throw new Error(`the key is in config mode (its LED pulses red) - it ends only at a restart (unplugKey / plugKey); nothing pressed`);
   if (!DARK.test(s.what)) throw new Error(`the web app's key: its LED is neither green (unlocked) nor dark (locked) after 10 s - ${s.what.replace(/^.*?: /, '')}; nothing pressed`);
   d.say('its key is locked (dark) - its PIN on its buttons');
   /* the web app's stream carries the gadget's "[gadget] led" lines; the desktop's does not - it reads the LED its machine holds */
@@ -140,6 +147,7 @@ async function unlockOutsideKey(d, pin) {
     for (let i = 0; ; i++) {
       const n = await d.machine('key-state');
       if (n.ok && GREEN.test(n.what)) break;
+      if (n.ok && CONFIG_RED.test(n.what)) { d.say('its key is unlocked, in config mode (its LED pulses red)'); return; }
       if (i >= 20) throw new Error(`the gadget stayed dark 20 s after its PIN - one wrong attempt; not tried again`);
       await new Promise((ok) => setTimeout(ok, 1000));
     }

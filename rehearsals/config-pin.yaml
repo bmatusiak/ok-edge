@@ -14,6 +14,9 @@ env:
   FROM: "2222222"
   TO: "3333333"
 onFlowComplete:
+  # from a key restarted out of config mode, wherever the flow stopped (one that stopped in it left the key there)
+  - unplugKey
+  - plugKey
   - runFlow:
       file: config-pin-set.yaml
       env:
@@ -24,6 +27,9 @@ onFlowComplete:
     target: webapp
     args:
       key: gadget
+# a key restarted first: out of config mode, whatever a run before left it in
+- unplugKey
+- plugKey
 - stopApp
 - launchApp
 - runFlow:

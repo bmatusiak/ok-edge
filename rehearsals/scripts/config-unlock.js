@@ -6,6 +6,8 @@
  */
 const GREEN = /led #00[4-9a-f][0-9a-f]00\b/;
 const DARK = /led #000000\b/;
+/* unlocked IN CONFIG MODE: the LED pulses red, not green (tools/drive/flows.js CONFIG_RED) - the colour this step wants */
+const CONFIG_RED = /led #(?!00)[0-9a-f]{2}0000\b/;
 const pin = String(typeof PIN === 'undefined' ? '1234561' : PIN);
 const s = await drive.machine('key-state');
 if (!s.ok) throw new Error(`the key: ${s.why}`);
@@ -16,8 +18,9 @@ const r = await drive.machine('press', drive.app.shell, { buttons: pin.split('')
 if (!r.ok) throw new Error(`the PIN was not pressed: ${r.why}`);
 for (let i = 0; ; i++) {
   const n = await drive.machine('key-state');
-  if (n.ok && GREEN.test(n.what)) break;
+  if (n.ok && CONFIG_RED.test(n.what)) break;
+  if (n.ok && GREEN.test(n.what)) throw new Error('the key unlocked GREEN after its PIN - unlocked, but not in config mode');
   if (i >= 20) throw new Error('the key stayed dark 20 s after its PIN - one wrong attempt; not tried again');
   await new Promise((ok) => setTimeout(ok, 1000));
 }
-drive.say('the key is unlocked, in config mode');
+drive.say('the key is unlocked in config mode (its LED pulses red)');

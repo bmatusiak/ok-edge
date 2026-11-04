@@ -13,6 +13,8 @@ for (let n = 0; ; n++) {
   if (!asked) break;
   if (n >= 10) throw new Error(`the app kept asking the key - no ${QUIET_S} s of quiet for the hold: ${String(asked).replace(/^.*\[timeline\] \d+ /, '')}`);
 }
+/* listened for BEFORE the hold (box, 2026-11-03: the line came in the same tick as the lock and a wait begun after it missed it) */
+const keptLine = drive.waitForLog(/\[key\] the key left unlocked \(\w+\) in config mode \([^)]+\): nothing forgotten/, 30).then((l) => l, () => null);
 const r = await drive.machine('press', drive.app.shell, { buttons: ['6:hold'] });
 if (!r.ok) throw new Error(`button 6 was not held: ${r.why}`);
 drive.say(r.what);
@@ -21,7 +23,6 @@ while (drive.app.flags.key !== 'locked') {
   if (Date.now() > until) throw new Error(`button 6 held, but the key did not lock in 15 s (the app says "${drive.app.flags.key}")`);
   await new Promise((ok) => setTimeout(ok, 500));
 }
-const kept = await drive.waitForLog(/\[key\] the key left unlocked \(\w+\) in config mode \([^)]+\): nothing forgotten/, 15)
-  .then((l) => l, () => null);
+const kept = await keptLine;
 if (!kept) throw new Error('the key locked for config mode, but the app did not say it kept the key (no "in config mode (...): nothing forgotten") - a config-mode lock must not forget');
 drive.say('the key locked for config mode; the app kept the key (nothing forgotten)');
