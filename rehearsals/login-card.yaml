@@ -1,0 +1,13 @@
+# THIS COMPUTER'S LOGIN CARD, MADE WHERE IT IS OFFERED (src/loginCard.ts): at a login, or again when Edge is not enabled
+# on this host ("the login card offered again: one press, and its checkpoint enables Edge here") - Make the card, the
+# drive presses the test key to certify it, its checkpoint enables Edge here.
+#   run.js rehearse --app desktop@box login-card
+name: This computer's login card
+tags:
+  - card
+---
+- runScript: scripts/require-test-key.js
+- tapOn: "Make the card"
+- waitForLog:
+    pattern: '\[card\] this device''s login card certified at #\d+'
+    timeout: 60000
