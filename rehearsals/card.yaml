@@ -1,0 +1,24 @@
+# THE AGENT CARD, MADE FROM THIS COMPUTER (Brad, 2026-11-03: "the ai agent creates the card over cli/mcp, providing the
+# label it wants, the keys it wants to use for future budgets"): `onlykey-js edge --test-mode setup --label <LABEL>` on
+# the app's own machine - the identity kept today becomes a card, its certificate kept - the card's sheet on this app
+# (its label, keys, certificate), Approve, the key's press (the drive's, a test key), the card kept beside the chain.
+# Then the ship (ship.yaml) runs under it: the CLI's budget names the card, the host checks every scope against it.
+#   run.js rehearse --app desktop@box card [--env LABEL="box claude"] [--env COMMITS=3]
+name: An agent card, then a ship under it
+tags:
+  - edge
+  - card
+env:
+  LABEL: "box claude"
+  COMMITS: "3"
+---
+- runFlow: desktop-soft-key.yaml
+- goto: Edge
+- runScript: scripts/card-start.js
+# the card reaches this app's sheet (a computer's agent card): Approve, then the drive presses the test key
+- waitForTap:
+    what: 'agent card'
+    timeout: 120000
+- tapOn: "Approve"
+- runScript: scripts/card-end.js
+- runFlow: ship.yaml
