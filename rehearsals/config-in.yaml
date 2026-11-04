@@ -1,0 +1,36 @@
+# INTO CONFIG MODE ON A HARD KEY, EACH STEP CHECKED (config-mode.yaml; Brad, 2026-11-03: "check config mode works as
+# intended"). From any state: logged in, Settings -> PAGE (where the write is), "I will hold button 6" (the app WANTS it),
+# button 6 held - the key locks itself and the app KEEPS the key (a config-mode lock is not a lock that forgets) and says
+# "pre"; Log in opens the PIN page, the PIN on the key (its LED pulses red: unlocked in config mode), "Check config mode"
+# -> "on". Ends back on PAGE, ready for the write.
+#   runFlow: {file: config-in.yaml, env: {PAGE: PIN Setup}}
+name: Into config mode
+tags:
+  - config
+---
+- login: {}
+- goto: Settings
+- tapOn: "Open ${PAGE}"
+- tapOn: "I will hold button 6"
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: wanted
+      WHY: the app was told before the hold, so the lock to come is config mode's
+- runScript: scripts/config-hold.js
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: pre
+      WHY: the key locked on its way in; the app waits for the PIN and the check
+# the lock put the app on its Log in page (the key is kept): Log in opens the PIN page, where "Check config mode" is
+- tapOn: "Log in"
+- runScript: scripts/config-unlock.js
+- tapOn: "Check config mode"
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: "on"
+      WHY: the key answered the check - the app may write what only config mode allows
+- goto: Settings
+- tapOn: "Open ${PAGE}"

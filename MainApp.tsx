@@ -673,6 +673,19 @@ function Shell() {
   /* LOCKED IS AN UNPLUG FOR THE LOGIN (Brad, 2026-11-03: "why are we not clearing the state when it locks like unplugs") - src/hooks/useKey.ts */
   useEffect(() => onIdentityForgotten(({why}) => {
     if (why !== 'unplugged' && why !== 'locked') return;
+    /*
+     * CONFIG MODE ENDS WITH THE KEY (box, 2026-11-03, the config-mode rehearsal: the gadget unplugged and back after a
+     * PIN change, and the app still said config mode was ON - its config-only panels open on a key that would refuse
+     * them). It ends only when the key restarts, and a key that went has restarted. Only from ON: on the way in (WANTED,
+     * PRE) the key's restart into config mode is the way in, not the way out.
+     */
+    if (why === 'unplugged') {
+      setConfigMode(prev => {
+        if (prev !== ON) return prev;
+        console.log('[key] the key went while in config mode: config mode ended with it');
+        return OFF;
+      });
+    }
     setLoggedInThisRun(false);
     setPassed(false);
     void endSession(why === 'locked' ? 'the key locked' : 'the key was unplugged');

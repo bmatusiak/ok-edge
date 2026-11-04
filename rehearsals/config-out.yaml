@@ -1,0 +1,16 @@
+# OUT OF CONFIG MODE (config-mode.yaml): it ends only when the key restarts - unplugged and back. The app forgets the key
+# as for any unplug, and holds no config mode after it.
+name: Out of config mode
+tags:
+  - config
+---
+- unplugKey
+- waitForLog:
+    pattern: '\[identity\] the key went \(unplugged\)'
+    timeout: 20000
+- plugKey
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: "off"
+      WHY: the key restarted - config mode ended with it, and the app holds none

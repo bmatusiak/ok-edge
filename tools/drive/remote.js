@@ -84,7 +84,8 @@ function start({ appPort = 8790, controlPort = 8791 } = {}) {
         /* a secret from a file HERE, handed to the app here - the drive server sees only the app's answer, and its length is all that is logged */
         const a = apps.get(m.cid);
         let v = null, why = null;
-        try { v = fs.readFileSync(m.file, 'utf8'); if (m.key) v = JSON.parse(v)[m.key]; } catch (e) { why = e.message; }
+        /* a plain file's last line break is the file's, not the secret's (a one-line passphrase file ends in one) */
+        try { v = fs.readFileSync(m.file, 'utf8'); v = m.key ? JSON.parse(v)[m.key] : v.replace(/\r?\n$/, ''); } catch (e) { why = e.message; }
         if (!why && (typeof v !== 'string' || !v)) why = 'nothing in that file';
         if (why || !a) { toServer({ t: 'app-msg', cid: m.cid, data: JSON.stringify({ t: 'reply', id: m.id, ok: false, why: why || 'the app is gone' }) }); }
         else { line(`fill "${m.field}" from ${m.file} (${v.length} chars)`); a.send(JSON.stringify({ t: 'fill', id: m.id, field: m.field, value: v })); }

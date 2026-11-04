@@ -634,7 +634,8 @@ function driveFor(app, say, answer = () => {}, run = null) {
       return;
     }
     let v = fs.readFileSync(file, 'utf8');
-    if (jsonKey) v = JSON.parse(v)[jsonKey];
+    /* a plain file's last line break is the file's, not the secret's (remote.js fill-file the same) */
+    v = jsonKey ? JSON.parse(v)[jsonKey] : v.replace(/\r?\n$/, '');
     if (typeof v !== 'string' || !v) throw new Error(`nothing to fill from ${file}`);
     await fill(field, v, { secret: true });
   }

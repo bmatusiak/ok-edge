@@ -259,6 +259,16 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
         await d.fill(field, String(text));
         return;
       }
+      /*
+       * inputFile {field, file, key?}: a field filled from a file ON THE APP'S MACHINE, never seen here or logged (the
+       * drive's fillFile - a backup and its passphrase, Brad 2026-11-03: "do a restore of a backup from settings ->
+       * backup/restore"). key: the value is that key of a JSON file.
+       */
+      case 'inputFile': {
+        if (!a || !a.field || !a.file) throw new Error('inputFile: {field, file} - the field (its placeholder) and the file on the app\'s machine');
+        await d.fillFile(String(a.field), String(a.file), a.key ? String(a.key) : null);
+        return;
+      }
       case 'copyTextFrom': {
         const re = wholeRe(selectorOf(a).text);
         const line = d.app.text.split('\n').map((l) => l.trim()).find((l) => re.test(l)) || (controlFor(selectorOf(a)) || {}).label;
