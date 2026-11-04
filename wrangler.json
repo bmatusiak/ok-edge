@@ -2,6 +2,9 @@
   "name": "ok-edge",
   "main": "worker/index.js",
   "compatibility_date": "2026-10-23",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "observability": {
     "enabled": true
   },
