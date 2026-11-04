@@ -386,6 +386,9 @@ async function handleCard(msg: any, seen: Set<string>, from: string): Promise<un
   if (msg.type === agentsLib.CREATE_TYPE) {
     if (!(await agentRequestsOn())) return null;
     if (unattended()) return {ok: false, refusal: 'timeout', detail: UNATTENDED_DETAIL};
+    /* the shared Edge source: the sheet's press button presses through it (pressFromSheet - a soft key's press) */
+    soft = soft ?? (await SoftKeyEdge.open());
+    if (!soft) return {ok: false, refusal: 'invalid', detail: "this device's key has no Edge"};
   }
   let asked: SheetAsk | null = null;
   const r: any = await answerCardMessage(msg, {
