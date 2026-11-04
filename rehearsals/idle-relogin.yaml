@@ -21,5 +21,11 @@ env:
 - login: {}
 - runScript: scripts/idle-set.js
 - runScript: scripts/idle-wait.js
+# the app as it stands: back in
+- login: {}
+# the key locks itself again - and the app is started again over the locked key, as red-key's was (19:53, a rebuild)
+- runScript: scripts/idle-wait.js
+- stopApp
+- launchApp
 - login: {}
 - runScript: scripts/idle-reset.js
