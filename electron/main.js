@@ -133,6 +133,8 @@ function createWindow() {
     width: 900,
     height: 760,
     title: 'ok-edge',
+    /* the app's O (tools/icons/make-icons.js) - the title bar and the taskbar, not Electron's own */
+    icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

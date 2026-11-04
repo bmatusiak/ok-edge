@@ -166,8 +166,9 @@ fs.copyFileSync(process.execPath, path.join(EXTRA, 'node', PLATFORM === 'win' ? 
         { from: path.join(EXTRA, 'node'), to: 'node' },
       ],
       artifactName: FILE.replace(new RegExp(`\\.${EXT.replace('.', '\\.')}$`), '.${ext}'),
-      win: { target: [{ target: 'zip', arch: ['x64'] }] },
-      linux: { target: [{ target: 'tar.gz', arch: ['x64'] }], executableName: 'ok-edge', category: 'Utility' },
+      /* the app's O on the .exe and on the Linux desktop entry (tools/icons/make-icons.js), not Electron's own */
+      win: { target: [{ target: 'zip', arch: ['x64'] }], icon: path.join(ROOT, 'electron', 'icon.ico') },
+      linux: { target: [{ target: 'tar.gz', arch: ['x64'] }], executableName: 'ok-edge', category: 'Utility', icon: path.join(ROOT, 'electron', 'icon.png') },
       publish: null,
     },
   });
