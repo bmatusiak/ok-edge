@@ -5,12 +5,12 @@
  *
  * Brad, 2026-10-27: "push the builds to cloudflare, cloudflare does not need to build ... this will keep our main from
  * having builds"; then "cloudflare builds are disabled". So the cloudflare branch holds the finished site - nothing on
- * it is built again: the web app (docs/, with docs/firmware and docs/android), the Worker already bundled by wrangler
+ * it is built again: the web app (docs/, with docs/firmware and, at publish, docs/release.json), the Worker already bundled by wrangler
  * (worker/index.js, its node-onlykey-lib inside), and a wrangler.json that names them with no build command and no
  * bundling. `npx wrangler deploy` in that folder deploys exactly what the workflow built - the workflow runs it when the
  * repo has a CLOUDFLARE_API_TOKEN secret; otherwise the branch is the record of the release and is deployed by hand.
  *
- *   node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir> --commit <sha> --tag <tag>
+ *   node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir>
  *
  * The bindings (the Durable Object rooms, the assets' single-page fallback, /ws/* to the Worker first) are main's
  * wrangler.jsonc, so the deployed site cannot drift from the one `wrangler dev` runs locally.
@@ -23,10 +23,8 @@ const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : nu
 const docs = opt('--docs');
 const worker = opt('--worker');
 const out = opt('--out');
-const commit = opt('--commit') || '';
-const tag = opt('--tag') || '';
 if (!docs || !worker || !out) {
-  console.error('usage: node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir> [--commit <sha>] [--tag <tag>]');
+  console.error('usage: node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir>');
   process.exit(1);
 }
 const root = path.join(__dirname, '..', '..');
@@ -61,16 +59,5 @@ fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify({
   description: 'The built ok-edge site (an unofficial R&D version) (release workflow output) - deploy with npx wrangler deploy; nothing here is built',
   devDependencies: wrangler ? { wrangler } : {},
 }, null, 2)}\n`);
-fs.writeFileSync(path.join(out, 'README.md'), [
-  '# ok-edge: the built site',
-  '',
-  `Release ${tag || '(untagged)'}, built by the release workflow from main ${commit}. Nothing on this branch is source:`,
-  'each release replaces all of it. The source and the workflow are on `main` (`.github/workflows/release.yml`).',
-  '',
-  '- `docs/` - the web app, with `docs/firmware/` (the developer-key hex) and `docs/android/manifest.json`',
-  '- `worker/index.js` - the Worker, bundled (wrangler.json: no build, no bundling)',
-  '',
-  'Deploy: `npx wrangler deploy` in this folder.',
-  '',
-].join('\n'));
+/* the branch's README is the release manifest's (tools/release/release-manifest.js, at publish): one writer */
 console.log(`cloudflare-site: ${out} - docs/, worker/index.js, wrangler.json (main ${config.main}, wrangler ${wrangler || '?'})`);

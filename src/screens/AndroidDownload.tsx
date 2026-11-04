@@ -3,17 +3,17 @@
  * downloaded or updated from the webapp").
  *
  * The APK itself is a GitHub release asset (a Cloudflare Worker serves files of 25 MiB at most); the release workflow
- * (.github/workflows/release.yml) publishes beside the web app /android/manifest.json: which build, where its file is,
+ * (.github/workflows/release.yml) publishes beside the web app /release.json (apps.android, src/release.ts): which build, where its file is,
  * and what to check it against - its sha256, and the SHA-256 of the certificate it is signed with. Android installs it
  * over the app already on the phone only when that app carries the same id (com.okrn) and the same signing certificate,
  * and a higher version - so the certificate is shown, not just the file's hash. No manifest (a server that publishes
  * none, the phone, the desktop): nothing is shown.
  */
-import React, {useEffect, useState} from 'react';
+import React from 'react';
 import {Linking, StyleSheet, Text, View} from 'react-native';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
-import {BROWSER_PAGE} from '../platform';
+import {useRelease} from '../release';
 
 export type AndroidManifest = {
   appId: string;
@@ -32,28 +32,15 @@ export type AndroidManifest = {
   builtAt?: string;
 };
 
-const MANIFEST = '/android/manifest.json';
-
 const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(1)} MB`;
 const pairs = (hex: string) => hex.toUpperCase().match(/../g)?.join(':') ?? hex;
 
-/** the manifest beside the web app, checked for the fields the panel shows; null when there is none */
+/** the release's Android app (/release.json, src/release.ts), checked for the fields the panel shows; null when there is none */
 export function useAndroidManifest(): AndroidManifest | null {
-  const [m, setM] = useState<AndroidManifest | null>(null);
-  useEffect(() => {
-    if (!BROWSER_PAGE) return;
-    let alive = true;
-    fetch(MANIFEST, {cache: 'no-store'})
-      .then(r => (r.ok ? r.json() : null))
-      .then(j => {
-        if (alive && j && typeof j.url === 'string' && /^https:\/\//.test(j.url) && /\.apk$/.test(String(j.file))) setM(j as AndroidManifest);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return m;
+  const r = useRelease();
+  const a = r?.apps.android;
+  if (!r || !a || !/^https:\/\//.test(a.url) || !/\.apk$/.test(a.file) || !a.certSha256) return null;
+  return {appId: a.appId ?? 'com.okrn', version: r.version, versionCode: r.code, file: a.file, url: a.url, sha256: a.sha256, size: a.size, certSha256: a.certSha256, commit: a.commit};
 }
 
 export function AndroidDownload({m}: {m: AndroidManifest}) {

@@ -3,7 +3,7 @@
  * the Downloads order "1 source code, 2 firmware, 3 android apk, 4 desktop package, 5 cli").
  *
  * The packages are GitHub release assets, one per system (tools/release/desktop-package.js builds each on a runner of
- * that system); the release workflow publishes beside the web app /desktop/manifest.json: {packages: [...]}, each its
+ * that system); the release workflow publishes beside the web app /release.json (apps.desktop, src/release.ts), each its
  * file, download address, sha256 and size. Unpacked and run where it lands - no installer.
  *
  * What each system needs is said here, not left to be found out:
@@ -12,11 +12,11 @@
  *            puts it, as on Windows and Android (the emulator's src/ok_hal.cpp, 2026-10-28), so no vm.mmap_min_addr
  *            setting is asked of the user.
  */
-import React, {useEffect, useState} from 'react';
+import React from 'react';
 import {Linking, StyleSheet, Text, View} from 'react-native';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
-import {BROWSER_PAGE} from '../platform';
+import {useRelease} from '../release';
 
 export type DesktopPackage = {
   os: 'windows' | 'linux';
@@ -32,29 +32,17 @@ export type DesktopPackage = {
   softKey?: {version: string; plugins: string[]};
 };
 
-const MANIFEST = '/desktop/manifest.json';
 const mb = (n: number) => `${(n / (1024 * 1024)).toFixed(0)} MB`;
 
-/** the packages listed beside the web app, each checked for what the panel uses; null when there are none */
+/** the release's desktop packages (/release.json, src/release.ts), each checked for what the panel uses; null when there are none */
 export function useDesktopManifest(): DesktopPackage[] | null {
-  const [m, setM] = useState<DesktopPackage[] | null>(null);
-  useEffect(() => {
-    if (!BROWSER_PAGE) return;
-    let alive = true;
-    fetch(MANIFEST, {cache: 'no-store'})
-      .then(r => (r.ok ? r.json() : null))
-      .then(j => {
-        const ok = (Array.isArray(j?.packages) ? j.packages : []).filter(
-          (p: any) => p && /^https:\/\//.test(String(p.url)) && (p.os === 'windows' || p.os === 'linux'),
-        );
-        if (alive && ok.length) setM(ok as DesktopPackage[]);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return m;
+  const r = useRelease();
+  if (!r) return null;
+  const ok = (['windows', 'linux'] as const)
+    .map(os => ({os, a: r.apps.desktop?.[os]}))
+    .filter(({a}) => a && /^https:\/\//.test(a.url))
+    .map(({os, a}) => ({os, arch: 'x64', file: a!.file, url: a!.url, sha256: a!.sha256, size: a!.size, version: r.version, versionCode: r.code, commit: a!.commit, softKey: a!.softKey}));
+  return ok.length ? ok : null;
 }
 
 const HOW: Record<DesktopPackage['os'], {title: string; steps: string}> = {

@@ -8,7 +8,7 @@
  *   node tools/webshot.js --dir <web export> [--from <site>] --serve [port]    only serve it, to open in a browser
  *
  * Serves the export on a local port (unknown paths get index.html, as the Worker's single-page-application handling
- * does), with --from copying /android/manifest.json and /firmware/manifest.json from a live site so the panels that
+ * does), with --from copying /release.json from a live site so the panels that
  * read them appear. Then headless Chrome (CHROME, else its usual Windows/Linux places) opens it over the DevTools
  * protocol - no puppeteer: Node's own WebSocket - clicks each --tap label in turn (the innermost element whose text is
  * exactly that label), and saves the whole page as a PNG.
@@ -38,7 +38,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function copyManifests() {
   if (!FROM) return;
-  for (const p of ['android/manifest.json', 'firmware/manifest.json']) {
+  for (const p of ['release.json']) {
     const r = await fetch(new URL(p, FROM));
     if (!r.ok) { console.log(`--from: no ${p} (${r.status})`); continue; }
     fs.mkdirSync(path.dirname(path.join(DIR, p)), { recursive: true });

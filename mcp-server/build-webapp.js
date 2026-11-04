@@ -24,6 +24,7 @@ const out = path.join(docs, 'firmware');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
 for (const f of fs.readdirSync(path.join(root, 'firmware'))) {
-  if (/\.(hex|json)$/.test(f)) fs.copyFileSync(path.join(root, 'firmware', f), path.join(out, f));
+  /* the hex alone: what it is built from is the release manifest's (docs/release.json, tools/release/release-manifest.js) */
+  if (/\.hex$/.test(f)) fs.copyFileSync(path.join(root, 'firmware', f), path.join(out, f));
 }
 console.log(`[build] firmware/ published at docs/firmware/ (${fs.readdirSync(out).join(', ')})`);

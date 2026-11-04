@@ -457,7 +457,8 @@ jobs:
           cp ok-edge/android/app/build/outputs/apk/release/app-release.apk "out/$file"
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           node ok-edge/tools/release/android-manifest.js --apk "out/$file" --apksigner "$apksigner" --repo "$GITHUB_REPOSITORY" \
-            --tag "$TAG" --version "$VERSION" --version-code "$CODE" --commit "${{ needs.firmware.outputs.ref }}" --out out/manifest.json
+            --tag "$TAG" --version "$VERSION" --version-code "$CODE" --commit "${{ needs.firmware.outputs.ref }}" \
+            --soft-key ok-edge/src/generated/firmware.json --out out/manifest.json
 
       - name: Upload the APK
         uses: actions/upload-artifact@v5
@@ -557,14 +558,6 @@ jobs:
           path: out/
           if-no-files-found: error
 
-      # its manifest alone as well: the web app takes only that, not the package
-      - name: Upload its manifest
-        uses: actions/upload-artifact@v5
-        with:
-          name: desktop-manifest-${{ matrix.name }}
-          path: out/desktop-${{ matrix.name }}.json
-          if-no-files-found: error
-
       # ANY FAIL = STOP (Brad, 2026-10-27: "the gate stops matrix 2 ... any fail = stop"): needs: keeps every later
       # job from starting, but a failed job does not stop the one running beside it - so the run is cancelled, and
       # the other jobs of its stage end with it. Not under act (no run to cancel).
@@ -607,19 +600,6 @@ jobs:
         working-directory: ok-edge
         run: node tools/firmware.js prod-only firmware
 
-      - name: The APK's manifest
-        uses: actions/download-artifact@v5
-        with:
-          name: android
-          path: android-out
-
-      - name: The desktop packages' manifests
-        uses: actions/download-artifact@v5
-        with:
-          pattern: desktop-manifest-*
-          path: desktop-out
-          merge-multiple: true
-
       - name: Install ok-edge's packages
         working-directory: ok-edge
         env:
@@ -627,14 +607,12 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       # wrangler's build command (mcp-server/build-webapp.js) builds the RELEASE web app into docs/ (CI is set) and
-      # copies firmware/ to docs/firmware; --dry-run then bundles the Worker into worker-out/ and deploys nothing
+      # copies the prod hex to docs/firmware; --dry-run then bundles the Worker into worker-out/ and deploys nothing.
+      # What the Downloads page lists is the release manifest (docs/release.json), written by publish over every part.
       - name: Build the web app and bundle the Worker
         working-directory: ok-edge
         run: |
           npx --yes "wrangler@$(node -p "require('./package.json').scripts['server:dev'].match(/wrangler@([\d.]+)/)[1]")" deploy --dry-run --outdir worker-out
-          mkdir -p docs/android
-          cp ../android-out/manifest.json docs/android/manifest.json
-          node tools/release/desktop-package.js merge ../desktop-out/desktop-windows.json ../desktop-out/desktop-linux.json --out docs/desktop/manifest.json
 
       # WHAT A RELEASE MUST NOT CARRY, as the APK's and the desktop packages' checks: a development export (Expo names its
       # bundle by the hash of nothing - __DEV__ on: testing mode, Login Bypass), the testing screen in the bundle, a soft
@@ -654,7 +632,7 @@ jobs:
 
       - name: Assemble the site
         working-directory: ok-edge
-        run: node tools/release/cloudflare-site.js --docs docs --worker worker-out --out ../site --commit "${{ needs.firmware.outputs.ref }}" --tag "${{ needs.firmware.outputs.tag }}"
+        run: node tools/release/cloudflare-site.js --docs docs --worker worker-out --out ../site
 
       - name: Upload the site
         uses: actions/upload-artifact@v5
@@ -694,6 +672,23 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # the release manifest's writer, from the commit released (nothing else of the tree is needed here)
+      - name: Checkout the release tools
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.trigger.outputs.ref }}
+          path: ok-edge
+          sparse-checkout: tools/release
+
+      # THE RELEASE MANIFEST (Brad, 2026-11-04: "the publish step should create a final manifest"): one record of every
+      # part this run built - docs/release.json (served at /release.json) and the branch's README from it. It refuses a
+      # part whose soft key carries other fixes than the firmware record, so nothing is published from such a run.
+      - name: The release manifest
+        run: |
+          node ok-edge/tools/release/release-manifest.js --artifacts artifacts --site artifacts/site --repo "$GITHUB_REPOSITORY" \
+            --tag "$TAG" --version "${{ needs.firmware.outputs.version }}" --code "${{ needs.firmware.outputs.version_code }}" \
+            --commit "$RELEASE_SHA" --run "$GITHUB_RUN_ID"
+
       # a prerelease: Brad promotes it once it has run on his devices
       - name: The GitHub prerelease (APK, desktop packages, hex)
         env:
@@ -723,7 +718,7 @@ jobs:
             echo "  WARNING: the test firmware exposes debugging - its console prints key data. Never use it with live"
             echo "  credentials and never restore a backup to it: it would expose them. For test keys only."
           } > notes.md
-          gh release create "$TAG" "$apk" "$win" "$linux" "$prod" "$test" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" --prerelease --title "$TAG" --notes-file notes.md
+          gh release create "$TAG" "$apk" "$win" "$linux" "$prod" "$test" artifacts/site/docs/release.json --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" --prerelease --title "$TAG" --notes-file notes.md
 
       # the built site, one commit per release on the cloudflare branch (created on the first run)
       - name: The site onto the cloudflare branch
@@ -735,6 +730,8 @@ jobs:
           if git fetch --quiet --depth 1 origin cloudflare; then git checkout --quiet -B cloudflare FETCH_HEAD; else git checkout --quiet --orphan cloudflare; fi
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a ../artifacts/site/. .
+          # the release manifest at the branch root too, as a link to the one file (Brad: "symlink to that")
+          ln -sfn docs/release.json release.json
           git add -A
           git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
             commit --quiet -m "$TAG: the built site from main ${RELEASE_SHA:0:7} (release workflow run $GITHUB_RUN_ID)"

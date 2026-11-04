@@ -5,7 +5,6 @@
  *
  *   node tools/release/desktop-package.js --platform win|linux --emulator <node-onlykey-emulator/emulator> --out <dir>
  *        --repo <owner/name> --tag <tag> --version <v> --version-code <n> --commit <sha>
- *   node tools/release/desktop-package.js merge <desktop-*.json>... --out <docs/desktop/manifest.json>
  *
  * One package per system - a .zip for Windows, a .tar.gz for Linux, x64 - unpacked and run from where it lands (no
  * installer: nothing is written outside its folder but the app's own data). What is in it:
@@ -38,17 +37,6 @@ const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const fail = (msg) => { console.error(`desktop-package: ${msg}`); process.exit(1); };
 const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-
-if (args[0] === 'merge') {
-  const out = opt('--out');
-  const files = args.slice(1).filter((a, i, all) => a !== '--out' && all[i - 1] !== '--out');
-  if (!out || !files.length) fail('usage: merge <desktop-*.json>... --out <file>');
-  const packages = files.map((f) => JSON.parse(fs.readFileSync(f, 'utf8')));
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, JSON.stringify({ packages }, null, 2) + '\n');
-  console.log(`desktop manifest: ${packages.map((p) => p.file).join(', ')}`);
-  process.exit(0);
-}
 
 const PLATFORM = opt('--platform');
 const EMU = opt('--emulator') && path.resolve(opt('--emulator'));
@@ -202,7 +190,8 @@ fs.copyFileSync(process.execPath, path.join(EXTRA, 'node', PLATFORM === 'win' ? 
     versionCode: Number(CODE),
     commit: COMMIT.slice(0, 7),
     builtAt: new Date().toISOString(),
-    softKey: { version: built.version, plugins: built.plugins || [] },
+    /* the soft key inside, from its build record: the release manifest checks its fixes against the hex's */
+    softKey: { version: built.version, plugins: built.plugins || [], fixes: built.fixes || [] },
   };
   fs.writeFileSync(path.join(OUT, `desktop-${OS_NAME}.json`), JSON.stringify(manifest, null, 2) + '\n');
   console.log(`desktop-package: ${FILE} (${(manifest.size / 1048576).toFixed(1)} MB), sha256 ${manifest.sha256}`);

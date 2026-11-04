@@ -3,7 +3,7 @@
  * login page that downloads the firmware hex file ... i send a link to the main maintainer, he can download the hex
  * firmware file to upload on his developer key").
  *
- * The server publishes it beside the web app: /firmware/manifest.json names the .hex and says what it is built from
+ * The server publishes it beside the web app: /release.json (its firmware, src/release.ts) names the .hex, served from /firmware/, and says what it is built from
  * (firmware and libraries commits, the plugins - ctap_bridge is what lets a browser reach the key) and its sha256, shown
  * here so the file can be checked after the download. No manifest (the phone, the desktop, a server that publishes
  * none): nothing is shown. Since 2026-10-27 it is a panel of the Downloads page (DownloadsPage.tsx), which the login
@@ -16,11 +16,11 @@
  * a prod hex (no debug console) and a test hex (DANGEROUS-..., its debug console prints key data); the web app's
  * manifest lists the prod build alone (tools/firmware.js prod-only), and this page offers nothing else.
  */
-import React, {useEffect, useState} from 'react';
+import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {Btn} from '../ui/components';
 import {theme} from '../ui/theme';
-import {BROWSER_PAGE} from '../platform';
+import {useRelease} from '../release';
 
 /* one built hex: the web app's manifest lists the prod one alone */
 export type FirmwareBuild = {
@@ -53,23 +53,13 @@ const HEX_NAME = /^[\w.-]+\.hex$/;
 const prodOf = (m: Manifest) =>
   m.builds.find(b => b.flavor === 'prod' && !b.debug && HEX_NAME.test(b.file) && !b.file.startsWith('DANGEROUS')) ?? null;
 
-/** the manifest beside the web app; null when there is none (the phone, the desktop, a server that publishes none) */
+/** the release's firmware (/release.json, src/release.ts); null when there is none (the phone, the desktop, a server that publishes none) */
 export function useFirmwareManifest(): Manifest | null {
-  const [m, setM] = useState<Manifest | null>(null);
-  useEffect(() => {
-    if (!BROWSER_PAGE) return;
-    let alive = true;
-    fetch(BASE + 'manifest.json', {cache: 'no-store'})
-      .then(r => (r.ok ? r.json() : null))
-      .then(j => {
-        if (alive && j && Array.isArray(j.builds) && prodOf(j as Manifest)) setM(j as Manifest);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return m;
+  const r = useRelease();
+  if (!r) return null;
+  const f = r.firmware;
+  const m: Manifest = {version: f.version, firmware: f.sources['OnlyKey-Firmware'], libraries: f.sources.libraries, plugins: f.plugins, fixes: f.fixes, buildHash: f.buildHash, builds: f.builds};
+  return prodOf(m) ? m : null;
 }
 
 /* the Downloads page's firmware panel (DownloadsPage.tsx) */

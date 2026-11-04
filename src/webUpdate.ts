@@ -7,7 +7,7 @@
  *   "this gives the user to use the webapp offline, in airplane mode"
  *
  * The page registers docs/sw.js (tools/web-build.js), which serves this build from its own cache. This build's version
- * is EXPO_PUBLIC_WEB_BUILD; the server's newest is /version.json, asked with no cache:
+ * is EXPO_PUBLIC_WEB_BUILD; the server's newest is /release.json's apps.web.build, asked with no cache:
  *   at the splash   newer -> the old caches cleared, the worker unregistered, the page reloaded (once per version, so a
  *                   server that still answers the old page cannot loop it); no answer (offline) -> on, from the cache
  *   a tab already open, brought back to the front -> newer: the banner (UpdateBanner) - the reload is the person's
@@ -36,9 +36,9 @@ async function newest(): Promise<string | null> {
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 3000);
-    const r = await fetch('/version.json', {cache: 'no-store', signal: ctl.signal});
+    const r = await fetch('/release.json', {cache: 'no-store', signal: ctl.signal});
     clearTimeout(t);
-    return r.ok ? String((await r.json()).version ?? '') || null : null;
+    return r.ok ? String((await r.json())?.apps?.web?.build ?? '') || null : null;
   } catch {
     return null;
   }

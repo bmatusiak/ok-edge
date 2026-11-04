@@ -182,7 +182,7 @@ app.whenReady().then(() => {
     const file = path.normalize(path.join(WEB_ROOT, decodeURIComponent(url.pathname)));
     const isFile = file.startsWith(WEB_ROOT) && fs.existsSync(file) && !fs.statSync(file).isDirectory();
     if (isFile) return net.fetch(pathToFileURL(file).toString());
-    /* the key's site is a real server too: what is not this app's page goes to it (/ws, /mcp, its version.json) */
+    /* the key's site is a real server too: what is not this app's page goes to it (/ws, /mcp, its release.json) */
     if (site && url.pathname !== '/') return net.fetch(request, { bypassCustomProtocolHandlers: true });
     return net.fetch(pathToFileURL(path.join(WEB_ROOT, 'index.html')).toString());
   });

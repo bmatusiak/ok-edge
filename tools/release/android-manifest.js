@@ -43,6 +43,8 @@ const manifest = {
   signedWith: 'the repo debug keystore (signing/debug.keystore)',
   commit: opt('--commit').slice(0, 7),
   builtAt: new Date().toISOString(),
+  /* the soft key inside (its build record, src/generated/firmware.json): the release manifest checks its fixes against the hex's */
+  ...(opt('--soft-key') ? { softKey: (({ version, plugins = [], fixes = [] }) => ({ version, plugins, fixes }))(JSON.parse(fs.readFileSync(opt('--soft-key'), 'utf8'))) } : {}),
 };
 fs.mkdirSync(path.dirname(opt('--out')), { recursive: true });
 fs.writeFileSync(opt('--out'), `${JSON.stringify(manifest, null, 2)}\n`);
