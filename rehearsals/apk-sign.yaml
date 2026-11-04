@@ -15,6 +15,7 @@ env:
   SLOT: "2"
 ---
 - runScript: scripts/require-test-key.js
+- login: {}
 - goto: Edge
 - tapOn: "Budgets"
 - runScript: scripts/apk-sign-start.js
