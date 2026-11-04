@@ -280,7 +280,18 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       started.services.identity?.on?.('store', (e: {op: 'add' | 'remove' | 'clear'; key?: string; keys?: string[]; why?: string | null}) => {
         console.log(`[identity] store (${backend}): ${e.op === 'add' ? `+ ${e.key}` : e.op === 'remove' ? `- ${e.key}` : `cleared (${e.why}): ${(e.keys ?? []).join(', ')}`}`);
       });
-      if (started.services.identity?.store) stores.set(backend, started.services.identity.store);
+      /*
+       * NO STORE, NO APP (box, 2026-11-03: the box's copy of the lib was one commit behind - its identity plugin had no
+       * store - and every keyValue made a holder that nothing kept: the Edge was re-opened on each call and dropped the
+       * press it was waiting on; nothing said why). The key's state has one place; a lib without it is refused here.
+       */
+      if (!started.services.identity?.store) {
+        booting.delete(backend);
+        void Promise.resolve(started.destroy?.()).catch(() => undefined);
+        reject(new Error("this app's node-onlykey-lib has no identity.store (lib plugins/identity) - the lib in node_modules is older than the app"));
+        return;
+      }
+      stores.set(backend, started.services.identity.store);
       resolve({
         device: started.services.device,
         okcrypto: started.services.okcrypto,
