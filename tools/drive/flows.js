@@ -141,6 +141,13 @@ async function unlockOutsideKey(d, pin) {
   if (GREEN.test(s.what)) { d.say(`its key is unlocked (${s.what.replace(/^.*?: /, '')})`); return; }
   if (CONFIG_RED.test(s.what)) throw new Error(`the key is in config mode (its LED pulses red) - it ends only at a restart (unplugKey / plugKey); nothing pressed`);
   if (!DARK.test(s.what)) throw new Error(`the web app's key: its LED is neither green (unlocked) nor dark (locked) after 10 s - ${s.what.replace(/^.*?: /, '')}; nothing pressed`);
+  /*
+   * THE GADGET'S PIN IS ITS OWN - THE TESTING ONE (box, 2026-11-04: `rehearse login` passed login.yaml's hard-key PIN
+   * 1111111, typed onto the gadget four times - four wrong attempts read as a firmware stall): the gadget is always set up
+   * with TEST_PIN (targets.js GADGET_SRC), as hard key 2 above always takes the kit's - whatever PIN a flow names
+   */
+  if (pin !== TEST_PIN) d.say(`the gadget takes the testing PIN, not the ${pin.length}-digit one this flow names (that is a hard key's)`);
+  pin = TEST_PIN;
   d.say('its key is locked (dark) - its PIN on its buttons');
   /* the web app's stream carries the gadget's "[gadget] led" lines; the desktop's does not - it reads the LED its machine holds */
   const lit = d.app.shell === 'webapp' ? d.until(/\[gadget\] led #00[4-9a-f][0-9a-f]00\b/, { life: 20, fail: [] }) : null;
