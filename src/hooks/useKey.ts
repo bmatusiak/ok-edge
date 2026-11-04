@@ -396,6 +396,26 @@ export function useKey({
   }, [backend, hardState, hardBusy, attached, start, connectHard]);
 
   const chosen = backend === 'usb' ? hard : soft;
+
+  /*
+   * A KEY THAT LOCKS TAKES ITS SESSION WITH IT, AS AN UNPLUG DOES (Brad, 2026-11-03: "when it goes inactive, it goes to
+   * login screen, but it does not clear the state like unplugging it does - why are we not clearing the state when it
+   * locks like unplugs"). Red-key's idle lockout restarted it under the desktop: back in under a second, so the unplug
+   * check (the device list, above) never saw it gone, and the session kept the transit key the restart had thrown away -
+   * the login's reads went unanswered, then one read a reply sealed under the old key ("transit v2 message failed
+   * authentication"), until a replug. Locked is the key's own word that its unlocked state is gone (a lockout, the lock
+   * button, a restart), so the same clean-up runs: the session torn down (resetOnlyKey - the identity forgotten, why
+   * 'locked'), and the login's own clean-up after it (MainApp onIdentityForgotten). The next unlock builds a fresh one.
+   */
+  const deviceWas = useRef(chosen.device);
+  useEffect(() => {
+    const was = deviceWas.current;
+    deviceWas.current = chosen.device;
+    if (was === 'unlocked' && chosen.device === 'locked') {
+      console.log(`[key] the ${BACKEND_NAME[backend]} locked: its session goes, as for an unplug`);
+      void resetOnlyKey(backend, 'locked');
+    }
+  }, [chosen.device, backend]);
   /*
    * The soft key's LED is exact - yellow for the whole window - so the timer
    * would only overstate it there; the timer is for the hard key, which shows

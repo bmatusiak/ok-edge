@@ -43,7 +43,9 @@ import {watchLogBox} from './logbox';
  * lines a drive reads, by their prefix - never the firmware's console, raw traffic, or the native log.
  */
 /* [sheet]: what the person sees, for the drive's sheet inspector (tools/drive/sheets.js) - which sheet, its height, no content */
-const LIVE_PREFIXES = ['[hold]', '[press]', '[sheet]', '[request]', '[tap]', '[mcp]', '[key-agent]', '[local-mcp]', '[web]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]', '[key]'];
+/* [hardkey] / [login]: the key's lock state as the app believes it, and the Log in page's clean-up (2026-11-03: red-key's
+   idle lockout - the app said unlocked over a locked key, and nothing recorded why) - states and versions, no bytes */
+const LIVE_PREFIXES = ['[hardkey]', '[login]', '[hold]', '[press]', '[sheet]', '[request]', '[tap]', '[mcp]', '[key-agent]', '[local-mcp]', '[web]', '[edge]', '[card]', '[identity]', '[bucket]', '[room]', '[timeline]', '[softkey]', '[drive]', '[keybusy]', '[bt]', '[ble]', '[applog:info] [ble]', '[sync]', '[site]', '[net]', '[key]'];
 const mayLeave = (line: string, native: boolean) =>
   currentNet() === 'test' || (!native && LIVE_PREFIXES.some(p => line.startsWith(p)));
 

@@ -24,7 +24,7 @@ import {BtKeyboardProvider, useSharedBtKeyboard} from './src/hooks/BtKeyboardCon
 import {useBtAuto, type BtAuto} from './src/hooks/useBtAuto';
 import {useUsbHid} from './src/hooks/useUsbHid';
 import {useFidoGatt, type FidoSession} from './src/hooks/useFidoGatt';
-import {getOnlyKey, onIdentityForgotten} from './src/onlykey';
+import {getOnlyKey, onIdentityForgotten, resetOnlyKey} from './src/onlykey';
 import {forgetKeyState} from './src/keyGone';
 import type {Backend} from './src/hooks/keySession';
 import {useTestingMode} from './src/hooks/useTestingMode';
@@ -511,6 +511,27 @@ function Shell() {
   useEffect(() => { setLoggedIn(phase === 'identity' || phase === 'main'); }, [phase]);
   /* the drive reads where the app is from the app, not from its screen (src/drive/registry.tsx) */
   useEffect(() => setDriveFlag('phase', phase), [phase]);
+  /*
+   * THE LOG IN PAGE IS A CLEAN APP (Brad, 2026-11-03: "if i see the log in page, it should be a clear app, no state from
+   * everything after - even showing that tab should clear the state again"). Whatever brings it - an unplug, a lock, a
+   * log-out, another key - arriving on it ends the login and its session, closes the bucket, forgets every per-key cache
+   * (forgetKeyState) and tears the key's session down (resetOnlyKey, why 'login': the next thing that wants the key gets
+   * a fresh one - a new OKCONNECT, a new transit key). On the way IN only: the login's own work (the PIN, the unlock)
+   * runs on what it opens after. Not from the splash: the app is new, and the splash is still opening the key.
+   */
+  const phaseWas = useRef(phase);
+  useEffect(() => {
+    const was = phaseWas.current;
+    phaseWas.current = phase;
+    if (phase !== 'login' || was === 'login' || was === 'splash') return;
+    console.log(`[login] the Log in page from ${was}: a clean app - the session, the bucket and the key's caches go`);
+    setLoggedInThisRun(false);
+    setPassed(false);
+    void endSession('the Log in page');
+    closeBucket();
+    forgetKeyState();
+    void resetOnlyKey(keys.backend, 'login');
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setDriveFlag('tab', tab), [tab]);
   useEffect(() => setDriveFlag('key', emu.device), [emu.device]);
   /* a hard key's debug console answers (its echo - a test hex only): the drive presses a hard key only when this says so */
@@ -627,11 +648,12 @@ function Shell() {
    * "logged in" sent it straight to the check, which asked a still-locked key and hung) - with the bucket, the kept
    * session and the door.
    */
+  /* LOCKED IS AN UNPLUG FOR THE LOGIN (Brad, 2026-11-03: "why are we not clearing the state when it locks like unplugs") - src/hooks/useKey.ts */
   useEffect(() => onIdentityForgotten(({why}) => {
-    if (why !== 'unplugged') return;
+    if (why !== 'unplugged' && why !== 'locked') return;
     setLoggedInThisRun(false);
     setPassed(false);
-    void endSession('the key was unplugged');
+    void endSession(why === 'locked' ? 'the key locked' : 'the key was unplugged');
     closeBucket();
     forgetKeyState();
     setPhase(prev => (prev === 'splash' ? prev : 'login'));

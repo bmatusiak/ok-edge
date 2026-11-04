@@ -42,6 +42,8 @@ const {IFACE, DIR} = oktransport;
 export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}) {
   const [state, setState] = useState<KeyState>('stopped');
   const [device, setDevice] = useState<DeviceState>('unknown');
+  /* every change of what the app believes of the key's lock, said (2026-11-03: "unlocked" over a locked red-key, unrecorded) */
+  useEffect(() => { console.log(`[hardkey] state: ${device}`); }, [device]);
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState('');
   /*
