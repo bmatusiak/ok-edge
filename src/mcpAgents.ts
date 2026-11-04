@@ -23,18 +23,23 @@ export type Agent = {id: string; name: string; state: AgentState; first?: number
 export type PlanItem = {
   item: number;
   op: 'sign' | 'decrypt';
-  key: {kind: 'ssh' | 'gpg'; identity: string};
+  /* ssh / gpg: an agent-derived key by its label; rsa: a stored slot and its size */
+  key: {kind: 'ssh' | 'gpg'; identity: string} | {kind: 'rsa'; slot: number; bits: number};
   reason: string;
-  /* the data to sign or decrypt (text, or base64 with encoding), or null for a placeholder still waiting for it */
-  data: string | null;
-  encoding?: 'text' | 'base64';
-  held?: boolean;
+  /* the SHA-256 of the data it will sign: the data itself comes once the budget is open (plan_data), never kept here */
+  fingerprint: string;
 };
 export type PlanResult = {item?: number; signature?: string; plaintext?: string; refusal?: string; encoding?: string};
-export type PlanState = 'draft' | 'submitted' | 'running' | 'paused' | 'done' | 'declined' | 'failed' | 'ended';
+export type PlanState = 'draft' | 'submitted' | 'running' | 'done' | 'declined' | 'failed' | 'ended';
+/* an agent's card request (mcp.js card_new): run as a plan of kind 'card' - the card sheet, a press, no budget */
+export type CardAsk = {label: string; slots: number[]; ssh?: string; days: number; reason: string};
 export type Plan = {
   id: string;
+  kind?: 'plan' | 'card';
   title: string;
+  /* the agent's card the plan's budget is asked under (a plan), or what the agent asks for (a card) */
+  card?: string;
+  ask?: CardAsk;
   agent: {id: string; name: string};
   state: PlanState;
   items: PlanItem[];
@@ -46,10 +51,10 @@ export type Plan = {
 };
 /* identityPublicKey: what the owner gives an agent (with the /mcp address) - the hex of the bucket identity's public key */
 export type AgentsState = {online: boolean; identityPublicKey: string | null; agents: Agent[]; plans: Plan[]};
-/* what a running plan listens for: the owner's room says it was submitted, a placeholder was filled, or finish */
+/* what a running plan listens for: the owner's room says it was submitted, an item's data came, or finish */
 export type PlanEvent =
   | {ev: 'submit'; plan: Plan}
-  | {ev: 'fill'; plan: string; item: number; data: string; encoding?: string}
+  | {ev: 'data'; plan: string; item: number; data: string; encoding?: string}
   | {ev: 'finish'; plan: string};
 
 let state: AgentsState = {online: false, identityPublicKey: null, agents: [], plans: []};
@@ -97,7 +102,7 @@ function heard(h: Held, m: any): void {
     case 'agent': {
       const others = h.agents.filter(x => x.id !== m.agent.id);
       h.agents = m.agent.state === 'removed' ? others : [...others, m.agent as Agent];
-      if (m.agent.state === 'blocked' || m.agent.state === 'removed') h.plans = h.plans.filter(p => p.agent.id !== m.agent.id || p.state === 'running' || p.state === 'paused');
+      if (m.agent.state === 'blocked' || m.agent.state === 'removed') h.plans = h.plans.filter(p => p.agent.id !== m.agent.id || p.state === 'running');
       break;
     }
     case 'plan':
@@ -111,13 +116,10 @@ function heard(h: Held, m: any): void {
       show();
       for (const l of [...planListeners]) l({ev: 'submit', plan: m.plan});
       return;
-    case 'fill': {
-      const p = h.plans.find(x => x.id === m.plan);
-      if (p) upsertPlan({...p, items: p.items.map(it => (it.item === m.item ? {...it, data: m.data, encoding: m.encoding} : it))});
-      show();
-      for (const l of [...planListeners]) l({ev: 'fill', plan: m.plan, item: m.item, data: m.data, encoding: m.encoding});
+    /* an item's data: to the plan's runner only - the picture keeps the fingerprints, never the data */
+    case 'data':
+      for (const l of [...planListeners]) l({ev: 'data', plan: m.plan, item: m.item, data: m.data, encoding: m.encoding});
       return;
-    }
     case 'finish':
       for (const l of [...planListeners]) l({ev: 'finish', plan: m.plan});
       return;

@@ -73,7 +73,8 @@ export type SheetAsk =
   /* 2026-11-03: a computer's press, approved here before it reaches the key (lib edge/src/pressask.js) - what it is for, the message, the code */
   | {kind: 'press'; computer: string | null; what: string; subject: string | null; code: string | null; blocked: null; at: number}
   /* 2026-11-03: a computer's new agent card (lib agents.js CREATE) - its label and keys, approved here, then certified at a press */
-  | {kind: 'card'; computer: string | null; card: CardAsk; blocked: null; at: number};
+  /* plan: an MCP agent's card request (mcpPlans.ts, a plan of kind card) - its sheet goes when another device claims it */
+  | {kind: 'card'; computer: string | null; card: CardAsk; blocked: null; at: number; plan?: string};
 /* until: when this phase runs out (ms since epoch) - the sheet counts down to it */
 export type SheetState =
   | {phase: 'ask'; ask: SheetAsk; until: number}
@@ -266,7 +267,7 @@ export type PlanAsk = {plan: string; onApprove: () => Promise<string | null>};
 let withdrawnPlan: string | null = null;
 /** Another device of the identity runs this plan: its sheet here goes, unanswered by the person (no refusal shown). */
 export function withdrawSheet(plan: string): void {
-  if (current?.phase !== 'ask' || current.ask.kind !== 'request' || current.ask.plan !== plan) return;
+  if (current?.phase !== 'ask' || (current.ask.kind !== 'request' && current.ask.kind !== 'card') || current.ask.plan !== plan) return;
   console.log(`[edge] plan ${plan}: another of your devices runs it - its sheet here goes`);
   withdrawnPlan = plan;
   answerSheet('decline');
@@ -386,7 +387,7 @@ async function handleIdentity(msg: any, seen: Set<string>, from: string): Promis
  * sheet - its label and keys - and certified by the key at one press (agentIdentities.answerCardMessage, the lib's one
  * answer). Behind the Requests switch like a budget: a card is what budgets are asked under.
  */
-async function handleCard(msg: any, seen: Set<string>, from: string): Promise<unknown | null> {
+async function handleCard(msg: any, seen: Set<string>, from: string, planAsk?: PlanAsk): Promise<unknown | null> {
   const computer = await computerOf(from);
   if (!computer) return null;
   const checked = agentsLib.verify(msg, {seen});
@@ -403,11 +404,19 @@ async function handleCard(msg: any, seen: Set<string>, from: string): Promise<un
     if (!(await openSoft())) return {ok: false, refusal: 'invalid', detail: "this device's key has no Edge"};
   }
   let asked: SheetAsk | null = null;
+  /* why the card request's claim was refused at Approve (another device was first) */
+  let notClaimed: string | null = null;
   const r: any = await answerCardMessage(msg, {
     who: computer.name,
+    /* an MCP agent's card is bound to it (lib agents.answer): its id from who asks, never from the message */
+    agent: computer.id.startsWith('agent:') ? computer.id.slice('agent:'.length) : null,
     approve: async (card: CardAsk) => {
-      asked = {kind: 'card', computer: computer.name, card, blocked: null, at: Date.now()};
+      asked = {kind: 'card', computer: computer.name, card, blocked: null, at: Date.now(), ...(planAsk ? {plan: planAsk.plan} : {})};
       if ((await askPerson(asked)) !== 'approve') return false;
+      if (planAsk) {
+        notClaimed = await planAsk.onApprove().catch((e: unknown) => String((e as Error)?.message ?? e));
+        if (notClaimed) return false;
+      }
       /* the press says which card (every press says why) - the key's press sheet, at its wait */
       require('./hostChallenge').expectPress(`Certify the agent card "${card.label}" - asked by ${computer.name}`);
       return true;
@@ -415,6 +424,15 @@ async function handleCard(msg: any, seen: Set<string>, from: string): Promise<un
     onPress: () => { if (asked) show({phase: 'press', ask: asked, until: Date.now() + PRESS_WAIT_MS}); },
   }).catch((e: unknown) => ({ok: false, refusal: 'invalid', detail: String((e as Error)?.message ?? e)}));
   const a = asked as SheetAsk | null;
+  if (a && planAsk && withdrawnPlan === planAsk.plan) {
+    withdrawnPlan = null;
+    show(null);
+    return r;
+  }
+  if (a && notClaimed) {
+    show({phase: 'done', ask: a, result: {ok: false, refusal: 'declined', detail: notClaimed}});
+    return r;
+  }
   if (a && a.kind === 'card') {
     show({phase: 'done', ask: a, result: r.ok
       ? {ok: true, text: `Certified: the agent card "${a.card.label}" - an agent's budgets may name it.`}
@@ -462,7 +480,7 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
   const seen = await loadSeen();
   try {
     if (identityLib.TYPES.includes(msg?.type)) return await handleIdentity(msg, seen, from);
-    if (agentsLib.TYPES.includes(msg?.type)) return await handleCard(msg, seen, from);
+    if (agentsLib.TYPES.includes(msg?.type)) return await handleCard(msg, seen, from, planAsk);
     if (msg?.type === pressAskLib.TYPE) return await handlePressAsk(msg, seen, from);
     if (msg?.type !== requestLib.TYPE) return null;
     /* the Requests switch is off: refused unread */

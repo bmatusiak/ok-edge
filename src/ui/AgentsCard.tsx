@@ -19,8 +19,7 @@ import {theme} from './theme';
 const STATE_WORD: Record<Plan['state'], string> = {
   draft: 'being written',
   submitted: 'waiting for your approval',
-  running: 'running',
-  paused: 'waiting for the agent',
+  running: 'running - its data comes now',
   done: 'done',
   declined: 'declined',
   failed: 'failed',
@@ -28,12 +27,12 @@ const STATE_WORD: Record<Plan['state'], string> = {
 };
 
 function ItemRow({item, result}: {item: PlanItem; result?: Plan['results'][string]}) {
-  const what = `${item.item}  ${item.op}  ${item.key.kind} ${item.key.identity}`;
+  const what = `${item.item}  ${item.op}  ${item.key.kind === 'rsa' ? `slot ${item.key.slot} (RSA-${item.key.bits})` : `${item.key.kind} ${item.key.identity}`}`;
   const outcome = !result ? null : result.refusal ? `refused: ${result.refusal}` : result.signature ? 'signed ✓' : result.plaintext !== undefined ? 'decrypted ✓' : null;
   return (
     <View style={styles.item}>
       <Text style={styles.mono} numberOfLines={1}>{what}</Text>
-      <Text style={styles.dim}>{`"${item.reason}"${item.data === null ? ' · data to come' : ''}`}</Text>
+      <Text style={styles.dim}>{`"${item.reason}" · ${item.fingerprint.slice(0, 16)}`}</Text>
       {outcome ? <Text style={[styles.dim, {color: result?.refusal ? theme.error : theme.ok}]}>{outcome}</Text> : null}
     </View>
   );

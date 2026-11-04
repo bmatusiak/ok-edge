@@ -11,10 +11,15 @@
  * claims the plan before the press, and the others' sheets go when they hear the claim (withdrawSheet). Nothing runs on
  * a device where nobody tapped Approve.
  *
+ * FINGERPRINTS FIRST (Brad, 2026-11-04): the sheet shows each item's fingerprint; the data comes after Approve (plan_data
+ * -> the room's 'data' events, passed to the runner here and kept nowhere else), and the runner checks it before the key
+ * signs. A CARD REQUEST (mcp.js card_new, a plan of kind 'card') is the agent asking for the card its plans go under: the
+ * card sheet (its label, keys and who asks), the claim at Approve as a plan's, one press to certify - bound to the agent.
+ *
  * KEY REQUESTS: the plan runner's count (plan.js) - the host's copy check + grant + ONE press, the opening read back,
- * four per item, one to end. None on a timer.
+ * four per item, one to end. A card: its certify press. None on a timer.
  */
-import {client as clientLib, plan as planLib} from 'node-onlykey-lib/edge';
+import {agents as agentsLib, client as clientLib, plan as planLib} from 'node-onlykey-lib/edge';
 import {onAgents, onPlanEvent, planClaim, planUpdate, youIn, type Plan, type PlanEvent} from './mcpAgents';
 import {AGENT_FROM, handleEdgeMessage, withdrawSheet} from './edgeAgents';
 import {getOnlyKey} from './onlykey';
@@ -50,6 +55,7 @@ async function runOne(plan: Plan): Promise<void> {
   if (running.has(plan.id)) return;
   const listeners = new Set<(e: PlanEvent) => void>();
   running.set(plan.id, listeners);
+  if (plan.kind === 'card') return runCard(plan);
   /* one tag for this file's lines and the lib runner's (which start "plan <id>:") */
   const say = (line: string) => console.log(`[mcp] ${line}`);
   say(`plan ${plan.id}: "${plan.title}" from ${plan.agent.name} - ${plan.items.length} item(s), waiting for your approval`);
@@ -94,6 +100,50 @@ async function runOne(plan: Plan): Promise<void> {
       log: say,
     });
     if (!claimed) say(`plan ${plan.id}: ${end} - not run here`);
+  } catch (e) {
+    say(`plan ${plan.id}: not run - ${String((e as Error)?.message ?? e)}`);
+  } finally {
+    running.delete(plan.id);
+    withdrawn.delete(plan.id);
+  }
+}
+
+/*
+ * THE AGENT'S CARD, ASKED (mcp.js card_new): the lib's card CREATE through this device's host, as a computer's - the card
+ * sheet, the claim at Approve, the certify press - from the agent (edgeAgents computerOf "agent:<id>"), so the host binds
+ * the card to it. Only the claiming device tells the room the end; a Decline here is told as a plan's.
+ */
+async function runCard(plan: Plan): Promise<void> {
+  const say = (line: string) => console.log(`[mcp] ${line}`);
+  const ask = plan.ask;
+  let claimed = false;
+  const told = async (u: any) => {
+    if (withdrawn.has(plan.id) || (!claimed && u.state !== 'declined')) return;
+    await planUpdate(plan.id, u).catch((e: unknown) => say(`plan ${plan.id}: its update was not taken (${String((e as Error)?.message ?? e)})`));
+  };
+  try {
+    if (!ask) { await told({state: 'failed', why: 'a card request names no card'}); return; }
+    say(`plan ${plan.id}: ${plan.agent.name} asks for the agent card "${ask.label}" - waiting for your approval`);
+    const info = {
+      label: ask.label, created: Math.floor(Date.now() / 1000), expires: ask.days * 86400,
+      derive: ask.ssh ? {ssh: ask.ssh} : {}, slots: ask.slots, committer: null,
+    };
+    const r: any = await handleEdgeMessage(agentsLib.buildCreate({info}), `${AGENT_FROM}${plan.agent.id}|${plan.agent.name}`, {
+      plan: plan.id,
+      onApprove: async () => {
+        try {
+          await planClaim(plan.id);
+          claimed = true;
+          return null;
+        } catch (e) {
+          withdrawn.add(plan.id);
+          return `another of your devices runs it (${String((e as Error)?.message ?? e)})`;
+        }
+      },
+    });
+    const state = r?.ok ? 'done' : r?.refusal === 'declined' ? 'declined' : 'failed';
+    say(`plan ${plan.id}: the card "${ask.label}" - ${state}${r?.detail ? ` (${r.detail})` : ''}`);
+    await told({state, why: r?.ok ? '' : r?.refusal === 'declined' ? 'the owner declined it' : String(r?.detail ?? r?.refusal ?? 'no answer')});
   } catch (e) {
     say(`plan ${plan.id}: not run - ${String((e as Error)?.message ?? e)}`);
   } finally {

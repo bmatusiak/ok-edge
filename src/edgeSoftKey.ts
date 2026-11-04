@@ -1172,6 +1172,8 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
       budgetOf: (id: number) => this.keptSync.get(id) ?? null,
       /* the agent card the budget is asked under - its keys are the only ones the scopes may name (lib approve.js) */
       cardOf: (label: string) => require('./agentIdentities').pickCard(label),
+      /* an MCP agent's plan (edgeAgents computerOf "agent:<id>"): its budgets open under its own card only */
+      agent: o.computer?.startsWith('agent:') ? o.computer.slice('agent:'.length) : null,
       coverOf: (m: any) => this.coverOf(m, o.computer),
       onPress: () => {
         this.pressWanted = () => undefined;

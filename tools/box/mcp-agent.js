@@ -5,7 +5,7 @@
  * can be driven and watched (the Agents rows on the Edge tab) without an AI in the loop.
  *
  *   node tools/box/mcp-agent.js <url> hello [name]                 first time: the agent key is kept in the state file
- *   node tools/box/mcp-agent.js <url> <tool> '<json arguments>'    any tool: plan_new, plan_add, plan_submit, plan_wait, ...
+ *   node tools/box/mcp-agent.js <url> <tool> '<json arguments>'    any tool: card_new, plan_new, plan_submit, plan_data, plan_wait, ...
  *   node tools/box/mcp-agent.js <url> tools                        the tool list
  *
  * State (MCP_AGENT_STATE, default /tmp/mcp-agent.json): the agent key and the session, so each command is the same

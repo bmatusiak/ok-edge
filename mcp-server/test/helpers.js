@@ -47,9 +47,14 @@ function connect(roomId) {
   return {
     ws,
     send: (m) => ws.send(JSON.stringify(m)),
+    /*
+     * A WAIT THAT TIMES OUT LEAVES THE LINE (2026-11-04: quiet()'s 800 ms wait stayed queued, and the next message - a
+     * plan's data - went to it and was lost)
+     */
     next: (ms = 5000) => (queue.length ? Promise.resolve(queue.shift()) : new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`no message in ${ms} ms`)), ms);
-      waiting.push((m) => { clearTimeout(timer); resolve(m); });
+      const take = (m) => { clearTimeout(timer); resolve(m); };
+      const timer = setTimeout(() => { waiting.splice(waiting.indexOf(take), 1); reject(new Error(`no message in ${ms} ms`)); }, ms);
+      waiting.push(take);
     })),
     get closed() { return closed; },
     close: () => ws.close(),

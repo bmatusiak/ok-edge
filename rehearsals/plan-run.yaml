@@ -1,7 +1,7 @@
 # A scripted agent's plan on this app, end to end (the MCP plan, Step 4b): the agent (tools/box/mcp-plan-agent.js, on the
-# app's machine - the desktop's local MCP, or the web app's server) builds a plan of one sign and one placeholder; the
-# owner's side accepts it by name, approves its budget on the Edge sheet (one press), and the agent fills the placeholder
-# and reads both signatures and the receipts. Run on a logged-in app: run.js rehearse --app <app> plan-run
+# app's machine - the desktop's local MCP, or the web app's server) asks for its card, then builds a plan of two signs
+# named by their fingerprints; the owner's side accepts it by name, approves its card (one press) and its budget on the
+# Edge sheet (one press), and the agent sends the data and reads both signatures and the receipts. Run on a logged-in app: run.js rehearse --app <app> plan-run
 name: A scripted agent's plan
 tags:
   - agents

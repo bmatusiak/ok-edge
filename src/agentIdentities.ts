@@ -78,7 +78,7 @@ export async function pickCard(label: string): Promise<any> {
 }
 
 /* what a computer's new card shows on the sheet before the press (lib agents.answer's approve) */
-export type CardAsk = {label: string; created: number; expires: number; derive: {ssh?: string; gpg?: string}; committer: {name: string; email: string} | null; fingerprint: string | null};
+export type CardAsk = {label: string; created: number; expires: number; derive: {ssh?: string; gpg?: string}; slots: number[]; agent: string | null; committer: {name: string; email: string} | null; fingerprint: string | null};
 
 /*
  * A COMPUTER'S AGENT-CARD MESSAGES (Brad, 2026-11-03: "the ai agent creates the card over cli/mcp, providing the label it
@@ -86,8 +86,9 @@ export type CardAsk = {label: string; created: number; expires: number; derive: 
  * shown to the person (approve), certified by the key at a press, then written beside the chain - the lib's one answer
  * (agents.answer), as every host gives it. -> the answer for the computer.
  */
-export function answerCardMessage(msg: any, o: {who: string; approve: (ask: CardAsk) => Promise<boolean>; onPress: () => void}): Promise<any> {
+export function answerCardMessage(msg: any, o: {who: string; agent: string | null; approve: (ask: CardAsk) => Promise<boolean>; onPress: () => void}): Promise<any> {
   return agentsLib.answer(msg, {
+    agent: o.agent,
     entries: async () => entries(),
     owner: () => require('./edgeDevices').ownerKey(),
     approve: o.approve,
