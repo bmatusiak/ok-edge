@@ -197,3 +197,6 @@ export function leaveBleRoom(): void {
   detachAgents('ble');
   set({status: state.host ? 'linked' : 'off', why: null, peers: [], needsKey: false, sealed: NO_SEALED});
 }
+
+/* the key forgotten (a lock, an unplug, the Log in page - its identity plugin): this, which stays loaded, lets go of it */
+require('./onlykey').onKeyForgotten(() => leaveBleRoom());

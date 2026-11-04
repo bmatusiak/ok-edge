@@ -22,7 +22,7 @@ import {approve as approveLib, budgetbook as budgetbookLib, chain, client as cli
  */
 export const TESTING_IDENTITY = 'ssh://testing@okedge';
 import {fromHex, toHex} from 'node-onlykey-lib/bytes';
-import {getOnlyKey, type Backend} from './onlykey';
+import {getOnlyKey, keyValue, type Backend} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {shell} from './platform';
 import OkEmu from './transport/OkEmu';
@@ -312,10 +312,13 @@ type Kept = {
 const DEFAULT_LIFETIME_MINUTES = 12 * 60;
 
 type SameHead = {key: string; raw: any; checkpoint?: any};
-/* per key: the answers the key gave for its current head, and its Edge public keys (P-256, ML-DSA-65) - this session's memory only */
-const sameHeads = new Map<string, SameHead>();
-const publicKeys = new Map<string, Uint8Array>();
-const publicKeysPq = new Map<string, Uint8Array>();
+/*
+ * per key: the answers the key gave for its current head, and its Edge public keys (P-256, ML-DSA-65) - memory only, in
+ * the key's store (src/onlykey.ts keyValue - the identity plugin's): they go with the key, nothing to clear by hand
+ */
+const sameHeads = () => keyValue('edge.sameHeads', () => new Map<string, SameHead>());
+const publicKeys = () => keyValue('edge.publicKeys', () => new Map<string, Uint8Array>());
+const publicKeysPq = () => keyValue('edge.publicKeysPq', () => new Map<string, Uint8Array>());
 /*
  * THE BUDGET OPENINGS, IN MEMORY FOR THE SESSION (A13, 2026-10-07: copyKey without a
  * checkpoint still 125-699 ms - the storage key list and every budget record read,
@@ -357,12 +360,6 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
   }
 
   /** null when the soft key does not answer Edge (no plugin, or locked). */
-  /* this session's memory, per key (device id hex) - never stored */
-  static forgetSession() {
-    sameHeads.clear();
-    publicKeys.clear();
-    publicKeysPq.clear();
-  }
 
   /*
    * THE KEY: the one the app is using - its soft key, or a hard key - on the phone and the desktop alike
@@ -445,7 +442,7 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const mirror = await loadMirror(this.deviceId);
     const records = syncLib.merge(mirror.links, offered).links;
     /* the copy's own public key (read from the key at its first sync) - no read of the key here */
-    const publicKey = mirror.publicKey ?? publicKeys.get(id) ?? null;
+    const publicKey = mirror.publicKey ?? publicKeys().get(id) ?? null;
     const opened = publicKey ? await keepOpenings(toHex(this.deviceId), publicKey, shared.openings ?? [], records) : 0;
     await keepNotes(this.deviceId, shared.notes);
     console.log(`[edge] shared records: ${opened} budget opening(s) and the notes filed`);
@@ -471,13 +468,13 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
    */
   /* shared by every SoftKeyEdge for this key (the tab, the background sync, the agent sheet each open one) */
   private get sameHead(): SameHead | null {
-    return sameHeads.get(toHex(this.deviceId)) ?? null;
+    return sameHeads().get(toHex(this.deviceId)) ?? null;
   }
   private noteHead(h: any) {
     const key = `${h.seq}:${h.head ? toHex(h.head) : ''}:${h.owed ?? ''}`;
     const id = toHex(this.deviceId);
-    const was = sameHeads.get(id);
-    if (!was || was.key !== key) sameHeads.set(id, {key, raw: h});
+    const was = sameHeads().get(id);
+    if (!was || was.key !== key) sameHeads().set(id, {key, raw: h});
     else was.raw = h;
   }
 
@@ -1033,11 +1030,11 @@ export class SoftKeyEdge implements EdgeSource, EdgeInbox {
     const want = opts.checkpoint !== false;
     /* the key's Edge public key never changes for this device: read once a session */
     const id = toHex(this.deviceId);
-    const publicKey = publicKeys.get(id) ?? (await this.edge.publicKey()).publicKey;
-    publicKeys.set(id, publicKey);
+    const publicKey = publicKeys().get(id) ?? (await this.edge.publicKey()).publicKey;
+    publicKeys().set(id, publicKey);
     /* its ML-DSA-65 twin (hybrid, 2026-10-10): never changes either - read once a session, beside it */
-    const publicKeyPq = publicKeysPq.get(id) ?? (await this.edge.publicKeyPq('checkpoint'));
-    publicKeysPq.set(id, publicKeyPq);
+    const publicKeyPq = publicKeysPq().get(id) ?? (await this.edge.publicKeyPq('checkpoint'));
+    publicKeysPq().set(id, publicKeyPq);
     /* the key's latest checkpoint - once per action */
     const cached = this.sameHead && 'checkpoint' in this.sameHead ? this.sameHead.checkpoint : undefined;
     /* a checkpoint the key would not give leaves the copy "unsigned" - the log says why, or nobody can tell (2026-10-28) */

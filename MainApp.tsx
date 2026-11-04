@@ -24,8 +24,7 @@ import {BtKeyboardProvider, useSharedBtKeyboard} from './src/hooks/BtKeyboardCon
 import {useBtAuto, type BtAuto} from './src/hooks/useBtAuto';
 import {useUsbHid} from './src/hooks/useUsbHid';
 import {useFidoGatt, type FidoSession} from './src/hooks/useFidoGatt';
-import {getOnlyKey, onIdentityForgotten, resetOnlyKey} from './src/onlykey';
-import {forgetKeyState} from './src/keyGone';
+import {forgetIdentities, getOnlyKey, onIdentityForgotten, resetOnlyKey} from './src/onlykey';
 import type {Backend} from './src/hooks/keySession';
 import {useTestingMode} from './src/hooks/useTestingMode';
 import {useKeyIdentity} from './src/keyIdentity';
@@ -351,6 +350,25 @@ function Shell() {
   }, [configMode, emu.device]);
 
   /*
+   * A KEY THAT LOCKS FORGETS, AS AN UNPLUG DOES - UNLESS CONFIG MODE (Brad, 2026-11-03: "why are we not clearing the state
+   * when it locks like unplugs"; "so unplugged state or a sudden lock fire the forget event - unless config mode"). Red-key's
+   * idle lockout restarted it under the desktop, back in under a second: the unplug check (useKey's device list) never saw
+   * it gone, and a session from before the restart answered for it - its transit key thrown away by the restart. Away from
+   * unlocked by any road (locked, or gone first - the box's gadget read its restart as a disconnect) the key's identity is
+   * forgotten (resetOnlyKey, why 'locked'): its store emptied, everything loaded told, the login follows. Config mode
+   * (wanted, waiting, on) is the person's settings work: its PIN and its lock are config mode's, and nothing is forgotten.
+   */
+  const deviceWas = useRef(emu.device);
+  useEffect(() => {
+    const was = deviceWas.current;
+    deviceWas.current = emu.device;
+    if (was !== 'unlocked' || emu.device === 'unlocked') return;
+    if (configMode !== OFF) { console.log(`[key] the key left unlocked (${emu.device}) in config mode (${configMode}): nothing forgotten`); return; }
+    console.log(`[key] the ${keys.name} locked: its session goes, as for an unplug (${emu.device})`);
+    void resetOnlyKey(keys.backend, 'locked');
+  }, [emu.device]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
    * CHANGING KEY WHILE IN CONFIG MODE RESTARTS THE APP - EITHER DIRECTION.
    *
    * `configMode` is one app-wide flag and it describes the SOFT key, while
@@ -515,7 +533,7 @@ function Shell() {
    * THE LOG IN PAGE IS A CLEAN APP (Brad, 2026-11-03: "if i see the log in page, it should be a clear app, no state from
    * everything after - even showing that tab should clear the state again"). Whatever brings it - an unplug, a lock, a
    * log-out, another key - arriving on it ends the login and its session, closes the bucket, forgets every per-key cache
-   * (forgetKeyState) and tears the key's session down (resetOnlyKey, why 'login': the next thing that wants the key gets
+   * (the key forgotten: its store emptied, everything loaded told - src/onlykey.ts) and tears the key's session down (resetOnlyKey, why 'login': the next thing that wants the key gets
    * a fresh one - a new OKCONNECT, a new transit key). On the way IN only: the login's own work (the PIN, the unlock)
    * runs on what it opens after. Not from the splash: the app is new, and the splash is still opening the key.
    */
@@ -524,12 +542,14 @@ function Shell() {
     const was = phaseWas.current;
     phaseWas.current = phase;
     if (phase !== 'login' || was === 'login' || was === 'splash') return;
+    /* config mode is the person's settings work (Brad, 2026-11-03: "unless config mode"): nothing is forgotten */
+    if (configMode !== OFF) { console.log(`[login] the Log in page from ${was} in config mode (${configMode}): nothing forgotten`); return; }
     console.log(`[login] the Log in page from ${was}: a clean app - the session, the bucket and the key's caches go`);
     setLoggedInThisRun(false);
     setPassed(false);
     void endSession('the Log in page');
-    closeBucket();
-    forgetKeyState();
+    /* every key this app has a session on is forgotten - the bucket and everything loaded follow the event - then the active one torn down */
+    forgetIdentities();
     void resetOnlyKey(keys.backend, 'login');
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setDriveFlag('tab', tab), [tab]);
@@ -654,8 +674,7 @@ function Shell() {
     setLoggedInThisRun(false);
     setPassed(false);
     void endSession(why === 'locked' ? 'the key locked' : 'the key was unplugged');
-    closeBucket();
-    forgetKeyState();
+    /* the bucket and everything else loaded let go on the same event (src/bucketStore.ts, src/onlykey.ts onKeyForgotten) */
     setPhase(prev => (prev === 'splash' ? prev : 'login'));
   }), []);
   useEffect(() => {
@@ -665,13 +684,12 @@ function Shell() {
     /* another key while inside: this tab's kept login ends with the door (not a key first armed on a page load) */
     if (passed) void endSession('another key');
     setPassed(false);
-    closeBucket();
     /*
      * AND NOTHING OF THE OLD KEY STAYS (box desktop, 2026-11-02: the gadget came onto the USB, the desktop's soft key
      * ended and a USB key became the door - but the Edge session opened on the soft key kept asking it, "firmware is not
-     * running", every few seconds): the same clean-up as an unplug (src/keyGone.ts)
+     * running", every few seconds): the old key forgotten - its store emptied, the bucket and everything loaded told
      */
-    forgetKeyState();
+    forgetIdentities();
     setPhase(prev => (prev === 'main' || prev === 'identity' ? 'login' : prev));
   }, [doorKey]);
   useEffect(() => {

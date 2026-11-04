@@ -28,7 +28,7 @@ import * as bucketLib from 'node-onlykey-lib/bucket';
 import {RULES, storeItems} from './bucketRules';
 import {storage, type Bucket, type Opened} from './bucket/storage';
 import {challengeOpts} from './hostChallenge';
-import {forgetIdentities, getOnlyKey} from './onlykey';
+import {getOnlyKey, onKeyForgotten} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {noteOwnSecret} from './ownAsks';
 
@@ -144,7 +144,6 @@ export function closeBucket(): Promise<void> {
   const was = open;
   open = null;
   legacy = false;
-  forgetIdentities();
   if (!was) return Promise.resolve();
   if (clockOf(was.opened.bucket) === was.savedClock) {
     was.key?.fill(0);
@@ -321,3 +320,10 @@ export async function openIdentityBucketWithSecret(identity: string, secret: Uin
 export function doorSecret(): Uint8Array | null {
   return open?.key ? Uint8Array.from(open.key) : null;
 }
+
+/*
+ * THE KEY FORGOTTEN, THE BUCKET CLOSES (Brad, 2026-11-03: "if things stay loaded, they get a forget event"): the forget is
+ * the cause (an unplug, a lock, the Log in page, another key) and this its consequence - not the other way round, which
+ * forgot the key whenever a bucket closed (config mode closes one, and keeps its key: "unless config mode").
+ */
+onKeyForgotten(() => { void closeBucket(); });

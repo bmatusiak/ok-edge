@@ -131,3 +131,6 @@ export function challengeOpts(what: string): {opts: {confirm: (a: {digits?: numb
     done: () => { if (mine && current === mine) set(screenAsk); mine = null; },
   };
 }
+
+/* the key forgotten (a lock, an unplug, the Log in page - its identity plugin): this, which stays loaded, lets go of it */
+require('./onlykey').onKeyForgotten(() => clearHostChallenge());

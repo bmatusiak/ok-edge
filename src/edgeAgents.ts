@@ -25,6 +25,7 @@ import {SoftKeyEdge} from './edgeSoftKey';
 import {addNote, sync as syncCopy} from './edgeStore';
 import {afterComputer} from './computerHold';
 import {keyTask} from './keyBusy';
+import {keyValue, onKeyForgotten} from './onlykey';
 import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import NativeBtKeyboard from 'okedge-native/specs/NativeBtKeyboard';
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
@@ -85,10 +86,22 @@ type Listener = (s: SheetState | null) => void;
 const listeners = new Set<Listener>();
 let current: SheetState | null = null;
 let answer: ((a: 'approve' | 'decline' | 'timeout') => void) | null = null;
-let soft: SoftKeyEdge | null = null;
-/* the key went away: its Edge, opened on that key's session, goes with it (src/keyGone.ts) */
-export function forgetAgentsKey(): void {
-  soft = null;
+/*
+ * THE AGENTS' EDGE, ON THE KEY THE APP IS ON NOW: kept in that key's store (src/onlykey.ts keyValue - the identity
+ * plugin's), so it goes with the key and the next one is opened afresh; one shared open, not one per message (each
+ * open probes the key and reads its public key).
+ */
+const agentsEdge = () => keyValue<{soft: SoftKeyEdge | null}>('edge.agents', () => ({soft: null}));
+async function openSoft(): Promise<SoftKeyEdge | null> {
+  const had = agentsEdge().soft;
+  if (had) return had;
+  const s = await SoftKeyEdge.open();
+  /* read again after the open: the open brings the key's session, and its store, up */
+  agentsEdge().soft = s;
+  return s;
+}
+/* the key forgotten (a lock, an unplug, the Log in page): what stays loaded here - the sheet - lets go of it */
+function forgetAgentsKey(): void {
   /*
    * THE KEY WENT: ITS SHEET GOES (Brad, 2026-11-03: "when unplugging, the user state stays exposed, leaking private
    * information" - the agent identity's sheet, its labels and certificate, stayed up after the unplug): a question still
@@ -177,7 +190,7 @@ export async function pressFromSheet() {
   } catch {
     /* no native side (jest, an old build) */
   }
-  await soft?.press();
+  await agentsEdge().soft?.press();
   if (current?.phase === 'press') show({phase: 'pressed', ask: current.ask});
 }
 
@@ -322,11 +335,11 @@ async function handleNote(msg: any, from: string): Promise<unknown | null> {
    * takeShared, checked offline) and the tab looks again when the computer lets the key go (useEdge): nothing here asks it.
    */
   const note = {computer: computer.id, seq: msg.seq, reason: msg.reason, receiptMsg: msg.receiptMsg, txRefused: msg.txRefused};
-  const kept = soft ? addNote(soft.deviceId, note).catch(() => undefined) : null;
+  const open = agentsEdge().soft;
+  const kept = open ? addNote(open.deviceId, note).catch(() => undefined) : null;
   if (!kept) afterComputer(() => void (async () => {
-    /* the shared one, not a fresh open per note (each open probes the key and reads its public key) */
-    soft = soft ?? (await SoftKeyEdge.open());
-    if (soft) await addNote(soft.deviceId, note).catch(() => undefined); /* else locked, or no Edge: nothing to keep it with */
+    const s = await openSoft();
+    if (s) await addNote(s.deviceId, note).catch(() => undefined); /* else locked, or no Edge: nothing to keep it with */
   })().catch(() => undefined));
   return {ok: true};
 }
@@ -387,8 +400,7 @@ async function handleCard(msg: any, seen: Set<string>, from: string): Promise<un
     if (!(await agentRequestsOn())) return null;
     if (unattended()) return {ok: false, refusal: 'timeout', detail: UNATTENDED_DETAIL};
     /* the shared Edge source: the sheet's press button presses through it (pressFromSheet - a soft key's press) */
-    soft = soft ?? (await SoftKeyEdge.open());
-    if (!soft) return {ok: false, refusal: 'invalid', detail: "this device's key has no Edge"};
+    if (!(await openSoft())) return {ok: false, refusal: 'invalid', detail: "this device's key has no Edge"};
   }
   let asked: SheetAsk | null = null;
   const r: any = await answerCardMessage(msg, {
@@ -461,7 +473,7 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
     step('computer');
     /* a timed-out sheet nobody has closed: nobody is there to press - refused at once, no new sheet */
     if (unattended()) return {ok: false, refusal: 'timeout', detail: UNATTENDED_DETAIL};
-    soft = soft ?? (await SoftKeyEdge.open());
+    const soft = await openSoft();
     if (!soft) return {ok: false, refusal: 'invalid', detail: 'this device\'s key has no Edge'};
     await soft.loadAgentBudgets();
     step('budgets');
@@ -535,3 +547,6 @@ async function handle(msg: any, from: string, planAsk?: PlanAsk): Promise<unknow
     await saveSeen(seen);
   }
 }
+
+/* the key forgotten (a lock, an unplug, the Log in page - its identity plugin): the sheet lets go of it */
+onKeyForgotten(() => forgetAgentsKey());

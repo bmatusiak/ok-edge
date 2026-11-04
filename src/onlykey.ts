@@ -151,6 +151,23 @@ const stores = new Map<Backend, KeyStore>();
 export function keyStore(backend: Backend = require('./hooks/KeyContext').activeBackend()): KeyStore | null {
   return stores.get(backend) ?? null;
 }
+/*
+ * THE TWO WAYS A MODULE KEEPS NOTHING OF A KEY (Brad, 2026-11-03: "when things reload, they can use a state; if things
+ * stay loaded, they get a forget event"):
+ *   keyValue(name, make)  what reloads - a cache, "the one now": kept in the key's store, made on first use, gone with
+ *                         the key (outside a key session, made fresh each time: nothing to keep it for);
+ *   onKeyForgotten(fn)    what stays loaded - a socket, a room, a sheet on screen: told when the key is forgotten, why.
+ */
+export function keyValue<T>(name: string, make: () => T, backend?: Backend): T {
+  const s = keyStore(backend);
+  if (!s) return make();
+  let v = s.getItem(name) as T | null;
+  if (v === null) { v = make(); s.setItem(name, v); }
+  return v;
+}
+export function onKeyForgotten(fn: (why: string | null) => void): () => void {
+  return onIdentityForgotten(({why}) => fn(why));
+}
 const forgottenListeners = new Set<(e: Forgotten) => void>();
 export function onIdentityForgotten(listener: (e: Forgotten) => void): () => void {
   forgottenListeners.add(listener);
@@ -255,6 +272,8 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       /* and the lib's waits between them, for the timeline (debug builds) */
       started.services.okcrypto?.on?.('settle', noteSettle);
       started.services.identity?.on?.('forgotten', (why: string | null) => {
+        /* said, so the drive's sheet inspector can check that nothing of the key stays on screen (tools/drive/sheets.js) */
+        console.log(`[identity] the key went (${why ?? 'forgotten'}): its state forgotten`);
         for (const l of [...forgottenListeners]) { try { l({backend, why}); } catch { /* a listener's error is not the key's */ } }
       });
       /* WHAT HOLDS THIS KEY'S STATE, SEEN (Brad, 2026-11-03: "then we can see what is using the state and it makes it debuggable") - names only */

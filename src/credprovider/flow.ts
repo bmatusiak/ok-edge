@@ -550,3 +550,6 @@ export async function runCredentialFlow(
   emit('assemble response', 'ok', JSON.parse(json).id);
   return json;
 }
+
+/* the key forgotten (a lock, an unplug, the Log in page - its identity plugin): this, which stays loaded, lets go of it */
+require('../onlykey').onKeyForgotten(() => dropChannel());

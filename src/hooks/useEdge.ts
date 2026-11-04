@@ -14,6 +14,7 @@ import {SoftKeyEdge} from '../edgeSoftKey';
 import {onKeyFree} from '../computerHold';
 import {onBucketTraded} from '../bucketEvents';
 import {keyTask} from '../keyBusy';
+import {keyValue} from '../onlykey';
 import {hasSoftKeyPlugin} from '../buildInfo';
 import {useBackend} from './KeyContext';
 import {blocksOf, chainState, evaluate, forgetVerifiedFor, liveView, loadMirror, lookable, offlineView, sync as syncMirror, tamper as tamperMirror, type EdgeView, type Tamper} from '../edgeStore';
@@ -28,11 +29,12 @@ import NativeShare from 'okedge-native/specs/NativeShare';
 
 type Source = EdgeSource & EdgeInbox;
 
-let real: SoftKeyEdge | null = null;
-/* the key went away: its Edge, opened on that key's session, goes with it - the next is opened afresh (src/keyGone.ts) */
-export function forgetEdgeKey(): void {
-  real = null;
-}
+/*
+ * THIS TAB'S EDGE, ON THE KEY IT IS ON NOW: kept in that key's store (src/onlykey.ts keyValue - the identity plugin's), so
+ * it goes with the key (a lock, an unplug, the Log in page) and the next one is opened afresh. Read after the open: the
+ * open is what brings the key's session, and its store, up.
+ */
+const tabEdge = () => keyValue<{real: SoftKeyEdge | null}>('edge.tab', () => ({real: null}));
 
 export function useEdge() {
   const backend = useBackend();
@@ -68,9 +70,11 @@ export function useEdge() {
   const source = useCallback(async (): Promise<Source | null> => {
     if (!wantReal) return null;
     /* the key the app is using now: another one (unplugged, picked) is opened afresh */
+    let real = tabEdge().real;
     if (!real || real.backend !== backend) {
       const was = real ? real.backend : 'none';
       real = await SoftKeyEdge.open();
+      tabEdge().real = real;
       /* once per key normally: more often means something re-opens it (and drops what the last one held) */
       console.log(`[edge] key opened for ${backend} (was ${was}): ${real ? `edge on ${real.backend}` : 'no edge'}`);
     }
@@ -171,7 +175,7 @@ export function useEdge() {
       /* the panel shows the message only; where it came from goes to the log (a TypeError says nothing without its stack) */
       console.log(`[edge] refresh failed after ${parts.join(', ') || 'nothing'}: ${e instanceof Error ? e.stack : String(e)}`);
     } finally {
-      const s = real;
+      const s = tabEdge().real;
       (s as unknown as {endRun?: () => void} | null)?.endRun?.();
       setBusy(false);
     }

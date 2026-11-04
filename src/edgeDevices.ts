@@ -29,6 +29,7 @@ import NativeEdgeAlert from 'okedge-native/specs/NativeEdgeAlert';
 import {acceptedPoints, keepAccepted, loadMirror, otherLog} from './edgeStore';
 import type {EdgeLinkRecord} from './edge/types';
 import {currentNet, edgeKey, netTag} from './net';
+import {keyValue} from './onlykey';
 
 const DEVICES = (): string => edgeKey('devices');
 /*
@@ -63,20 +64,17 @@ function statementIn(text: string | undefined): StoredStatement | null {
   }
 }
 const logEntries = (): Promise<Record<string, string> | null> => require('./bucketStore').storeEntries(LOGS());
-let currentDevice: string | null = null;
-let currentIsHard = false;
-export function setCurrentDevice(deviceIdHex: string, backend?: string): void {
-  currentDevice = deviceIdHex.toLowerCase();
-  currentIsHard = backend === 'usb';
-}
-/** The key went away: no device is "this one" until Edge opens the next. */
-export function forgetCurrentDevice(): void {
-  currentDevice = null;
-  currentIsHard = false;
+/*
+ * "THIS DEVICE": the key the app is using now, once Edge opened it - kept in that key's store (src/onlykey.ts keyValue - the
+ * identity plugin's), so no device is "this one" after the key goes until Edge opens the next.
+ */
+const here = () => keyValue<{id: string | null}>('edge.thisDevice', () => ({id: null}));
+export function setCurrentDevice(deviceIdHex: string, _backend?: string): void {
+  here().id = deviceIdHex.toLowerCase();
 }
 /** The device id (16 bytes, hex) of the key the app is using now, named or not - null before Edge opened it. */
 export function currentDeviceId(): string | null {
-  return currentDevice;
+  return here().id;
 }
 const HELD = (): string => edgeKey('held');
 
@@ -145,7 +143,7 @@ async function readJson<T>(key: string, fallback: T): Promise<T> {
 /* ------------------------------------------------ this phone */
 
 /** A key's signed nametag statement in the bucket - by default the key the app is using now - or null: none set (UNNAMED), or no bucket open. */
-export async function ownStatement(deviceIdHex: string | null = currentDevice): Promise<StoredStatement | null> {
+export async function ownStatement(deviceIdHex: string | null = currentDeviceId()): Promise<StoredStatement | null> {
   if (!deviceIdHex) return null;
   const entries = await logEntries();
   return entries ? statementIn(entries[statementKey(deviceIdHex)]) : null;
@@ -161,7 +159,7 @@ export async function ownStatement(deviceIdHex: string | null = currentDevice): 
  */
 const owners = new Map<string, {ownerKey: Uint8Array; ownerKeyPq: Uint8Array}>();
 export async function ownerKey(soft?: {ownerKeys(): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array}>} | null): Promise<{ownerKey: Uint8Array; ownerKeyPq: Uint8Array} | null> {
-  const dev = currentDevice;
+  const dev = currentDeviceId();
   if (!dev) return null;
   const held = owners.get(dev);
   if (held) return held;
@@ -237,7 +235,7 @@ export async function nametagOf(d: {deviceId: string}): Promise<{nametag: string
 }
 /** Every nametag this device's key signed, newest first (the first is its nametag now) - [] when none. */
 export async function ownNames(): Promise<string[]> {
-  const dev = currentDevice;
+  const dev = currentDeviceId();
   return dev ? (await signedNametags({withOwn: true})).find(n => n.deviceId === dev)?.names ?? [] : [];
 }
 
@@ -275,7 +273,7 @@ export async function signedNametags(o: {withOwn?: boolean} = {}): Promise<Signe
   }
   const out: SignedNametags[] = [];
   for (const [dev, {now, all}] of byDev) {
-    if (!o.withOwn && dev === currentDevice) continue;
+    if (!o.withOwn && dev === currentDeviceId()) continue;
     /* newest first: by the key's seq when signed, then by when it was set; the log's own newest leads */
     const sorted = all.sort((a, b) => (b.s.seq ?? -1) - (a.s.seq ?? -1) || b.at - a.at).map(x => x.s);
     const head = now ?? sorted[0];
@@ -286,7 +284,7 @@ export async function signedNametags(o: {withOwn?: boolean} = {}): Promise<Signe
     if (!k.endsWith('.meta')) continue;
     let id = '';
     try { id = String(JSON.parse(v).deviceId ?? '').toLowerCase(); } catch { continue; }
-    if (!id || byDev.has(id) || (!o.withOwn && id === currentDevice)) continue;
+    if (!id || byDev.has(id) || (!o.withOwn && id === currentDeviceId())) continue;
     let keys: {publicKey?: string; publicKeyPq?: string} = {};
     try { keys = JSON.parse(entries[`${k.slice(0, -5)}.keys`] ?? '{}'); } catch { /* none filed yet */ }
     out.push({deviceId: id, nametag: null, names: [], publicKey: keys.publicKey ?? '', publicKeyPq: keys.publicKeyPq ?? ''});

@@ -106,3 +106,6 @@ function keep(r: KeyIdentity): KeyIdentity {
   for (const l of [...listeners]) l();
   return r;
 }
+
+/* the key forgotten (a lock, an unplug, the Log in page - its identity plugin): this, which stays loaded, lets go of it */
+require('./onlykey').onKeyForgotten(() => forgetKeyIdentity());

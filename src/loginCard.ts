@@ -185,3 +185,6 @@ export function offerCardForGate(identity: string, device: string, why: string):
 export function dismissCardOffer(): void {
   setOffer(null);
 }
+
+/* the key forgotten (a lock, an unplug, the Log in page - its identity plugin): this, which stays loaded, lets go of it */
+require('./onlykey').onKeyForgotten(() => dismissCardOffer());
