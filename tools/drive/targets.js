@@ -1215,6 +1215,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     const apps = {
       desktop: pick((c) => c.includes('ok-edge/node_modules/electron') && !c.includes('--type=')),
       'desktop soft key': pick((c) => c.includes('okemu-host')),
+      /* the gadget's firmware daemons: two on one storage share one flash and one socket (2026-11-04: a PIN not taken) */
+      gadget: pick((c) => c.includes('bin/daemon.js') && c.includes('webapp-softkey')),
       webapp: pick((c) => c.includes('serve-docs.js') || c.includes('localhost/main.js') || (c.includes('webapp-chromium') && !c.includes('--type='))),
       metro: pick((c) => /expo(\.js)? start|metro|react-native start/.test(c) && !c.includes('jest-worker')),
       'drive (NW.js)': pick((c) => c.includes('tools/drive') && /nw(\.exe)?\b/.test(c) && !c.includes('--type=')),
