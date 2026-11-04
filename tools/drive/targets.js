@@ -1169,10 +1169,25 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
           if (gadgetChild && !exited(gadgetChild)) r.push(await stopChild(gadgetChild, line, 'gadget'));
           const left = gadgetElsewhere();
           if (left.length) r.push(await endPids(left, line, 'gadget'));
+          /* down now: its socket's own close may come after a plugKey that follows at once */
+          gadgetUp = false;
           return { ok: true, what: `the gadget unplugged (its soft key stopped${r.length ? `: ${r.join(', ')}` : ''})` };
         }
         const held = holdGadget((l) => out('webapp', l));
-        return { ok: true, what: `the gadget plugged back: ${gadget()}${held ? ` - ${held}` : ''}` };
+        const started = gadget();
+        /*
+         * BACK WHEN IT CONNECTS, not when it was started (box, 2026-11-03: the login after a plugKey looked before the
+         * gadget was on the USB and took another road) - its connect is the event, 15 s the watchdog
+         */
+        if (!gadgetUp && gadgetHost) {
+          await new Promise((resolve) => {
+            const dog = setTimeout(done, 15000);
+            function done() { clearTimeout(dog); gadgetHost.off('device-connect', done); resolve(); }
+            gadgetHost.once('device-connect', done);
+          });
+        }
+        if (!gadgetUp) return { ok: false, why: `the gadget was started but did not connect in 15 s (${started})` };
+        return { ok: true, what: `the gadget plugged back: ${started}${held ? ` - ${held}` : ''}` };
       }
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };

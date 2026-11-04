@@ -26,6 +26,8 @@ tags:
     env:
       WANT: pre
       WHY: the key locked on its way in; the app waits for the PIN and the check
+# the lock put the app on its Log in page (the key is kept): Log in opens the PIN page, where "Check config mode" is
+- tapOn: "Log in"
 - runScript: scripts/config-unlock.js
 - tapOn: "Check config mode"
 - runScript:
