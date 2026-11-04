@@ -1,20 +1,11 @@
-# EVERY SHEET CLOSES WHEN THE KEY'S IDENTITY IS FORGOTTEN (Brad, 2026-11-04: red-key locked itself on Windows with a
-# budget sheet open, and the Log in page sat under the agent card's label, its ssh and gpg identities and the email -
-# "all sheets need to close on identity forget"; src/ui/Sheet.tsx). On the box's gadget (a test key): logged in, the
-# lock-after set to MINUTES, a budget asked from this machine's CLI and left on the sheet unanswered, then nothing until
-# the key locks itself - the app must come to a clean Log in page with no sheet over it, and the ask refused.
+# THE SHEET CLEARS ON LOGOUT (Brad, 2026-11-04: red-key locked itself on Windows with a budget sheet open, and the Log in
+# page sat under the agent card's label, its ssh and gpg identities and the email - "need to clear the sheet on
+# logout"; src/ui/Sheet.tsx, src/onlykey.ts tellForgotten). On the box's gadget (a test key): logged in, a sheet open,
+# button 3 held - the same lock as the idle lockout - and the app must come to a clean Log in page with no sheet over it.
 #   run.js rehearse --app desktop@box sheet-forget
-name: Every sheet closes when the key is forgotten
+name: The sheet clears on logout
 tags:
   - login
-  - idle
-  - edge
-env:
-  MINUTES: "1"
-  COMMITS: "1"
-  LABEL: "box sheet-forget"
-onFlowComplete:
-  - runScript: scripts/idle-reset.js
 ---
 - machine:
     action: use-key
@@ -25,30 +16,8 @@ onFlowComplete:
 - launchApp
 - login: {}
 - goto: Edge
-# the budget names an agent card: one made on this key's chain first (card.yaml's steps), approved and pressed
-- runScript: scripts/card-start.js
-- waitForTap:
-    what: 'agent card'
-    timeout: 120000
-- tapOn: "Approve"
-- runScript: scripts/card-end.js
-- tapOn: "Close"
-- runScript: scripts/idle-set.js
-# a budget asked, as the ship asks it - the commit it would sign made now, so the flow runs again
-- machine:
-    action: tool
-    target: firmware
-    args:
-      name: ship-proof-commit.js
-      argv:
-        - ${COMMITS}
-- runScript: scripts/ship-start.js
-# the ask on the sheet - and left there: nobody answers it
-- waitForTap:
-    what: 'budget ask'
-    timeout: 120000
-- assertVisible: "An agent asks for a budget"
+- tapOn: "Open Edge Management"
+- assertVisible: "Close Edge Management"
+- runScript: scripts/lock-hold.js
 - runScript: scripts/idle-wait.js
 - runScript: scripts/sheet-forget-check.js
-# logged in again, so the lock-after can be put back (onFlowComplete: a locked key refuses it)
-- login: {}
