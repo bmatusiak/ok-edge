@@ -1124,10 +1124,58 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       } finally {
         end(srv, 'SIGTERM');
       }
+    } else if (what === 'kit') {
+      return kit(rest);
     } else {
-      return { ok: false, why: 'check <lib [test files...] | tsc | server>' };
+      return { ok: false, why: 'check <lib [test files...] | tsc | server | kit <okt run args> [--repeat N] [--no-build]>' };
     }
     return r.ok ? { ok: true, what: verdict(r) } : { ok: false, why: verdict(r) };
+  }
+
+  /*
+   * THE TEST KIT, AS THE RELEASE GATE RUNS IT (Brad, 2026-11-04: the 0.0.14 gate failed one test, "how the kit so we can
+   * get a published version"; "building testing running like we have been"): the soft key built the gate's way - this
+   * machine's emulator clone at its head, OKEMU_VERSION v3.1.0, DEBUG on, the plugins read from release.yml's gate so the
+   * two never differ - in a worktree of its own (kit-emu: the desktop's soft key is never rebuilt under it), then
+   * `okt run <args>` on it, against this machine's lib. --repeat N runs it N times and stops at the first failure: a
+   * test that fails once in CI is chased by running it until it does here. --no-build reuses the last kit soft key.
+   */
+  async function kit(args = []) {
+    const at = args.indexOf('--repeat');
+    const times = at >= 0 ? Math.max(1, Number(args[at + 1]) || 1) : 1;
+    const build = !args.includes('--no-build');
+    const run = args.filter((a, k) => a !== '--no-build' && (at < 0 || (k !== at && k !== at + 1)));
+    if (!run.length) return { ok: false, why: 'check kit <okt run args, e.g. test/08-plugins/01-softkey-plugins.test.js --test "idle lockout"> [--repeat N] [--no-build]' };
+    const EMU = path.join(ROOT, 'node-onlykey-emulator');
+    const KIT_EMU = path.join(ROOT, 'kit-emu');
+    const KIT = path.join(ROOT, 'onlykey-testing');
+    const gate = fs.readFileSync(path.join(EDGE, '.github/workflows/release.yml'), 'utf8').split(/Test gate/)[0];
+    const plugins = (gate.match(/OKEMU_PLUGINS: ([\w,]+)\s*\n\s*OKEMU_DEBUG: 1/) || [])[1];
+    if (!plugins) return { ok: false, why: 'check kit: release.yml\'s gate build (OKEMU_PLUGINS beside OKEMU_DEBUG: 1) not found' };
+    if (build) {
+      const head = (await runIn(EMU, 'git', ['rev-parse', 'HEAD'], 10000)).out.trim();
+      const wt = fs.existsSync(KIT_EMU)
+        ? await streamIn(KIT_EMU, 'git', ['checkout', '--detach', '--quiet', head], { timeout: 60000, ...shown('check kit: worktree') })
+        : await streamIn(EMU, 'git', ['worktree', 'add', '--detach', KIT_EMU, head], { timeout: 120000, ...shown('check kit: worktree') });
+      if (!wt.ok) return { ok: false, why: `check kit: the kit-emu worktree at ${head.slice(0, 7)}: ${wt.out.split('\n').slice(-3).join(' | ')}` };
+      /* the clone's packages and its fetched firmware sources, shared (a junction on Windows: no symlink right needed) */
+      for (const dir of ['node_modules', '.stage-src']) {
+        const link = path.join(KIT_EMU, 'emulator', dir);
+        if (!fs.existsSync(link)) fs.symlinkSync(path.join(EMU, 'emulator', dir), link, 'junction');
+      }
+      const env = { ...process.env, JOBS: 'max', OKEMU_VERSION: 'v3.1.0', OKEMU_PLUGINS: plugins, OKEMU_DEBUG: '1' };
+      const b = await streamIn(path.join(KIT_EMU, 'emulator'), NPM, ['run', 'rebuild'], { timeout: 20 * 60000, idle: true, env, ...shown(`check kit: soft key ${head.slice(0, 7)} ${plugins}`.slice(0, 60)) });
+      if (!b.ok) return { ok: false, why: `check kit: the soft key did not build: ${b.out.split('\n').slice(-4).join(' | ')}` };
+    }
+    const env = { ...process.env, OKEMU_ROOT: path.join(KIT_EMU, 'emulator'), OKT_LIB_DIR: LIB };
+    const ends = [];
+    for (let n = 1; n <= times; n++) {
+      const r = await streamIn(KIT, NODE, ['bin/okt.js', 'run', ...run], { timeout: 20 * 60000, idle: true, env, ...shown(`check kit ${n}/${times} ${run.join(' ')}`.slice(0, 60)) });
+      const end = (r.out.match(/OKT-END[^\n]*/g) || []).pop() || r.out.split('\n').slice(-2).join(' | ');
+      ends.push(`run ${n}: ${end}`);
+      if (!r.ok) return { ok: false, why: `check kit: run ${n} of ${times} failed - ${end}` };
+    }
+    return { ok: true, what: `check kit: ${times} run(s) passed - ${ends[ends.length - 1]}` };
   }
 
   /*
