@@ -266,6 +266,42 @@ function gadget() {
  * "[gadget]" lines go to the web app's tab (#3's path: the testnet every line, the live chain none).
  */
 let gadgetHost = null;
+/*
+ * PRESSED IS TAKEN BY THE KEY, NOT SENT TO IT (box, 2026-11-03, the config-mode rehearsal: a second-profile PIN's seven
+ * taps were sent and the flow tapped "Done - I pressed it" in the same second; in config mode each digit taken blinks
+ * 200 ms, so the key was asked "stored?" with part of the PIN counted - "Error PIN is not between 7 - 10 digits"). A
+ * person presses, THEN taps Done. So a press returns once the firmware has taken every tap (its queue empty) and the
+ * last one has ended: its sense rounds past a tap's length after that (the digit is added at the release, in the
+ * round's own payload - node-onlykey-emulator lib/ipc-peer.js getState pending, rounds). null: taken; else why not.
+ */
+/* the rounds the longest press pressed lasts, from the emulator's own table (lib/press-modes.js MODE_TICKS), and two for its release */
+const roundsFor = (modes) => {
+  const { MODE_TICKS } = require(path.join(EMU, 'lib', 'press-modes'));
+  return Math.max(...modes.map((m) => MODE_TICKS[m] || MODE_TICKS.tap)) + 2;
+};
+function gadgetState() {
+  return new Promise((resolve) => {
+    const dog = setTimeout(() => { gadgetHost.off('state', on); resolve(null); }, 2000);
+    function on(s) { clearTimeout(dog); gadgetHost.off('state', on); resolve(s); }
+    gadgetHost.on('state', on);
+    gadgetHost.getState();
+  });
+}
+async function gadgetTook(modes, life = 20000) {
+  const need = roundsFor(modes);
+  const until = Date.now() + life;
+  let from = null;
+  for (;;) {
+    const s = await gadgetState();
+    if (!s) return 'the gadget did not say its state in 2 s';
+    if (typeof s.pending !== 'number' || typeof s.rounds !== 'number') return "the gadget's emulator does not say its pending presses (node-onlykey-emulator older than fb87e92)";
+    if (s.pending === 0 && from === null) from = s.rounds;
+    if (from !== null && s.rounds >= from + need) return null;
+    if (Date.now() > until) return `the gadget took its presses too slowly (${s.pending} still queued after ${life / 1000} s)`;
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
+}
+
 /* the gadget firmware's console, followed from its daemon's output (holdGadget) */
 let gadgetConsole = null;
 /* who waits for the gadget's next LED colour (gadgetWaits) */
@@ -743,6 +779,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
             if (!how) return `press failed: the gadget did not wait for an Edge press (no /${after}/, no Edge yellow) within 25 s - nothing pressed`;
           }
           for (const x of b) { const [n, mode = 'tap'] = x.split(':'); gadgetHost.press(Number(n), mode); }
+          const taken = await gadgetTook(b.map((x) => x.split(':')[1] || 'tap'));
+          if (taken) return `press failed: ${taken}`;
           return `pressed ${b.join(' ')} on the gadget soft key${how ? ` (when ${how})` : ''}`;
         }
         if (b.some((x) => x.includes(':'))) return `press failed: a hard key's debug console taps only - ${b.join(' ')} needs the gadget`;
