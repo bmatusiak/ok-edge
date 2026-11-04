@@ -77,28 +77,14 @@ export function Sheet({
   const edge = TONE_COLOR[tone];
   const name = typeof title === 'string' ? title : 'sheet';
   /*
-   * EVERY SHEET CLOSES WHEN THE KEY'S IDENTITY IS FORGOTTEN - HERE, IN THE ONE SHEET ALL OTHERS ARE BUILT ON (Brad,
-   * 2026-11-04: "all sheets need to close on identity forget"; "a sheet class that gets inherited by the other sheet
-   * types"): red-key locked on Windows with a timed-out budget sheet open, and the Log in page sat under the agent card's
-   * label, its ssh and gpg identities and the email - the logged-out user's private information. Each owner closing its
-   * own sheet on the forget (edgeAgents forgetAgentsKey, loginCard, pressAsk, ...) left it to every owner to remember;
-   * one that missed it leaked. So the base closes itself on the event, whoever owns it: hidden at once, and the owner told
-   * through onClose. It stays hidden until its owner closes it (visible false) or shows another (a new title) - the old
-   * content never comes back on its own.
+   * EVERY SHEET CLOSES ON LOGOUT, HERE IN THE ONE SHEET ALL OTHERS ARE BUILT ON (Brad, 2026-11-04: red-key locked with a
+   * budget sheet open, and the Log in page sat under the agent card's identities - "need to clear the sheet on logout").
+   * On the forget the sheet hides and tells its owner (onClose); it stays hidden until the owner closes it.
    */
   const [forgotten, setForgotten] = React.useState(false);
-  const visibleNow = React.useRef(visible);
-  visibleNow.current = visible;
-  const closeNow = React.useRef(onClose);
-  closeNow.current = onClose;
-  React.useEffect(() => require('../onlykey').onIdentityForgotten(({why}: {why: string | null}) => {
-    if (!visibleNow.current) return;
-    console.log(`[sheet] closed by the forget (${why ?? 'forgotten'}): ${name}`);
-    setForgotten(true);
-    closeNow.current?.();
-  }), [name]);
+  React.useEffect(() => require('../onlykey').onIdentityForgotten(() => setForgotten(true)), []);
+  React.useEffect(() => { if (forgotten) onClose?.(); }, [forgotten]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => { if (!visible) setForgotten(false); }, [visible]);
-  React.useEffect(() => setForgotten(false), [name]);
   const shown = visible && !forgotten;
   /*
    * A SHEET'S HEIGHT, SAID AS IT CHANGES (Brad, 2026-11-02: the progress sheet rose and fell as its time bar came and

@@ -130,9 +130,8 @@ function storeFor(backend: Backend) {
  * booted, so the next read asks the key again and no key is taken for the one before it (lib plugins/identity forget).
  */
 export function forgetIdentities(): void {
-  /* no key session to forget through: the app is told all the same (tellForgotten) */
-  if (!booting.size) tellForgotten(require('./hooks/KeyContext').activeBackend(), null, 'no key session');
   for (const app of booting.values()) void app.then((a) => a.identity?.forget?.()).catch(() => undefined);
+  tellForgotten(require('./hooks/KeyContext').activeBackend(), null);
 }
 
 /*
@@ -172,19 +171,14 @@ export function onKeyForgotten(fn: (why: string | null) => void): () => void {
 }
 const forgottenListeners = new Set<(e: Forgotten) => void>();
 /*
- * THE APP HEARS EVERY FORGET - WITH A KEY SESSION OR WITHOUT ONE (Brad, 2026-11-04: red-key locked itself on Windows,
- * the app went to its Log in page, and the timed-out budget sheet stayed over it - the agent card's label, its ssh and
- * gpg identities, the email; "seems like its apart of the user identity showing private info about the logged in user
- * after logout"). The app's log had no "the key went" line: the forget went only through the lib's identity plugin of a
- * key session still booted, and with none booted (torn down before, or its build failed) no listener was told - the
- * sheet, the bucket, the rooms kept what they held. So a forget with no session to go through tells the app here, and
- * the plugin's own event comes through here too (getOnlyKey): one road, said once.
+ * EVERY FORGET TELLS THE APP (Brad, 2026-11-04: red-key locked, and a budget sheet stayed over the Log in page - "need to
+ * clear the sheet on logout"). The app is the only caller of identity.forget - forgetIdentities and resetOnlyKey - so
+ * both tell the app's listeners themselves. It was told through the lib's 'forgotten' event, which a forget with no key
+ * session booted never fires: nothing heard the logout.
  */
-let forgetsTold = 0;
-function tellForgotten(backend: Backend, why: string | null, how: string): void {
-  forgetsTold += 1;
+function tellForgotten(backend: Backend, why: string | null): void {
   /* said, so the drive's sheet inspector can check that nothing of the key stays on screen (tools/drive/sheets.js) */
-  console.log(`[identity] the key went (${why ?? 'forgotten'}${how ? `, ${how}` : ''}): its state forgotten`);
+  console.log(`[identity] the key went (${why ?? 'forgotten'}): its state forgotten`);
   for (const l of [...forgottenListeners]) { try { l({backend, why}); } catch { /* a listener's error is not the key's */ } }
 }
 export function onIdentityForgotten(listener: (e: Forgotten) => void): () => void {
@@ -289,7 +283,6 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       if (started.services.edge) started.services.edge.onPress = (e: {phase: 'asked' | 'done'; sub: number; ok?: boolean}) => pressSaid({phase: e.phase, msg: 0xf8, slot: e.sub, ok: e.ok});
       /* and the lib's waits between them, for the timeline (debug builds) */
       started.services.okcrypto?.on?.('settle', noteSettle);
-      started.services.identity?.on?.('forgotten', (why: string | null) => tellForgotten(backend, why, ''));
       /* WHAT HOLDS THIS KEY'S STATE, SEEN (Brad, 2026-11-03: "then we can see what is using the state and it makes it debuggable") - names only */
       started.services.identity?.on?.('store', (e: {op: 'add' | 'remove' | 'clear'; key?: string; keys?: string[]; why?: string | null}) => {
         console.log(`[identity] store (${backend}): ${e.op === 'add' ? `+ ${e.key}` : e.op === 'remove' ? `- ${e.key}` : `cleared (${e.why}): ${(e.keys ?? []).join(', ')}`}`);
@@ -340,16 +333,11 @@ export async function resetOnlyKey(backend?: Backend, why?: string): Promise<voi
     booting.delete(target);
     /* its store goes with its session (the plugin empties it on the forget below): keyStore() never hands back the old one */
     stores.delete(target);
-    const told = forgetsTold;
-    try {
-      const app = pending ? await pending : null;
-      /* the key's identity goes first, told why - what follows it (the login) hears that this key is gone */
-      app?.identity?.forget?.(why);
-      await app?.destroy();
-    } catch {
-      /* a build that never succeeded has nothing to tear down */
-    }
-    /* no session, a failed build, no identity plugin: nothing told the app - told here (tellForgotten) */
-    if (forgetsTold === told) tellForgotten(target, why ?? null, pending ? 'its session did not say it' : 'no key session');
+    /* a build that never succeeded has nothing to forget or tear down */
+    const app = pending ? await pending.catch(() => null) : null;
+    /* the key's identity goes first, told why - what follows it (the login) hears that this key is gone */
+    app?.identity?.forget?.(why);
+    tellForgotten(target, why ?? null);
+    await Promise.resolve(app?.destroy()).catch(() => undefined);
   }
 }

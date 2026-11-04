@@ -19,5 +19,4 @@ tags:
 - tapOn: "Open Edge Management"
 - assertVisible: "Close Edge Management"
 - runScript: scripts/lock-hold.js
-- runScript: scripts/idle-wait.js
 - runScript: scripts/sheet-forget-check.js
