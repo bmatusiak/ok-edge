@@ -196,13 +196,29 @@ async function until(tool, id, end, { running = null } = {}) {
 
 /* ------------------------------------------------------------------ the commands */
 
+/*
+ * SUBMITTED ONCE THE OWNER HAS ACCEPTED THIS AGENT: a new agent is shown to the owner (pending) by its first plan or
+ * card; until they accept it a submit is refused - asked again each time the plan changes, or every 5 s, to the deadline
+ */
+async function submitted(tool, id, end) {
+  for (let n = 0; ; n++) {
+    const r = await tool('plan_submit', { plan_id: id });
+    if (!r.refused) return;
+    if (!/not accepted you yet/.test(r.refused) || Date.now() > end) die(`plan_submit: ${r.refused}`);
+    if (n === 0) say('waiting for the owner to accept this agent (the Edge tab\'s Agents rows)');
+    await tool('plan_wait', { plan_id: id, seconds: 5 });
+  }
+}
+
 async function card() {
   const tool = await mcp(serverUrl());
   await agent(tool);
+  const end = deadline();
   const r = await tool('card_new', { identity: identityArg(), label: CARD(), slots: [slotArg()], reason: 'sign ok-edge release APKs' });
-  if (r.refused) die(`card_new: ${r.refused} (an agent the owner has not accepted: accept it in the Edge tab's Agents rows, then ask again)`);
+  if (r.refused) die(`card_new: ${r.refused}`);
+  if (r.state === 'draft') await submitted(tool, r.plan_id, end);
   say(`the card "${CARD()}" (slot ${slotArg()}) asked - approve it on your desktop, then press the key once`);
-  const w = await until(tool, r.plan_id, deadline());
+  const w = await until(tool, r.plan_id, end);
   if (w.state !== 'done') die(`the card: ${w.state}${w.why ? ` - ${w.why}` : ''}`);
   say(`the card "${CARD()}" is certified`);
 }
@@ -228,8 +244,7 @@ async function sign() {
       items: digests.map((d, i) => ({ op: 'sign', key: { kind: 'rsa', slot, bits: cert.bits }, reason: `APK signature ${i + 1} of ${digests.length} (${path.basename(apk)})`, fingerprint: fp(d) })),
     });
     if (p.refused) die(`plan_new: ${p.refused}`);
-    const s = await tool('plan_submit', { plan_id: p.plan_id });
-    if (s.refused) die(`plan_submit: ${s.refused}`);
+    await submitted(tool, p.plan_id, end);
     say(`plan ${p.plan_id} submitted - approve it on your desktop (its fingerprints: the ones above), then press the key once`);
     const w = await until(tool, p.plan_id, end, {
       running: async () => {

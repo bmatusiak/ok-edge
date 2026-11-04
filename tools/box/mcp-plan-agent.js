@@ -38,16 +38,22 @@ const end = (id) => { for (;;) { const w = call('plan_wait', { plan_id: id, seco
 
 call('hello', NAME);
 
-/* 1. the card: asked once the owner has accepted this agent (refused while pending) */
+/* submitted once the owner has accepted this agent (a submit is refused while it is pending) */
+const submitted = (id) => {
+  for (let n = 0; ; n++) {
+    const r = call('plan_submit', { plan_id: id });
+    if (!r.refused) return;
+    if (n === 0) say(`submit refused (${r.refused}) - waiting for the owner to accept this agent`);
+    if (n > 60) { say('never accepted'); process.exit(1); }
+    call('plan_wait', { plan_id: id, seconds: 5 });
+  }
+};
+
+/* 1. the card: shown to the owner at once (this agent pending), submitted once they accept it */
 const CARD = `${NAME} card`;
-let card;
-for (let n = 0; ; n++) {
-  card = call('card_new', { identity, label: CARD, ssh, reason: 'the dev loop\'s test plan' });
-  if (!card.refused) break;
-  if (n === 0) say(`card_new refused (${card.refused}) - waiting for the owner to accept this agent`);
-  if (n > 60) { say('never accepted'); process.exit(1); }
-  execFileSync(process.execPath, ['-e', 'setTimeout(() => {}, 5000)']);
-}
+const card = call('card_new', { identity, label: CARD, ssh, reason: 'the dev loop\'s test plan' });
+if (card.refused) { say(`card_new refused: ${card.refused}`); process.exit(1); }
+if (card.state === 'draft') submitted(card.plan_id);
 say(`card "${CARD}" asked - the owner approves it, one press`);
 const made = end(card.plan_id);
 if (made.state !== 'done') { say(`card: ${made.state}${made.why ? ` - ${made.why}` : ''}`); process.exit(1); }

@@ -234,10 +234,15 @@ test('card_new: the agent asks for its card - a card request submitted at once, 
   const ask = { identity: hexOf(A.identityPublicKey), label: 'release signer', slots: [3], reason: 'sign ok-edge releases' };
   assert.match((await s.tool('card_new', { ...ask, slots: [5] })).refused, /stored RSA slots/);
   assert.match((await s.tool('card_new', { ...ask, slots: [] })).refused, /at least one key/);
-  assert.match((await s.tool('card_new', ask)).refused, /not accepted you yet/);
-  await ownerA.re({ op: 'agent', agent: agent_id, state: 'accepted' });
+  /* not accepted yet: shown to the owner, kept a draft with the reason; plan_submit sends it once they accept */
   const c = await s.tool('card_new', ask);
-  assert.deepEqual([c.kind, c.state, c.ask], ['card', 'submitted', { label: 'release signer', slots: [3], days: 0, reason: 'sign ok-edge releases' }]);
+  assert.deepEqual([c.kind, c.state, c.ask], ['card', 'draft', { label: 'release signer', slots: [3], days: 0, reason: 'sign ok-edge releases' }]);
+  assert.match(c.why, /not accepted you yet/);
+  assert.equal((await ownerA.until((m) => m.ev === 'agent')).agent.state, 'pending', 'the owner sees who asks');
+  assert.match((await s.tool('plan_submit', { plan_id: c.plan_id })).refused, /not accepted you yet/);
+  await ownerA.re({ op: 'agent', agent: agent_id, state: 'accepted' });
+  const sub = await s.tool('plan_submit', { plan_id: c.plan_id });
+  assert.deepEqual([sub.state, sub.why], ['submitted', null]);
   const asked = await ownerA.until((m) => m.ev === 'submit');
   assert.deepEqual([asked.plan.kind, asked.plan.agent.id, asked.plan.ask.slots], ['card', agent_id, [3]]);
   assert.match((await s.tool('plan_data', { plan_id: c.plan_id, items: [{ item: 1, data: 'x' }] })).refused, /a card ask takes no data/);
