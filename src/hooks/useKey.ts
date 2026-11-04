@@ -407,12 +407,17 @@ export function useKey({
    * button, a restart), so the same clean-up runs: the session torn down (resetOnlyKey - the identity forgotten, why
    * 'locked'), and the login's own clean-up after it (MainApp onIdentityForgotten). The next unlock builds a fresh one.
    */
+  /*
+   * AWAY FROM UNLOCKED, BY ANY ROAD: straight to locked (a lock the pipe never saw go), or through unknown first (the box,
+   * 2026-11-03: the gadget's self-restart read as a disconnect - unlocked, unknown, locked - and a check for the one step
+   * unlocked -> locked never fired).
+   */
   const deviceWas = useRef(chosen.device);
   useEffect(() => {
     const was = deviceWas.current;
     deviceWas.current = chosen.device;
-    if (was === 'unlocked' && chosen.device === 'locked') {
-      console.log(`[key] the ${BACKEND_NAME[backend]} locked: its session goes, as for an unplug`);
+    if (was === 'unlocked' && chosen.device !== 'unlocked') {
+      console.log(`[key] the ${BACKEND_NAME[backend]} locked: its session goes, as for an unplug (${chosen.device})`);
       void resetOnlyKey(backend, 'locked');
     }
   }, [chosen.device, backend]);
