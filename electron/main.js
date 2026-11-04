@@ -132,7 +132,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 900,
     height: 760,
-    title: 'ok-edge',
+    /* the name the phone's launcher shows (modules/okedge-native app_name) - the web page's <title> says the same (app.json web.name) */
+    title: 'OnlyKey',
     /* the app's O (tools/icons/make-icons.js) - the title bar and the taskbar, not Electron's own */
     icon: path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {

@@ -64,7 +64,7 @@ if [ -n "$CONSOLE" ]; then
   trap 'kill $PC 2>/dev/null' EXIT
   sleep 2
 else
-  w=$(DISPLAY=:10 xdotool search --name "ok-edge - Chromium" | head -1)
+  w=$(DISPLAY=:10 xdotool search --name "OnlyKey - Chromium" | head -1)
   DISPLAY=:10 xdotool windowactivate --sync "$w" key ctrl+shift+r
 fi
 waitfor "\[Continue\]\|$BUCKET_BUTTON\|Locked" || exit 1

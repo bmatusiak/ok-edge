@@ -21,6 +21,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
+      "name": "OnlyKey",
       "favicon": "./assets/favicon.png",
       "output": "single"
     },
