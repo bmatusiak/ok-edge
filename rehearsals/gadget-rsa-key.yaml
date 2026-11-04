@@ -1,0 +1,20 @@
+# A TEST KEY'S RSA SLOT GIVEN THE DEBUG KEYSTORE'S KEY (the signing dry run, plan B4/B7): into config mode, the key
+# loaded by the CLI's setkey through this app (scripts/rsa-key-load.js), out of config mode. Then apk-sign.yaml signs an
+# APK with it, and the APK verifies with the debug certificate (signing/debug.crt.pem). Test keys only - the key is the
+# repo's public debug key.
+#   run.js rehearse --app desktop@box gadget-rsa-key --env KEYHEX=<p||q hex> [--env SLOT=RSA2]
+name: A test key's RSA slot given the debug key
+tags:
+  - config
+  - signing
+env:
+  SLOT: "RSA2"
+---
+- runScript: scripts/require-test-key.js
+- runFlow:
+    file: config-in.yaml
+    env:
+      PAGE: PIN Setup
+- runScript: scripts/rsa-key-load.js
+- runFlow: config-out.yaml
+- login: {}
