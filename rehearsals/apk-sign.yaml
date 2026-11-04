@@ -1,0 +1,42 @@
+# THE APK SIGNED BY A KEY'S RSA SLOT, END TO END (the signing dry run, plan B7; Brad, 2026-11-04: "a dry run - running
+# the real process locally, before trying live"). The signer (tools/release/apk-sign/sign.js, the drive's apk-sign
+# action) on the app's own machine is an MCP agent: it asks for its card, then signs the newest APK this machine built -
+# the record pass, a plan of the fingerprints, the digests once it runs, the replay - and the APK must verify with the
+# certificate. Here the owner's side: accept the agent, approve its card (the drive presses the test key to certify it),
+# approve its plan's budget (one press). The test key's SLOT holds the debug keystore's key, so the certificate is the
+# debug one (signing/debug.crt.pem) - nothing new is made for a dry run.
+#   run.js rehearse --app desktop@box apk-sign [--env SERVER=standin] [--env SLOT=2]
+name: An APK signed by a key's RSA slot
+tags:
+  - edge
+  - signing
+env:
+  SERVER: "local"
+  SLOT: "2"
+---
+- runScript: scripts/require-test-key.js
+- goto: Edge
+- tapOn: "Budgets"
+- runScript: scripts/apk-sign-start.js
+- tapOn:
+    text: "Accept ${output.agentName}"
+    timeout: 60
+# its card: the stored slot it may use - Approve, then the drive presses the test key to certify it
+- waitForTap:
+    what: 'agent card'
+    timeout: 120000
+- tapOn: "Approve"
+- waitForLog:
+    pattern: '\[mcp\] plan \S+: the card .* - done'
+    timeout: 120000
+- tapOn: "Close"
+# its plan: the APK's signatures named by their fingerprints - Approve, one press; the digests come after
+- waitForTap:
+    what: 'budget ask'
+    timeout: 300000
+- tapOn: "Approve"
+- waitForLog:
+    pattern: '\[mcp\] plan \S+: (done|ended|failed|declined)'
+    timeout: 300000
+    idle: none
+- runScript: scripts/apk-sign-end.js

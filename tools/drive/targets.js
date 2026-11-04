@@ -1301,6 +1301,31 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         const tail = r.out.split(/\r?\n/).filter(Boolean).slice(-6).join(' | ');
         return r.ok ? { ok: true, what: tail } : { ok: false, why: `plan-agent: ${tail}` };
       }
+      /*
+       * THE APK SIGNER ON THIS MACHINE (the signing dry run, plan B7): tools/release/apk-sign/sign.js as an MCP agent - its
+       * card first (card), then the APK (record, the plan, replay, verify) - against the desktop's local MCP here
+       * (--server local, as on Brad's PC) or the stand-in (the remote path, as the workflow). The key's slot holds the
+       * debug keystore's key on a test key, so the APK must verify with the debug certificate.
+       */
+      if (action === 'apk-sign') {
+        if (!/^[0-9a-f]{64}$/i.test(String(args.identity || ''))) return { ok: false, why: 'apk-sign: the identity public key (64 hex)' };
+        const server = String(args.server || 'local') === 'standin' ? `http://127.0.0.1:${STANDIN_PLAIN}` : String(args.server || 'local');
+        const name = String(args.name || 'apk-sign dry run');
+        const common = ['--server', server, '--identity', String(args.identity), '--slot', String(args.slot || 2), '--card', `${name} card`, '--name', name,
+          '--key-file', path.join(os.tmpdir(), `apk-sign-${name.replace(/[^\w-]/g, '_')}.json`), '--minutes', String(args.minutes || 10)];
+        const sign = path.join(EDGE, 'tools/release/apk-sign/sign.js');
+        const card = await streamIn(EDGE, NODE, [sign, 'card', ...common], { timeout: 15 * 60000, ...shown('apk-sign') });
+        if (!card.ok) return { ok: false, why: `apk-sign card: ${card.out.split(/\r?\n/).filter(Boolean).slice(-3).join(' | ')}` };
+        /* the APK: the one named, or the newest this machine built (android/app/build/outputs/apk) */
+        const built = path.join(EDGE, 'android/app/build/outputs/apk');
+        const apks = fs.existsSync(built) ? fs.readdirSync(built, { recursive: true }).filter((f) => String(f).endsWith('.apk')).map((f) => path.join(built, String(f))) : [];
+        const apk = args.apk ? String(args.apk) : apks.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+        if (!apk) return { ok: false, why: 'apk-sign: no APK named and none built here (android/app/build/outputs/apk)' };
+        const out = path.join(os.tmpdir(), `apk-sign-${Date.now()}.apk`);
+        const r = await streamIn(EDGE, NODE, [sign, apk, '--out', out, '--cert', String(args.cert || path.join(EDGE, 'signing/debug.crt.pem')), ...common], { timeout: 15 * 60000, ...shown('apk-sign') });
+        const tail = r.out.split(/\r?\n/).filter(Boolean).slice(-4).join(' | ');
+        return r.ok ? { ok: true, what: tail } : { ok: false, why: `apk-sign: ${tail}` };
+      }
       if (action === 'tool') return target === 'firmware' ? boxTool(args) : { ok: false, why: 'tool belongs to the firmware target' };
       if (action === 'hex') return target === 'firmware' ? hexFor(args) : { ok: false, why: 'hex belongs to the firmware target' };
       if (action === 'flash') return target === 'firmware' ? flashKey(args) : { ok: false, why: 'flash belongs to the firmware target' };

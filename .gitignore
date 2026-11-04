@@ -32,6 +32,8 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+# the APK signing certificates: public halves only, pinned on purpose (modules/okedge-native/android/build.gradle)
+!signing/*.crt.pem
 
 # local env files
 .env*.local

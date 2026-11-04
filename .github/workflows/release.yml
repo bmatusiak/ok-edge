@@ -35,8 +35,10 @@
 #      gate     - THE TEST LINE, from the start of the run on a runner of its own: a soft key from the same sources
 #                 must pass the kit's 00-sanity, 01-protocol, 07-lib, 08-plugins; the long test, so it holds back only publish
 #   then, on the build line:
-#      android  - the release APK (com.okrn), that hex in its assets (developer_firmware/), signed with the repo
-#                 debug keystore until the OnlyKey signs releases through Edge
+#      android  - the APK, that hex in its assets (developer_firmware/), by channel (EXPO_PUBLIC_OKEDGE_CHANNEL, below):
+#                 a pre-release is com.okedge.debug signed with the repo debug keystore; a release is com.okedge, built
+#                 unsigned and signed by red-key's RSA3 over the remote MCP - Brad approves it on his desktop and presses
+#                 (tools/release/apk-sign; the secret OKEDGE_SIGNER, the variable OKEDGE_IDENTITY)
 #      desktop  - beside android (Brad, 2026-10-28: "desktop package = go, linux and windows separated packages"): one
 #                 package per system - Windows .zip, Linux .tar.gz - each on a runner of that system, the soft key
 #                 inside built there from the same recorded sources with the phone's plugins
@@ -92,7 +94,11 @@ permissions:
 
 env:
   NODE_VERSION: 24
-  APP_ID: com.okrn
+  # THE CHANNEL (modules/okedge-native/app.plugin.js, src/channel.ts), one variable read by Gradle and inlined by Metro: a
+  # published release (by hand, kind=release) is the release channel - com.okedge, signed by red-key's RSA3, its update
+  # notices from the published site; every other run builds the debug channel - com.okedge.debug ("OnlyKey DEBUG"), the
+  # repo debug keystore, its update notices from the pre-release site
+  EXPO_PUBLIC_OKEDGE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.kind == 'release' && 'release' || 'debug' }}
 
 jobs:
   # WHETHER THE BUILD LINE RUNS, AND WHAT IT PUBLISHES (kind: '' builds nothing, build = artifacts only, prerelease,
@@ -418,8 +424,6 @@ jobs:
 
       - name: Generate android/
         working-directory: ok-edge
-        env:
-          OKEDGE_APP_ID: ${{ env.APP_ID }}
         run: npx expo prebuild --platform android --no-install
 
       # OKEMU_PRODUCTION=1: the soft key's DEBUG console off (it is off by default; said here so no setting can turn it
@@ -427,9 +431,33 @@ jobs:
       - name: Build the release APK
         working-directory: ok-edge/android
         env:
-          OKEDGE_APP_ID: ${{ env.APP_ID }}
           OKEMU_PRODUCTION: 1
         run: ./gradlew assembleRelease --no-daemon
+
+      # A RELEASE IS SIGNED BY RED-KEY'S RSA3 (Brad, 2026-11-04: "the workflow can request signing from my desktop app";
+      # "when i do a published release, it will sign using redkey"): Gradle left it unsigned; tools/release/apk-sign
+      # records what apksigner signs, asks the key over the remote MCP as the release signer's agent (OKEDGE_SIGNER) -
+      # the fingerprints first, Brad approves on his desktop and presses once, then the digests - and replays the
+      # signatures; apksigner verify must name the pinned certificate. Up to 30 minutes for the approval; then it fails
+      # with nothing signed.
+      - name: Sign the release APK with red-key's RSA3 (approved on Brad's desktop)
+        if: env.EXPO_PUBLIC_OKEDGE_CHANNEL == 'release'
+        working-directory: ok-edge
+        env:
+          OKEDGE_SIGNER: ${{ secrets.OKEDGE_SIGNER }}
+          OKEDGE_IDENTITY: ${{ vars.OKEDGE_IDENTITY }}
+          OKEDGE_MCP: ${{ vars.OKEDGE_MCP || 'https://ok-edge.bmatusiak.workers.dev' }}
+        run: |
+          set -euo pipefail
+          [ -n "$OKEDGE_SIGNER" ] || { echo "::error::no OKEDGE_SIGNER secret: the release signer's agent_key (tools/release/apk-sign/sign.js)"; exit 1; }
+          [ -n "$OKEDGE_IDENTITY" ] || { echo "::error::no OKEDGE_IDENTITY variable: the identity public key the signer asks"; exit 1; }
+          [ -f signing/release.crt.pem ] || { echo "::error::no signing/release.crt.pem: the RSA3 certificate is pinned first"; exit 1; }
+          out=android/app/build/outputs/apk/release
+          zipalign=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)zipalign
+          "$zipalign" -c 4 "$out/app-release-unsigned.apk"
+          node tools/release/apk-sign/sign.js "$out/app-release-unsigned.apk" --out "$out/app-release.apk" --cert signing/release.crt.pem \
+            --server "$OKEDGE_MCP" --identity "$OKEDGE_IDENTITY" --slot 3 --minutes 30
+          echo "signed by red-key's RSA3: $(node -p "new (require('crypto').X509Certificate)(require('fs').readFileSync('signing/release.crt.pem')).fingerprint256")" >> "$GITHUB_STEP_SUMMARY"
 
       # WHAT A RELEASE MUST NOT CARRY (ok-rn's tools/release-guards.js, the same three): the soft key's DEBUG console
       # (it prints key bytes), the debugging lock off (a computer could approve and press), the testing screen in the
@@ -464,6 +492,7 @@ jobs:
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           node ok-edge/tools/release/android-manifest.js --apk "out/$file" --apksigner "$apksigner" --repo "$GITHUB_REPOSITORY" \
             --tag "$TAG" --version "$VERSION" --version-code "$CODE" --commit "${{ needs.firmware.outputs.ref }}" \
+            --app-id "$([ "$EXPO_PUBLIC_OKEDGE_CHANNEL" = release ] && echo com.okedge || echo com.okedge.debug)" \
             --soft-key ok-edge/src/generated/firmware.json --out out/manifest.json
 
       - name: Upload the APK
@@ -717,7 +746,11 @@ jobs:
           {
             echo "A $KIND, built by the release workflow (run $GITHUB_RUN_ID) from main ${RELEASE_SHA:0:7}."
             echo
-            echo "- Android app: $(basename "$apk") - com.okrn, signed with the repo debug keystore"
+            if [ "$KIND" = release ]; then
+              echo "- Android app: $(basename "$apk") - com.okedge, signed by red-key's RSA3 (the official certificate)"
+            else
+              echo "- Android app: $(basename "$apk") - com.okedge.debug (OnlyKey DEBUG, installs beside the release), signed with the repo debug keystore"
+            fi
             echo "  sha256 $(node -p "require('./artifacts/android/manifest.json').sha256")"
             echo "  signing certificate SHA-256 $(node -p "require('./artifacts/android/manifest.json').certSha256")"
             echo "- Desktop app for Windows (x64, unzip and run ok-edge.exe; not code-signed): $(basename "$win")"
