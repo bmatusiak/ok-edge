@@ -167,7 +167,19 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
     const flowEnv = { ...interp(f.config.env || {}, env), ...env };
     say(`flow ${f.config.name || path.basename(file)}${f.config.appId ? ` (${f.config.appId})` : ''} on ${maestro.platform}`);
     listen();
-    await runList(f.commands, flowEnv, f.dir);
+    /*
+     * onFlowComplete (Maestro's header key): steps that run after the flow WHATEVER came of it (Brad, 2026-11-03: the idle
+     * rehearsal set the key's lock-after to 1 minute and set it back only when it passed - "that setting stays and you
+     * need to set it back to 30 after"; a run that stopped part-way left the test key at 1 minute). A failure in them is
+     * said; it never hides the flow's own.
+     */
+    try {
+      await runList(f.commands, flowEnv, f.dir);
+    } finally {
+      if (Array.isArray(f.config.onFlowComplete)) {
+        await runList(f.config.onFlowComplete, flowEnv, f.dir).catch((e) => say(`onFlowComplete: ${String(e.message).split('\n')[0]}`));
+      }
+    }
     /* the inspector's last word on the flow's last step: its checks run up to NO_PROGRESS_MS after an answer */
     await new Promise((r) => setTimeout(r, require('../sheets').NO_PROGRESS_MS + 500));
     inspected();

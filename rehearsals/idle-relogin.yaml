@@ -2,7 +2,8 @@
 # and the desktop could not log in - two reads with no answer, a third that failed its transit check - until an unplug
 # and replug; "unplug and plug back in is not a fix"). On the box's gadget (a test key, an emulated hard key on USB):
 # the desktop logged in on it, its lock-after set to MINUTES, nothing done until the key locks and restarts itself, then
-# the login again - which must get in with no unplug. The lock-after is put back at the end.
+# the login again - which must get in with no unplug. The lock-after is put back when the flow ends, passed or failed
+# (onFlowComplete): the setting stays on the key, and a run that stopped half-way left the gadget at 1 minute.
 #   run.js rehearse --app desktop@box idle-relogin [--env MINUTES=1]
 name: Logging in again after the key locked itself
 tags:
@@ -10,6 +11,8 @@ tags:
   - idle
 env:
   MINUTES: "1"
+onFlowComplete:
+  - runScript: scripts/idle-reset.js
 ---
 - machine:
     action: use-key
@@ -28,4 +31,3 @@ env:
 - stopApp
 - launchApp
 - login: {}
-- runScript: scripts/idle-reset.js
