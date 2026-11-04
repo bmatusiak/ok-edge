@@ -37,6 +37,13 @@ export function setShown(deviceId: string, on: boolean): void {
   void AsyncStorage.setItem(KEY, JSON.stringify([...hidden])).catch(() => { /* not kept: shown again next time */ });
 }
 
+/* every device switched off but `keep` (Brad, 2026-11-04: "hide others (showing only this key)") */
+export function showOnly(keep: string, all: string[]): void {
+  hidden = new Set(all.map(id => id.toLowerCase()).filter(id => id !== keep.toLowerCase()));
+  for (const l of [...listeners]) l();
+  void AsyncStorage.setItem(KEY, JSON.stringify([...hidden])).catch(() => { /* not kept: shown again next time */ });
+}
+
 export function showAll(): void {
   hidden = new Set();
   for (const l of [...listeners]) l();

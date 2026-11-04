@@ -8,7 +8,7 @@
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {loadNew, onDevicesChanged, type ForkTree, type NewItem} from '../edgeDevices';
-import {onFilter, setShown, showAll, shown} from '../edgeFilter';
+import {onFilter, setShown, showAll, showOnly, shown} from '../edgeFilter';
 import {netTag} from '../net';
 import {Btn} from './components';
 import {Sheet} from './Sheet';
@@ -36,6 +36,7 @@ function originLine(id: string, forks: ForkTree | null, nameOf: (id: string) => 
 
 export function DeviceFilterSheet({visible, onClose, devices, forks = null}: {visible: boolean; onClose: () => void; devices: FilterDevice[]; forks?: ForkTree | null}) {
   const nameOf = (id: string) => devices.find(d => d.deviceId === id)?.name ?? `device ${short(id)}`;
+  const mine = devices.find(d => d.thisDevice);
   const [, setTick] = useState(0);
   const [failing, setFailing] = useState<NewItem[]>([]);
   useEffect(() => onFilter(() => setTick(t => t + 1)), []);
@@ -47,7 +48,12 @@ export function DeviceFilterSheet({visible, onClose, devices, forks = null}: {vi
 
   return (
     <Sheet visible={visible} tone="edge" title={netTag() + 'Devices in your history'} titleColor={theme.text} onClose={onClose}
-      footer={<View style={styles.row}><Btn title="Show all" onPress={showAll} /><Btn title="Close" tone="primary" onPress={onClose} /></View>}>
+      footer={<View style={styles.row}>
+        <Btn title="Show all" onPress={showAll} />
+        {/* only this key's own budgets and presses */}
+        <Btn title="Hide others" onPress={() => mine && showOnly(mine.deviceId, devices.map(d => d.deviceId))} disabled={!mine} />
+        <Btn title="Close" tone="primary" onPress={onClose} />
+      </View>}>
       <Text style={styles.dim}>Every use of your key from every device is in your log. Switch a device off to hide its budgets and presses here; switch it on to see them again.</Text>
       {devices.map(d => {
         const on = shown(d.deviceId);
