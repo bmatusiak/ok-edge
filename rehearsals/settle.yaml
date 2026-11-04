@@ -1,0 +1,19 @@
+# A USE NOBODY WILL RECEIPT, SETTLED (EdgeScreen SettleControls; firmware R16-R18): its budget's detail, "Settle…", the
+# person's Yes, then a press on the key - every live budget ends and the chain records that the owed use is accepted
+# without its receipt. For a test key left owing by a run that failed mid-use (the signing dry run, 2026-11-04: a sign
+# the key paid whose answer was lost, filed by no one).
+#   run.js rehearse --app desktop@box settle --env BUDGET=455
+name: An owed receipt settled
+tags:
+  - edge
+---
+- runScript: scripts/require-test-key.js
+- login: {}
+- goto: Edge
+- tapOn: "Budgets"
+- tapOn: "Open budget ${BUDGET}"
+- tapOn: "Settle…"
+- tapOn: "Yes, settle"
+- waitForLog:
+    pattern: '\[key\] Edge: .*[Ss]ettl.* via '
+    timeout: 60000
