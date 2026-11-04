@@ -164,6 +164,20 @@ function check(rev) {
 function build(force) {
   const want = expected();
   if (!force && fs.existsSync(path.join(DIR, 'manifest.json')) && posted().hexes.length && !differences().length) {
+    /*
+     * THE HEX IS THE SAME, THE EMULATOR COMMIT MOVED ON (2026-11-04: the record kept 9e6ce48 after the kit tests were fixed
+     * in becb74f): the release gate checks out the emulator at emulatorCommit and runs the side-loaded kit tests from it,
+     * so a record left behind runs old tests against the new release. Same sources, so no build - the commit is moved.
+     */
+    const m = JSON.parse(fs.readFileSync(path.join(DIR, 'manifest.json'), 'utf8'));
+    const head = git(EMU_REPO, 'rev-parse', 'HEAD');
+    if (m.emulatorCommit !== head) {
+      m.emulatorCommit = head;
+      m.sourcesFrom = `node-onlykey-emulator ${head.slice(0, 7)}`;
+      fs.writeFileSync(path.join(DIR, 'manifest.json'), `${JSON.stringify(m, null, 2)}\n`);
+      console.log(`firmware: the same build ${want.buildHash}; the record now names emulator ${head.slice(0, 7)} (its kit tests) - commit firmware/manifest.json`);
+      return;
+    }
     console.log(`firmware: up to date - firmware/ already holds build ${want.buildHash}; nothing to build (--force builds anyway)`);
     return;
   }
