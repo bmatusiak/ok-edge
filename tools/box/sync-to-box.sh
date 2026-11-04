@@ -32,4 +32,7 @@ done
 # ok-edge/node_modules/node-onlykey-lib - tests skipped, a file already the same left alone
 case " $want " in *" lib "*)
   ssh $BOX 'cd ~/project/onlykey && pin=$(grep -o "node-onlykey-lib#[0-9a-f]*" ok-edge/package.json | cut -d"#" -f2) && n=0 && for f in $(git -C node-onlykey-lib diff --name-only "$pin"..HEAD | grep -v /test/); do [ -f "node-onlykey-lib/$f" ] || continue; cmp -s "node-onlykey-lib/$f" "ok-edge/node_modules/node-onlykey-lib/$f" && continue; mkdir -p "$(dirname "ok-edge/node_modules/node-onlykey-lib/$f")"; cp "node-onlykey-lib/$f" "ok-edge/node_modules/node-onlykey-lib/$f"; n=$((n+1)); done; echo "the lib copy in ok-edge/node_modules: $n file(s) from ${pin:0:7}..$(git -C node-onlykey-lib rev-parse --short HEAD)"' </dev/null
+  # THE STAND-IN SERVES THE LIB'S MCP AND ROOMS (2026-11-04: it ran the MCP from before card_new - "no tool card_new"):
+  # ended here, so the next app start (targets.js ensureStandin) brings it back on the new code
+  ssh $BOX 'p=$(cat ~/project/onlykey/standin.pid 2>/dev/null) && kill "$p" 2>/dev/null && echo "the stand-in server (pid $p) ended - the next app start brings it back on this lib"' </dev/null || true
 esac
