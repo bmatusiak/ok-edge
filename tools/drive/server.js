@@ -262,10 +262,17 @@ function pressWhenAsked(app) {
    * the nametag's sheet ("[press] key waits") is raised at Save, a press 1 s later landed before the certify reached the key,
    * and the key waited out its 30 s.
    */
+  /*
+   * ...A PLAIN PRESS, not a code (box desktop, 2026-11-03, the login after a restore: the login's "buttons any" was raised as
+   * the sign began, and the sign's "press asked ... - code 6 3 5" was taken as its press being on the key - the drive
+   * waited 25 s for an Edge press with the code's digits held behind it, and the key gave up). A code's ask, a press done or
+   * the request's end: no plain press waits. As the app ranks them (src/hostChallenge.ts: a code outranks a screen's ask).
+   */
+  const PLAIN_ASKED = /^\[request\] press asked: .* - a press$/;
   let asked = false;
   app.on('log', (l) => {
-    if (/^\[request\] press asked: /.test(l)) asked = true;
-    else if (/^\[request\] press done: /.test(l)) asked = false;
+    if (PLAIN_ASKED.test(l)) asked = true;
+    else if (/^\[request\] press (asked|done): |^\[timeline\] \d+ end #\d+ /.test(l)) asked = false;
   });
   app.on('log', async (l) => {
     const tl = /^\[timeline\] \d+ (begin|end) #(\d+)/.exec(l);
@@ -376,7 +383,8 @@ function pressWhenAsked(app) {
       if (outside[2] === 'any' && app.shell !== 'webapp' && !asked) {
         const onKey = await new Promise((ok) => {
           const t = setTimeout(() => { app.off('log', on); ok(false); }, ASKED_MS);
-          function on(x) { if (/^\[request\] press asked: /.test(x)) { clearTimeout(t); app.off('log', on); ok(true); } }
+          /* a plain press's ask only (src/requestLog.ts: " - a press"); a code's is its own "key waits", pressed as given */
+          function on(x) { if (PLAIN_ASKED.test(x)) { clearTimeout(t); app.off('log', on); ok(true); } }
           app.on('log', on);
         });
         if (!onKey) { declined(app, `not pressed: ${outside[1]} - the lib never said the request reached the key`); return; }
