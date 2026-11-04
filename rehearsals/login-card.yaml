@@ -7,6 +7,12 @@ tags:
   - card
 ---
 - runScript: scripts/require-test-key.js
+# a finished sheet over it (the budget whose Approve was off, ended): closed first
+- runFlow:
+    when:
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
 - tapOn: "Make the card"
 - waitForLog:
     pattern: '\[card\] this device''s login card certified at #\d+'
