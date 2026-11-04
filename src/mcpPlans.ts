@@ -26,6 +26,7 @@ import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {loadIdentity} from './edgeIdentity';
 import {openpgpFork} from './pgpOps';
+import {keyTask} from './keyBusy';
 
 /* the plans running here, each with what its runner listens to (its fills and finish) */
 const running = new Map<string, Set<(e: PlanEvent) => void>>();
@@ -79,7 +80,12 @@ async function runOne(plan: Plan): Promise<void> {
         },
       }),
     };
-    const end = await planLib.runPlan({
+    /*
+     * THE PLAN'S OWN KEY WORK SAYS WHOSE IT IS (box, 2026-11-04: the budget client's first reads showed "Working with
+     * your key" with no reason): a weak task - its reads, signs and receipts are said as the agent's plan, and any other
+     * named work keeps its own name
+     */
+    const end = await keyTask(`${plan.agent.name}'s plan "${plan.title}"`, () => planLib.runPlan({
       plan,
       client: clientLib.createEdgeClient({edge: app.edge, channel}),
       signers: planLib.planSigners({okcrypto: app.okcrypto, openpgp: openpgpFork(), identity: () => loadIdentity()}),
@@ -98,7 +104,7 @@ async function runOne(plan: Plan): Promise<void> {
         return () => { listeners.delete(l); };
       },
       log: say,
-    });
+    }), {weak: true});
     if (!claimed) say(`plan ${plan.id}: ${end} - not run here`);
   } catch (e) {
     say(`plan ${plan.id}: not run - ${String((e as Error)?.message ?? e)}`);
