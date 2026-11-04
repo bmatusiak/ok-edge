@@ -1,0 +1,25 @@
+# LOGGED IN AGAIN AFTER THE KEY LOCKED ITSELF (Brad, 2026-11-03, red-key on Windows: the key's idle lockout restarted it,
+# and the desktop could not log in - two reads with no answer, a third that failed its transit check - until an unplug
+# and replug; "unplug and plug back in is not a fix"). On the box's gadget (a test key, an emulated hard key on USB):
+# the desktop logged in on it, its lock-after set to MINUTES, nothing done until the key locks and restarts itself, then
+# the login again - which must get in with no unplug. The lock-after is put back at the end.
+#   run.js rehearse --app desktop@box idle-relogin [--env MINUTES=1]
+name: Logging in again after the key locked itself
+tags:
+  - login
+  - idle
+env:
+  MINUTES: "1"
+---
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: gadget
+- stopApp
+- launchApp
+- login: {}
+- runScript: scripts/idle-set.js
+- runScript: scripts/idle-wait.js
+- login: {}
+- runScript: scripts/idle-reset.js
