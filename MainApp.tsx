@@ -554,6 +554,8 @@ function Shell() {
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setDriveFlag('tab', tab), [tab]);
   useEffect(() => setDriveFlag('key', emu.device), [emu.device]);
+  /* config mode as the app holds it (wanted / pre / on / off), for the config-mode rehearsal (rehearsals/config-pin.yaml) */
+  useEffect(() => setDriveFlag('configMode', configMode === WANTED ? 'wanted' : configMode === PRE ? 'pre' : configMode === ON ? 'on' : 'off'), [configMode]);
   /* a hard key's debug console answers (its echo - a test hex only): the drive presses a hard key only when this says so */
   useEffect(() => setDriveFlag('consoleAnswers', keys.backend === 'usb' && emu.canPress === true), [keys.backend, emu.canPress]);
   /*

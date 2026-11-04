@@ -28,6 +28,12 @@ const ROOT = path.resolve(EDGE, '..');
  * "Cannot open ZIP archive okemu-host.js") - launch.js passes the Node that ran it as DRIVE_NODE.
  */
 const NODE = process.env.DRIVE_NODE || process.execPath;
+/*
+ * A BUTTON, AND HOW LONG IT IS HELD (Brad, 2026-11-03: "a rehearsal flow to adjust something with config mode" - config
+ * mode is button 6 held): "6" is a tap, "6:hold" the button's gesture (config mode on 6, lock + restart on 3), "1:press"
+ * its b-profile press - the emulator's own press modes (node-onlykey-emulator lib/press-modes.js), never tick counts.
+ */
+const BUTTON = /^[1-6](:(tap|press|hold))?$/;
 const LOGS = process.env.DRIVE_LOGS || path.join(os.homedir(), 'project/onlykey/logs');
 
 function run(cmd, args) {
@@ -586,8 +592,10 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       async press({ buttons = ['1'], after = null, sinceAge = 0 } = {}) {
         /* the gadget's own press, with the key's word to wait for (2026-11-03: dropped here, the budget's press went early) */
         if (KEY === 'gadget' && gadgetUp) return T.webapp.press({ buttons, after, sinceAge });
-        const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
+        const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).map(String).filter((x) => BUTTON.test(x));
         if (!b.length) b.push('1');
+        /* a hard key is pressed through its debug console's taps (tools/box/hardkey-press.js): no hold there */
+        if (b.some((x) => x.includes(':'))) return `press failed: a hard key's debug console taps only - ${b.join(' ')} needs the gadget`;
         /*
          * NOT BEFORE THE KEY WAITS (box, 2026-11-01: the login budget's press went the moment its sheet showed, before the
          * request was on the key - lost, the login timed out to "Try again"): 800 ms first, as the kit's own Edge tests.
@@ -708,7 +716,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
        */
       async press({ buttons = ['1'], after = null, sinceAge = 0 } = {}) {
         const since = sinceAge ? Date.now() - sinceAge : Date.now();
-        const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).filter((x) => /^[1-6]$/.test(x));
+        const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).map(String).filter((x) => BUTTON.test(x));
         if (!b.length) b.push('1');
         if (KEY === 'gadget') {
           if (!gadgetHost) return 'press failed: the gadget is not held here (start the web app through the drive)';
@@ -734,9 +742,10 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
             how = await gadgetWaits(new RegExp(after), since, 25000);
             if (!how) return `press failed: the gadget did not wait for an Edge press (no /${after}/, no Edge yellow) within 25 s - nothing pressed`;
           }
-          for (const x of b) gadgetHost.press(Number(x), 'tap');
+          for (const x of b) { const [n, mode = 'tap'] = x.split(':'); gadgetHost.press(Number(n), mode); }
           return `pressed ${b.join(' ')} on the gadget soft key${how ? ` (when ${how})` : ''}`;
         }
+        if (b.some((x) => x.includes(':'))) return `press failed: a hard key's debug console taps only - ${b.join(' ')} needs the gadget`;
         /* the held console: its word since this request began (`since`), or the next one; not held: the press tool listens */
         let waitFor = [];
         let said = '';

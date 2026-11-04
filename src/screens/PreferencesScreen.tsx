@@ -9,6 +9,7 @@ import {useActiveKey, useBackend, useKeyName} from '../hooks/KeyContext';
 import {layoutNameForId, rememberLayout} from '../hooks/useKeyboardLayout';
 import * as biometrics from '../biometrics';
 import {SetupScreen} from './SetupScreen';
+import {HardKeySetupScreen} from './HardKeySetupScreen';
 import OkEmu from '../transport/OkEmu';
 import type {EmuSession} from '../hooks/useOkEmu';
 import {FidoGatt} from '../transport/FidoGatt';
@@ -336,6 +337,25 @@ export function PreferencesScreen({
   );
 
 
+  /*
+   * A HARD KEY'S PIN GOES IN ON ITS OWN BUTTONS (box, 2026-11-03, the config-mode rehearsal): SetupScreen collects the
+   * digits on screen and has the key's provision press them - for a hard key that is the debug console's, which a
+   * production key does not have, and it set the PRIMARY PIN whichever was asked (useHardKey.provision took no kind).
+   * The setup tab's way for a hard key (SetupFlowScreen -> HardKeySetupScreen) is this one too: the key's pinStep
+   * bracket with the kind, the person pressing.
+   */
+  if (changing && backend === 'usb') {
+    return (
+      <HardKeySetupScreen
+        kinds={[changing]}
+        onBack={() => setChanging(null)}
+        onDone={() => {
+          setChanging(null);
+          setChanged(true);
+        }}
+      />
+    );
+  }
   if (changing) {
     return (
       <SetupScreen

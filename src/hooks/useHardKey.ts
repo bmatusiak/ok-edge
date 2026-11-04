@@ -557,12 +557,13 @@ export function useHardKey({log}: {log: (level: LogLevel, text: string) => void}
    * finish. See FINDING-provisioning-needs-a-debug-build.md.
    */
   const provision = useCallback(
-    async (pin: string) => {
+    /* the PIN asked for, not always the primary (it set the primary whichever was asked, until 2026-11-03) */
+    async (pin: string, {kind = 'primary'}: {kind?: 'primary' | 'secondary' | 'selfDestruct'} = {}) => {
       if (!capabilities || capabilities.debugConsole !== true) {
         throw new Error(unsupported('set a PIN'));
       }
       const {device: dev} = await getOnlyKey('usb');
-      return dev.setPin(pin);
+      return dev.setPin(pin, {kind});
     },
     [capabilities],
   );

@@ -1,0 +1,44 @@
+# CONFIG MODE WORKS AS INTENDED (Brad, 2026-11-03: "need a rehearsal flow to adjust something with config mode, like 2nd
+# profile pin from 2222222 to 3333333"; "the purpose of this flow is to check config mode works as intended"). On the
+# box's gadget (a test key - an emulated hard key on USB, its second-profile PIN FROM): config mode in, a write only it
+# allows (the second-profile PIN set to TO), out (config-pin-set.yaml checks each); then the write is proven - TO
+# unlocks the key - and, after a login, config mode is off: the PIN panel is closed to writes again.
+# The PIN stays on the key, so FROM is put back when the flow ends, passed or failed (onFlowComplete) - through config
+# mode again.
+#   run.js rehearse --app desktop@box config-pin [--env FROM=2222222 --env TO=3333333]
+name: Config mode works as intended - the second-profile PIN changed and put back
+tags:
+  - config
+  - pin
+env:
+  FROM: "2222222"
+  TO: "3333333"
+onFlowComplete:
+  - runFlow:
+      file: config-pin-set.yaml
+      env:
+        PIN2: ${FROM}
+---
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: gadget
+- stopApp
+- launchApp
+- runFlow:
+    file: config-pin-set.yaml
+    env:
+      PIN2: ${TO}
+# the write took: the new second-profile PIN opens the key - then unplugged and back, locked for the primary PIN
+- runScript:
+    file: scripts/config-pin-check.js
+    env:
+      PIN2: ${TO}
+- unplugKey
+- plugKey
+# out of config mode for good: logged in again, the PIN panel needs config mode once more
+- login: {}
+- goto: Settings
+- tapOn: "Open PIN Setup"
+- assertVisible: "Needs config mode"

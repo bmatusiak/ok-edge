@@ -1,0 +1,61 @@
+# CONFIG MODE, ONE WRITE IN IT (config-pin.yaml runs this twice: the new second-profile PIN, then the old one put back).
+# Every step of config mode as a person goes through it on a hard key, each with its own check:
+#   in      "I will hold button 6", button 6 held -> the key locks itself, and the app KEEPS the key (a config-mode lock is
+#           not a lock that forgets - MainApp's lock rule) and says config mode "pre"
+#   on      the PIN again on the key, "Check config mode" -> the app says config mode "on"
+#   write   a write only config mode allows: the second-profile PIN, PIN2, on the key's own buttons (HardKeySetupScreen)
+#   out     the key unplugged and back - the only way out of config mode - and the app forgets the key as for any unplug
+#           and says config mode "off"
+#   run.js rehearse --app desktop@box config-pin-set --env PIN2=3333333   (on the gadget; config-pin.yaml sets it up)
+name: Config mode - in, one write, out
+tags:
+  - config
+---
+- login: {}
+- goto: Settings
+- tapOn: "Open PIN Setup"
+- tapOn: "I will hold button 6"
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: wanted
+      WHY: the app was told before the hold, so the lock to come is config mode's
+- runScript: scripts/config-hold.js
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: pre
+      WHY: the key locked on its way in; the app waits for the PIN and the check
+- runScript: scripts/config-unlock.js
+- tapOn: "Check config mode"
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: "on"
+      WHY: the key answered the check - the app may write what only config mode allows
+- goto: Settings
+- tapOn: "Open PIN Setup"
+- tapOn: "Change Secondary PIN"
+- tapOn: "Start"
+- runScript:
+    file: scripts/config-pin-press.js
+    env:
+      PASS: first
+- tapOn: "Done - I pressed it"
+- runScript:
+    file: scripts/config-pin-press.js
+    env:
+      PASS: again
+- tapOn: "Done - I pressed it again"
+- assertVisible: "The second-profile PIN is set.*"
+- tapOn: "Continue"
+- unplugKey
+- waitForLog:
+    pattern: '\[identity\] the key went \(unplugged\)'
+    timeout: 20000
+- plugKey
+- runScript:
+    file: scripts/config-expect.js
+    env:
+      WANT: "off"
+      WHY: the key restarted - config mode ended with it, and the app holds none
