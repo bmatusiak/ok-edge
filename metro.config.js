@@ -14,6 +14,13 @@ const WEB_TARGETS = ['webapp', 'desktop'];
 const WEB_TARGET = process.env.OKEDGE_SHELL;
 const OWN = path.join(__dirname, 'src') + path.sep;
 
+/*
+ * WHAT THE APP IS AND WHAT IT USES (src/generated/about.json, tools/legal/gen-about.js): the Log in page's panel and the
+ * Legal page read it. Written here because every bundle - the desktop, the web app, the phone, a dev server - loads this
+ * file first; it is rewritten only when it changed.
+ */
+require('./tools/legal/gen-about.js')();
+
 const config = getDefaultConfig(__dirname);
 const workspace = path.resolve(__dirname, '..');
 

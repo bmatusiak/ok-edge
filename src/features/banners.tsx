@@ -69,7 +69,8 @@ export const testBuildBanner = bannerPlugin({
  */
 export const unofficialBanner = bannerPlugin({
   name: 'unofficial', order: 30,
-  render: () => (appSignature.unofficial ? <Line color={theme.error}>UNOFFICIAL RELEASE - this app is not signed with the OnlyKey release key</Line> : null),
+  /* the desktop and the web app have no official signing at all (src/appSignature.ts): theirs says so plainly */
+  render: () => (appSignature.unofficial ? <Line color={theme.error}>{appSignature.sha256 ? 'UNOFFICIAL RELEASE - this app is not signed with the OnlyKey release key' : 'UNOFFICIAL RELEASE - not an official OnlyKey release'}</Line> : null),
 });
 
 /*

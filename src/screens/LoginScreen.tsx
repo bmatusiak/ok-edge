@@ -8,6 +8,8 @@ import {buildInfo} from '../buildInfo';
 import NativeOkSsl from 'okedge-native/specs/NativeOkSsl';
 import type {DeviceState} from '../hooks/useOkEmu';
 import {DownloadsPage} from './DownloadsPage';
+import {LegalPage} from './LegalPage';
+import {about} from '../about';
 import {BROWSER_PAGE, KEY_OVER_WEBAUTHN} from '../platform';
 
 /**
@@ -68,7 +70,13 @@ export function LoginScreen({
 
   /* the web app's Downloads page (DownloadsPage.tsx): the app and the firmware, opened from here and back */
   const [downloads, setDownloads] = useState(false);
+  /* the Legal page (LegalPage.tsx): licenses, contributors, the source - every shell */
+  const [legal, setLegal] = useState(false);
   if (downloads) return <DownloadsPage onBack={() => setDownloads(false)} />;
+  if (legal) return <LegalPage onBack={() => setLegal(false)} />;
+  /* version and short commit, from the build's own record (src/about.ts); the commit is left out when the build had none */
+  const appLine = [about?.app.version ?? buildInfo.app, about?.app.commit || buildInfo.appCommit].filter(Boolean).join(' · ');
+  const libraryLine = [about?.library.version ?? buildInfo.library, about?.library.commit || buildInfo.libraryCommit].filter(Boolean).join(' · ');
 
   return (
     <View style={styles.root}>
@@ -82,32 +90,32 @@ export function LoginScreen({
          * must allow (this host - the WebAuthn rpId), how the page reaches it, and which library and app build this is.
          */
         <View style={styles.versions}>
+          <Row label="app" value={appLine} />
+          <Row label="library" value={libraryLine} />
           <Row label="key" value={keyVersion || 'asked when you log in'} />
           <Row label="site" value={location.host} />
           <Row label="connection" value="WebAuthn (this browser)" />
-          <Row label="library" value={[buildInfo.library, buildInfo.libraryCommit].filter(Boolean).join(' · ')} />
-          <Row label="app" value={[buildInfo.app, buildInfo.appCommit].filter(Boolean).join(' · ')} />
         </View>
       ) : (
+      /*
+       * THE APP AND WHAT IT USES (Brad, 2026-11-04: "dont need to describe the softkey on the login page, thats what
+       * the This Key tab's job is - App version and short-hash, lib version and hash, stuff about the app and what it
+       * uses"): the soft key's build is This Key's, not this panel's.
+       */
       <View style={styles.versions}>
-        <Row label="firmware" value={buildInfo.firmware} />
-        {buildInfo.sources ? <Row label="sources" value={buildInfo.sources} /> : null}
-        <Row label="built for" value={buildInfo.builtFor} />
-        <Row label="library" value={buildInfo.library} />
+        <Row label="app" value={appLine} />
+        <Row label="library" value={libraryLine} />
         {openssl ? <Row label="openssl" value={openssl} /> : null}
-        {/* A plugin build is not the soft key everyone else has (android/okemu/plugins/). */}
-        {buildInfo.plugins.length ? <Row label="plugins" value={buildInfo.plugins.join(', ')} /> : null}
-        <Row label="app" value={buildInfo.app} />
       </View>
       )}
 
       {/*
         * A HARD KEY BEING PRESENT IS NOT VISIBLE ANYWHERE ELSE ON THIS SCREEN.
         *
-        * Everything in the card above comes from `buildInfo` - the soft key's
-        * staged firmware, baked in at build time - so it reads exactly the same
-        * with a key plugged in as without, and describes the emulator either
-        * way. Attachment is the one fact here that the device gets a say in.
+        * Everything in the card above is the app's own - its build and its
+        * library, baked in at build time - so it reads exactly the same with a
+        * key plugged in as without. Attachment is the one fact here that the
+        * device gets a say in.
         *
         * `attached` is tri-state: null means USB has not answered yet, which is
         * not the same as nothing being there, so only `true` says anything.
@@ -156,7 +164,10 @@ export function LoginScreen({
         */}
       <View style={styles.devFooter}>
         {/* the web app: what it publishes - its source code, the firmware for a developer key, the Android app, the command line (DownloadsPage.tsx) */}
-        {BROWSER_PAGE ? <Btn title="Downloads" onPress={() => setDownloads(true)} /> : null}
+        <View style={styles.footRow}>
+          {BROWSER_PAGE ? <Btn title="Downloads" onPress={() => setDownloads(true)} /> : null}
+          <Btn title="Legal" onPress={() => setLegal(true)} />
+        </View>
         {__DEV__ && onTesting ? (
           <View style={styles.devFooterInner}>
             <Btn title="Enter testing mode" onPress={onTesting} disabled={picked === 'live'} />
@@ -171,9 +182,8 @@ function Row({label, value}: {label: string; value: string}) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={1}>
-        {value}
-      </Text>
+      {/* wraps, never cut off (Brad, 2026-11-04: the plugins line was truncated) */}
+      <Text style={styles.rowValue}>{value}</Text>
     </View>
   );
 }
@@ -191,9 +201,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
-  row: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6},
+  row: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, gap: 12},
   rowLabel: {color: theme.textDim, fontSize: 12},
-  rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1},
+  rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1, textAlign: 'right'},
+  footRow: {flexDirection: 'row', gap: 12, justifyContent: 'center'},
   attached: {
     marginTop: 12,
     color: theme.textSecondary,
