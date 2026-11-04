@@ -568,6 +568,13 @@ const recentOf = (tab) => { const a = [...everyApp].find((x) => tabName(x) === t
  * in every window held the run's end until the last was written).
  */
 function driveFor(app, say, answer = () => {}, run = null) {
+  /*
+   * WHICH MACHINE THIS APP IS ON, DECIDED ONCE, WHEN IT IS PICKED (2026-11-04: `rebuild --app desktop` asked Brad's
+   * Windows app to quit - the plain name is this machine's app - and then stopped, built and started the BOX's): the
+   * test read the app's live connection, which the quit had just closed, so "not connected here" read as "a remote's".
+   * Named @windows/@local/@here, or connected straight to this server: this machine's, for the whole run.
+   */
+  const onThisMachine = HERE_WORDS.includes(app.where) || (!app.where && !!app.ws && !app.ws.via);
   const lastLines = [];
   const remember = (l) => { lastLines.push(l); if (lastLines.length > 8) lastLines.shift(); };
   app.on('log', remember);
@@ -727,7 +734,7 @@ function driveFor(app, say, answer = () => {}, run = null) {
      * @windows/@local/@here, or connected straight to this server (no drive-remote between), is started and stopped
      * here - with remotes given, proc alone sends every target to the remote that has it.
      */
-    const here = target === app.shell && (HERE_WORDS.includes(app.where) || (!app.where && !!app.ws && !app.ws.via));
+    const here = target === app.shell && onThisMachine;
     const r = here ? { ...(await localTargets.act(action, target, {})), where: 'this machine' } : await proc(action, target);
     if (!r.ok) throw failure(`${action} ${target} (${r.where}): ${r.why}`);
     say(`${action} ${target} on ${r.where}: ${r.what}`);
@@ -764,7 +771,7 @@ function driveFor(app, say, answer = () => {}, run = null) {
    */
   const machine = (action, target = app.shell, args = {}) => {
     if (target === app.shell && app.ws) return procFor(app, action, args);
-    if (target === app.shell && HERE_WORDS.includes(app.where)) return localTargets.act(action, target, args).then((r) => ({ ...r, where: 'this machine' }));
+    if (target === app.shell && onThisMachine) return localTargets.act(action, target, args).then((r) => ({ ...r, where: 'this machine' }));
     return proc(action, target, args);
   };
   /* every machine at once - this one and each connected remote (run.js doctor) */
