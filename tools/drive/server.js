@@ -441,12 +441,22 @@ function pressWhenAsked(app) {
          */
         let r;
         if (buttons.length > 1) {
+          /* listened for from before the press; its FIRST_DIGIT_MS counted from when the key has taken the button (a gadget press returns then) */
+          let startClock;
+          const clockStarted = new Promise((s) => { startClock = s; });
           const answered = new Promise((ok) => {
-            const t = setTimeout(() => { app.off('log', on); ok(false); }, FIRST_DIGIT_MS);
-            function on(x) { if (/^\[request\] press done: /.test(x)) { clearTimeout(t); app.off('log', on); ok(true); } }
+            let t = null;
+            void clockStarted.then(() => { t = setTimeout(() => { app.off('log', on); ok(false); }, FIRST_DIGIT_MS); });
+            /*
+             * ...or the request's own end (box, 2026-11-03, after a restore: a derive took its first button - a derive says
+             * no "press done" - so its other two went as strays onto the login's next request, a sign that wanted its code,
+             * and it timed out). Any end of the request means the key answered.
+             */
+            function on(x) { if (/^\[request\] press done: |^\[timeline\] \d+ end #\d+ /.test(x)) { if (t) clearTimeout(t); app.off('log', on); ok(true); } }
             app.on('log', on);
           });
           r = await procFor(app, 'press', { buttons: [buttons[0]], after, sinceAge });
+          startClock();
           if (r.ok && await answered) r = { ...r, what: `${r.what} - the key answered its first button: a plain press, not the code` };
           else if (r.ok) {
             const rest = await procFor(app, 'press', { buttons: buttons.slice(1) });

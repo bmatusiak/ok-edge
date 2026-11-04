@@ -1,9 +1,10 @@
 # A BACKUP RESTORED IN CONFIG MODE (Brad, 2026-11-03: "do a restore of a backup from settings => backup/restore, because
 # that's the most common used feature in config mode"). Settings -> Backup/Restore in config mode: the backup pasted in
 # (the drive fills it from a file on the app's machine - never seen or logged), "Read this file" checks it, its
-# passphrase, Restore -> "Restored N bytes". Out of config mode, logged in again: the key is the backup's identity.
-# The box's gadget restores its own testnet backup (the Pixel testnet key's, identity 9da6d2e711b9 - the gadget holds
-# the same), so the key ends as it began. BACKUP / PASSFILE: files on the app's machine.
+# passphrase, Restore -> "Restored N bytes". Out of config mode, logged in again: the same identity as before it.
+# The box's gadget restores its own testnet backup - the scratch testnet backup, identity 60da8605... (the gadget holds
+# it since the first restore, 2026-11-03 22:05; the Pixel moved on to 9da6d2e711b9) - so the key ends as it began.
+# BACKUP / PASSFILE: files on the app's machine.
 #   run.js rehearse --app desktop@box config-restore
 name: A backup restored in config mode
 tags:
@@ -12,7 +13,6 @@ tags:
 env:
   BACKUP: /home/bmatusiak/project/onlykey/scratch/pixel-testnet-backup.txt
   PASSFILE: /home/bmatusiak/project/onlykey/scratch/testnet-backup-passphrase.txt
-  IDENTITY: 9da6d2e711b9
 ---
 # the gadget held by this machine's drive (its presses, its LED), and restarted first: out of config mode, whatever a run before left
 - machine:
@@ -24,6 +24,12 @@ env:
 - plugKey
 - stopApp
 - launchApp
+# which key it is before: the login's own identity line
+- login: {}
+- waitForLog:
+    pattern: '\[identity\] [0-9a-f]{12}:'
+    as: identityBefore
+    timeout: 60000
 - runFlow:
     file: config-in.yaml
     env:
@@ -44,5 +50,7 @@ env:
 # the key reloaded what it now holds: logged in again, it is the backup's identity
 - login: {}
 - waitForLog:
-    pattern: '\[identity\] ${IDENTITY}'
+    pattern: '\[identity\] [0-9a-f]{12}:'
+    as: identityAfter
     timeout: 60000
+- runScript: scripts/config-same-identity.js
