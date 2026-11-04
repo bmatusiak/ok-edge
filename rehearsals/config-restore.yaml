@@ -14,6 +14,16 @@ env:
   PASSFILE: /home/bmatusiak/project/onlykey/scratch/testnet-backup-passphrase.txt
   IDENTITY: 9da6d2e711b9
 ---
+# the gadget held by this machine's drive (its presses, its LED), and restarted first: out of config mode, whatever a run before left
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: gadget
+- unplugKey
+- plugKey
+- stopApp
+- launchApp
 - runFlow:
     file: config-in.yaml
     env:
