@@ -21,4 +21,6 @@ env:
     timeout: 120000
 - tapOn: "Approve"
 - runScript: scripts/card-end.js
+# the card's sheet says it was certified and stays until closed (as any done sheet)
+- tapOn: "Close"
 - runFlow: ship.yaml
