@@ -139,6 +139,18 @@ export function forgetIdentities(): void {
  * state, if i unplug, it suppose to clear the identity").
  */
 type Forgotten = {backend: Backend; why: string | null};
+
+/*
+ * THE KEY'S STATE, ONE PLACE (Brad, 2026-11-03: "store the state in that plugin, so it's 1 place to clear"): the identity
+ * plugin's in-memory store (lib plugins/identity identity.store - getItem / setItem / removeItem / keys / clear) of the
+ * key the app is on now, or null before its session is up. Per-key values live here, never in a module; the plugin
+ * empties it when the key is forgotten (a lock, an unplug, the Log in page), and each name held or cleared is logged.
+ */
+export type KeyStore = {getItem(k: string): any; setItem(k: string, v: unknown): void; removeItem(k: string): void; keys(): string[]; clear(): void};
+const stores = new Map<Backend, KeyStore>();
+export function keyStore(backend: Backend = require('./hooks/KeyContext').activeBackend()): KeyStore | null {
+  return stores.get(backend) ?? null;
+}
 const forgottenListeners = new Set<(e: Forgotten) => void>();
 export function onIdentityForgotten(listener: (e: Forgotten) => void): () => void {
   forgottenListeners.add(listener);
@@ -245,6 +257,11 @@ export function getOnlyKey(backend: Backend = 'embedded'): Promise<OnlyKeyApp> {
       started.services.identity?.on?.('forgotten', (why: string | null) => {
         for (const l of [...forgottenListeners]) { try { l({backend, why}); } catch { /* a listener's error is not the key's */ } }
       });
+      /* WHAT HOLDS THIS KEY'S STATE, SEEN (Brad, 2026-11-03: "then we can see what is using the state and it makes it debuggable") - names only */
+      started.services.identity?.on?.('store', (e: {op: 'add' | 'remove' | 'clear'; key?: string; keys?: string[]; why?: string | null}) => {
+        console.log(`[identity] store (${backend}): ${e.op === 'add' ? `+ ${e.key}` : e.op === 'remove' ? `- ${e.key}` : `cleared (${e.why}): ${(e.keys ?? []).join(', ')}`}`);
+      });
+      if (started.services.identity?.store) stores.set(backend, started.services.identity.store);
       resolve({
         device: started.services.device,
         okcrypto: started.services.okcrypto,
@@ -277,6 +294,8 @@ export async function resetOnlyKey(backend?: Backend, why?: string): Promise<voi
   for (const target of targets) {
     const pending = booting.get(target);
     booting.delete(target);
+    /* its store goes with its session (the plugin empties it on the forget below): keyStore() never hands back the old one */
+    stores.delete(target);
     if (!pending) {
       continue;
     }
