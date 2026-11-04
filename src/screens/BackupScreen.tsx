@@ -14,6 +14,7 @@ import {summarizeBackup} from '../backupFile';
 import type {BackupSummary} from '../backupFile';
 import type {EmuSession} from '../hooks/useOkEmu';
 import {DEVICE_WORD, SHOW_SCROLLBARS} from '../platform';
+import {useDriveField} from '../drive/registry';
 
 /*
  * Backup and restore.
@@ -149,6 +150,22 @@ export function BackupScreen({
    * `canPress` is the debug-console probe; a production key answers no.
    */
   const canTrigger = emu.canPress === true;
+
+  /*
+   * THE RESTORE'S TWO FIELDS, FILLABLE BY THE DRIVE (box, 2026-11-03, the config-mode restore rehearsal - Brad: "do a
+   * restore of a backup from settings => backup/restore"): the same as typing them - the Setup tab's restore has the
+   * same two (SetupScreen.tsx). Development builds only (driveGate).
+   */
+  useDriveField('-----BEGIN ONLYKEY BACKUP-----', t => {
+    setRestoreText(t);
+    setRestoreFrom(null);
+    setChecked(null);
+    setAmbiguous(false);
+  });
+  useDriveField('backup passphrase (optional)', t => {
+    setRestorePassphrase(t);
+    setAmbiguous(false);
+  });
 
   /* A staged backup must not outlive the screen that made it. */
   useEffect(() => () => { void NativeShare.clearShared().catch(() => {}); }, []);
