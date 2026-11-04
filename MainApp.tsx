@@ -1004,7 +1004,12 @@ function Shell() {
             /* a blank key: the setup flow - which key (the only place it is chosen), then its PIN (SetupFlowScreen) */
             <SetupFlowScreen keys={keys} onDone={() => setPhase('login')} onBack={() => setPhase('login')} />
           ) : phase === 'identity' ? (
-            <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => { setPassed(true); setPhase('main'); }} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
+            /* the login lands on Edge when this key has it (Brad, 2026-11-04: "i want Edge tab to be the landing page after login flow") - a restart you asked for still brings back its own tab (resumeTab, after this) */
+            <IdentityCheckScreen key={doorKey} keyName={keys.backend === 'usb' ? 'Hard Key' : 'Soft Key'} onContinue={() => {
+              setPassed(true);
+              setPhase('main');
+              if (shownTabs({testing: testing.enabled, testingLocked: false, keyHasEdge, keyBlank}).some(x => x.name === 'Edge')) setTab('Edge');
+            }} onPress={keys.backend === 'embedded' ? () => void emu.press(1) : undefined} />
           ) : phase === 'pin' ? (
             <PinScreen
               onBypass={keys.backend === 'embedded' && keys.soft.state === 'running' ? () => void devLogin() : undefined}

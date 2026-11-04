@@ -86,11 +86,12 @@ export function tabPlugin(tab: AppTab, watch?: AppWatch) {
  * - Preferences holds what can be changed back, Advanced what cannot (the library's `oneWay` flag decides). The desktop
  *   keeps both in its Preferences; this is the one deliberate difference.
  *
- * EDGE SECOND, SETTINGS LAST (Brad, 2026-10-11: "Settings Tab,, should be at the Bottom, in the list of tabs,, and Edge
- * should be 2nd"); the rest in the order the drawer always had. Plugin tabs place themselves `after` one of these.
+ * EDGE FIRST, SETTINGS LAST (Brad, 2026-10-11: "Settings Tab,, should be at the Bottom, in the list of tabs"; 2026-11-04:
+ * "move the ordering of main menu tabs list, so edge is at the top" - it was 2nd); the rest in the order the drawer
+ * always had. Plugin tabs place themselves `after` one of these.
  */
 const ORDER = {
-  'This Key': 10, Setup: 10, Edge: 20, 'PIN Setup': 30, 'Encrypt/Decrypt': 40, Encrypt: 41, Decrypt: 42, Slots: 50, 'Key Chain': 60,
+  Edge: 5, 'This Key': 10, Setup: 10, 'PIN Setup': 30, 'Encrypt/Decrypt': 40, Encrypt: 41, Decrypt: 42, Slots: 50, 'Key Chain': 60,
   Keys: 70, Passkeys: 80, 'Backup/Restore': 90, Firmware: 100, Preferences: 110, Bluetooth: 120, Sync: 130, Activity: 140,
   Advanced: 150, Log: 160, 'In-Development': 900, Testing: 910, Settings: 1000,
 } as const;
