@@ -164,10 +164,9 @@ export function LoginScreen({
         */}
       <View style={styles.devFooter}>
         {/* the web app: what it publishes - its source code, the firmware for a developer key, the Android app, the command line (DownloadsPage.tsx) */}
-        <View style={styles.footRow}>
-          {BROWSER_PAGE ? <Btn title="Downloads" onPress={() => setDownloads(true)} /> : null}
-          <Btn title="Legal" onPress={() => setLegal(true)} />
-        </View>
+        {/* each as wide as Enter testing mode (Brad, 2026-11-04) */}
+        {BROWSER_PAGE ? <View style={styles.devFooterInner}><Btn title="Downloads" onPress={() => setDownloads(true)} /></View> : null}
+        <View style={styles.devFooterInner}><Btn title="Legal" onPress={() => setLegal(true)} /></View>
         {__DEV__ && onTesting ? (
           <View style={styles.devFooterInner}>
             <Btn title="Enter testing mode" onPress={onTesting} disabled={picked === 'live'} />
@@ -203,9 +202,7 @@ const styles = StyleSheet.create({
   },
   row: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, gap: 12},
   rowLabel: {color: theme.textDim, fontSize: 12},
-  rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1, textAlign: 'right'},
-  footRow: {flexDirection: 'row', gap: 12, justifyContent: 'center'},
-  attached: {
+  rowValue: {color: theme.textSecondary, fontSize: 12, fontFamily: theme.mono, flexShrink: 1, textAlign: 'right'},  attached: {
     marginTop: 12,
     color: theme.textSecondary,
     fontSize: 12,

@@ -1,0 +1,15 @@
+# THE LEGAL PAGE, FROM THE LOG IN PAGE (Brad, 2026-11-04: "a legal button that opens a legal page that shows licences,
+# contributors and stuff"): Legal opens it, its sections and the firmware's required acknowledgment are there, a long
+# text opens on a tap, and Back returns to Log in.
+#   run.js rehearse --app desktop@box legal
+name: The Legal page
+tags:
+  - login
+---
+- tapOn: "Legal"
+- assertVisible: "Contributors"
+- assertVisible: "This product includes software developed by CryptoTrust LLC.*"
+- tapOn: "Show its license"
+- assertVisible: "Hide its license"
+- tapOn: "‹ Back"
+- assertVisible: "Log in"
