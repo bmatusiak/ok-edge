@@ -1157,6 +1157,23 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (action === 'health') return { ok: true, what: await health[target]() };
       if (action === 'bt-capture') return btCapture();
       if (action === 'use-key') return { ok: true, what: await useKey(args.key, line, (l) => out('webapp', l)) };
+      /*
+       * THE GADGET UNPLUGGED AND PLUGGED BACK (box, 2026-11-03, the config-mode rehearsal: config mode ends only when the
+       * key restarts, and the drive could unplug only the Pi relay key): its soft key stopped - off the USB, its firmware
+       * gone as with the power - then started again, booting locked. A flow's unplugKey / plugKey (maestro/runner.js).
+       */
+      if ((action === 'unplug' || action === 'plug') && KEY === 'gadget' && LINUX) {
+        if (action === 'unplug') {
+          gadgetStopping = true;
+          const r = [];
+          if (gadgetChild && !exited(gadgetChild)) r.push(await stopChild(gadgetChild, line, 'gadget'));
+          const left = gadgetElsewhere();
+          if (left.length) r.push(await endPids(left, line, 'gadget'));
+          return { ok: true, what: `the gadget unplugged (its soft key stopped${r.length ? `: ${r.join(', ')}` : ''})` };
+        }
+        const held = holdGadget((l) => out('webapp', l));
+        return { ok: true, what: `the gadget plugged back: ${gadget()}${held ? ` - ${held}` : ''}` };
+      }
       if (action === 'keys') return { ok: true, what: JSON.stringify(await keysOnUsb()) };
       if (action === 'build') return build[target] ? build[target]() : { ok: false, why: `no build for ${target}` };
       if (action === 'cli') return cli(args.argv || []);
