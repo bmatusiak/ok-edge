@@ -32,6 +32,12 @@ onFlowComplete:
 - plugKey
 - stopApp
 - launchApp
+# which key it is before: the login's own identity line
+- login: {}
+- waitForLog:
+    pattern: '\[identity\] [0-9a-f]{12}:'
+    as: identityBefore
+    timeout: 60000
 - runFlow:
     file: config-pin-set.yaml
     env:
@@ -43,8 +49,17 @@ onFlowComplete:
       PIN2: ${TO}
 - unplugKey
 - plugKey
-# out of config mode for good: logged in again, the PIN panel needs config mode once more
+# out of config mode for good: logged in again - the same key (patch 0018: before it, the primary profile came back as
+# another key with its FIDO2 blocked) - and the PIN panel needs config mode once more
 - login: {}
+- waitForLog:
+    pattern: '\[identity\] [0-9a-f]{12}:'
+    as: identityAfter
+    timeout: 60000
+- runScript:
+    file: scripts/config-same-identity.js
+    env:
+      WHAT: the second-profile PIN set in config mode
 - goto: Settings
 - tapOn: "Open PIN Setup"
 - assertVisible: "Needs config mode"
