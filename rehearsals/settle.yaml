@@ -11,7 +11,12 @@ tags:
 - login: {}
 - goto: Edge
 - tapOn: "Budgets"
-- tapOn: "Open budget ${BUDGET}"
+# the budget's detail holds Settle - unless the tab shows it already (a debt its copy holds no budget for)
+- runFlow:
+    when:
+      notVisible: "Settle…"
+    commands:
+      - tapOn: "Open budget ${BUDGET}"
 - tapOn: "Settle…"
 - tapOn: "Yes, settle"
 - waitForLog:
