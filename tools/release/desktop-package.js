@@ -105,7 +105,7 @@ fs.writeFileSync(path.join(APP, 'package.json'), JSON.stringify({
   name: 'ok-edge',
   productName: 'ok-edge',
   version: VERSION,
-  description: 'OnlyKey Edge - the desktop app',
+  description: 'ok-edge - an unofficial R&D version, the desktop app',
   main: 'electron/main.js',
   private: true,
   /* the noble fork is not optional: npm drops everything that is optional only through a failed module (onlykey-js's

@@ -61,11 +61,11 @@ function about() {
   const lib = fs.existsSync(path.join(libDir, 'package.json')) ? json(path.join(libDir, 'package.json')) : {};
   const pin = (/#([0-9a-f]{7,40})$/.exec(String(pkg.dependencies?.['node-onlykey-lib'] ?? '')) || [])[1] || '';
   return {
-    app: { name: 'OnlyKey Edge', version: String(pkg.version), commit: commit(), license: pkg.license || 'not stated', notice: read('NOTICE').trim() },
+    app: { name: 'ok-edge', version: String(pkg.version), commit: commit(), license: pkg.license || 'not stated', notice: read('NOTICE').trim() },
     library: { name: 'node-onlykey-lib', version: String(lib.version || 'unknown'), commit: pin.slice(0, 7), license: licenseOf(lib) },
     contributors: read('CONTRIBUTORS').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#')),
     source: [
-      { what: 'OnlyKey Edge', where: 'https://github.com/bmatusiak/ok-edge' },
+      { what: 'ok-edge', where: 'https://github.com/bmatusiak/ok-edge' },
       { what: 'node-onlykey-lib', where: 'https://github.com/bmatusiak/node-onlykey-lib' },
       { what: 'The soft key (the OnlyKey firmware run in the app) and its patches', where: 'https://github.com/bm-ok/node-onlykey-emulator' },
       { what: 'The OnlyKey firmware', where: 'https://github.com/trustcrypto/OnlyKey-Firmware' },

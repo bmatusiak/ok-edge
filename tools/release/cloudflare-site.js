@@ -58,7 +58,7 @@ const wrangler = (JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'u
 fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify({
   name: 'ok-edge-site',
   private: true,
-  description: 'The built OnlyKey Edge site (release workflow output) - deploy with npx wrangler deploy; nothing here is built',
+  description: 'The built ok-edge site (an unofficial R&D version) (release workflow output) - deploy with npx wrangler deploy; nothing here is built',
   devDependencies: wrangler ? { wrangler } : {},
 }, null, 2)}\n`);
 fs.writeFileSync(path.join(out, 'README.md'), [
