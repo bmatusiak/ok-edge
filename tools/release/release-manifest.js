@@ -14,17 +14,21 @@
  * A part whose soft key carries other fixes than the firmware record is refused: nothing is published from it.
  *
  *   node tools/release/release-manifest.js --artifacts <dir> --site <dir> --repo <owner/name> --tag <tag>
- *     --version <x.y.z> --code <n> --commit <sha> --run <id>
+ *     --version <x.y.z> --code <n> --commit <sha> --run <id> --kind <prerelease|release>
+ * A pre-release's manifest goes to the cloudflare-pre-release site and names itself so (kind); the published site's
+ * names releases only.
  */
 const fs = require('fs');
 const path = require('path');
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
-const need = ['--artifacts', '--site', '--repo', '--tag', '--version', '--code', '--commit', '--run'];
+const need = ['--artifacts', '--site', '--repo', '--tag', '--version', '--code', '--commit', '--run', '--kind'];
 const missing = need.filter((k) => !opt(k));
 if (missing.length) { console.error(`release-manifest: missing ${missing.join(' ')}`); process.exit(1); }
 const fail = (why) => { console.error(`release-manifest: ${why}`); process.exit(1); };
+const KIND = opt('--kind');
+if (!['prerelease', 'release'].includes(KIND)) fail(`--kind ${KIND}: prerelease or release`);
 const ART = path.resolve(opt('--artifacts'));
 const SITE = path.resolve(opt('--site'));
 const json = (...p) => { const f = path.join(...p); if (!fs.existsSync(f)) fail(`no ${path.relative(process.cwd(), f)}`); return JSON.parse(fs.readFileSync(f, 'utf8')); };
@@ -69,6 +73,7 @@ const release = {
   name: 'ok-edge',
   note: 'an unofficial research and development version - not an official OnlyKey product',
   published: true,
+  kind: KIND,
   version: opt('--version'),
   code: Number(opt('--code')),
   tag: opt('--tag'),
@@ -85,8 +90,9 @@ fs.writeFileSync(path.join(SITE, 'docs', 'release.json'), `${JSON.stringify(rele
 const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
 const row = (what, a) => `| ${what} | [${a.file}](${a.url}) | ${mb(a.size)} | \`${a.sha256}\` |`;
 const readme = [
-  `# ok-edge ${release.version} (${release.tag})`,
+  `# ok-edge ${release.version} (${release.tag})${KIND === 'prerelease' ? ' - a pre-release' : ''}`,
   '',
+  ...(KIND === 'prerelease' ? ['A pre-release, for testers: the published releases are on the `cloudflare` branch and the published site.', ''] : []),
   `${release.note}. Built by the release workflow (run ${release.run}) from \`${release.commit.slice(0, 7)}\` on ${release.publishedAt.slice(0, 10)}.`,
   `The release: ${release.releaseUrl}. Everything below is \`docs/release.json\`, which the site serves at \`/release.json\`.`,
   '',

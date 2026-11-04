@@ -10,7 +10,10 @@
  * bundling. `npx wrangler deploy` in that folder deploys exactly what the workflow built - the workflow runs it when the
  * repo has a CLOUDFLARE_API_TOKEN secret; otherwise the branch is the record of the release and is deployed by hand.
  *
- *   node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir>
+ *   node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir> [--kind build|prerelease|release]
+ *
+ * A pre-release's site goes to the cloudflare-pre-release branch as a Worker of its own (<name>-pre-release, its own
+ * rooms): Brad, 2026-11-04, the published site takes releases only - so its branch can never deploy over that Worker.
  *
  * The bindings (the Durable Object rooms, the assets' single-page fallback, /ws/* to the Worker first) are main's
  * wrangler.jsonc, so the deployed site cannot drift from the one `wrangler dev` runs locally.
@@ -23,8 +26,9 @@ const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : nu
 const docs = opt('--docs');
 const worker = opt('--worker');
 const out = opt('--out');
-if (!docs || !worker || !out) {
-  console.error('usage: node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir>');
+const kind = opt('--kind') || 'build';
+if (!docs || !worker || !out || !['build', 'prerelease', 'release'].includes(kind)) {
+  console.error('usage: node tools/release/cloudflare-site.js --docs <dir> --worker <dir> --out <dir> [--kind build|prerelease|release]');
   process.exit(1);
 }
 const root = path.join(__dirname, '..', '..');
@@ -34,6 +38,7 @@ const jsonc = fs.readFileSync(path.join(root, 'wrangler.jsonc'), 'utf8');
 const config = JSON.parse(jsonc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, ''));
 delete config.$schema;
 delete config.build;
+if (kind === 'prerelease') config.name = `${config.name}-pre-release`;
 /* wrangler names its bundle after the entry (mcp-server/src/cloudflare/worker.js -> worker.js) */
 const bundled = path.basename(config.main);
 config.main = 'worker/index.js';
@@ -60,4 +65,4 @@ fs.writeFileSync(path.join(out, 'package.json'), `${JSON.stringify({
   devDependencies: wrangler ? { wrangler } : {},
 }, null, 2)}\n`);
 /* the branch's README is the release manifest's (tools/release/release-manifest.js, at publish): one writer */
-console.log(`cloudflare-site: ${out} - docs/, worker/index.js, wrangler.json (main ${config.main}, wrangler ${wrangler || '?'})`);
+console.log(`cloudflare-site: ${out} - docs/, worker/index.js, wrangler.json (${config.name}, main ${config.main}, wrangler ${wrangler || '?'})`);
