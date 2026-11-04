@@ -75,6 +75,31 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   const {height} = useWindowDimensions();
   const edge = TONE_COLOR[tone];
+  const name = typeof title === 'string' ? title : 'sheet';
+  /*
+   * EVERY SHEET CLOSES WHEN THE KEY'S IDENTITY IS FORGOTTEN - HERE, IN THE ONE SHEET ALL OTHERS ARE BUILT ON (Brad,
+   * 2026-11-04: "all sheets need to close on identity forget"; "a sheet class that gets inherited by the other sheet
+   * types"): red-key locked on Windows with a timed-out budget sheet open, and the Log in page sat under the agent card's
+   * label, its ssh and gpg identities and the email - the logged-out user's private information. Each owner closing its
+   * own sheet on the forget (edgeAgents forgetAgentsKey, loginCard, pressAsk, ...) left it to every owner to remember;
+   * one that missed it leaked. So the base closes itself on the event, whoever owns it: hidden at once, and the owner told
+   * through onClose. It stays hidden until its owner closes it (visible false) or shows another (a new title) - the old
+   * content never comes back on its own.
+   */
+  const [forgotten, setForgotten] = React.useState(false);
+  const visibleNow = React.useRef(visible);
+  visibleNow.current = visible;
+  const closeNow = React.useRef(onClose);
+  closeNow.current = onClose;
+  React.useEffect(() => require('../onlykey').onIdentityForgotten(({why}: {why: string | null}) => {
+    if (!visibleNow.current) return;
+    console.log(`[sheet] closed by the forget (${why ?? 'forgotten'}): ${name}`);
+    setForgotten(true);
+    closeNow.current?.();
+  }), [name]);
+  React.useEffect(() => { if (!visible) setForgotten(false); }, [visible]);
+  React.useEffect(() => setForgotten(false), [name]);
+  const shown = visible && !forgotten;
   /*
    * A SHEET'S HEIGHT, SAID AS IT CHANGES (Brad, 2026-11-02: the progress sheet rose and fell as its time bar came and
    * went - "causing it to flicker"): the drive's sheet inspector fails a sheet that keeps changing size (tools/drive/sheets.js)
@@ -87,32 +112,31 @@ export function Sheet({
    * changes after it are said. Closing starts over.
    */
   const opened = React.useRef(false);
-  const name = typeof title === 'string' ? title : 'sheet';
   const say = (h: number) => { heightWas.current = h; console.log(`[sheet] height ${h}: ${name}`); };
   const onLayout = (e: {nativeEvent: {layout: {height: number}}}) => {
     const h = Math.round(e.nativeEvent.layout.height);
     if (!opened.current) { heightWas.current = h; return; }
-    if (!visible || Math.abs(h - heightWas.current) < 1) return;
+    if (!shown || Math.abs(h - heightWas.current) < 1) return;
     say(h);
   };
   /* and its close, said for an opened sheet - the inspector checks that a key's sheets close with the key (keyGone.ts) */
   React.useEffect(() => {
-    if (visible || !opened.current) return;
+    if (shown || !opened.current) return;
     opened.current = false;
     console.log(`[sheet] closed: ${name}`);
-  }, [visible, name]);
+  }, [shown, name]);
   React.useEffect(() => () => { if (opened.current) console.log(`[sheet] closed: ${name}`); }, [name]);
   return (
     <Modal
       transparent
       animationType="slide"
-      visible={visible}
+      visible={shown}
       statusBarTranslucent
       navigationBarTranslucent
       onShow={() => { opened.current = true; if (heightWas.current) say(heightWas.current); }}
       onRequestClose={onClose ?? (() => undefined)}>
       {/* an open sheet is the drive's top layer: what is beneath it is covered (src/drive/registry.tsx) */}
-      <DriveLayer open={visible} name={typeof title === 'string' ? title : 'sheet'}>
+      <DriveLayer open={shown} name={name}>
       <View style={styles.backdrop}>
         {onClose ? <Pressable style={styles.dismiss} onPress={onClose} accessibilityLabel="Close" /> : null}
         {onClose ? <DriveTap label="Close" onPress={onClose} /> : null}
