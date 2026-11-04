@@ -8,7 +8,9 @@
  *                       cache by every page (src/webUpdate.ts); a published release's (tools/release/release-manifest.js)
  *                       replaces it with the whole release, the same apps.web inside - one file on every server
  *   docs/sw.js          the service worker (tools/web/sw.template.js) with this version and the files to precache
- *   docs/_headers       no caching of those two by the server's static assets (Cloudflare reads _headers)
+ *   docs/_headers       no caching of those two by the server's static assets (Cloudflare reads _headers); release.json
+ *                       readable from any origin - it is the public download list, and the desktop app (another
+ *                       origin) asks it for its update notice (src/appUpdate.ts)
  * The version reaches the page as EXPO_PUBLIC_WEB_BUILD (Expo inlines it): a page whose version differs from
  * release.json's apps.web.build is an old build.
  *
@@ -48,5 +50,5 @@ files.sort();
 fs.writeFileSync(path.join(docs, 'release.json'), `${JSON.stringify({ published: false, apps: { web: { build: version, commit, at: new Date().toISOString(), dev } } }, null, 2)}\n`);
 const template = fs.readFileSync(path.join(__dirname, 'web', 'sw.template.js'), 'utf8');
 fs.writeFileSync(path.join(docs, 'sw.js'), template.replace("'__VERSION__'", JSON.stringify(version)).replace('__FILES__', JSON.stringify(files)));
-fs.writeFileSync(path.join(docs, '_headers'), '/sw.js\n  Cache-Control: no-cache\n/release.json\n  Cache-Control: no-store\n');
+fs.writeFileSync(path.join(docs, '_headers'), '/sw.js\n  Cache-Control: no-cache\n/release.json\n  Cache-Control: no-store\n  Access-Control-Allow-Origin: *\n');
 console.log(`[web-build] ${version}: ${files.length} file(s) precached by docs/sw.js`);

@@ -1,7 +1,7 @@
 # A copy left behind the key's ring is brought back by its loss (the recovery half of lost-links.yaml, on any key):
 # the Edge tab says which links this device cannot reach, the loss is accepted (one press), the copy verifies again.
 # For a testnet key whose copy fell behind (the Pixel, 2026-11-01: app restarts mid-sync, #50-#57 off its 8-link ring).
-appId: com.okrn
+appId: com.okedge.debug
 name: Accept a loss the copy cannot cure
 tags:
   - edge

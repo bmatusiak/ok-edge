@@ -2,7 +2,7 @@
 # on, the computer its Target, Bluetooth MCP switched on - the computer's mcp-server (run.js mcpble start, on the box)
 # links, says its name, and the phone joins with the login proof (one press). The switch is turned off first when it is
 # on, so the join is this run's. Optional steps: a phone already set needs none of them (3 s each to find out).
-appId: com.okrn
+appId: com.okedge.debug
 name: The phone in the computer's room over Bluetooth
 tags:
   - bluetooth

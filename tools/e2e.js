@@ -30,8 +30,8 @@ const {adb, foregroundApp} = require('./adb');
 /* Reading and tapping the screen lives in ./ui.js, shared with tools/tap.js. */
 const {dumpUi: dumpUiShared, findByText, visibleLabels, swipeUp, tapText: tapTextShared, sleep} = require('./ui');
 
-/* ok-edge: the app id the build used (OKEDGE_APP_ID, as app.plugin.js; com.okrn = the replacement on the A13) */
-const PACKAGE = process.env.OKEDGE_APP_ID || 'com.okedge';
+/* the app id the drive's builds carry: com.okedge.debug, the debug channel (app.plugin.js); OKEDGE_APP_ID for another (com.okedge, a release) */
+const PACKAGE = process.env.OKEDGE_APP_ID || 'com.okedge.debug';
 /* ok-edge: the activity is always com.okedge.MainActivity (the namespace), whatever the app id */
 const ACTIVITY = `${PACKAGE}/com.okedge.MainActivity`;
 

@@ -13,10 +13,9 @@ import java.security.MessageDigest
  *
  * apkContentsSigners is the certificate the APK is signed with NOW - after a key
  * rotation that is the newest one in the lineage, which is the one to compare.
- * The official list comes from the build (BuildConfig.OKRN_OFFICIAL_SIGNERS,
- * android/app/build.gradle). With Google Play App Signing, Play re-signs the APK
- * with its own app signing key, so that key's fingerprint (Play Console > App
- * integrity) is the one to list, not the upload key's.
+ * The official one comes from the build (BuildConfig.OKEDGE_OFFICIAL_SIGNER: the
+ * SHA-256 of signing/release.crt.pem, red-key's RSA3 certificate - this module's
+ * build.gradle). None pinned: nothing is official.
  */
 class NativeAppSignatureModule(reactContext: ReactApplicationContext) :
   NativeAppSignatureSpec(reactContext) {
@@ -29,8 +28,8 @@ class NativeAppSignatureModule(reactContext: ReactApplicationContext) :
 
   /* every signer must be official: an APK with an extra, unknown signer is not ours */
   override fun isOfficial(): Boolean {
-    val official = BuildConfig.OKRN_OFFICIAL_SIGNERS.split(',').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet()
-    return signers.isNotEmpty() && signers.all { it in official }
+    val official = BuildConfig.OKEDGE_OFFICIAL_SIGNER.uppercase()
+    return official.isNotEmpty() && signers.isNotEmpty() && signers.all { it == official }
   }
 
   private fun readSigners(): List<String> = try {

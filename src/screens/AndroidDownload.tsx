@@ -5,7 +5,8 @@
  * The APK itself is a GitHub release asset (a Cloudflare Worker serves files of 25 MiB at most); the release workflow
  * (.github/workflows/release.yml) publishes beside the web app /release.json (apps.android, src/release.ts): which build, where its file is,
  * and what to check it against - its sha256, and the SHA-256 of the certificate it is signed with. Android installs it
- * over the app already on the phone only when that app carries the same id (com.okrn) and the same signing certificate,
+ * over the app already on the phone only when that app carries the same id (com.okedge, or com.okedge.debug for a
+ * pre-release) and the same signing certificate,
  * and a higher version - so the certificate is shown, not just the file's hash. No manifest (a server that publishes
  * none, the phone, the desktop): nothing is shown.
  */
@@ -40,7 +41,7 @@ export function useAndroidManifest(): AndroidManifest | null {
   const r = useRelease();
   const a = r?.apps.android;
   if (!r || !a || !/^https:\/\//.test(a.url) || !/\.apk$/.test(a.file) || !a.certSha256) return null;
-  return {appId: a.appId ?? 'com.okrn', version: r.version, versionCode: r.code, file: a.file, url: a.url, sha256: a.sha256, size: a.size, certSha256: a.certSha256, commit: a.commit};
+  return {appId: a.appId ?? 'com.okedge', version: r.version, versionCode: r.code, file: a.file, url: a.url, sha256: a.sha256, size: a.size, certSha256: a.certSha256, commit: a.commit};
 }
 
 export function AndroidDownload({m}: {m: AndroidManifest}) {

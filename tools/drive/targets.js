@@ -40,8 +40,8 @@ function run(cmd, args) {
   return new Promise((resolve) => execFile(cmd, args, { cwd: EDGE, windowsHide: true }, (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr}`.trim() })));
 }
 
-/* the phones (ok-edge runs as com.okrn on them - memory a13-runs-ok-edge-as-okrn) */
-const APP_ID = process.env.OKEDGE_APP_ID || 'com.okrn';
+/* the app id the drive's builds carry: com.okedge.debug, the debug channel (app.plugin.js); OKEDGE_APP_ID for another (com.okedge, a release) */
+const APP_ID = process.env.OKEDGE_APP_ID || 'com.okedge.debug';
 const ADB = (() => {
   const sdk = process.env.ANDROID_HOME || path.join(os.homedir(), LINUX ? 'Android/Sdk' : 'AppData/Local/Android/Sdk');
   const bin = path.join(sdk, 'platform-tools', LINUX ? 'adb' : 'adb.exe');
@@ -995,7 +995,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
     async android() {
       const sdk = process.env.ANDROID_HOME || path.join(os.homedir(), LINUX ? 'Android/Sdk' : 'AppData/Local/Android/Sdk');
       const g = await streamIn(path.join(EDGE, 'android'), path.join(EDGE, 'android', LINUX ? 'gradlew' : 'gradlew.bat'), ['assembleDebug'], {
-        timeout: 30 * 60000, env: { ...process.env, ANDROID_HOME: sdk, OKEDGE_APP_ID: APP_ID, OKRN_DEBUG_LOCK: 'off' }, ...shown('build android'),
+        timeout: 30 * 60000, env: { ...process.env, ANDROID_HOME: sdk, OKRN_DEBUG_LOCK: 'off' }, ...shown('build android'),
       });
       logBuild('android', g);
       if (!g.ok) return built('the debug APK', g);

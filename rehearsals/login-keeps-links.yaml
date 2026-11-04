@@ -2,7 +2,7 @@
 # their heads, and a restart lost them past the key's ring - red-key's lost #1069, blue-key's #20-#29). The login now
 # syncs this computer's copy before going in; a restart after it must find the copy still reaching the key's head.
 # A test hard key (the drive presses through its debug console).
-appId: com.okrn
+appId: com.okedge.debug
 name: A login's links survive a restart
 tags:
   - edge

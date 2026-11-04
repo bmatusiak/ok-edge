@@ -69,10 +69,19 @@ android {
 
     defaultConfig {
         minSdkVersion rootProject.ext.minSdkVersion
-        /* NativeAppSignature: the certificates an OFFICIAL release is signed with (SHA-256,
-           comma-separated), so the app can say "UNOFFICIAL RELEASE" under any other. Empty until
-           a Play Store release keystore exists - as ok-rn's app build, from the same variable. */
-        buildConfigField "String", "OKRN_OFFICIAL_SIGNERS", "\"${System.getenv('OKRN_OFFICIAL_SIGNERS') ?: ''}\""
+        /*
+         * NativeAppSignature: the ONE certificate an official release is signed with - red-key's RSA3 (Brad, 2026-11-04:
+         * "so we can get the certificate baseline to enable/disable the signature keystore banner properly"), pinned as
+         * the repo's signing/release.crt.pem; its SHA-256 (AA:BB:...) is what isOfficial() matches. No file there: no
+         * build is official, and every one shows the UNOFFICIAL RELEASE banner.
+         */
+        def releaseCert = new File(rootDir, '../signing/release.crt.pem')
+        def officialSigner = ''
+        if (releaseCert.exists()) {
+            def der = releaseCert.text.replaceAll(/-----[A-Z ]+-----/, '').replaceAll(/\s/, '').decodeBase64()
+            officialSigner = java.security.MessageDigest.getInstance('SHA-256').digest(der).collect { String.format('%02X', it) }.join(':')
+        }
+        buildConfigField "String", "OKEDGE_OFFICIAL_SIGNER", "\"${officialSigner}\""
         externalNativeBuild {
             cmake {
                 arguments "-DOKSSL_OPENSSL=${new File(prefabDir, 'modules/openssl').absolutePath.replace('\\', '/')}"

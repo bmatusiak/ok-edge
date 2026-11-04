@@ -62,8 +62,8 @@ if has android; then
   say "android"
   sources
   okedge_install
-  (cd ok-edge && OKEDGE_APP_ID=com.okrn npx expo prebuild --platform android --no-install)
-  (cd ok-edge/android && OKEDGE_APP_ID=com.okrn OKEMU_PRODUCTION=1 ./gradlew assembleRelease --no-daemon -q)
+  (cd ok-edge && npx expo prebuild --platform android --no-install)
+  (cd ok-edge/android && OKEMU_PRODUCTION=1 ./gradlew assembleRelease --no-daemon -q)
   apk=ok-edge/android/app/build/outputs/apk/release/app-release.apk
   bad=0
   for h in $(find node-onlykey-emulator/emulator/.stage* -path '*libraries/onlykey/onlykey.h'); do

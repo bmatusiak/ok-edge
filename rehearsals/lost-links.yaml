@@ -3,7 +3,7 @@
 # A test hard key, Edge wiped; this computer follows its chain; then links are made with the app closed, past the key's
 # ring - nothing holds them. The app must say so, offer the loss, take the press and go on: a budget opens after it.
 # Runs on the box (its firmware target: the wipe and the links over the key's debug console).
-appId: com.okrn
+appId: com.okedge.debug
 name: A lost link never strands a key
 tags:
   - edge

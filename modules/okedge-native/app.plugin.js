@@ -166,16 +166,23 @@ android {
             }
         }
         /*
-         * OKEDGE_APP_ID=com.okrn builds the REPLACEMENT: ok-edge installed over ok-rn as an update, so
-         * the app's data - the soft key's flash.bin/eeprom.bin, AsyncStorage, Keystore keys - is
-         * kept and tested as it is. Unset, ok-edge is com.okedge beside ok-rn. Read at build time,
-         * so switching needs no prebuild.
+         * TWO APPS, BY CHANNEL (Brad, 2026-11-04: "i dont want to lose us having the ability to install the debug
+         * version at will"; "switch to com.okedge, and yes separate, and the app title needs DEBUG on it, and the icons
+         * need red background"). EXPO_PUBLIC_OKEDGE_CHANNEL - one variable, read here and inlined into the JS by Metro
+         * (src/channel.ts) - is 'release' for a published release only:
+         *   release  com.okedge, "OnlyKey", the O on black, built UNSIGNED: red-key's RSA3 signs it after
+         *            (tools/release/apk-sign)
+         *   debug    (anything else: local builds, pre-releases) com.okedge.debug, "OnlyKey DEBUG", the O on red,
+         *            signed with the repo debug keystore
+         * Two ids: both install side by side, each with its own storage and soft key, and a debug build can never
+         * replace the release (another id, another signer). Read at build time, so switching needs no prebuild.
          *
-         * versionCode = 1000 + this repo's commit count: above every ok-rn build (ok-rn's is its own
-         * commit count, 623 at 0.0.7), so the replacement installs as an update. Going back to ok-rn
-         * means an ok-rn build with a versionCode above it.
+         * versionCode = 1000 + this repo's commit count.
          */
-        applicationId System.getenv('OKEDGE_APP_ID') ?: 'com.okedge'
+        def okedgeRelease = System.getenv('EXPO_PUBLIC_OKEDGE_CHANNEL') == 'release'
+        applicationId okedgeRelease ? 'com.okedge' : 'com.okedge.debug'
+        resValue 'string', 'app_name', okedgeRelease ? 'OnlyKey' : 'OnlyKey DEBUG'
+        resValue 'color', 'ic_launcher_background', okedgeRelease ? '#000000' : '#B71C1C'
         def commits = 0
         try {
             commits = providers.exec { commandLine 'git', 'rev-list', '--count', 'HEAD' }.standardOutput.asText.get().trim().toInteger()
@@ -185,10 +192,9 @@ android {
         versionCode 1000 + commits
     }
     /*
-     * ONE SIGNING KEY WITH OK-RN: ok-rn's repo debug.keystore (signing/debug.keystore, a copy), the
-     * key its dev and pre-release builds carry - a replacement build must be signed by the same
-     * certificate as the app it updates, or Android refuses it. Every ok-edge build uses it, not
-     * the keystore expo prebuild generates.
+     * THE DEBUG KEYSTORE (signing/debug.keystore - the React Native template key, its private half public): every
+     * debug-channel build, dev and pre-release, not the keystore expo prebuild generates. A release-channel build is
+     * left unsigned here: red-key signs it (above).
      */
     signingConfigs {
         debug {
@@ -197,6 +203,9 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+    }
+    if (System.getenv('EXPO_PUBLIC_OKEDGE_CHANNEL') == 'release') {
+        buildTypes { release { signingConfig null } }
     }
 }
 `;
@@ -213,7 +222,8 @@ const withAppGradle = (config) => withAppBuildGradle(config, (c) => {
  *     Android 7 layer-list (mipmap-anydpi); anydpi wins over the density PNGs Expo writes
  *   the launch window: drawable/splash_window (the logo on splash_background #1a1a1a), made the
  *     window background of Expo's splash theme, as ok-rn's Theme.App.Main does
- *   the name the launcher shows: OnlyKey, ok-rn's app_name
+ *   the name the launcher shows and the icon's background: the channel's (app_name and ic_launcher_background are
+ *     the build's resValues, above) - so the ones prebuild writes are taken out
  */
 const fs = require('fs');
 const { withDangerousMod, withAndroidStyles, withStringsXml } = require('expo/config-plugins');
@@ -226,6 +236,8 @@ const withOkRnLook = (config) => {
       fs.mkdirSync(path.join(to, dir), { recursive: true });
       for (const f of fs.readdirSync(path.join(from, dir))) fs.copyFileSync(path.join(from, dir, f), path.join(to, dir, f));
     }
+    /* the fixed black an older copy left (ic_launcher_background is the build's resValue now - a duplicate otherwise) */
+    fs.rmSync(path.join(to, 'values', 'ic_launcher.xml'), { force: true });
     return c;
   }]);
   config = withAndroidStyles(config, (c) => {
@@ -237,9 +249,9 @@ const withOkRnLook = (config) => {
     }
     return c;
   });
+  /* app_name is the build's (resValue): a second one in strings.xml would be a duplicate resource */
   return withStringsXml(config, (c) => {
-    const row = (c.modResults.resources.string || []).find((s) => s.$.name === 'app_name');
-    if (row) row._ = 'OnlyKey';
+    c.modResults.resources.string = (c.modResults.resources.string || []).filter((s) => s.$.name !== 'app_name');
     return c;
   });
 };

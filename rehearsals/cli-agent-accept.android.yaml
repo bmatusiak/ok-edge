@@ -1,7 +1,7 @@
 # A computer's onlykey-js on this phone's key through the Bluetooth room (ok-edge plan B4): the phone is in the
 # computer's room (bluetooth-room), the computer ran `onlykey-js --ble <command>` and waits ("accept ... on the phone:
 # the Edge tab, Agents"). The owner accepts it in the Agents list; the phone's key session then serves it.
-appId: com.okrn
+appId: com.okedge.debug
 name: Accept a computer's onlykey-js on the phone
 tags:
   - bluetooth

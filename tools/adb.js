@@ -57,7 +57,7 @@ function adb(args, opts = {}) {
  * Is OUR app the thing on screen? Package name of the focused window, or null.
  *
  * Parsed by splitting rather than by regex. The line looks like
- *   mCurrentFocus=Window{bdc94f5 u0 com.okrn/com.okrn.MainActivity}
+ *   mCurrentFocus=Window{bdc94f5 u0 com.okedge.debug/com.okedge.MainActivity}
  * and the package is the token before the slash. A regex here was corrupted
  * twice by shell escaping while being written; the split cannot be.
  */

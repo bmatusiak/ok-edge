@@ -1,6 +1,6 @@
 # The phone's Bluetooth on, and on at every app start (a fresh install has it off - its key service then does not
 # advertise, and no computer's mcp-server can link to it: ok-edge plan B0-B3). Logged in first.
-appId: com.okrn
+appId: com.okedge.debug
 name: Bluetooth on at app start
 tags:
   - bluetooth

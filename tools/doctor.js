@@ -46,8 +46,8 @@ const path = require('path');
 
 const {adb, serial, foregroundWindow} = require('./adb');
 
-/* ok-edge: the app id the build used (OKEDGE_APP_ID, as app.plugin.js; com.okrn = the replacement on the A13) */
-const PACKAGE = process.env.OKEDGE_APP_ID || 'com.okedge';
+/* the app id the drive's builds carry: com.okedge.debug, the debug channel (app.plugin.js); OKEDGE_APP_ID for another (com.okedge, a release) */
+const PACKAGE = process.env.OKEDGE_APP_ID || 'com.okedge.debug';
 const ROOT = path.join(__dirname, '..');
 /* ok-edge's Metro (metro.pm2.config.js); ok-rn's keeps 8081 */
 const METRO_PORT = 8082;

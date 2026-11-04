@@ -1,5 +1,5 @@
 # Log in - from wherever the app stands to inside, the login card made when it is offered (the drive's login).
-appId: com.okrn
+appId: com.okedge.debug
 name: Log in
 tags:
   - login

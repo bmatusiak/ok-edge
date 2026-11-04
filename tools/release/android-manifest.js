@@ -9,7 +9,9 @@
  * The certificate digest is apksigner's (the APK as built), never the keystore's (what it was meant to be signed with).
  *
  *   node tools/release/android-manifest.js --apk <file> --apksigner <apksigner> --repo <owner/name> --tag <tag>
- *     --version <x.y.z> --version-code <n> --commit <sha> --out <manifest.json>
+ *     --version <x.y.z> --version-code <n> --commit <sha> --app-id <com.okedge | com.okedge.debug> --out <manifest.json>
+ * --app-id: the channel's (modules/okedge-native/app.plugin.js) - com.okedge for a release, com.okedge.debug for a
+ * pre-release; the page tells a phone which app the download updates.
  */
 const fs = require('fs');
 const path = require('path');
@@ -18,7 +20,7 @@ const { execFileSync } = require('child_process');
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
-const need = ['--apk', '--apksigner', '--repo', '--tag', '--version', '--version-code', '--commit', '--out'];
+const need = ['--apk', '--apksigner', '--repo', '--tag', '--version', '--version-code', '--commit', '--app-id', '--out'];
 const missing = need.filter((k) => !opt(k));
 if (missing.length) { console.error(`android-manifest: missing ${missing.join(' ')}`); process.exit(1); }
 
@@ -31,7 +33,7 @@ if (digests.length !== 1) { console.error(`android-manifest: expected one signer
 
 const file = path.basename(apk);
 const manifest = {
-  appId: 'com.okrn',
+  appId: opt('--app-id'),
   version: opt('--version'),
   versionCode: Number(opt('--version-code')),
   file,

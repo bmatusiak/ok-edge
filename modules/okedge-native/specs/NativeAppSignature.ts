@@ -9,7 +9,8 @@ import {TurboModuleRegistry} from 'react-native';
  * Someone who unpacks the APK to change it cannot sign it again with the release key - they
  * do not have it - so a repackaged app runs under some other certificate. Android says which
  * certificate signed the running APK (PackageManager signing info); the app compares its
- * SHA-256 with the official one built in (BuildConfig.OKRN_OFFICIAL_SIGNERS) and says so on
+ * SHA-256 with the official one built in (BuildConfig.OKEDGE_OFFICIAL_SIGNER, from the pinned
+ * signing/release.crt.pem - red-key's RSA3) and says so on
  * every screen when they differ.
  *
  * This is a notice, not a lock: whoever repackages the app can also cut the check out. It

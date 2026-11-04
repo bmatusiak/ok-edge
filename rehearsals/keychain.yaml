@@ -1,7 +1,7 @@
 # KEY CHAIN KEEPS EVERY KEY (the structure track S9, 2026-11-02 - the review's Key Chain writer race): the tab's own
 # changes go through the recorder's queue as changes to the list as it is then, so a key the soft key records meanwhile
 # is not written over. This walks the tab's derive path on the testnet soft key.
-appId: com.okrn
+appId: com.okedge.debug
 name: Key Chain keeps every key
 tags:
   - keychain
