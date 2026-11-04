@@ -27,3 +27,9 @@ for n in $want; do
   scp -q "/tmp/$n.bundle" "$BOX:/tmp/$n.bundle"
   ssh $BOX "b=$b; d=$d; cd ~/project/onlykey/$d && git fetch -q /tmp/$n.bundle +$b:refs/remotes/windows/$b && $take && echo \"$d \$(git rev-parse --short HEAD)\" && echo \"\$(date -Is) sync-to-box: $d \$(git rev-parse --short HEAD)\" >> ~/project/onlykey/steps.log" </dev/null
 done
+# THE APP RUNS ITS OWN COPY OF THE LIB (memory box-gets-every-lib-commit: 2026-11-03 a box run tested a copy one commit
+# behind): after the lib, every file changed since ok-edge's pin (package.json) goes into the box's
+# ok-edge/node_modules/node-onlykey-lib - tests skipped, a file already the same left alone
+case " $want " in *" lib "*)
+  ssh $BOX 'cd ~/project/onlykey && pin=$(grep -o "node-onlykey-lib#[0-9a-f]*" ok-edge/package.json | cut -d"#" -f2) && n=0 && for f in $(git -C node-onlykey-lib diff --name-only "$pin"..HEAD | grep -v /test/); do [ -f "node-onlykey-lib/$f" ] || continue; cmp -s "node-onlykey-lib/$f" "ok-edge/node_modules/node-onlykey-lib/$f" && continue; mkdir -p "$(dirname "ok-edge/node_modules/node-onlykey-lib/$f")"; cp "node-onlykey-lib/$f" "ok-edge/node_modules/node-onlykey-lib/$f"; n=$((n+1)); done; echo "the lib copy in ok-edge/node_modules: $n file(s) from ${pin:0:7}..$(git -C node-onlykey-lib rev-parse --short HEAD)"' </dev/null
+esac
