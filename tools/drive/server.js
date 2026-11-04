@@ -384,9 +384,19 @@ function pressWhenAsked(app) {
         const onKey = await new Promise((ok) => {
           const t = setTimeout(() => { app.off('log', on); ok(false); }, ASKED_MS);
           /* a plain press's ask only (src/requestLog.ts: " - a press"); a code's is its own "key waits", pressed as given */
-          function on(x) { if (PLAIN_ASKED.test(x)) { clearTimeout(t); app.off('log', on); ok(true); } }
+          /*
+           * ...WHILE ITS ASK IS STILL UP (box desktop, 2026-11-03: the login's "buttons any" was closed - "[press] key
+           * done" - once its codes had logged in, and this wait went on, took the login card's certify ask a second later
+           * and pressed for it; the certify's own wait then pressed a key that waited for nothing). Its ask closed, or
+           * another raised in its place: this one is over - the app raises it again when it is wanted (hostChallenge).
+           */
+          function on(x) {
+            if (PLAIN_ASKED.test(x)) { clearTimeout(t); app.off('log', on); ok(true); return; }
+            if (/^\[press\] key (done$|waits: )/.test(x)) { clearTimeout(t); app.off('log', on); ok('gone'); }
+          }
           app.on('log', on);
         });
+        if (onKey === 'gone') { line(`[${app.shell}] not pressed: ${outside[1]} - its ask closed before the key asked`); return; }
         if (!onKey) { declined(app, `not pressed: ${outside[1]} - the lib never said the request reached the key`); return; }
       }
       /* a press in progress (a touch) is waited for, not a reason to drop this one - the key would wait out its 25 s */
