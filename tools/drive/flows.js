@@ -50,6 +50,11 @@ function loginState(app) {
    */
   /* the web app's "a newer build is out" sheet (Reload / Dismiss): in testing the newer build is the one wanted - reload into it */
   if (app.top && !f.busy && app.has('Reload') && app.has('Dismiss')) return 'Reload';
+  /*
+   * the phone's and the desktop's "a newer release is published" sheet (Download / Dismiss, src/ui/UpdateSheet.tsx; box,
+   * 2026-11-04: a rehearsal waited 3 min behind it): the drive tests the build it runs, not the published one - Dismiss
+   */
+  if (app.top && !f.busy && app.has('Download') && app.has('Dismiss')) return 'close:Dismiss';
   /* the login card's sheet after a failed certify (Try again / Not now): the card again - its press is answered now */
   if (app.top && !f.busy && app.has('Not now') && app.has('Try again')) return 'card again';
   if (app.top && !f.busy) { const c = ['Close menu', 'Close Edge Management'].find((l) => app.has(l)); if (c) return `close:${c}`; }
