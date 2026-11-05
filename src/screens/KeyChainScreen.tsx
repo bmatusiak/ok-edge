@@ -145,6 +145,8 @@ export function KeyChainScreen({
   /* Import certificate (On this App): the PEM picked or pasted, and what checking it found (certKeys checkCert) */
   const [certText, setCertText] = useState('');
   const [certCheck, setCertCheck] = useState<{key: CertKey; signature: 'checked' | 'unchecked'} | null>(null);
+  /* fillable by the drive (development builds only), as typing it is */
+  useDriveField('X.509 certificate', t => { setCertText(t); setCertCheck(null); });
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
