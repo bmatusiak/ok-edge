@@ -26,7 +26,13 @@ const { ensureOnDevice } = require(`${KIT}/lib/fixtures`);
   await transport.start();
   await device.waitReady();
   const r = await ensureOnDevice('initialized', device, { log: (m) => console.log(m) });
-  console.log(r.applied ? 'set up: initialized (PIN 1111111)' : 'already set up: initialized');
+  /*
+   * A KEY ALREADY SET UP IS RESTARTED, LOCKED (box, 2026-11-04: a wrong PIN typed on blue-key's keypad left its entry
+   * broken - the kit PIN after it failed too, as the key adds each digit to the entry until a hold or a restart): the
+   * login after this starts on a clean entry. Setting up reboots the key already.
+   */
+  if (!r.applied) await device.restart();
+  console.log(r.applied ? 'set up: initialized (PIN 1111111)' : 'already set up: initialized - restarted, locked');
   await transport.stop();
   process.exit(0);
 })().catch((e) => { console.error(`hardkey-setup: ${e && e.stack || e}`); process.exit(1); });
