@@ -11,8 +11,11 @@
  * unlock test does not know, 2026-10-31.)
  */
 const TEST_PIN = '1234561';
-/* a test hard key's PIN: the kit's 'initialized' state (onlykey-testing lib/config PINS.primary; tools/box/hardkey-setup.js) */
-const KIT_PIN = '1111111';
+/*
+ * ...AND EVERY KEY'S IN THE APP - ONE PIN (Brad, 2026-11-05: "i need consistency in the app, i cant have different pin
+ * code for testing in the app"; "1111111 is only used in node-onlykey-testing"). A hard test key the kit used is cleared
+ * (tools/box/hardkey-clear.js) and set up by the app (rehearsals/hardkey-setup.yaml) - with this PIN, like every other.
+ */
 /*
  * A SOFT KEY WITH ANOTHER PIN (Brad, 2026-10-31: the box desktop's is the kit's 1111111 - each Login Bypass, which types
  * TEST_PIN, was a wrong PIN attempt, and ten wipe a key): run.js login|budget --pin <pin> names it, and the login types
@@ -135,8 +138,8 @@ async function unlockOutsideKey(d, pin) {
   if (/^hard key 2/.test(s.what)) {
     if (/state unlocked/.test(s.what)) { d.say('its key (hard key 2) is unlocked'); return; }
     if (!/state locked/.test(s.what)) throw new Error(`the web app's key: ${s.what} - not pressed: its state is not read as locked`);
-    d.say('its key (hard key 2) is locked - the kit PIN on its buttons, through its debug console');
-    const r = await d.machine('press', d.app.shell, { buttons: '1111111'.split('') });
+    d.say("its key (hard key 2) is locked - the app's PIN on its buttons, through its debug console");
+    const r = await d.machine('press', d.app.shell, { buttons: TEST_PIN.split('') });
     if (!r.ok) throw new Error(`the web app's key: ${r.why}`);
     for (let i = 0; i < 10; i++) {
       await new Promise((ok) => setTimeout(ok, 2000));
@@ -282,11 +285,7 @@ async function loginMoves(d, { pin: named = null, life = 180, key = null } = {})
     else if (now === 'keypad' && key === 'soft' && d.app.flags.consoleAnswers === true) {
       throw new Error('login: the keypad is a USB key\'s, not the soft key\'s (its console answers) - nothing typed; take the USB key off first (the box gadget: machine use-key hard)');
     }
-    /*
-     * A TEST KEY ON THE USB TAKES THE KIT'S PIN (box, 2026-11-04: blue-key, just set up by tools/box/hardkey-setup.js,
-     * got the testing PIN 1234561 - one wrong attempt, then a 3-min wait on a state that never moved): its console
-     * answers, so the kit set it up (1111111) - unless the flow names its PIN. A key still locked after it stops the run.
-     */
+    /* the app's one PIN (TEST_PIN), unless the flow names another; a key still locked after it stops the run */
     else if (now === 'keypad') {
       /*
        * NOT ON A SCREEN STILL COMING UP (box desktop, 2026-11-04: at the app's start the key read locked on the remembered
@@ -295,10 +294,9 @@ async function loginMoves(d, { pin: named = null, life = 180, key = null } = {})
        */
       await d.until((app) => app.controls.some((c) => c.label === 'Button 1' && c.enabled) || loginState(app) !== 'keypad', { life: 30, fail: [] });
       if (loginState(d.app) !== 'keypad') { seen.delete(now); continue; }
-      const typed = !named && d.app.flags.consoleAnswers === true ? KIT_PIN : pin;
-      for (const n of typed) await d.tap(`Button ${n}`);
+      for (const n of pin) await d.tap(`Button ${n}`);
       await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] }).catch(() => {
-        throw new Error(`login: the key stayed locked after its ${typed === KIT_PIN ? 'kit' : `${typed.length}-digit`} PIN on the keypad - one wrong attempt; not tried again. Its PIN: --pin <pin>`);
+        throw new Error(`login: the key stayed locked after its ${pin.length}-digit PIN on the keypad - one wrong attempt; not tried again. A key the testing kit used is cleared and set up by the app first (hardkey-setup)`);
       });
       continue;
     }

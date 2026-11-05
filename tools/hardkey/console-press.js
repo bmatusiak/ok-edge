@@ -8,7 +8,7 @@
  * no console). Testnet keys only: this is automation, never a live key's presses.
  *
  *   node tools/hardkey/console-press.js 1          press button 1
- *   node tools/hardkey/console-press.js 1111111    a PIN, as one line (the firmware queues the presses)
+ *   node tools/hardkey/console-press.js 1234561    a PIN, as one line (the firmware queues the presses)
  *
  * node-hid: the lib's copy (it keeps node-hid optional; this computer has it), else the kit's.
  */

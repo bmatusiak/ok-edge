@@ -9,14 +9,14 @@
  * check. That the PIN went in: the gadget's press returns once it took every digit; a hard key's DEBUG console says
  * "UNLOCKED" (box, 2026-11-04, blue-key: "GUESSED PROFILE 1 PIN ... UNLOCKED").
  *
- * PIN: the key's own - the flow's PIN, else the kit's 1111111 on a test hard key (its console answers;
- * tools/box/hardkey-setup.js), else the drive's testing PIN (the gadget).
+ * PIN: the flow's, else the app's one PIN, 1234561 - a hard test key included (cleared after the testing kit and set up
+ * by the app, hardkey-setup.yaml; Brad, 2026-11-05: one PIN in the app).
  */
 const s = await drive.machine('key-state');
 if (!s.ok) throw new Error(`the key: ${s.why}`);
 const hard = /debug console answers/.test(s.what);
 if (!hard && !/\btestnet\b/.test(s.what)) throw new Error(`the key is not a test key (${s.what}) - the drive does not press it`);
-const pin = String(typeof PIN !== 'undefined' ? PIN : hard ? '1111111' : '1234561');
+const pin = String(typeof PIN !== 'undefined' ? PIN : '1234561');
 /* pressed only while locked: a press on a locked key is a PIN attempt, on an unlocked one it types a slot */
 if (drive.app.flags.key !== 'locked') throw new Error(`the app does not say the key is locked for its PIN ("${drive.app.flags.key}") - nothing pressed`);
 const pressedAt = Date.now();

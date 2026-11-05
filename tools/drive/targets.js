@@ -750,7 +750,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         if (KEY === 'hard') {
           /*
            * key 2 - a test-hex key restored from the testnet backup: its lock state read by the lib's CLI ("status", no
-           * press), the way webapp-edge-budget.sh read it. Its PIN is the kit's (1111111), not the soft keys' testing one.
+           * press), the way webapp-edge-budget.sh read it. Its PIN is the app's one PIN (1234561), set up by the app.
            */
           /* ok-edge's own copy of the lib: it has node-hid (the lib's clone keeps it optional) */
           const st = await runIn(EDGE, NODE, [path.join(EDGE, 'node_modules', 'node-onlykey-lib', 'cli', 'index.js'), 'status'], 30000);
@@ -758,7 +758,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
           /* the page cannot probe its key's console (FIDO2 only): this machine does, by the echo (hardkey-press.js --probe) */
           const pr = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), '--probe'], 20000);
           const debug = pr.ok && /debug console answers/.test(pr.out) ? 'debug console answers (a test hex)' : 'no debug console echo (a production key, or none)';
-          return `hard key 2, the testnet test key (kit PIN): ${state === 'unlocked' || state === 'locked' ? 'connected' : 'not connected'}; state ${state}; ${debug}${keys}`;
+          return `hard key 2, the testnet test key: ${state === 'unlocked' || state === 'locked' ? 'connected' : 'not connected'}; state ${state}; ${debug}${keys}`;
         }
         if (!gadgetHost) return `the gadget is not held here (start the web app through the drive)${keys}`;
         return `the testnet soft key (gadget): ${gadgetUp ? 'connected' : 'not connected'}; led ${gadgetLed.hex || 'not seen yet'}${gadgetLed.at ? ` for ${Math.round((Date.now() - gadgetLed.at) / 1000)} s` : ''}${keys}`;
@@ -1058,7 +1058,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
    * only these - each refuses a production key by itself (they work through the kit's debug-console unlock and the
    * test hex's Edge requests). Its output live in its own tab; the last lines come back.
    */
-  const BOX_TOOLS = ['hardkey-edge-links.js', 'hardkey-edge-wipe.js', 'hardkey-setup.js', 'owner-key.js', 'ship-proof-commit.js'];
+  const BOX_TOOLS = ['hardkey-edge-links.js', 'hardkey-edge-wipe.js', 'hardkey-clear.js', 'owner-key.js', 'ship-proof-commit.js'];
   async function boxTool({ name, argv = [] } = {}) {
     if (!BOX_TOOLS.includes(name)) return { ok: false, why: `"${name}" is not a rehearsal tool (${BOX_TOOLS.join(', ')})` };
     const r = await streamIn(EDGE, NODE, [path.join(EDGE, 'tools/box', name), ...argv.map(String)], { timeout: 10 * 60000, ...shown(`tool ${name}`) });
@@ -1374,6 +1374,28 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         if (!consoleProc || exited(consoleProc)) return { ok: false, why: 'no hard key\'s console is held on this machine (use-key hard)' };
         const seen = await consoleSaid(new RegExp(String(args.re)), Date.now() - (Number(args.sinceAge) || 0), (Number(args.life) || 20) * 1000);
         return seen ? { ok: true, what: seen.l.trim() } : { ok: false, why: `the key's console did not say /${args.re}/ within ${Number(args.life) || 20} s` };
+      }
+      /*
+       * HOW MANY TIMES THE HARD KEY SAID IT (2026-11-05, a PIN set through the app's Setup tab: the firmware prints
+       * "password appended with" once per digit taken, and a step asked before the last one lands saves a short PIN - the
+       * kit's own measurement, onlykey-testing initialized.js): at least args.n lines matching args.re since args.sinceAge
+       * ms ago, each new one an event, within args.life s
+       */
+      if (action === 'console-count') {
+        if (!consoleProc || exited(consoleProc)) return { ok: false, why: "no hard key's console is held on this machine (use-key hard)" };
+        const re = new RegExp(String(args.re));
+        const since = Date.now() - (Number(args.sinceAge) || 0);
+        const n = Math.max(1, Number(args.n) || 1);
+        const until = Date.now() + (Number(args.life) || 20) * 1000;
+        for (;;) {
+          const c = consoleLines.filter((x) => x.at >= since && re.test(x.l)).length;
+          if (c >= n) return { ok: true, what: `${c} line(s) /${args.re}/` };
+          if (Date.now() >= until || !(await consoleSaid(re, Date.now(), until - Date.now()))) {
+            const k = consoleLines.filter((x) => x.at >= since && re.test(x.l)).length;
+            if (k >= n) return { ok: true, what: `${k} line(s) /${args.re}/` };
+            return { ok: false, why: `the key's console said /${args.re}/ ${k} of ${n} times within ${Number(args.life) || 20} s` };
+          }
+        }
       }
       return { ok: false, why: `no action "${action}"` };
     },

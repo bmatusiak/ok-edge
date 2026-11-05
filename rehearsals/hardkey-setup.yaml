@@ -1,11 +1,15 @@
-# A FRESHLY FLASHED TEST KEY, SET UP AND LOGGED IN (box, 2026-11-04: blue-key flashed with patch 0019 for the signing
-# dry run on a hard key). A developer flash wipes the key: the gadget goes off (one OnlyKey on the USB), the app stops
-# (it holds the hard key's replies), the kit's 'initialized' state is typed through the key's debug console
-# (tools/box/hardkey-setup.js - PIN 1111111), then the app logs in on it. Test hex only.
+# A TEST KEY CLEARED AFTER THE TESTING KIT, THEN SET UP BY THE APP (Brad, 2026-11-05: "clear the key after using the
+# testing kit, then rehearse the setup on the app"; "i dont want a dirty key being plugged in the app after its been
+# hammered in the testing kit"; one PIN in the app, 1234561). The gadget goes off (one OnlyKey on the USB), the app stops
+# (it holds the hard key's replies), the kit's 'blank' wipe goes through the key's debug console (tools/box/hardkey-
+# clear.js - the userspace wipe), then the app's own Setup tab sets it up as a person would: the PIN pressed on the
+# key's buttons twice (scripts/setup-pin-on-key.js), the key unplugged and back, and the login. Test hex only.
 #   run.js rehearse --app desktop@box hardkey-setup
-name: A flashed test key set up
+name: A test key cleared and set up by the app
 tags:
   - config
+env:
+  PIN: "1234561"
 ---
 - machine:
     action: use-key
@@ -18,7 +22,28 @@ tags:
     action: tool
     target: firmware
     args:
-      name: hardkey-setup.js
-# the app back first: a login judged on the stopped app's last screen waits for a page nobody starts
+      name: hardkey-clear.js
 - launchApp
-- login: {}
+- goto: Setup
+- tapOn: "Continue"
+- tapOn: "Start"
+- runScript:
+    file: scripts/setup-pin-on-key.js
+    env:
+      PIN: ${PIN}
+- tapOn: "Done - I pressed it"
+- runScript:
+    file: scripts/setup-pin-on-key.js
+    env:
+      PIN: ${PIN}
+- tapOn: "Done - I pressed it again"
+- tapOn: "Continue"
+# the replug page: unplugged and back, which ends the key's first-use config mode - it starts locked
+- unplugKey
+- waitForLog:
+    pattern: '\[identity\] the key went \(unplugged\)'
+    timeout: 20000
+- plugKey
+- tapOn: "Continue"
+- login:
+    pin: ${PIN}
