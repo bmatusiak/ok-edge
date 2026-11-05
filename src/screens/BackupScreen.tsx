@@ -1,5 +1,5 @@
-import React, {useCallback, useEffect, useState} from 'react';
-import {ScrollView, StyleSheet, Text, TextInput} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {Platform, ScrollView, StyleSheet, Text, TextInput} from 'react-native';
 import {Btn, Section, Segmented} from '../ui/components';
 import {theme} from '../ui/theme';
 import {useActiveKey, useBackend, useKeyName} from '../hooks/KeyContext';
@@ -40,6 +40,17 @@ import {useDriveField} from '../drive/registry';
  * offers both, in two separate wizard steps.
  */
 const BACKUP_SOURCES = ['Passphrase', 'PGP key'] as const;
+
+/*
+ * THE KEY TYPES INTO A BOX HERE (Brad, 2026-11-04: "for prod keys, need an input box for the key to type in the backup,
+ * then an auto verify when a backup is pasted in, and a save button" - as the classic OnlyKey App 5.x's Backup panel).
+ * The desktop and the web app are pages: the key's keyboard interface belongs to the computer's OS (Windows will not
+ * hand it to an app at all), so the capture above - reading the keystrokes off that interface - hears nothing. The OS
+ * types them into whatever has the focus; here that is this box. The phone keeps the capture: there the app holds the
+ * whole USB device and reads the keyboard interface itself.
+ */
+const TYPED_BACKUP = Platform.OS === 'web';
+const BACKUP_END = '-----END ONLYKEY BACKUP-----';
 
 type BackupSource = (typeof BACKUP_SOURCES)[number];
 
@@ -122,6 +133,39 @@ export function BackupScreen({
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * THE TYPED BACKUP (TYPED_BACKUP): what the key typed into the box, or what was pasted there. Checked by itself once its
+   * END line is in - the same digest chain the capture and the restore check (summarizeBackup) - so the verdict is
+   * always about the text in the box, and Save names it.
+   */
+  const [typed, setTyped] = useState('');
+  const [savedAs, setSavedAs] = useState<string | null>(null);
+  const typedDone = typed.includes(BACKUP_END);
+  const typedCheck = useMemo(() => (typedDone ? summarizeBackup(typed) : null), [typed, typedDone]);
+  /* fillable by the drive, as the restore's fields are (development builds only) */
+  useDriveField('Backup data', t => { setTyped(t); setSavedAs(null); });
+
+  const saveTyped = useCallback(async () => {
+    setBusy('saveTyped');
+    setError(null);
+    try {
+      /* as the classic App named it: onlykey-backup-2022-01-31T22-09.txt, the person's local time */
+      const d = new Date();
+      const two = (n: number) => String(n).padStart(2, '0');
+      const name = `onlykey-backup-${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}-${two(d.getMinutes())}.txt`;
+      const r = await NativeShare.saveFile(name, `${typed.trim()}\n`, 'text/plain');
+      if (r.saved) {
+        setSavedAs(r.name);
+        /* the box is emptied once the file is handed over, as the classic App reset its form */
+        setTyped('');
+      }
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  }, [typed]);
 
   const locked = emu.device !== 'unlocked';
 
@@ -450,7 +494,51 @@ export function BackupScreen({
         the section below is dimmed, and it carries its own one-line reason.
         A fourth statement of the same fact was noise.
       */}
-      {has('capture') ? (<>
+      {has('capture') && TYPED_BACKUP ? (
+      <Section
+        title={`Backup — ${keyName}`}
+        unavailable={configMode === ON ? NOT_IN_CONFIG_MODE : null}>
+        <Text style={styles.body}>
+          The key types its backup. Click inside the box below, then hold button 1
+          on the key for 5+ seconds and let go: it types an encrypted backup of
+          everything it holds into the box. Once the last line reads
+          {` ${BACKUP_END}`}, the backup is checked here, and you can save it.
+          A backup you saved before can be pasted in to check it.
+        </Text>
+        <TextInput
+          style={styles.textarea}
+          accessibilityLabel="Backup data"
+          placeholder="Do not type here. Click inside, then hold button 1 on your key for 5+ seconds."
+          placeholderTextColor={theme.textDim}
+          value={typed}
+          onChangeText={t => { setTyped(t); setSavedAs(null); }}
+          multiline
+          autoCorrect={false}
+          autoCapitalize="none"
+          spellCheck={false}
+        />
+        {typed && !typedDone ? (
+          <Text style={styles.note}>Receiving… {typed.length} characters - keep holding until the key stops typing.</Text>
+        ) : null}
+        {typedCheck ? (
+          typedCheck.ok ? (
+            <Text style={styles.status}>
+              Verified: the backup's SHA-256 chain matches ({typedCheck.lines} lines, {typedCheck.bytes} bytes).
+            </Text>
+          ) : (
+            <Text style={styles.error}>Not a good backup: {typedCheck.reason}. Do not rely on it; take it again.</Text>
+          )
+        ) : null}
+        <Btn
+          title={busy === 'saveTyped' ? 'Saving…' : typedCheck && !typedCheck.ok ? 'Save file anyway (not verified)' : 'Save file'}
+          tone="primary"
+          disabled={busy !== null || !typedDone}
+          onPress={saveTyped}
+        />
+        {savedAs ? <Text style={styles.status}>Saved as {savedAs}. Keep it with your backup passphrase stored apart from it.</Text> : null}
+      </Section>
+      ) : null}
+      {has('capture') && !TYPED_BACKUP ? (<>
       <Section
         title={`Backup — ${keyName}`}
         unavailable={configMode === ON ? NOT_IN_CONFIG_MODE : null}>
