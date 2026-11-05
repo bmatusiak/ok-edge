@@ -9,7 +9,12 @@ tags:
 ---
 - login: {}
 - goto: Settings
-- tapOn: "Open Backup/Restore"
+# its sub view stays open across runs: opened only when its link shows
+- runFlow:
+    when:
+      visible: "Open Backup/Restore"
+    commands:
+      - tapOn: "Open Backup/Restore"
 - inputFile:
     field: "Backup data"
     file: ${GOOD}
