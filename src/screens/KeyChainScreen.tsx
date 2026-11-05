@@ -1559,12 +1559,16 @@ export function KeyChainScreen({
           entries.map(e => (
             <View key={e.id}>
               <Pressable onPress={() => setOpen(o => (o === e.id ? null : e.id))} style={styles.row}>
-                <Text style={styles.rowSlot}>{e.kind === 'derived' ? e.scheme : DEVICE_WORD}</Text>
+                {/* a slot key's entry names its slot - where its private key lives (Brad, 2026-11-05: "it does not say RSA, or what key slot it works with") */}
+                <Text style={styles.rowSlot}>{e.kind === 'derived' ? e.scheme : e.kind === 'slot' && e.slot ? slotName(e.slot) : DEVICE_WORD}</Text>
                 <Text style={styles.rowName} numberOfLines={1}>{e.label || e.name}</Text>
-                <Text style={styles.rowType}>{e.type}</Text>
+                <Text style={styles.rowType}>{e.type === 'rsa' && e.publicKey.length ? `RSA ${e.publicKey.length * 8}` : e.type}</Text>
               </Pressable>
               {open === e.id ? (
                 <>
+                  {e.kind === 'slot' && e.slot ? (
+                    <Text style={styles.note}>{`Its private key: ${slotName(e.slot)}, On this Key. Kept here: its public key${e.x509 ? ' and its certificate' : ''}.`}</Text>
+                  ) : null}
                   {artifactRows(e.artifacts, {name: e.label || e.name || 'key', pgp: e.pgp, id: e.id})}
                   {e.x509 ? certView(e.x509, e.label || e.name || 'key') : null}
                   <Btn title="Remove…" tone="danger" disabled={busy !== null} onPress={() => setRemoving(targetForEntry(e))} />
