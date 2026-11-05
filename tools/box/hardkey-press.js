@@ -144,6 +144,32 @@ async function main(argv) {
       await new Promise((ok) => { const w = fs.watch('/dev', () => { w.close(); ok(); }); });
     }
   }
+  /*
+   * --unplug / --plug: THE KEY OFF THE USB AND BACK, BY ITS OWN RESTART (box, 2026-11-04: config mode ends only when the key
+   * restarts, and blue-key has no hands on it): the console's '8' (the kit's device.restart) and the key's node gone;
+   * --plug waits for its console's node back. The line is sent again while the node stays (3 tries, 10 s each): a busy
+   * key drops a console line unread - measured in the kit (onlykey-testing lib/device _commandThatReboots).
+   */
+  if (LINUX && (argv.includes('--unplug') || argv.includes('--plug'))) {
+    const present = () => { try { return hardConsole(); } catch { return null; } };
+    const until = (want, ms) => new Promise((ok) => {
+      if (!!present() === want) { ok(true); return; }
+      const w = fs.watch('/dev', () => { if (!!present() === want) { clearTimeout(t); w.close(); ok(true); } });
+      const t = setTimeout(() => { w.close(); ok(false); }, ms);
+    });
+    if (argv.includes('--plug')) {
+      if (!(await until(true, 20000))) throw new Error('the key did not come back on the USB in 20 s');
+      console.log(`the key is back on the USB (${present()})`);
+      return 0;
+    }
+    const n = present();
+    if (!n) throw new Error('no hard OnlyKey on the USB to unplug');
+    for (let i = 1; i <= 3; i++) {
+      send(n, '8');
+      if (await until(false, 10000)) { console.log(`the key restarted - off the USB (try ${i})`); return 0; }
+    }
+    throw new Error('the key stayed on the USB after 3 restart lines');
+  }
   const node = LINUX ? hardConsole() : hidConsole();
   /*
    * --probe: does this key's DEBUG console answer? One inert byte (Z - not a button, not a command; the lib's

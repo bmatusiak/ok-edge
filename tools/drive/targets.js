@@ -364,10 +364,10 @@ function dropConsole() {
  * A HARD KEY PRESSED THROUGH ITS DEBUG CONSOLE - the web app's and the desktop's alike (box desktop, 2026-11-04: the
  * desktop's press tool listened only from its own start; blue-key said "Edge: waiting for a press" 2 s into the login
  * card's certify, before the tool listened, and waited out its 30 s - twice). after: the key's word since the request
- * began (`since`), from the held console; not held, the press tool listens from now. buttons: taps only.
+ * began (`since`), from the held console; not held, the press tool listens from now. buttons: taps, or n:hold|long|longest
+ * (the console's '!' modifiers - config mode is 6:hold, as the kit's enterConfigMode).
  */
 async function hardPress(b, after, since) {
-  if (b.some((x) => x.includes(':'))) return `press failed: a hard key's debug console taps only - ${b.join(' ')} needs the gadget`;
   let waitFor = [];
   let said = '';
   if (after && consoleProc && !exited(consoleProc)) {
@@ -1273,6 +1273,16 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
        * key restarts, and the drive could unplug only the Pi relay key): its soft key stopped - off the USB, its firmware
        * gone as with the power - then started again, booting locked. A flow's unplugKey / plugKey (maestro/runner.js).
        */
+      /*
+       * A TEST HARD KEY UNPLUGGED AND PLUGGED BACK (box, 2026-11-04: config-out on blue-key): its own restart through its
+       * debug console - off the USB, then back, booting locked (tools/box/hardkey-press.js --unplug | --plug). A test hex
+       * only: a production key has no console, and the restart line goes nowhere.
+       */
+      if ((action === 'unplug' || action === 'plug') && KEY === 'hard' && LINUX) {
+        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), `--${action}`], 45000);
+        const last = r.out.split(/\r?\n/).filter(Boolean).pop() || '';
+        return r.ok ? { ok: true, what: `the hard key: ${last}` } : { ok: false, why: `hardkey-press --${action}: ${last}` };
+      }
       if ((action === 'unplug' || action === 'plug') && KEY === 'gadget' && LINUX) {
         if (action === 'unplug') {
           gadgetStopping = true;
