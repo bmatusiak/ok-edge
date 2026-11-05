@@ -39,6 +39,13 @@ const ROOT = path.join(HERE, '..', '..', '..');
 const CLASSES = path.join(HERE, '.local', 'classes');
 const say = (l) => console.error(`[apk-sign] ${l}`);
 const die = (l) => { say(`STOPPED: ${l}`); process.exit(1); };
+/*
+ * ITS TEMP FOLDERS GO WHEN IT DOES, HOWEVER IT ENDS (box, 2026-11-05: die() exits at once, so a finally never ran - a
+ * stopped sign left its 147 MB folder in /tmp, and the next sign failed "Disk quota exceeded")
+ */
+const temps = new Set();
+process.on('exit', () => { for (const d of temps) fs.rmSync(d, { recursive: true, force: true }); });
+const tempDir = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-sign-')); temps.add(d); return d; };
 
 const argv = process.argv.slice(2);
 const flag = (k, d = null) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -240,7 +247,7 @@ async function sign() {
   const out = flag('--out');
   if (!apk || !fs.existsSync(apk) || !out) die('sign.js <in.apk> --out <out.apk> --cert <cert.pem> --server <url|local> --identity <hex>');
   const cert = certOf(flag('--cert'));
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-sign-'));
+  const tmp = tempDir();
   try {
     /* 1 */
     const digests = record(apk, flag('--cert'), tmp);
@@ -287,7 +294,7 @@ async function sign() {
   const [cmd] = positional;
   if (cmd === 'card') return card();
   if (cmd === 'record') {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-sign-'));
+    const tmp = tempDir();
     try { for (const d of record(positional[1], flag('--cert'), tmp)) console.log(d); } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     return undefined;
   }

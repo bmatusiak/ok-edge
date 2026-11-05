@@ -1349,6 +1349,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         if (!apk) return { ok: false, why: 'apk-sign: no APK named and none built here (android/app/build/outputs/apk)' };
         const out = path.join(os.tmpdir(), `apk-sign-${Date.now()}.apk`);
         const r = await streamIn(EDGE, NODE, [sign, apk, '--out', out, ...common], { timeout: 15 * 60000, ...shown('apk-sign') });
+        /* the signer verified it and said so (its last lines, below): the 100-170 MB APK goes (2026-11-05: eight of them filled the box's /tmp) */
+        fs.rmSync(out, { force: true });
         const tail = r.out.split(/\r?\n/).filter(Boolean).slice(-4).join(' | ');
         return r.ok ? { ok: true, what: tail } : { ok: false, why: `apk-sign: ${tail}` };
       }
