@@ -226,7 +226,12 @@ export function startDrive(): void {
   });
 
   /* the screen's text on every change - the page's MutationObserver, Android's layout event - while connected */
-  watchScreen(() => { if (ws) sendScreen(); });
+  /*
+   * READ EVEN WHEN NOT CONNECTED (2026-11-05): Android's watcher holds one event until a read takes it (screen.android.ts) -
+   * an event dropped unread while the drive was away left it waiting, and no screen change was sent again. The read is
+   * the app's own, local; send() sends only while connected.
+   */
+  watchScreen(sendScreen);
 
   /* the native side's own log (Android: its logcat), marked as such - the testnet only (mayLeave) */
   watchNativeLog(l => { if (ws && mayLeave(l, true)) send({t: 'log', line: `[logcat] ${l}`, at: Date.now()}); });

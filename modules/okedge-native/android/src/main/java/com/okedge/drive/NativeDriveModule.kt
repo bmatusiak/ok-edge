@@ -96,7 +96,13 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
     if (v is EditText) return
     if (v is TextView) {
       val r = Rect()
-      if (v.getGlobalVisibleRect(r) && r.width() > 0 && r.height() > 0 && v.createAccessibilityNodeInfo().isVisibleToUser) {
+      val inView = v.getGlobalVisibleRect(r)
+      /*
+       * ...AND WHERE IT IS, seen or not (the Pixel, 2026-11-05, again: the restore's PIN page also SLIDES in - its texts
+       * off the screen, two reads alike, settled before it arrived): a slide moves the text from frame to frame
+       */
+      look.append(if (inView) "${r.left}:${r.top}" else "-").append(',')
+      if (inView && r.width() > 0 && r.height() > 0 && v.createAccessibilityNodeInfo().isVisibleToUser) {
         val t = v.text?.toString()?.trim()
         if (!t.isNullOrEmpty()) { lines.add(t); look.append(a).append(',') }
       }
