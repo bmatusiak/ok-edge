@@ -27,7 +27,7 @@ import {activeBackend} from './hooks/KeyContext';
 import {loadIdentity} from './edgeIdentity';
 import {openpgpFork} from './pgpOps';
 import {keyTask} from './keyBusy';
-import {certLine, keepCert, slotOfCert, slotOfCertHash, type CertKey} from './certKeys';
+import {certKeyStillIn, certLine, keepCert, slotOfCert, slotOfCertHash, type CertKey} from './certKeys';
 
 /* the plans running here, each with what its runner listens to (its fills and finish) */
 const running = new Map<string, Set<(e: PlanEvent) => void>>();
@@ -71,6 +71,18 @@ async function runOne(plan: Plan): Promise<void> {
       if (it.key?.kind !== 'rsa') continue;
       const k = it.key.cert ? await slotOfCertHash(it.key.cert) : null;
       if (!k) { say(`plan ${plan.id}: not run here - item ${it.item}'s certificate ${String(it.key.cert || '').slice(0, 16)}… is in no Key Chain entry of this device`); return; }
+      /*
+       * THE KEPT CERTIFICATE IS THE REFERENCE, SO THE SLOT IS CHECKED AGAINST IT EACH TIME (Brad, 2026-11-05: "this forces
+       * the user to keep a backup of their pubkey to ensure the correct pubkey they have listed gets properly used"): the
+       * slot's public key read now (no press) must be the certificate's. Another key there - replaced since the
+       * certificate was kept - and nothing is signed; the agent hears only that the certificate's key is not here.
+       */
+      if (!(await certKeyStillIn(k))) {
+        const why = `the key of certificate ${k.sha256.slice(0, 16)}… is not on this OnlyKey`;
+        say(`plan ${plan.id}: refused - RSA${k.slot} no longer holds the key of the kept certificate ${k.sha256.slice(0, 16)}… (re-import it, or put the key back)`);
+        await planUpdate(plan.id, {state: 'failed', why}).catch(() => {});
+        return;
+      }
       it.key = {...it.key, slot: k.slot, bits: k.bits};
     }
     const app = await getOnlyKey(activeBackend());

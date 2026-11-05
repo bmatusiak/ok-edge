@@ -81,6 +81,13 @@ export async function checkCert(pem: string): Promise<{key: CertKey; signature: 
   return {key, signature};
 }
 
+/** The slot still holds this certificate's key: its public key read now (no press) is the certificate's. */
+export async function certKeyStillIn(k: CertKey): Promise<boolean> {
+  const {device} = await getOnlyKey(activeBackend());
+  const p = await device.probeKeySlot(k.slot).catch(() => null);
+  return p?.kind === 'rsa' && !!p.publicKey && hexOf(p.publicKey) === hexOf(k.publicKey);
+}
+
 /** Keep the certificate on its slot's Key Chain entry (merged with the entry that is there) - in the bucket. */
 export async function keepCert(k: CertKey, name?: string): Promise<'saved' | 'held' | 'same'> {
   const made = keychain.list.createEntry({kind: 'slot', slot: k.slot, type: 'rsa', publicKey: k.publicKey, name: name || `RSA${k.slot}`, x509: k.pem});
