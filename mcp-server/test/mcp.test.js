@@ -236,7 +236,7 @@ test('card_new: the agent asks for its card - a card request submitted at once, 
   const pem = require('fs').readFileSync(require('path').join(__dirname, '../../signing/debug.crt.pem'), 'utf8');
   const sha = require('crypto').createHash('sha256').update(new (require('crypto').X509Certificate)(pem).raw).digest('hex');
   const ask = { identity: hexOf(A.identityPublicKey), label: 'release signer', certs: [pem], reason: 'sign ok-edge releases' };
-  assert.match((await s.tool('card_new', { ...ask, certs: ['not a certificate'] })).refused, /certs[0]/);
+  assert.match((await s.tool('card_new', { ...ask, certs: ['not a certificate'] })).refused, /certs\[0\]: x509: not a PEM certificate/);
   assert.match((await s.tool('card_new', { ...ask, certs: [] })).refused, /at least one key/);
   /* not accepted yet: shown to the owner, kept a draft with the reason; plan_submit sends it once they accept */
   const c = await s.tool('card_new', ask);

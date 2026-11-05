@@ -1127,7 +1127,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       if (r.ok && !r.out) r.out = 'tsc: no errors';
     } else if (what === 'server') {
       const main = path.join(EDGE, 'node_modules/node-onlykey-lib/mcp/localhost/main.js');
-      const srv = spawn(NODE, [main, '--port', '8787', '--host', '127.0.0.1', '--var', 'REQUIRE_LOGIN=0', '--var', 'LIFETIME_IDENTITIES=*'], { cwd: EDGE, windowsHide: true });
+      /* its own process group on Linux: end() signals the group (box, 2026-11-05: without one, -pid reached nothing - every check left its server on 8787 and the next found it taken) */
+      const srv = spawn(NODE, [main, '--port', '8787', '--host', '127.0.0.1', '--var', 'REQUIRE_LOGIN=0', '--var', 'LIFETIME_IDENTITIES=*'], { cwd: EDGE, windowsHide: true, detached: LINUX });
       const up = await new Promise((resolve) => {
         let said = '';
         const t = setTimeout(() => resolve(false), 20000);
