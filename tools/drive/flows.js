@@ -11,6 +11,8 @@
  * unlock test does not know, 2026-10-31.)
  */
 const TEST_PIN = '1234561';
+/* a test hard key's PIN: the kit's 'initialized' state (onlykey-testing lib/config PINS.primary; tools/box/hardkey-setup.js) */
+const KIT_PIN = '1111111';
 /*
  * A SOFT KEY WITH ANOTHER PIN (Brad, 2026-10-31: the box desktop's is the kit's 1111111 - each Login Bypass, which types
  * TEST_PIN, was a wrong PIN attempt, and ten wipe a key): run.js login|budget --pin <pin> names it, and the login types
@@ -184,7 +186,8 @@ async function onGadget(d) {
  * change, look again - from the login screen, the keypad, the identity check, a failed try, another tab
  */
 /* key: 'soft' - the desktop logs in on its own testnet soft key even while the box's gadget is up (onGadget is not asked) */
-async function loginMoves(d, { pin = TEST_PIN, life = 180, key = null } = {}) {
+async function loginMoves(d, { pin: named = null, life = 180, key = null } = {}) {
+  const pin = named || TEST_PIN;
   const gadget = (dd) => (key === 'soft' ? Promise.resolve(false) : onGadget(dd));
   const until = Date.now() + life * 1000;
   /*
@@ -271,7 +274,19 @@ async function loginMoves(d, { pin = TEST_PIN, life = 180, key = null } = {}) {
     else if (now === 'keypad' && key === 'soft' && d.app.flags.consoleAnswers === true) {
       throw new Error('login: the keypad is a USB key\'s, not the soft key\'s (its console answers) - nothing typed; take the USB key off first (the box gadget: machine use-key hard)');
     }
-    else if (now === 'keypad') { for (const n of pin) await d.tap(`Button ${n}`); }
+    /*
+     * A TEST KEY ON THE USB TAKES THE KIT'S PIN (box, 2026-11-04: blue-key, just set up by tools/box/hardkey-setup.js,
+     * got the testing PIN 1234561 - one wrong attempt, then a 3-min wait on a state that never moved): its console
+     * answers, so the kit set it up (1111111) - unless the flow names its PIN. A key still locked after it stops the run.
+     */
+    else if (now === 'keypad') {
+      const typed = !named && d.app.flags.consoleAnswers === true ? KIT_PIN : pin;
+      for (const n of typed) await d.tap(`Button ${n}`);
+      await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] }).catch(() => {
+        throw new Error(`login: the key stayed locked after its ${typed === KIT_PIN ? 'kit' : `${typed.length}-digit`} PIN on the keypad - one wrong attempt; not tried again. Its PIN: --pin <pin>`);
+      });
+      continue;
+    }
     else if (now === 'elsewhere') await d.goto('This Key');
     /*
      * the LIVE soft key blank, its setup page up (the Pixel, 2026-11-01: a fresh install's restart lands there, the
