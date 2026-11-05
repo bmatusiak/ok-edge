@@ -108,6 +108,11 @@ function GiveAnAgent({identityPublicKey}: {identityPublicKey: string}) {
         <Text selectable style={[styles.mono, styles.giveText]}>{identityPublicKey}</Text>
         <Btn title="Copy" label="Copy the identity public key" onPress={() => copy(identityPublicKey, 'Identity public key')} />
       </View>
+      {/* both at once (Brad, 2026-11-05: "I should have a copy button to copy both"), labelled as an agent reads them */}
+      {address ? (
+        <Btn title="Copy both" tone="primary" label={`Copy the ${where.toLowerCase()} address and the identity public key`}
+          onPress={() => copy(`MCP server: ${address}\nidentity public key: ${identityPublicKey}`, 'Both')} />
+      ) : null}
       {copied ? <Text style={styles.dim}>{copied}</Text> : null}
     </View>
   );
