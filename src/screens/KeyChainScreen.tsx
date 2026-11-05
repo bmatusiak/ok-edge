@@ -140,6 +140,8 @@ export function KeyChainScreen({
   /* The remove Wizard, while one is open (KeyChainRemove). */
   const [removing, setRemoving] = useState<RemoveTarget | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  /* a pasted X.509 certificate per RSA slot, before it is kept (certRows) */
+  const [certDrafts, setCertDrafts] = useState<Record<number, string>>({});
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -917,6 +919,76 @@ export function KeyChainScreen({
     );
   };
 
+  /*
+   * AN RSA SLOT'S X.509 CERTIFICATE, KEPT HERE (Brad, 2026-11-04: RSA3's code-signing certificate - "store the pub cert in
+   * the key chain in the desktop app", beside its copy in the repo). Kept on the slot's entry (lib list.js x509), and only
+   * one whose public key is the slot's: read here first, its key compared, its signature checked where the page has
+   * WebCrypto (the desktop, the web app) - a phone without it says so. Shown with its subject, end date and fingerprint;
+   * the PEM copied or shared as a .crt.pem.
+   */
+  const keptCert = (p: Probe) => (p.kind === 'rsa' && p.publicKey
+    ? entries.find(x => x.x509 && x.kind === 'slot' && x.slot === p.slot && hexOf(x.publicKey) === hexOf(p.publicKey))
+    : undefined);
+  const keepCert = async (p: Probe) => {
+    setError(null);
+    setStatus(null);
+    try {
+      const pem = (certDrafts[p.slot] || '').trim();
+      const c = keychain.x509.read(pem);
+      if (hexOf(c.modulus) !== hexOf(p.publicKey)) throw new Error(`this certificate's public key is not the one in ${slotName(p.slot)}`);
+      const subtle = (globalThis as any).crypto?.subtle;
+      let checked = 'its signature not checked on this device';
+      if (subtle) {
+        const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const hash = c.signatureAlgorithm === 'sha512WithRSAEncryption' ? 'SHA-512' : c.signatureAlgorithm === 'sha256WithRSAEncryption' ? 'SHA-256' : null;
+        if (!hash) throw new Error(`a certificate signed with ${c.signatureAlgorithm} is not kept here (SHA-256 or SHA-512 with RSA)`);
+        const key = await subtle.importKey('jwk', {kty: 'RSA', n: b64u(c.modulus), e: b64u(c.exponent), ext: true}, {name: 'RSASSA-PKCS1-v1_5', hash}, false, ['verify']);
+        if (!(await subtle.verify('RSASSA-PKCS1-v1_5', key, c.signature, c.tbs))) throw new Error('this certificate\'s signature does not check out with its own key');
+        checked = 'its signature checked';
+      }
+      const tag = keychain.tag.parseTag(p.label);
+      const made = keychain.list.createEntry({kind: 'slot', slot: p.slot, type: 'rsa', publicKey: p.publicKey, name: tag ? tag.name : slotName(p.slot), x509: pem});
+      await saveEntries(cur => keychain.list.merge(cur, [made]).entries);
+      setCertDrafts(d => ({...d, [p.slot]: ''}));
+      setStatus(`Kept ${slotName(p.slot)}'s certificate (${c.subject.CN || 'no name'}): its key is the slot's, ${checked}.`);
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    }
+  };
+  const certRows = (p: Probe) => {
+    if (p.kind !== 'rsa') return null;
+    const e = keptCert(p);
+    if (e?.x509) {
+      const c = keychain.x509.read(e.x509);
+      const who = [c.subject.CN, c.subject.O].filter(Boolean).join(', ');
+      const base = (who || slotName(p.slot)).replace(/[^A-Za-z0-9._-]+/g, '-');
+      return (
+        <View style={styles.detail}>
+          <CopyRow title="X.509" value={`${who} · until ${c.notAfter.slice(0, 10)}`} onCopy={() => copy(e.x509 as string, 'Certificate')} />
+          <CopyRow title="cert SHA-256" value={c.sha256.toUpperCase().replace(/(.{4})/g, '$1 ').trim()} onCopy={() => copy(c.sha256.toUpperCase(), 'Certificate fingerprint')} />
+          <Btn title="Share certificate" onPress={() => void NativeShare.shareFile(`${base}.crt.pem`, e.x509 as string, 'application/x-pem-file', 'Certificate')} />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.detail}>
+        <Text style={styles.note}>An X.509 certificate for this key (a .crt.pem) can be kept here - paste it:</Text>
+        <TextInput
+          style={[styles.input, styles.pgpInput]}
+          accessibilityLabel={`X.509 certificate for ${slotName(p.slot)}`}
+          placeholder="-----BEGIN CERTIFICATE-----"
+          placeholderTextColor={theme.textDim}
+          value={certDrafts[p.slot] || ''}
+          onChangeText={t => setCertDrafts(d => ({...d, [p.slot]: t}))}
+          multiline
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        <Btn title="Keep certificate" disabled={busy !== null || !/BEGIN CERTIFICATE/.test(certDrafts[p.slot] || '')} onPress={() => void keepCert(p)} />
+      </View>
+    );
+  };
+
   const slotRows = (slots || []).filter(p => p.kind !== 'empty' || p.label);
   /* The use flag the key being made will get - what decides each slot's outcome. */
   const keyUse: 'signature' | 'decryption' = path === 'In the App'
@@ -1407,6 +1479,7 @@ export function KeyChainScreen({
                 {open === id ? (
                   <>
                     {a ? artifactRows(a, {name: tag ? `${tag.kind}-${tag.name}` : slotName(p.slot)}) : null}
+                    {certRows(p)}
                     {!a && kept ? artifactRows(kept.artifacts, {name: kept.name || slotName(p.slot), pgp: kept.pgp, id: kept.id, fp: kept.pgpFingerprint}) : null}
                     {p.kind === 'composite' && !kept ? (
                       <AdoptComposite slot={p.slot} entries={entries} getKey={getKey} busy={busy !== null}

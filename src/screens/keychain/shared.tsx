@@ -21,6 +21,8 @@ export type Entry = {
   slot?: number;
   publicKey: Uint8Array;
   artifacts: {hex: string; base64: string; ssh?: string; age?: string};
+  /* an RSA slot key's X.509 certificate (PEM), kept with it (KeyChainScreen certRows) */
+  x509?: string;
   /* an armored PGP public key block, when the entry is a PGP key */
   pgp?: string;
   /* a composite key's PGP fingerprint: it has no raw public key, so this names it */
