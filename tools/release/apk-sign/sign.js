@@ -76,7 +76,15 @@ function build() {
 function apksigner(args, env = {}) {
   const r = spawnSync(java('java'), ['-cp', [path.join(buildTools(), 'lib', 'apksigner.jar'), CLASSES].join(path.delimiter), 'com.android.apksigner.ApkSignerTool', ...args],
     { encoding: 'utf8', env: { ...process.env, ...env }, maxBuffer: 64 * 1024 * 1024 });
-  if (r.status !== 0) die(`apksigner ${args[0]}: ${(r.stderr || r.stdout || '').trim().split('\n').slice(-3).join(' | ')}`);
+  if (r.status !== 0) {
+    /*
+     * THE EXCEPTION, NOT THE STACK'S END (box, 2026-11-05: "apksigner sign: at ...ApkSigner.sign(ApkSigner.java:241) | at
+     * ...main" - the three last lines were all frames, the reason gone): its exception lines and causes first
+     */
+    const lines = (r.stderr || r.stdout || '').trim().split('\n');
+    const why = lines.filter((l) => !/^\s+at /.test(l) && /\S/.test(l));
+    die(`apksigner ${args[0]}: ${(why.length ? why : lines).slice(0, 4).map((l) => l.trim()).join(' | ')}`);
+  }
   return r.stdout;
 }
 
