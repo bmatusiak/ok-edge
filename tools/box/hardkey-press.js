@@ -128,6 +128,22 @@ async function main(argv) {
     for (const x of nodes()) console.log(`${x.node} ${x.seremu ? 'console' : '       '} ${x.gadget ? 'gadget soft key' : 'hard key'}`);
     return 0;
   }
+  /* --watch: each line with the time it came, to the ms - to line up with the page's own [timeline] lines */
+  const print = (l) => { console.log(`${new Date().toISOString().slice(11, 23)} ${l}`); return false; };
+  /*
+   * ...ACROSS THE KEY'S RESTARTS on the box (2026-11-04: a restart re-enumerates the key, its node went, the watch ended -
+   * and the drive's held console with it, so the next press waited for a word it never heard): read until the node goes,
+   * then wait for /dev to change (the key back) and read on. A key coming back makes several nodes (four hidraw, its
+   * serial), so a change seen before its console's node is followed by more.
+   */
+  if (argv.includes('--watch') && LINUX) {
+    for (;;) {
+      let n = null;
+      try { n = hardConsole(); } catch { /* not back yet */ }
+      if (n) { await readLines(n, print, 0).catch(() => {}); print('(the key\'s console went - waiting for it to come back)'); }
+      await new Promise((ok) => { const w = fs.watch('/dev', () => { w.close(); ok(); }); });
+    }
+  }
   const node = LINUX ? hardConsole() : hidConsole();
   /*
    * --probe: does this key's DEBUG console answer? One inert byte (Z - not a button, not a command; the lib's
@@ -142,8 +158,7 @@ async function main(argv) {
     console.log(answers ? `debug console answers on ${node}` : `no echo on ${node} - not a test hex`);
     return answers ? 0 : 3;
   }
-  /* --watch: each line with the time it came, to the ms - to line up with the page's own [timeline] lines */
-  if (argv.includes('--watch')) { await readLines(node, (l) => { console.log(`${new Date().toISOString().slice(11, 23)} ${l}`); return false; }, 0); return 0; }
+  if (argv.includes('--watch')) { await readLines(node, print, 0); return 0; }
   const after = (argv.find((a) => a.startsWith('--after=')) || '').slice(8);
   const timeout = Number((argv.find((a) => a.startsWith('--timeout=')) || '').slice(10)) || 60;
   const presses = argv.filter((a) => !a.startsWith('--'));
@@ -159,4 +174,8 @@ async function main(argv) {
   return 0;
 }
 
-main(process.argv.slice(2)).then((c) => { process.exitCode = c; }, (e) => { console.error(`hardkey-press: ${e.message}`); process.exitCode = 1; });
+/*
+ * EXITS, not left to drain (box, 2026-11-04: an --after that ran out kept the process up to its caller's 70 s kill - a
+ * hidraw read stream destroyed with its read still pending holds the event loop)
+ */
+main(process.argv.slice(2)).then((c) => process.exit(c), (e) => { console.error(`hardkey-press: ${e.message}`); process.exit(1); });

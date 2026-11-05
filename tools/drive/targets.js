@@ -232,11 +232,15 @@ async function useKey(which, line, onOut) {
     if (gadgetChild && !exited(gadgetChild)) r.push(await stopChild(gadgetChild, line, 'gadget'));
     const left = gadgetElsewhere();
     if (left.length) r.push(await endPids(left, line, 'gadget'));
+    /* the hard key's console held from now: a press reads its word from its request's start (hardPress) */
+    holdConsole();
     return `the web app's key is hard key 2; the gadget is off${r.length ? ` (${r.join(', ')})` : ''}`;
   }
   if (which === 'gadget') {
     KEY = 'gadget';
     gadgetStopping = false;
+    /* the gadget's console lines go to the same list (holdGadget): the hard key's are not mixed in */
+    dropConsole();
     const held = holdGadget(onOut);
     return `the web app's key is the gadget soft key; ${gadget()}${held ? ` - ${held}` : ''}`;
   }
@@ -355,6 +359,24 @@ function dropConsole() {
   if (consoleProc && !exited(consoleProc)) try { consoleProc.kill(); } catch { /* gone */ }
   consoleProc = null;
   consoleLines.length = 0;
+}
+/*
+ * A HARD KEY PRESSED THROUGH ITS DEBUG CONSOLE - the web app's and the desktop's alike (box desktop, 2026-11-04: the
+ * desktop's press tool listened only from its own start; blue-key said "Edge: waiting for a press" 2 s into the login
+ * card's certify, before the tool listened, and waited out its 30 s - twice). after: the key's word since the request
+ * began (`since`), from the held console; not held, the press tool listens from now. buttons: taps only.
+ */
+async function hardPress(b, after, since) {
+  if (b.some((x) => x.includes(':'))) return `press failed: a hard key's debug console taps only - ${b.join(' ')} needs the gadget`;
+  let waitFor = [];
+  let said = '';
+  if (after && consoleProc && !exited(consoleProc)) {
+    const seen = await consoleSaid(new RegExp(after), since, 25000);
+    if (!seen) return `press failed: the key's console did not say /${after}/ within 25 s - nothing pressed`;
+    said = ` (its console said "${seen.l.trim().slice(0, 40)}" ${Math.max(0, Date.now() - seen.at)} ms before)`;
+  } else if (after) waitFor = [`--after=${after}`, '--timeout=25'];
+  const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...waitFor, ...b], 70000);
+  return r.ok ? `pressed ${b.join(' ')} on the hard key${said || (after ? ` (when its console said /${after}/)` : '')}` : `press failed: ${r.out.split('\n').pop()}`;
 }
 /* a console line matching re since `since` (ms epoch), or the next one - null after `life` ms */
 function consoleSaid(re, since, life) {
@@ -628,19 +650,18 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       async press({ buttons = ['1'], after = null, sinceAge = 0 } = {}) {
         /* the gadget's own press, with the key's word to wait for (2026-11-03: dropped here, the budget's press went early) */
         if (KEY === 'gadget' && gadgetUp) return T.webapp.press({ buttons, after, sinceAge });
+        const since = sinceAge ? Date.now() - sinceAge : Date.now();
         const b = (Array.isArray(buttons) ? buttons : String(buttons).split(/\s+/)).map(String).filter((x) => BUTTON.test(x));
         if (!b.length) b.push('1');
-        /* a hard key is pressed through its debug console's taps (tools/box/hardkey-press.js): no hold there */
-        if (b.some((x) => x.includes(':'))) return `press failed: a hard key's debug console taps only - ${b.join(' ')} needs the gadget`;
+        /* the box's hard key: its console held from here on, if the app's start did not already (a drive-remote restart) */
+        if (LINUX) holdConsole();
         /*
          * NOT BEFORE THE KEY WAITS (box, 2026-11-01: the login budget's press went the moment its sheet showed, before the
          * request was on the key - lost, the login timed out to "Try again"): 800 ms first, as the kit's own Edge tests.
          */
         /* ...or, given the key's word (an Edge press: "Edge: waiting for a press"), when its console says it - the event, not the wait */
         if (!after) await new Promise((ok) => setTimeout(ok, 800));
-        const waitFor = after ? [`--after=${after}`, '--timeout=25'] : [];
-        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...waitFor, ...b], 70000);
-        return r.ok ? `pressed ${b.join(' ')} on the hard key (debug console${after ? `, when it said /${after}/` : ''})` : `press failed: ${r.out.split(/\r?\n/).pop()}`;
+        return hardPress(b, after, since);
       },
       async start() {
         const c = running.get('desktop');
@@ -649,6 +670,8 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         /* on the box: its user's server is the stand-in, under the key's site (electron/main.js OKEDGE_STANDIN_HOST) */
         const standin = await ensureStandin(line);
         if (standin) { env.OKEDGE_STANDIN_HOST = KEY_SITE; line(`desktop: the user's server is the box's stand-in - ${standin}`); }
+        /* the box's hard key as the desktop's: its console held before the app's first request (hardPress). Not on Windows - red-key's console is never read there */
+        if (LINUX && KEY === 'hard') holdConsole();
         const child = launch('desktop-test', LINUX ? 'npm' : 'npm.cmd', ['run', 'electron:test', ...(LINUX ? ['--', '--no-sandbox'] : [])], env);
         /* kept after it exits: its exit code is its last words (lastWords); the next start replaces it */
         running.set('desktop', child);
@@ -783,17 +806,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
           if (taken) return `press failed: ${taken}`;
           return `pressed ${b.join(' ')} on the gadget soft key${how ? ` (when ${how})` : ''}`;
         }
-        if (b.some((x) => x.includes(':'))) return `press failed: a hard key's debug console taps only - ${b.join(' ')} needs the gadget`;
-        /* the held console: its word since this request began (`since`), or the next one; not held: the press tool listens */
-        let waitFor = [];
-        let said = '';
-        if (after && consoleProc && !exited(consoleProc)) {
-          const seen = await consoleSaid(new RegExp(after), since, 25000);
-          if (!seen) return `press failed: the key's console did not say /${after}/ within 25 s - nothing pressed`;
-          said = ` (its console said "${seen.l.trim().slice(0, 40)}" ${Math.max(0, Date.now() - seen.at)} ms before)`;
-        } else if (after) waitFor = [`--after=${after}`, '--timeout=25'];
-        const r = await runIn(EDGE, NODE, [path.join(EDGE, 'tools/box/hardkey-press.js'), ...waitFor, ...b], 70000);
-        return r.ok ? `pressed ${b.join(' ')} on the hard key${said || (after ? ` (when its console said /${after}/)` : '')}` : `press failed: ${r.out.split('\n').pop()}`;
+        return hardPress(b, after, since);
       },
       async stop() {
         const c = running.get('webapp') || [];
