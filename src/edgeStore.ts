@@ -664,6 +664,15 @@ async function syncNow(source: EdgeSource, now: number): Promise<{mirror: Mirror
        */
       if (seqOf(r) > head.seq) { welded = false; break; }
       const last = mirror.links[mirror.links.length - 1];
+      /*
+       * NO HEAD, NOT KEPT (box, 2026-11-05: an agent's plan on the hard key - every sync of this host's copy threw
+       * "expected Uint8Array, got type=object" and saved nothing, so the budget's cards never moved). A hard key never
+       * reveals its heads: this host welds them (lib edge plugin weldTracked), and a ring link past a gap in the copy has
+       * nothing to weld from - its head comes back null. Kept, the copy's digest (lib verdict.digestOf) hashed that null.
+       * Such a link is passed over; the first one this host CAN weld (one the key's proven head or a use made known)
+       * is taken after the gap, as any gap is. The NEXT link with no head still stops the read, as before.
+       */
+      if (!r.head && (!last || seqOf(r) > seqOf(last) + 1)) continue;
       if (follows(last, r)) { mirror.links.push(r); mirror.seen[seqOf(r)] = mirror.seen[seqOf(r)] ?? now; }
       else if (!last || seqOf(r) > seqOf(last)) { welded = false; break; } /* not this chain's next link: read it again next sync */
     }
