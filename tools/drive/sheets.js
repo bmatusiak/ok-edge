@@ -145,6 +145,13 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
       changed();
       return;
     }
+    /*
+     * HELD UNDER AN ACTION SHEET (Brad, 2026-11-05: "sheets that need actions are on top" - Sheet.tsx): the progress the
+     * key's work has, waiting to open until the sheet that asks something is answered; the person reads that sheet - the
+     * work is not hidden from them, so it counts as progress shown
+     */
+    m = /^\[sheet\] progress held under an action sheet: ?(.*)$/.exec(l);
+    if (m) { progress = true; progressWhat = m[1].replace(/ - why: .*$/, ''); changed(); return; }
     if (/^\[sheet\] progress down/.test(l)) { progress = false; changed(); return; }
     m = /^\[sheet\] height (\d+): (.*)$/.exec(l);
     if (m) {

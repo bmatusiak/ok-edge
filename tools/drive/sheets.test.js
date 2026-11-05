@@ -208,6 +208,18 @@ test('no progress: requests run after the press and no sheet shows them', async 
   assert.match(fails[0], /^no progress/);
 });
 
+test('progress held under an action sheet counts as shown: the person reads the sheet on top - the card certify', async () => {
+  const { j, fails, say } = inspector();
+  say(`[request] press asked: ${CERTIFY} - a press`, '[press] icon up (usb)');
+  await wait(100);
+  say(`[request] press done: ${CERTIFY} - answered`, '[press] icon down', "[timeline] 1 begin #3 Edge: reading the key's post-quantum public key",
+    "[sheet] progress held under an action sheet: Edge: reading the key's post-quantum public key - why: Certifying the card");
+  await wait(NO_PROGRESS_MS + 200);
+  say("[timeline] 2 end #3 Edge: reading the key's post-quantum public key steps=1 ok", '[sheet] progress down');
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
 test('a new press asked after an answer is not a stale sheet (a derive\'s code after the budget\'s press)', async () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)');

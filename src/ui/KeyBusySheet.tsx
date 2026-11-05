@@ -32,13 +32,17 @@ export function KeyBusySheet() {
   /* ...as it really shows: under an action sheet it waits to open (Sheet's layers), and "up" is said only once it opened */
   const [sheetShown, setSheetShown] = useState(false);
   useEffect(() => { if (!b || hostSheetShows(c, b)) setSheetShown(false); }, [b, c]);
-  const progressUp = !!b && !hostSheetShows(c, b) && !b.asks && sheetShown;
-  const wasUp = React.useRef(false);
+  const progressWanted = !!b && !hostSheetShows(c, b) && !b.asks;
+  const progressUp = progressWanted && sheetShown;
+  /* up, held (wanted, but waiting under a sheet that asks something - Sheet.tsx's layers), or down - said as it changes */
+  const now = progressUp ? 'up' : progressWanted ? 'held' : 'down';
+  const was = React.useRef<'up' | 'held' | 'down'>('down');
   useEffect(() => {
-    if (progressUp === wasUp.current) return;
-    wasUp.current = progressUp;
-    console.log(progressUp ? `[sheet] progress up: ${b?.what ?? ''} - why: ${b?.why.length ? b.why.join(' + ') : '(not named)'}` : '[sheet] progress down');
-  }, [progressUp, b]);
+    if (now === was.current) return;
+    was.current = now;
+    const why = `${b?.what ?? ''} - why: ${b?.why.length ? b.why.join(' + ') : '(not named)'}`;
+    console.log(now === 'up' ? `[sheet] progress up: ${why}` : now === 'held' ? `[sheet] progress held under an action sheet: ${why}` : '[sheet] progress down');
+  }, [now, b]);
   /* a host's press sheet (HostChallengeSheet) is on top while the key waits for its press - the rest is this one's progress (Brad, 2026-11-01) */
   if (!b || hostSheetShows(c, b)) return null;
   /*
