@@ -101,6 +101,11 @@ async function openSoft(): Promise<SoftKeyEdge | null> {
   agentsEdge().soft = s;
   return s;
 }
+/* the agents' copy brought up to the key's head, on their shared open - an agent's plan, after its uses (mcpPlans) */
+export async function syncAgentsCopy(): Promise<void> {
+  const soft = await openSoft();
+  if (soft) await syncCopy(soft);
+}
 /* the key forgotten (a lock, an unplug, the Log in page): what stays loaded here - the sheet - lets go of it */
 function forgetAgentsKey(): void {
   /*

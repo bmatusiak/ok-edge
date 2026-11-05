@@ -39,4 +39,9 @@ env:
     pattern: '\[mcp\] plan \S+: (done|ended|failed|declined)'
     timeout: 300000
     idle: none
+# the sheet's budget card followed the plan (Brad, 2026-11-05: it stayed "0 of 2 uses spent" after both signs)
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "2 of 2 uses spent"
 - runScript: scripts/apk-sign-end.js

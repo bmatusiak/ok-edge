@@ -22,15 +22,13 @@
  */
 import {agents as agentsLib, client as clientLib, plan as planLib} from 'node-onlykey-lib/edge';
 import {onAgents, onPlanEvent, planClaim, planUpdate, youIn, type Plan, type PlanEvent} from './mcpAgents';
-import {AGENT_FROM, handleEdgeMessage, withdrawSheet} from './edgeAgents';
+import {AGENT_FROM, handleEdgeMessage, syncAgentsCopy, withdrawSheet} from './edgeAgents';
 import {getOnlyKey} from './onlykey';
 import {activeBackend} from './hooks/KeyContext';
 import {loadIdentity} from './edgeIdentity';
 import {openpgpFork} from './pgpOps';
 import {keyTask} from './keyBusy';
 import {certKeyStillIn, certLine, keepCert, slotOfCert, slotOfCertHash, type CertKey} from './certKeys';
-import {SoftKeyEdge} from './edgeSoftKey';
-import {chainState} from './edgeStore';
 
 /* the plans running here, each with what its runner listens to (its fills and finish) */
 const running = new Map<string, Set<(e: PlanEvent) => void>>();
@@ -42,9 +40,9 @@ let started = false;
  * THE EDGE COPY FOLLOWS A PLAN (Brad, 2026-11-05: after the release APK's two signs the Edge tab's budget card and the
  * progress card on the sheet both still read "0 of 2 uses spent, Active"). A computer's uses reach the copy when it lets
  * the key go (its log, useEdge onKeyFree); a plan runs HERE, straight on the key, so nothing told the copy. After each
- * receipt and at the end (plan.js progress) one copy check reads the key's head and the links since - the sheet's card
- * redraws on it (chainState 'checked') and the Edge tab looks again (onPlanMoved). One at a time: a check asked while
- * one runs is folded into the next.
+ * receipt and at the end (plan.js progress) one sync of the copy, on the host's own open (as its Approve brings the copy
+ * up): the key's head and the links since - the sheet's card redraws on it (chainState 'checked') and the Edge tab looks
+ * again (onPlanMoved). One at a time: a sync asked while one runs is folded into the next.
  */
 const movedListeners = new Set<() => void>();
 export function onPlanMoved(listener: () => void): () => void {
@@ -58,8 +56,9 @@ function followCopy(): Promise<void> {
   following = (async () => {
     do {
       followAgain = false;
-      const source = await SoftKeyEdge.open();
-      if (source) await chainState.validity(source);
+      await syncAgentsCopy().catch((e: unknown) => {
+        console.log(`[mcp] the Edge copy did not follow the plan: ${String((e as Error)?.stack ?? e).split('\n').slice(0, 4).join(' | ')}`);
+      });
     } while (followAgain);
     for (const l of [...movedListeners]) l();
   })().finally(() => { following = null; });
