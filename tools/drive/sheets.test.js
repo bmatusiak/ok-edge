@@ -122,6 +122,16 @@ test('press covered: the progress sheet opens while a press sheet shows - the Pi
   assert.match(fails[0], /^press covered/);
 });
 
+test('the key asks a press the lib did not (a touchless derive, the soft key setting): its sheet is no stale sign sheet - the Pixel login', async () => {
+  const { j, fails, say } = inspector();
+  say('[request] press asked: signing - code 3 1 6', '[press] icon up (embedded)', '[press] icon down', '[request] press done: signing - answered',
+    '[request] press asked: deriving a secret (the key) - a press', '[press] icon up (embedded)');
+  await wait(STALE_MS + 300);
+  say('[press] icon down', '[request] press done: deriving a secret (the key) - answered');
+  j.stop();
+  assert.deepEqual(fails, []);
+});
+
 test('one press, one sheet: no swap', () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)', `[request] press done: ${BUDGET} - answered`, '[press] icon down');

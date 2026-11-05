@@ -20,6 +20,7 @@
 import NativeOkEmu from 'okedge-native/specs/NativeOkEmu';
 import type {KeyWaiting} from './transport/OkEmu';
 import {readKeyChainList} from './keyChainRecorder';
+import {sayKeyAskEnded, sayKeyAsks} from './requestLog';
 
 const {press: kcPress} = require('node-onlykey-lib/keychain');
 const {okconnect} = require('node-onlykey-lib/crypto');
@@ -66,6 +67,7 @@ export function startPressRecords(): void {
   try {
     NativeOkEmu.onPluginEvent(ev => {
       if (ev.name === 'press_end') {
+        sayKeyAskEnded();
         if (deriveWait) { deriveWait = null; changed(); }
         return;
       }
@@ -85,6 +87,7 @@ export function startPressRecords(): void {
       if (p && p.opcode === kcPress.DERIVE_OPCODE && p.slot === kcPress.DERIVE_SLOT && p.label) {
         const mode: 'press' | 'code' = p.mode === 'code' ? 'code' : 'press';
         deriveWait = {since: Date.now(), mode, code: mode === 'code' ? kcPress.codeOf(p.subject) : null, label: p.label};
+        sayKeyAsks(p.opcode, p.slot, deriveWait.code);
         changed();
         if (__DEV__) console.log(`[press] firmware record: a derive, ${mode}, label ${p.label.slice(0, 8)}`);
         return;
