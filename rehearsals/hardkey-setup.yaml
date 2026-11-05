@@ -24,7 +24,13 @@ env:
     args:
       name: hardkey-clear.js
 - launchApp
-- goto: Setup
+# a blank key: the login screen offers its setup (no menu yet)
+- tapOn: "Set up this key"
+# its Continue goes on to the PINs only once the app reads the key as blank - its options show then
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "A PIN, and also:"
 - tapOn: "Continue"
 - tapOn: "Start"
 - runScript:
@@ -44,6 +50,6 @@ env:
     pattern: '\[identity\] the key went \(unplugged\)'
     timeout: 20000
 - plugKey
-- tapOn: "Continue"
+# the unplug forgot the key (as every unplug - identity.forget): the app is back at its Log in page, the setup done
 - login:
     pin: ${PIN}
