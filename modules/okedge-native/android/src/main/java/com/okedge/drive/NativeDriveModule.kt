@@ -64,14 +64,10 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
     main.post {
       pending = false
       val lines = ArrayList<String>()
-      val look = StringBuilder()
-      collect(activity.window.decorView, lines, look)
-      val text = lines.joinToString("\n")
-      /* the same text AND the same alphas as the last read: whatever was fading has stopped - the frames stop asking */
-      val seen = text + "\u0000" + look
-      if (seen == lastSeen) settling = false
-      lastSeen = seen
-      promise.resolve(text)
+      collect(activity.window.decorView, lines)
+      /* what the screen looked like as read: a frame that looks the same asks nothing (check) */
+      lastRead = look(activity.window.decorView)
+      promise.resolve(lines.joinToString("\n"))
     }
   }
 
@@ -82,7 +78,7 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
    * is visible to the user, no parent hides it from accessibility, and its alpha (with its parents') is above zero. (A
    * home-made "on top at its centre" test came first and read nothing at all on the setup screen - replaced.)
    */
-  private fun collect(v: View, lines: MutableList<String>, look: StringBuilder, alpha: Float = 1f) {
+  private fun collect(v: View, lines: MutableList<String>, alpha: Float = 1f) {
     if (!v.isShown) return
     /*
      * a screen the navigator keeps attached but not shown is marked hidden from accessibility (react-native-screens'
@@ -91,24 +87,41 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
      */
     if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) return
     val a = alpha * v.alpha
-    /* every alpha this read stopped at or read text under, exactly: a fade changes it from frame to frame (settling) */
-    if (a <= 0.01f) { look.append(a).append(','); return }
+    if (a <= 0.01f) return
     if (v is EditText) return
     if (v is TextView) {
       val r = Rect()
-      val inView = v.getGlobalVisibleRect(r)
-      /*
-       * ...AND WHERE IT IS, seen or not (the Pixel, 2026-11-05, again: the restore's PIN page also SLIDES in - its texts
-       * off the screen, two reads alike, settled before it arrived): a slide moves the text from frame to frame
-       */
-      look.append(if (inView) "${r.left}:${r.top}" else "-").append(',')
-      if (inView && r.width() > 0 && r.height() > 0 && v.createAccessibilityNodeInfo().isVisibleToUser) {
+      if (v.getGlobalVisibleRect(r) && r.width() > 0 && r.height() > 0 && v.createAccessibilityNodeInfo().isVisibleToUser) {
         val t = v.text?.toString()?.trim()
-        if (!t.isNullOrEmpty()) { lines.add(t); look.append(a).append(',') }
+        if (!t.isNullOrEmpty()) lines.add(t)
       }
       return
     }
-    if (v is ViewGroup) for (i in 0 until v.childCount) collect(v.getChildAt(i), lines, look, a)
+    if (v is ViewGroup) for (i in 0 until v.childCount) collect(v.getChildAt(i), lines, a)
+  }
+
+  /*
+   * WHAT THE SCREEN LOOKS LIKE, CHEAPLY (no accessibility nodes - this runs on every frame drawn): each text with where it
+   * is and its alpha, and where a hidden branch stops the walk. A fade, a slide or a text changed in place all change it.
+   */
+  private fun look(root: View): String {
+    val sb = StringBuilder()
+    fun walk(v: View, alpha: Float) {
+      if (!v.isShown) return
+      if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) { sb.append("h,"); return }
+      val a = alpha * v.alpha
+      if (a <= 0.01f) { sb.append(a).append(','); return }
+      if (v is EditText) return
+      if (v is TextView) {
+        val p = IntArray(2)
+        v.getLocationOnScreen(p)
+        sb.append(v.text).append('@').append(p[0]).append(':').append(p[1]).append('^').append(a).append('\u0000')
+        return
+      }
+      if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i), a)
+    }
+    walk(root, 1f)
+    return sb.toString()
   }
 
   /*
@@ -117,15 +130,16 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
    * one read. The listener follows the activity: re-attached when the app comes back to the front.
    */
   /*
-   * ...AND UNTIL IT SETTLES (the Pixel, 2026-11-05: the restore's "Choose a PIN" page fades in - its layout came first,
-   * the read found its texts at alpha 0, and a fade changes no layout, so nothing asked again: the drive waited out its
-   * watchdog on a page that was plainly there). A layout starts SETTLING; while settling, each frame drawn asks too (one
-   * read in flight, as before), until a read finds what the last one did - text and alphas - and the frames stop asking.
-   * A still screen draws nothing; a spinner draws but changes no text or alpha, so it settles at once.
+   * ...AND ON EVERY FRAME THAT LOOKS DIFFERENT (the Pixel, 2026-11-05 - three misses of the restore's "Choose a PIN": the
+   * page faded in (read at alpha 0), slid in (read off the screen), and changed its words in place once the key came up
+   * (no layout at all) - and each time nothing asked again, and the drive waited out its watchdog on a page that was
+   * plainly there). A "settling" guess after each layout missed the last case. Now each frame drawn checks how the screen
+   * looks (look(), cheap) against the last read, one check at a time, and only a difference is an event. A still screen
+   * draws nothing; a spinner draws, looks the same and asks nothing. The drive runs in debug builds only.
    */
   @Volatile private var pending = false
-  @Volatile private var settling = false
-  private var lastSeen: String? = null
+  private var checking = false
+  private var lastRead: String? = null
   private var watching = false
   private var watchedView: View? = null
   private fun changed() {
@@ -133,11 +147,17 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
     pending = true
     reactContext.emitDeviceEvent(EVENT, null)
   }
-  private val onLayout = ViewTreeObserver.OnGlobalLayoutListener {
-    settling = true
-    changed()
+  private fun check() {
+    if (pending || checking) return
+    val root = watchedView ?: return
+    checking = true
+    main.post {
+      checking = false
+      if (!pending && look(root) != lastRead) changed()
+    }
   }
-  private val onDraw = ViewTreeObserver.OnDrawListener { if (settling) changed() }
+  private val onLayout = ViewTreeObserver.OnGlobalLayoutListener { changed() }
+  private val onDraw = ViewTreeObserver.OnDrawListener { check() }
 
   override fun watchScreen(on: Boolean) {
     main.post {
