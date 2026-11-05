@@ -64,8 +64,14 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
     main.post {
       pending = false
       val lines = ArrayList<String>()
-      collect(activity.window.decorView, lines)
-      promise.resolve(lines.joinToString("\n"))
+      val look = StringBuilder()
+      collect(activity.window.decorView, lines, look)
+      val text = lines.joinToString("\n")
+      /* the same text AND the same alphas as the last read: whatever was fading has stopped - the frames stop asking */
+      val seen = text + "\u0000" + look
+      if (seen == lastSeen) settling = false
+      lastSeen = seen
+      promise.resolve(text)
     }
   }
 
@@ -76,7 +82,7 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
    * is visible to the user, no parent hides it from accessibility, and its alpha (with its parents') is above zero. (A
    * home-made "on top at its centre" test came first and read nothing at all on the setup screen - replaced.)
    */
-  private fun collect(v: View, lines: MutableList<String>, alpha: Float = 1f) {
+  private fun collect(v: View, lines: MutableList<String>, look: StringBuilder, alpha: Float = 1f) {
     if (!v.isShown) return
     /*
      * a screen the navigator keeps attached but not shown is marked hidden from accessibility (react-native-screens'
@@ -85,17 +91,18 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
      */
     if (v.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS) return
     val a = alpha * v.alpha
-    if (a <= 0.01f) return
+    /* every alpha this read stopped at or read text under, exactly: a fade changes it from frame to frame (settling) */
+    if (a <= 0.01f) { look.append(a).append(','); return }
     if (v is EditText) return
     if (v is TextView) {
       val r = Rect()
       if (v.getGlobalVisibleRect(r) && r.width() > 0 && r.height() > 0 && v.createAccessibilityNodeInfo().isVisibleToUser) {
         val t = v.text?.toString()?.trim()
-        if (!t.isNullOrEmpty()) lines.add(t)
+        if (!t.isNullOrEmpty()) { lines.add(t); look.append(a).append(',') }
       }
       return
     }
-    if (v is ViewGroup) for (i in 0 until v.childCount) collect(v.getChildAt(i), lines, a)
+    if (v is ViewGroup) for (i in 0 until v.childCount) collect(v.getChildAt(i), lines, look, a)
   }
 
   /*
@@ -103,14 +110,28 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
    * or resized (new text, a sheet opening). One event waits at a time; screenText() clears it, so a burst of layouts is
    * one read. The listener follows the activity: re-attached when the app comes back to the front.
    */
+  /*
+   * ...AND UNTIL IT SETTLES (the Pixel, 2026-11-05: the restore's "Choose a PIN" page fades in - its layout came first,
+   * the read found its texts at alpha 0, and a fade changes no layout, so nothing asked again: the drive waited out its
+   * watchdog on a page that was plainly there). A layout starts SETTLING; while settling, each frame drawn asks too (one
+   * read in flight, as before), until a read finds what the last one did - text and alphas - and the frames stop asking.
+   * A still screen draws nothing; a spinner draws but changes no text or alpha, so it settles at once.
+   */
   @Volatile private var pending = false
+  @Volatile private var settling = false
+  private var lastSeen: String? = null
   private var watching = false
   private var watchedView: View? = null
-  private val onLayout = ViewTreeObserver.OnGlobalLayoutListener {
-    if (pending) return@OnGlobalLayoutListener
+  private fun changed() {
+    if (pending) return
     pending = true
     reactContext.emitDeviceEvent(EVENT, null)
   }
+  private val onLayout = ViewTreeObserver.OnGlobalLayoutListener {
+    settling = true
+    changed()
+  }
+  private val onDraw = ViewTreeObserver.OnDrawListener { if (settling) changed() }
 
   override fun watchScreen(on: Boolean) {
     main.post {
@@ -125,13 +146,14 @@ class NativeDriveModule(private val reactContext: ReactApplicationContext) : Nat
     if (watchedView === view) return
     detach()
     view.viewTreeObserver.addOnGlobalLayoutListener(onLayout)
+    view.viewTreeObserver.addOnDrawListener(onDraw)
     watchedView = view
     pending = false
     reactContext.emitDeviceEvent(EVENT, null)
   }
 
   private fun detach() {
-    watchedView?.viewTreeObserver?.let { if (it.isAlive) it.removeOnGlobalLayoutListener(onLayout) }
+    watchedView?.viewTreeObserver?.let { if (it.isAlive) { it.removeOnGlobalLayoutListener(onLayout); it.removeOnDrawListener(onDraw) } }
     watchedView = null
   }
 
