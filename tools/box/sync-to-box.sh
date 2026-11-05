@@ -15,6 +15,8 @@ if [ "$1" = "--after-ship" ]; then
   take='{ git log --format=%T windows/$b | grep -qx $(git rev-parse HEAD^{tree}) || { echo "$d: the box head matches no signed commit - not moved"; exit 1; }; git checkout -q -B $b windows/$b; }'
 fi
 want=${*:-lib edge emu kit}
+# the box's drive code before the sync (below: a changed tools/drive restarts the box's drive-remote)
+case " $want " in *" edge "*) edgeWas=$(ssh $BOX 'git -C ~/project/onlykey/ok-edge rev-parse HEAD' </dev/null) ;; esac
 for n in $want; do
   case $n in
     lib) d=node-onlykey-lib; b=master ;;
@@ -36,3 +38,10 @@ case " $want " in *" lib "*)
   # ended here, so the next app start (targets.js ensureStandin) brings it back on the new code
   ssh $BOX 'p=$(cat ~/project/onlykey/standin.pid 2>/dev/null) && kill "$p" 2>/dev/null && echo "the stand-in server (pid $p) ended - the next app start brings it back on this lib"' </dev/null || true
 esac
+# THE BOX'S DRIVE-REMOTE RUNS THE DRIVE CODE IT STARTED WITH (2026-11-05: a rehearsal on the box refused
+# "hardkey-clear.js is not a rehearsal tool" - the remote still held targets.js from before the rename): when the sync
+# changed tools/drive, it restarts on the new code (launch.js restart remote); the drive server dials it again
+if [ -n "$edgeWas" ] && ! ssh $BOX "git -C ~/project/onlykey/ok-edge diff --quiet $edgeWas HEAD -- tools/drive" </dev/null; then
+  ssh $BOX '. ~/.nvm/nvm.sh >/dev/null 2>&1; cd ~/project/onlykey/ok-edge && node tools/drive/launch.js restart remote' </dev/null >/dev/null 2>&1 || true
+  echo "the box's drive-remote restarted on the new drive code"
+fi
