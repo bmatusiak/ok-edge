@@ -12,6 +12,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {type EdgeBudget, type EdgeCopyCheck, type EdgeEnded, type EdgeInbox, type EdgeKeyState, type EdgeRequest, type EdgeSource} from '../edge/types';
 import {SoftKeyEdge} from '../edgeSoftKey';
 import {onKeyFree} from '../computerHold';
+import {onPlanMoved} from '../mcpPlans';
 import {onBucketTraded} from '../bucketEvents';
 import {keyTask} from '../keyBusy';
 import {keyValue} from '../onlykey';
@@ -380,6 +381,11 @@ export function useEdge() {
   useEffect(() => {
     if (!wantReal) return;
     return onKeyFree(() => { void look(); });
+  }, [wantReal, look]);
+  /* and after an agent's plan moved its budget here (mcpPlans followCopy: the copy was just checked against the key) */
+  useEffect(() => {
+    if (!wantReal) return;
+    return onPlanMoved(() => { void look(); });
   }, [wantReal, look]);
 
   return {

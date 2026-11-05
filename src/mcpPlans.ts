@@ -17,7 +17,8 @@
  * card sheet (its label, keys and who asks), the claim at Approve as a plan's, one press to certify - bound to the agent.
  *
  * KEY REQUESTS: the plan runner's count (plan.js) - the host's copy check + grant + ONE press, the opening read back,
- * four per item, one to end. A card: its certify press. None on a timer.
+ * four per item, one to end; after each receipt and at the end, the Edge copy follows (followCopy, below: the key's
+ * head and the new links). A card: its certify press. None on a timer.
  */
 import {agents as agentsLib, client as clientLib, plan as planLib} from 'node-onlykey-lib/edge';
 import {onAgents, onPlanEvent, planClaim, planUpdate, youIn, type Plan, type PlanEvent} from './mcpAgents';
@@ -28,12 +29,42 @@ import {loadIdentity} from './edgeIdentity';
 import {openpgpFork} from './pgpOps';
 import {keyTask} from './keyBusy';
 import {certKeyStillIn, certLine, keepCert, slotOfCert, slotOfCertHash, type CertKey} from './certKeys';
+import {SoftKeyEdge} from './edgeSoftKey';
+import {chainState} from './edgeStore';
 
 /* the plans running here, each with what its runner listens to (its fills and finish) */
 const running = new Map<string, Set<(e: PlanEvent) => void>>();
 /* plans whose sheet here was taken down because another device claimed or declined them: nothing told for them */
 const withdrawn = new Set<string>();
 let started = false;
+
+/*
+ * THE EDGE COPY FOLLOWS A PLAN (Brad, 2026-11-05: after the release APK's two signs the Edge tab's budget card and the
+ * progress card on the sheet both still read "0 of 2 uses spent, Active"). A computer's uses reach the copy when it lets
+ * the key go (its log, useEdge onKeyFree); a plan runs HERE, straight on the key, so nothing told the copy. After each
+ * receipt and at the end (plan.js progress) one copy check reads the key's head and the links since - the sheet's card
+ * redraws on it (chainState 'checked') and the Edge tab looks again (onPlanMoved). One at a time: a check asked while
+ * one runs is folded into the next.
+ */
+const movedListeners = new Set<() => void>();
+export function onPlanMoved(listener: () => void): () => void {
+  movedListeners.add(listener);
+  return () => { movedListeners.delete(listener); };
+}
+let following: Promise<void> | null = null;
+let followAgain = false;
+function followCopy(): Promise<void> {
+  if (following) { followAgain = true; return following; }
+  following = (async () => {
+    do {
+      followAgain = false;
+      const source = await SoftKeyEdge.open();
+      if (source) await chainState.validity(source);
+    } while (followAgain);
+    for (const l of [...movedListeners]) l();
+  })().finally(() => { following = null; });
+  return following;
+}
 
 /** Listen for submitted plans - once, when a room with agents is first attached (mcpAgents.attachAgents). */
 export function startMcpPlans(): void {
@@ -128,6 +159,7 @@ async function runOne(plan: Plan): Promise<void> {
         return () => { listeners.delete(l); };
       },
       log: say,
+      progress: followCopy,
     }), {weak: true});
     if (!claimed) say(`plan ${plan.id}: ${end} - not run here`);
   } catch (e) {
