@@ -34,7 +34,7 @@
  */
 import {detail, errText} from '../logSafe';
 import {useEffect, useRef} from 'react';
-import {chainState, loadMirror, type ChainAnswer} from '../edgeStore';
+import {chainState, loadMirror, ownEnd, type ChainAnswer} from '../edgeStore';
 import {createWatchRound} from '../edgeWatchRound';
 import {beat, onHoldRequested, onWatchTick, raiseWatchAlarms, takeHoldRequest, watching} from '../edgeAlerts';
 import {SoftKeyEdge} from '../edgeSoftKey';
@@ -99,8 +99,23 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
     }, {periodMs: PERIOD_MS, alarmEveryMs: ALARM_EVERY_MS});
     /* a link is waiting to be copied: one round when the watch starts, then each "edge_link" (or a confirmation cleared) */
     let pending = true;
+    /*
+     * THE NEWEST LINK THE KEY SAID IT STORED (the Pixel, 2026-11-05: a login stores a link a second for a few seconds, each
+     * "edge_link" started a round, and each round read the key's head - six reads in six seconds - though the login's own
+     * sync had already copied every one). The event names the link's seq; a round whose copy already reaches it asks the
+     * key nothing (the copy is storage). Whatever sync took the links raised their alarms (edgeStore syncNow).
+     */
+    let announced = -1;
     const attempt = async () => {
       if (!alive || busy || !pending) return; /* nothing new stored: the key is not asked */
+      if (announced >= 0 && source) {
+        const end = await ownEnd(source.deviceId).catch(() => null);
+        if (end && end.seq >= announced) {
+          pending = false;
+          console.log(`[edge-watch] link #${announced} is in the copy already - the key is not asked`);
+          return;
+        }
+      }
       /*
        * B7 stage 2, option A (spec 2026-10-04): no longer only with the app in
        * front - the soft key's foreground service keeps this process alive, and
@@ -132,7 +147,14 @@ export function useEdgeBackgroundSync({enabled, waiting}: {enabled: boolean; wai
     /* the firmware's event: a link was stored */
     const offLink = (() => {
       try {
-        const sub = NativeOkEmu.onPluginEvent(ev => { if (ev.name === 'edge_link') kick.current(); });
+        const sub = NativeOkEmu.onPluginEvent(ev => {
+          if (ev.name !== 'edge_link') return;
+          /* [0..3] the link's seq, u32 little-endian (okplugin_edge.cpp) */
+          const h = String(ev.hex || '');
+          const seq = h.length >= 8 ? parseInt(h.slice(6, 8) + h.slice(4, 6) + h.slice(2, 4) + h.slice(0, 2), 16) : NaN;
+          if (Number.isFinite(seq)) announced = Math.max(announced, seq);
+          kick.current();
+        });
         return () => sub.remove();
       } catch {
         return () => {};
