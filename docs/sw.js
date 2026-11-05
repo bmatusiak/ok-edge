@@ -5,11 +5,11 @@
  *
  * One cache per build (okedge-web-<version>), filled when the worker installs: the app then loads from it - fast, and
  * with no network at all. A new build is a new worker (its version differs, so the browser installs it); once active it
- * deletes every older build's cache. Never cached: /version.json (how a page learns a newer build is out, src/webUpdate.ts),
+ * deletes every older build's cache. Never cached: /release.json (how a page learns a newer build is out, src/webUpdate.ts),
  * this file, the rooms and /mcp (live), the firmware downloads (large, rarely asked).
  */
-const VERSION = "2260617-mw2c7xix";
-const FILES = ["/","/_expo/static/js/web/index-9e11f1fefa1a9af2323731d2014c40c2.js","/assets/assets/OKS1.f4ca6cefe8e7467ce6c0d1d87a72749e.png","/assets/assets/OKS2.2f5c44d1332e94349584f28e00f6485f.png","/assets/assets/duo-photo.4eb528d6cd229cfc075ac23585931877.png","/assets/assets/onlykey-logo.f70f39fd279ac1d6b7717821500a6f12.png","/assets/assets/onlykey-mark.574cd2e6df2327a6750510fcbd917cfa.png","/assets/assets/onlykey-photo.9096f91b4cb5068d34d30f26c6c83911.png","/favicon.ico","/metadata.json","/sounds/press_loud.mp3","/sounds/press_soft.mp3"];
+const VERSION = "dc7b402-mw3yuwof";
+const FILES = ["/","/_expo/static/js/web/index-a04bc08ca1e5fc492b5d723dcb9435b4.js","/assets/assets/OKS1.f4ca6cefe8e7467ce6c0d1d87a72749e.png","/assets/assets/OKS2.2f5c44d1332e94349584f28e00f6485f.png","/assets/assets/duo-photo.4eb528d6cd229cfc075ac23585931877.png","/assets/assets/onlykey-logo.f70f39fd279ac1d6b7717821500a6f12.png","/assets/assets/onlykey-mark.574cd2e6df2327a6750510fcbd917cfa.png","/assets/assets/onlykey-photo.9096f91b4cb5068d34d30f26c6c83911.png","/favicon.ico","/metadata.json","/sounds/press_loud.mp3","/sounds/press_soft.mp3"];
 const CACHE = `okedge-web-${VERSION}`;
 
 self.addEventListener('install', (e) => {
@@ -22,7 +22,7 @@ self.addEventListener('activate', (e) => {
     .then(() => self.clients.claim()));
 });
 
-const LIVE = (p) => p === '/version.json' || p === '/sw.js' || p === '/mcp' || p.startsWith('/ws/') || p.startsWith('/firmware/');
+const LIVE = (p) => p === '/release.json' || p === '/sw.js' || p === '/mcp' || p.startsWith('/ws/') || p.startsWith('/firmware/');
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);

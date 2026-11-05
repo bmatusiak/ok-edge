@@ -1818,6 +1818,54 @@ var require_sha2 = __commonJS({
 });
 
 // node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/ciphers/utils.js
+var utils_exports = {};
+__export(utils_exports, {
+  aarray: () => aarray,
+  abool: () => abool2,
+  abytes: () => abytes2,
+  aexists: () => aexists2,
+  anumber: () => anumber2,
+  aoutput: () => aoutput2,
+  aoutput32: () => aoutput32,
+  byteSwap: () => byteSwap2,
+  byteSwap32: () => byteSwap322,
+  bytesToHex: () => bytesToHex2,
+  bytesToNumberBE: () => bytesToNumberBE,
+  bytesToUtf8: () => bytesToUtf8,
+  checkOpts: () => checkOpts2,
+  clean: () => clean2,
+  complexOverlapBytes: () => complexOverlapBytes,
+  concatBytes: () => concatBytes2,
+  copyBytes: () => copyBytes,
+  createView: () => createView2,
+  equalBytes: () => equalBytes,
+  getOutput: () => getOutput,
+  hexToBytes: () => hexToBytes2,
+  hexToNumber: () => hexToNumber,
+  isAligned32: () => isAligned32,
+  isBytes: () => isBytes2,
+  isLE: () => isLE2,
+  managedNonce: () => managedNonce,
+  numberToBytesBE: () => numberToBytesBE,
+  overlapBytes: () => overlapBytes,
+  randomBytes: () => randomBytes2,
+  swap32IfBE: () => swap32IfBE2,
+  swap8IfBE: () => swap8IfBE,
+  u32: () => u322,
+  u64Lengths: () => u64Lengths,
+  u8: () => u8,
+  utf8ToBytes: () => utf8ToBytes2,
+  wrapCipher: () => wrapCipher,
+  wrapMacConstructor: () => wrapMacConstructor
+});
+function aarray(item, title, inner = () => {
+}) {
+  if (!Array.isArray(item))
+    throw new TypeError(`"${title}" expected array, got type=${typeof item}`);
+  for (let i = 0; i < item.length; i++)
+    inner(item[i], `${title}[${i}]`);
+  return item;
+}
 function isBytes2(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
@@ -1886,6 +1934,82 @@ function byteSwap322(arr) {
     arr[i] = byteSwap2(arr[i]);
   }
   return arr;
+}
+function bytesToHex2(bytes3) {
+  abytes2(bytes3);
+  if (hasHexBuiltin2)
+    return bytes3.toHex();
+  let hex2 = "";
+  for (let i = 0; i < bytes3.length; i++) {
+    hex2 += hexes2[bytes3[i]];
+  }
+  return hex2;
+}
+function asciiToBase162(ch) {
+  return ch >= 48 && ch <= 57 ? ch - 48 : ch >= 65 && ch <= 70 ? ch - (65 - 10) : ch >= 97 && ch <= 102 ? ch - (97 - 10) : void 0;
+}
+function hexToBytes2(hex2) {
+  if (typeof hex2 !== "string")
+    throw new TypeError("hex string expected, got " + typeof hex2);
+  if (hasHexBuiltin2) {
+    try {
+      return Uint8Array.fromHex(hex2);
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        throw new RangeError(error.message);
+      throw error;
+    }
+  }
+  const hl = hex2.length;
+  const al = hl / 2;
+  if (hl % 2)
+    throw new RangeError("hex string expected, got unpadded hex of length " + hl);
+  const array = new Uint8Array(al);
+  for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
+    const n1 = asciiToBase162(hex2.charCodeAt(hi));
+    const n2 = asciiToBase162(hex2.charCodeAt(hi + 1));
+    if (n1 === void 0 || n2 === void 0) {
+      const char = hex2[hi] + hex2[hi + 1];
+      throw new RangeError('hex string expected, got non-hex character "' + char + '" at index ' + hi);
+    }
+    array[ai] = n1 * 16 + n2;
+  }
+  return array;
+}
+function hexToNumber(hex2) {
+  if (typeof hex2 !== "string")
+    throw new TypeError("hex string expected, got " + typeof hex2);
+  return hex2 === "" ? _0n : BigInt("0x" + hex2);
+}
+function bytesToNumberBE(bytes3) {
+  return hexToNumber(bytesToHex2(bytes3));
+}
+function abignumber(n) {
+  if (typeof n === "bigint") {
+    if (!(_0n <= n))
+      throw new RangeError("positive bigint expected, got " + n);
+  } else
+    anumber2(n);
+  return n;
+}
+function numberToBytesBE(n, len) {
+  anumber2(len);
+  if (len === 0)
+    throw new Error("zero output length is invalid");
+  n = abignumber(n);
+  const expectedLen = len * 2;
+  const hex2 = n.toString(16);
+  if (hex2.length > expectedLen)
+    throw new RangeError("number is too large");
+  return hexToBytes2(hex2.padStart(expectedLen, "0"));
+}
+function utf8ToBytes2(str) {
+  if (typeof str !== "string")
+    throw new TypeError("string expected");
+  return new Uint8Array(new TextEncoder().encode(str));
+}
+function bytesToUtf8(bytes3) {
+  return new TextDecoder().decode(bytes3);
 }
 function overlapBytes(a, b) {
   if (!a.byteLength || !b.byteLength)
@@ -1972,9 +2096,47 @@ function randomBytes2(bytesLength = 32) {
     throw new RangeError(`"bytesLength" expected <= 65536, got ${bytesLength}`);
   return cr.getRandomValues(new Uint8Array(bytesLength));
 }
-var atitle2, aobject2, isLE2, swap8IfBE, swap32IfBE2, wrapCipher;
+function managedNonce(fn, randomBytes_ = randomBytes2) {
+  if (typeof fn !== "function")
+    throw new TypeError('"fn" expected cipher constructor, got type=' + typeof fn);
+  if (typeof randomBytes_ !== "function")
+    throw new TypeError('"randomBytes_" expected function, got type=' + typeof randomBytes_);
+  const { nonceLength } = fn;
+  anumber2(nonceLength, "fn.nonceLength");
+  const addNonce = /* @__PURE__ */ __name((nonce, ciphertext, plaintext) => {
+    const out = concatBytes2(nonce, ciphertext);
+    if (!overlapBytes(plaintext, ciphertext))
+      ciphertext.fill(0);
+    return out;
+  }, "addNonce");
+  const res = /* @__PURE__ */ __name(((key, ...args) => ({
+    encrypt(plaintext) {
+      abytes2(plaintext, void 0, "data");
+      const nonce = randomBytes_(nonceLength);
+      const encrypted = fn(key, nonce, ...args).encrypt(plaintext);
+      if (encrypted instanceof Promise)
+        return encrypted.then((ct) => addNonce(nonce, ct, plaintext));
+      return addNonce(nonce, encrypted, plaintext);
+    },
+    decrypt(ciphertext) {
+      abytes2(ciphertext, void 0, "data");
+      const nonce = ciphertext.subarray(0, nonceLength);
+      const decrypted = ciphertext.subarray(nonceLength);
+      return fn(key, nonce, ...args).decrypt(decrypted);
+    }
+  })), "res");
+  if ("blockSize" in fn)
+    res.blockSize = fn.blockSize;
+  if ("tagLength" in fn)
+    res.tagLength = fn.tagLength;
+  if ("withAAD" in fn)
+    res.withAAD = fn.withAAD;
+  return res;
+}
+var atitle2, aobject2, isLE2, swap8IfBE, swap32IfBE2, hasHexBuiltin2, hexes2, _0n, wrapCipher;
 var init_utils2 = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/ciphers/utils.js"() {
+    __name(aarray, "aarray");
     __name(isBytes2, "isBytes");
     atitle2 = /* @__PURE__ */ __name((title) => title ? `"${title}" ` : "", "atitle");
     __name(abool2, "abool");
@@ -1996,6 +2158,21 @@ var init_utils2 = __esm({
     swap8IfBE = isLE2 ? (n) => n : (n) => byteSwap2(n) >>> 0;
     __name(byteSwap322, "byteSwap32");
     swap32IfBE2 = isLE2 ? (u) => u : byteSwap322;
+    hasHexBuiltin2 = /* @__PURE__ */ (() => (
+      // @ts-ignore
+      typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function"
+    ))();
+    hexes2 = /* @__PURE__ */ Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, "0"));
+    __name(bytesToHex2, "bytesToHex");
+    __name(asciiToBase162, "asciiToBase16");
+    __name(hexToBytes2, "hexToBytes");
+    _0n = /* @__PURE__ */ BigInt(0);
+    __name(hexToNumber, "hexToNumber");
+    __name(bytesToNumberBE, "bytesToNumberBE");
+    __name(abignumber, "abignumber");
+    __name(numberToBytesBE, "numberToBytesBE");
+    __name(utf8ToBytes2, "utf8ToBytes");
+    __name(bytesToUtf8, "bytesToUtf8");
     __name(overlapBytes, "overlapBytes");
     __name(complexOverlapBytes, "complexOverlapBytes");
     __name(concatBytes2, "concatBytes");
@@ -2055,6 +2232,7 @@ var init_utils2 = __esm({
     __name(isAligned32, "isAligned32");
     __name(copyBytes, "copyBytes");
     __name(randomBytes2, "randomBytes");
+    __name(managedNonce, "managedNonce");
   }
 });
 
@@ -3528,7 +3706,7 @@ var require_bytes = __commonJS({
       return diff === 0;
     }
     __name(equalConstantTime, "equalConstantTime");
-    function utf8ToBytes2(text2) {
+    function utf8ToBytes3(text2) {
       const str = String(text2);
       const out = [];
       for (let i = 0; i < str.length; i++) {
@@ -3557,8 +3735,8 @@ var require_bytes = __commonJS({
       }
       return Uint8Array.from(out);
     }
-    __name(utf8ToBytes2, "utf8ToBytes");
-    function bytesToUtf8(bytes3) {
+    __name(utf8ToBytes3, "utf8ToBytes");
+    function bytesToUtf82(bytes3) {
       let out = "";
       for (let i = 0; i < bytes3.length; ) {
         const b = bytes3[i];
@@ -3607,7 +3785,7 @@ var require_bytes = __commonJS({
       }
       return out;
     }
-    __name(bytesToUtf8, "bytesToUtf8");
+    __name(bytesToUtf82, "bytesToUtf8");
     var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     function toBase64(bytes3) {
       let out = "";
@@ -3651,8 +3829,8 @@ var require_bytes = __commonJS({
     }
     __name(fromBase64, "fromBase64");
     module.exports = {
-      utf8ToBytes: utf8ToBytes2,
-      bytesToUtf8,
+      utf8ToBytes: utf8ToBytes3,
+      bytesToUtf8: bytesToUtf82,
       toBase64,
       fromBase64,
       toBase64Url,
@@ -3676,8 +3854,8 @@ var require_vault = __commonJS({
     var { hkdf: hkdf2 } = require_hkdf();
     var { sha256: sha2562 } = require_sha2();
     var { gcm: gcm2 } = require_aes();
-    var { utf8ToBytes: utf8ToBytes2, bytesToUtf8, toBase64, fromBase64 } = require_bytes();
-    var HKDF_INFO = utf8ToBytes2("onlyagent-vault-v1");
+    var { utf8ToBytes: utf8ToBytes3, bytesToUtf8: bytesToUtf82, toBase64, fromBase64 } = require_bytes();
+    var HKDF_INFO = utf8ToBytes3("onlyagent-vault-v1");
     var HKDF_SALT = new Uint8Array(32);
     var NONCE_BYTES = 12;
     var TAG_BYTES = 16;
@@ -3695,7 +3873,7 @@ var require_vault = __commonJS({
       if (nonce.length !== NONCE_BYTES) {
         throw new Error(`the nonce must be ${NONCE_BYTES} bytes, got ${nonce.length}`);
       }
-      const ct = gcm2(Uint8Array.from(key), nonce).encrypt(utf8ToBytes2(String(plaintext)));
+      const ct = gcm2(Uint8Array.from(key), nonce).encrypt(utf8ToBytes3(String(plaintext)));
       const out = new Uint8Array(NONCE_BYTES + ct.length);
       out.set(nonce, 0);
       out.set(ct, NONCE_BYTES);
@@ -3710,7 +3888,7 @@ var require_vault = __commonJS({
       const nonce = raw.subarray(0, NONCE_BYTES);
       const body = raw.subarray(NONCE_BYTES);
       const pt = gcm2(Uint8Array.from(key), nonce).decrypt(body);
-      return bytesToUtf8(pt);
+      return bytesToUtf82(pt);
     }
     __name(open, "open");
     var DEFAULT_POLICY = "session:30m";
@@ -4307,13 +4485,13 @@ var require_rules = __commonJS({
 var require_ssh_pub = __commonJS({
   "node_modules/node-onlykey-lib/src/crypto/ssh-pub.js"(exports, module) {
     "use strict";
-    var { utf8ToBytes: utf8ToBytes2, toBase64, concat } = require_bytes();
+    var { utf8ToBytes: utf8ToBytes3, toBase64, concat } = require_bytes();
     var CURVES = {
       ed25519: { curve: "ed25519", sshName: "ssh-ed25519", keyType: 1 },
       nist256p1: { curve: "nist256p1", sshName: "ecdsa-sha2-nistp256", keyType: 2, sshCurve: "nistp256" }
     };
     var RSA_NAME = "ssh-rsa";
-    var toBytes = /* @__PURE__ */ __name((v) => typeof v === "string" ? utf8ToBytes2(v) : Uint8Array.from(v), "toBytes");
+    var toBytes = /* @__PURE__ */ __name((v) => typeof v === "string" ? utf8ToBytes3(v) : Uint8Array.from(v), "toBytes");
     function uint32(n) {
       const v = n >>> 0;
       return Uint8Array.of(v >>> 24 & 255, v >>> 16 & 255, v >>> 8 & 255, v & 255);
@@ -4468,12 +4646,12 @@ function keccakP(s, rounds = 24) {
   }
   clean(B);
 }
-var _0n, _1n, _2n, _7n, _256n, _0x71n, SHA3_PI, SHA3_ROTL, _SHA3_IOTA, IOTAS, SHA3_IOTA_H, SHA3_IOTA_L, rotlSH, rotlSL, rotlBH, rotlBL, rotlH, rotlL, B, Keccak, genKeccak, sha3_224, sha3_256, sha3_384, sha3_512, keccak_224, keccak_256, keccak_384, keccak_512, genShake, shake128, shake256, shake128_32, shake256_64;
+var _0n2, _1n, _2n, _7n, _256n, _0x71n, SHA3_PI, SHA3_ROTL, _SHA3_IOTA, IOTAS, SHA3_IOTA_H, SHA3_IOTA_L, rotlSH, rotlSL, rotlBH, rotlBL, rotlH, rotlL, B, Keccak, genKeccak, sha3_224, sha3_256, sha3_384, sha3_512, keccak_224, keccak_256, keccak_384, keccak_512, genShake, shake128, shake256, shake128_32, shake256_64;
 var init_sha3 = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/hashes/sha3.js"() {
     init_u64();
     init_utils();
-    _0n = BigInt(0);
+    _0n2 = BigInt(0);
     _1n = BigInt(1);
     _2n = BigInt(2);
     _7n = BigInt(7);
@@ -4486,7 +4664,7 @@ var init_sha3 = __esm({
       [x, y] = [y, (2 * x + 3 * y) % 5];
       SHA3_PI.push(2 * (5 * y + x));
       SHA3_ROTL.push((round + 1) * (round + 2) / 2 % 64);
-      let t = _0n;
+      let t = _0n2;
       for (let j = 0; j < 7; j++) {
         R = (R << _1n ^ (R >> _7n) * _0x71n) % _256n;
         if (R & _2n)
@@ -4684,7 +4862,7 @@ var init_sha3 = __esm({
 });
 
 // node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/utils.js
-function aarray(item, title, inner = () => {
+function aarray2(item, title, inner = () => {
 }) {
   if (!Array.isArray(item))
     throw new TypeError(`"${title}" expected array, got type=${typeof item}`);
@@ -4714,7 +4892,7 @@ function abool3(value, title = "") {
     throw new TypeError(atitle3(title) + "expected boolean, got type=" + typeof value);
   return value;
 }
-function abignumber(n) {
+function abignumber2(n) {
   if (typeof n === "bigint") {
     if (!isPosBig(n))
       throw new RangeError("positive bigint expected, got " + n);
@@ -4733,25 +4911,25 @@ function asafenumber(value, title = "") {
   }
 }
 function numberToHexUnpadded(num) {
-  const hex2 = abignumber(num).toString(16);
+  const hex2 = abignumber2(num).toString(16);
   return hex2.length & 1 ? "0" + hex2 : hex2;
 }
-function hexToNumber(hex2) {
+function hexToNumber2(hex2) {
   if (typeof hex2 !== "string")
     throw new TypeError("hex string expected, got " + typeof hex2);
-  return hex2 === "" ? _0n2 : BigInt("0x" + hex2);
+  return hex2 === "" ? _0n3 : BigInt("0x" + hex2);
 }
-function bytesToNumberBE(bytes3) {
-  return hexToNumber(bytesToHex(bytes3));
+function bytesToNumberBE2(bytes3) {
+  return hexToNumber2(bytesToHex(bytes3));
 }
 function bytesToNumberLE(bytes3) {
-  return hexToNumber(bytesToHex(copyBytes2(abytes(bytes3)).reverse()));
+  return hexToNumber2(bytesToHex(copyBytes2(abytes(bytes3)).reverse()));
 }
-function numberToBytesBE(n, len) {
+function numberToBytesBE2(n, len) {
   anumber(len);
   if (len === 0)
     throw new Error("zero output length is invalid");
-  n = abignumber(n);
+  n = abignumber2(n);
   const expectedLen = len * 2;
   const hex2 = n.toString(16);
   if (hex2.length > expectedLen)
@@ -4759,7 +4937,7 @@ function numberToBytesBE(n, len) {
   return hexToBytes(hex2.padStart(expectedLen, "0"));
 }
 function numberToBytesLE(n, len) {
-  return numberToBytesBE(n, len).reverse();
+  return numberToBytesBE2(n, len).reverse();
 }
 function equalBytes2(a, b) {
   a = abytes3(a);
@@ -4786,7 +4964,7 @@ function asciiToBytes(ascii) {
   });
 }
 function isPosBig(n) {
-  return typeof n === "bigint" && _0n2 <= n;
+  return typeof n === "bigint" && _0n3 <= n;
 }
 function inRange(n, min, max) {
   return isPosBig(n) && isPosBig(min) && isPosBig(max) && min <= n && n < max;
@@ -4796,9 +4974,9 @@ function aInRange(title, n, min, max) {
     throw new RangeError("expected valid " + title + ": " + min + " <= n < " + max + ", got " + n);
 }
 function bitLen(n) {
-  if (n < _0n2)
+  if (n < _0n3)
     throw new Error("expected non-negative bigint, got " + n);
-  return n === _0n2 ? 0 : n.toString(2).length;
+  return n === _0n3 ? 0 : n.toString(2).length;
 }
 function createHmacDrbg(hashLen, qByteLen, hmacFn) {
   anumber(hashLen, "hashLen");
@@ -4872,32 +5050,32 @@ function validateObject(object, fields = {}, optFields = {}, title = "object") {
   iter(fields, false);
   iter(optFields, true);
 }
-var abytes3, anumber3, bytesToHex2, concatBytes3, hexToBytes2, isBytes3, randomBytes3, _0n2, _1n2, atitle3, bitMask, notImplemented;
+var abytes3, anumber3, bytesToHex3, concatBytes3, hexToBytes3, isBytes3, randomBytes3, _0n3, _1n2, atitle3, bitMask, notImplemented;
 var init_utils3 = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/utils.js"() {
     init_utils();
-    __name(aarray, "aarray");
+    __name(aarray2, "aarray");
     abytes3 = /* @__PURE__ */ __name((value, length, title) => abytes(value, length, title), "abytes");
     anumber3 = anumber;
     __name(astring, "astring");
     __name(aobject3, "aobject");
     __name(afunction, "afunction");
-    bytesToHex2 = bytesToHex;
+    bytesToHex3 = bytesToHex;
     concatBytes3 = /* @__PURE__ */ __name((...arrays) => concatBytes(...arrays), "concatBytes");
-    hexToBytes2 = /* @__PURE__ */ __name((hex2) => hexToBytes(hex2), "hexToBytes");
+    hexToBytes3 = /* @__PURE__ */ __name((hex2) => hexToBytes(hex2), "hexToBytes");
     isBytes3 = isBytes;
     randomBytes3 = /* @__PURE__ */ __name((bytesLength) => randomBytes(bytesLength), "randomBytes");
-    _0n2 = /* @__PURE__ */ BigInt(0);
+    _0n3 = /* @__PURE__ */ BigInt(0);
     _1n2 = /* @__PURE__ */ BigInt(1);
     atitle3 = /* @__PURE__ */ __name((title) => title ? `"${title}" ` : "", "atitle");
     __name(abool3, "abool");
-    __name(abignumber, "abignumber");
+    __name(abignumber2, "abignumber");
     __name(asafenumber, "asafenumber");
     __name(numberToHexUnpadded, "numberToHexUnpadded");
-    __name(hexToNumber, "hexToNumber");
-    __name(bytesToNumberBE, "bytesToNumberBE");
+    __name(hexToNumber2, "hexToNumber");
+    __name(bytesToNumberBE2, "bytesToNumberBE");
     __name(bytesToNumberLE, "bytesToNumberLE");
-    __name(numberToBytesBE, "numberToBytesBE");
+    __name(numberToBytesBE2, "numberToBytesBE");
     __name(numberToBytesLE, "numberToBytesLE");
     __name(equalBytes2, "equalBytes");
     __name(copyBytes2, "copyBytes");
@@ -4920,28 +5098,28 @@ var init_utils3 = __esm({
 
 // node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/modular.js
 function mod(a, b) {
-  if (b <= _0n3)
+  if (b <= _0n4)
     throw new Error("mod: expected positive modulus, got " + b);
   const result = a % b;
-  return result >= _0n3 ? result : b + result;
+  return result >= _0n4 ? result : b + result;
 }
 function pow(num, power, modulo) {
   if (modulo <= _1n3)
     throw new Error("pow: expected modulus > 1, got " + modulo);
   if (typeof power !== "bigint")
     throw new TypeError("invalid exponent: expected bigint, got " + typeof power);
-  if (power < _0n3)
+  if (power < _0n4)
     throw new Error("invalid exponent, negatives unsupported");
-  if (power === _0n3)
+  if (power === _0n4)
     return _1n3;
   if (power === _1n3)
     return num;
   let d = num % modulo;
-  if (d < _0n3)
+  if (d < _0n4)
     d += modulo;
   if (power < POW_WINDOWED_MIN) {
     let p2 = _1n3;
-    while (power > _0n3) {
+    while (power > _0n4) {
       if (power & _1n3)
         p2 = p2 * d % modulo;
       d = d * d % modulo;
@@ -4950,7 +5128,7 @@ function pow(num, power, modulo) {
     return p2;
   }
   const digits = [];
-  while (power > _0n3) {
+  while (power > _0n4) {
     digits.push(Number(power & _15n));
     power >>= _4n;
   }
@@ -4974,24 +5152,24 @@ function pow(num, power, modulo) {
 function pow2(x, power, modulo) {
   if (modulo <= _1n3)
     throw new Error("pow2: expected modulus > 1, got " + modulo);
-  if (power < _0n3)
+  if (power < _0n4)
     throw new Error("pow2: expected non-negative exponent, got " + power);
   let res = x;
-  while (power-- > _0n3) {
+  while (power-- > _0n4) {
     res *= res;
     res %= modulo;
   }
   return res;
 }
 function invert(number, modulo) {
-  if (number === _0n3)
+  if (number === _0n4)
     throw new Error("invert: expected non-zero number");
   if (modulo <= _1n3)
     throw new Error("invert: expected modulus > 1, got " + modulo);
   let a = mod(number, modulo);
   let b = modulo;
-  let x = _0n3, u = _1n3;
-  while (a !== _0n3) {
+  let x = _0n4, u = _1n3;
+  while (a !== _0n4) {
     const q = b / a;
     const r = b - a * q;
     const m = x - u * q;
@@ -5006,7 +5184,7 @@ function invertCt(a, prime) {
   if (prime <= _1n3)
     throw new Error("invertCt: expected prime modulus > 1, got " + prime);
   const an = mod(a, prime);
-  if (an === _0n3)
+  if (an === _0n4)
     throw new Error("invertCt: expected non-zero number");
   const inverse = pow(an, prime - _2n2, prime);
   if (mod(an * inverse, prime) !== _1n3)
@@ -5019,7 +5197,7 @@ function assertIsSquare(Fp2, root, n) {
     throw new Error("Cannot find square root");
 }
 function aoddModulus(order, fnName) {
-  if ((order & _1n3) === _0n3)
+  if ((order & _1n3) === _0n4)
     throw new Error(fnName + ": expected odd modulus, got " + order);
 }
 function sqrt3mod4(Fp2, n) {
@@ -5069,7 +5247,7 @@ function tonelliShanks(P) {
   aoddModulus(P, "tonelliShanks");
   let Q3 = P - _1n3;
   let S = 0;
-  while (Q3 % _2n2 === _0n3) {
+  while (Q3 % _2n2 === _0n4) {
     Q3 /= _2n2;
     S++;
   }
@@ -5140,7 +5318,7 @@ function validateField(field) {
 }
 function FpInvertBatch(Fp2, nums, passZero = false) {
   validateField(Fp2);
-  aarray(nums, "nums");
+  aarray2(nums, "nums");
   abool3(passZero, "passZero");
   const F3 = Fp2;
   const inverted = new Array(nums.length).fill(passZero ? F3.ZERO : void 0);
@@ -5179,7 +5357,7 @@ function FpIsSquare(Fp2, n) {
 function nLength(n, nBitLength) {
   if (nBitLength !== void 0)
     anumber3(nBitLength);
-  if (n <= _0n3)
+  if (n <= _0n4)
     throw new Error("invalid n length: expected positive n, got " + n);
   if (nBitLength !== void 0 && nBitLength < 1)
     throw new Error("invalid n length: expected positive bit length, got " + nBitLength);
@@ -5221,15 +5399,15 @@ function mapHashToField(key, fieldOrder, isLE3 = false) {
   const minLen = Math.max(getMinHashLength(fieldOrder), 16);
   if (len < minLen || len > 1024)
     throw new Error("expected " + minLen + "-1024 bytes of input, got " + len);
-  const num = isLE3 ? bytesToNumberLE(key) : bytesToNumberBE(key);
+  const num = isLE3 ? bytesToNumberLE(key) : bytesToNumberBE2(key);
   const reduced = mod(num, fieldOrder - _1n3) + _1n3;
-  return isLE3 ? numberToBytesLE(reduced, fieldLen) : numberToBytesBE(reduced, fieldLen);
+  return isLE3 ? numberToBytesLE(reduced, fieldLen) : numberToBytesBE2(reduced, fieldLen);
 }
-var _0n3, _1n3, _2n2, _3n, _4n, _5n, _7n2, _8n, _9n, _15n, _16n, POW_WINDOWED_MIN, isNegativeLE, FIELD_FIELDS, FIELD_SQRT, _Field;
+var _0n4, _1n3, _2n2, _3n, _4n, _5n, _7n2, _8n, _9n, _15n, _16n, POW_WINDOWED_MIN, isNegativeLE, FIELD_FIELDS, FIELD_SQRT, _Field;
 var init_modular = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/modular.js"() {
     init_utils3();
-    _0n3 = /* @__PURE__ */ BigInt(0);
+    _0n4 = /* @__PURE__ */ BigInt(0);
     _1n3 = /* @__PURE__ */ BigInt(1);
     _2n2 = /* @__PURE__ */ BigInt(2);
     _3n = /* @__PURE__ */ BigInt(3);
@@ -5287,7 +5465,7 @@ var init_modular = __esm({
       BITS;
       BYTES;
       isLE;
-      ZERO = _0n3;
+      ZERO = _0n4;
       ONE = _1n3;
       _lengths;
       _mod;
@@ -5322,10 +5500,10 @@ var init_modular = __esm({
       isValid(num) {
         if (typeof num !== "bigint")
           throw new TypeError("invalid field element: expected bigint, got " + typeof num);
-        return _0n3 <= num && num < this.ORDER;
+        return _0n4 <= num && num < this.ORDER;
       }
       is0(num) {
-        return num === _0n3;
+        return num === _0n4;
       }
       // is valid and invertible
       isValidNot0(num) {
@@ -5381,7 +5559,7 @@ var init_modular = __esm({
         return sqrt(this, num);
       }
       toBytes(num) {
-        return this.isLE ? numberToBytesLE(num, this.BYTES) : numberToBytesBE(num, this.BYTES);
+        return this.isLE ? numberToBytesLE(num, this.BYTES) : numberToBytesBE2(num, this.BYTES);
       }
       fromBytes(bytes3, skipValidation = false) {
         abytes3(bytes3);
@@ -5396,7 +5574,7 @@ var init_modular = __esm({
         }
         if (bytes3.length !== BYTES)
           throw new Error("Field.fromBytes: expected " + BYTES + " bytes, got " + bytes3.length);
-        let scalar = isLE3 ? bytesToNumberLE(bytes3) : bytesToNumberBE(bytes3);
+        let scalar = isLE3 ? bytesToNumberLE(bytes3) : bytesToNumberBE2(bytes3);
         if (modFromBytes)
           scalar = mod(scalar, ORDER);
         if (!skipValidation) {
@@ -5749,7 +5927,7 @@ var init_fft = __esm({
 });
 
 // node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/post-quantum/utils.js
-function aarray2(item, title, inner = () => {
+function aarray3(item, title, inner = () => {
 }) {
   if (!Array.isArray(item))
     throw new TypeError(`"${title}" expected array, got type=${typeof item}`);
@@ -5846,7 +6024,7 @@ function vecCoder(c, vecLen) {
   return {
     bytesLen,
     encode: /* @__PURE__ */ __name((u) => {
-      const uArr = aarray2(u, "u");
+      const uArr = aarray3(u, "u");
       if (uArr.length !== vecLen)
         throw new RangeError(`vecCoder.encode: wrong length=${uArr.length}. Expected: ${vecLen}`);
       const res = new Uint8Array(bytesLen);
@@ -5922,7 +6100,7 @@ var init_utils4 = __esm({
     init_utils();
     abytesDoc = abytes;
     randomBytes4 = randomBytes;
-    __name(aarray2, "aarray");
+    __name(aarray3, "aarray");
     __name(aobject4, "aobject");
     __name(equalBytes3, "equalBytes");
     __name(copyBytes3, "copyBytes");
@@ -6605,7 +6783,7 @@ function probeRandomBytes(randomBytes5, length) {
   return randomBytes5;
 }
 function validateMSMPoints(points, c) {
-  aarray(points, "points");
+  aarray2(points, "points");
   points.forEach((p, i) => {
     if (!(p instanceof c))
       throw new Error("invalid point at index " + i);
@@ -6635,7 +6813,7 @@ function wnafDigits(n, W) {
   const half = size / 2;
   const mask = BigInt(size - 1);
   const d = [];
-  while (n > _0n4) {
+  while (n > _0n5) {
     let w = 0;
     if (n & _1n4) {
       w = Number(n & mask);
@@ -6663,7 +6841,7 @@ function signedWindowDigits(n, W, windows) {
     }
     d.push(v);
   }
-  if (n !== _0n4)
+  if (n !== _0n5)
     throw new Error("invalid wnaf");
   return d;
 }
@@ -6716,7 +6894,7 @@ function createCurveFields(type, CURVE, curveOpts = {}, FpFnLE) {
   validateObject(curveOpts);
   for (const p of ["p", "n", "h"]) {
     const val = CURVE[p];
-    if (!(isPosBig(val) && val !== _0n4))
+    if (!(isPosBig(val) && val !== _0n5))
       throw new Error(`CURVE.${p} must be positive bigint`);
   }
   const Fp2 = createField(CURVE.p, curveOpts.Fp, FpFnLE);
@@ -6736,12 +6914,12 @@ function createKeygen(randomSecretKey, getPublicKey) {
     return { secretKey, publicKey: getPublicKey(secretKey) };
   }, "keygen");
 }
-var _0n4, _1n4, _4n2, BLIND_BYTES, BLIND_BITS, FW_WINDOW, TABLE_BYTES_MAX, pointWindowSizes, ScalarMultiplier;
+var _0n5, _1n4, _4n2, BLIND_BYTES, BLIND_BITS, FW_WINDOW, TABLE_BYTES_MAX, pointWindowSizes, ScalarMultiplier;
 var init_curve = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/curve.js"() {
     init_utils3();
     init_modular();
-    _0n4 = /* @__PURE__ */ BigInt(0);
+    _0n5 = /* @__PURE__ */ BigInt(0);
     _1n4 = /* @__PURE__ */ BigInt(1);
     _4n2 = /* @__PURE__ */ BigInt(4);
     BLIND_BYTES = 16;
@@ -6888,7 +7066,7 @@ var init_curve = __esm({
         if (!isBytes3(blind) || blind.length !== BLIND_BYTES)
           throw new Error("randomBytes returned invalid byte array");
         blind[0] = blind[0] & 63 | 128;
-        const n = scalar + bytesToNumberBE(blind) * this.Point.Fn.ORDER;
+        const n = scalar + bytesToNumberBE2(blind) * this.Point.Fn.ORDER;
         return this.runCT(point, n, bits, transform);
       }
       /**
@@ -7008,14 +7186,14 @@ function edwards(params, extraOpts = {}) {
     try {
       return { isValid: true, value: Fp2.sqrt(Fp2.div(u, v)) };
     } catch (e) {
-      return { isValid: false, value: _0n5 };
+      return { isValid: false, value: _0n6 };
     }
   } : opts2.uvRatio;
   if (!isEdValidXY(Fp2, CURVE, CURVE.Gx, CURVE.Gy))
     throw new Error("bad curve params: generator point");
   const mulA = Fp2.eql(CURVE.a, Fp2.neg(Fp2.ONE)) ? (x) => Fp2.neg(x) : Fp2.eql(CURVE.a, Fp2.ONE) ? (x) => x : (x) => Fp2.mul(CURVE.a, x);
   function acoord(title, n, banZero = false) {
-    const min = banZero ? _1n5 : _0n5;
+    const min = banZero ? _1n5 : _0n6;
     aInRange("coordinate " + title, n, min, MASK);
     return n;
   }
@@ -7071,7 +7249,7 @@ function edwards(params, extraOpts = {}) {
       normed[len - 1] = lastByte & ~128;
       const y = bytesToNumberLE(normed);
       const max = zip215 ? MASK : Fp2.ORDER;
-      aInRange("point.y", y, _0n5, max);
+      aInRange("point.y", y, _0n6, max);
       const y2 = Fp2.sqr(y);
       const u = Fp2.sub(y2, Fp2.ONE);
       const v = Fp2.sub(Fp2.mulN(d, y2), a);
@@ -7087,7 +7265,7 @@ function edwards(params, extraOpts = {}) {
       return Point.fromAffine({ x, y });
     }
     static fromHex(hex2, zip215 = false) {
-      return Point.fromBytes(hexToBytes2(hex2), zip215);
+      return Point.fromBytes(hexToBytes3(hex2), zip215);
     }
     get x() {
       return this.toAffine().x;
@@ -7200,7 +7378,7 @@ function edwards(params, extraOpts = {}) {
     multiplyUnsafe(scalar) {
       if (!Fn2.isValid(scalar))
         throw new RangeError("invalid scalar: expected 0 <= sc < curve.n");
-      if (scalar === _0n5)
+      if (scalar === _0n6)
         return Point.ZERO;
       if (this.is0() || scalar === _1n5)
         return this;
@@ -7256,7 +7434,7 @@ function edwards(params, extraOpts = {}) {
       return bytes3;
     }
     toHex() {
-      return bytesToHex2(this.toBytes());
+      return bytesToHex3(this.toBytes());
     }
     toString() {
       return `<Point ${this.is0() ? "ZERO" : this.toHex()}>`;
@@ -7437,13 +7615,13 @@ function eddsa(Point, cHash, eddsaOpts = {}) {
     lengths
   });
 }
-var _0n5, _1n5, _2n3, _4n3, _8n2, PrimeEdwardsPoint;
+var _0n6, _1n5, _2n3, _4n3, _8n2, PrimeEdwardsPoint;
 var init_edwards = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/edwards.js"() {
     init_utils3();
     init_curve();
     init_modular();
-    _0n5 = /* @__PURE__ */ BigInt(0);
+    _0n6 = /* @__PURE__ */ BigInt(0);
     _1n5 = /* @__PURE__ */ BigInt(1);
     _2n3 = /* @__PURE__ */ BigInt(2);
     _4n3 = /* @__PURE__ */ BigInt(4);
@@ -7497,7 +7675,7 @@ var init_edwards = __esm({
         return this.ep.toAffine(invertedZ);
       }
       toHex() {
-        return bytesToHex2(this.toBytes());
+        return bytesToHex3(this.toBytes());
       }
       toString() {
         return this.toHex();
@@ -7735,8 +7913,8 @@ function createHasher2(Point, mapToCurve, defaults) {
 function SWUFpSqrtRatio(Fp2, Z) {
   const F3 = validateField(Fp2);
   const q = F3.ORDER;
-  let l = _0n6;
-  for (let o = q - _1n6; o % _2n4 === _0n6; o /= _2n4)
+  let l = _0n7;
+  for (let o = q - _1n6; o % _2n4 === _0n7; o /= _2n4)
     l += _1n6;
   const c1 = l;
   const _2n_pow_c1_1 = _2n4 << c1 - _1n6 - _1n6;
@@ -7841,17 +8019,17 @@ function mapToCurveSimpleSWU(Fp2, opts2) {
     return { x: x2, y };
   };
 }
-var _0n6, _1n6, _2n4, _3n2, _4n4, os2ip, _DST_scalar;
+var _0n7, _1n6, _2n4, _3n2, _4n4, os2ip, _DST_scalar;
 var init_hash_to_curve = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/hash-to-curve.js"() {
     init_utils3();
     init_modular();
-    _0n6 = /* @__PURE__ */ BigInt(0);
+    _0n7 = /* @__PURE__ */ BigInt(0);
     _1n6 = /* @__PURE__ */ BigInt(1);
     _2n4 = /* @__PURE__ */ BigInt(2);
     _3n2 = /* @__PURE__ */ BigInt(3);
     _4n4 = /* @__PURE__ */ BigInt(4);
-    os2ip = bytesToNumberBE;
+    os2ip = bytesToNumberBE2;
     __name(i2osp, "i2osp");
     __name(strxor, "strxor");
     __name(normDST, "normDST");
@@ -7893,7 +8071,7 @@ function createFROST(opts2) {
   const hashBytes = opts2.hash;
   const hashToScalar = opts2.hashToScalar === void 0 ? (msg, opts3 = { DST: new Uint8Array() }) => {
     const t = hashBytes(concatBytes3(opts3.DST, msg));
-    return Fn2.create(Fn2.isLE ? bytesToNumberLE(t) : bytesToNumberBE(t));
+    return Fn2.create(Fn2.isLE ? bytesToNumberLE(t) : bytesToNumberBE2(t));
   } : opts2.hashToScalar;
   const H1Prefix = utf8ToBytes(opts2.H1 !== void 0 ? opts2.H1 : opts2.name + "rho");
   const H2Prefix = utf8ToBytes(opts2.H2 !== void 0 ? opts2.H2 : opts2.name + "chal");
@@ -7913,7 +8091,7 @@ function createFROST(opts2) {
     if (typeof rng !== "function")
       throw new TypeError('"rng" expected function, got type=' + typeof rng);
     const t = mapHashToField(rng(getMinHashLength(Fn2.ORDER)), Fn2.ORDER, Fn2.isLE);
-    return Fn2.isLE ? bytesToNumberLE(t) : bytesToNumberBE(t);
+    return Fn2.isLE ? bytesToNumberLE(t) : bytesToNumberBE2(t);
   }, "randomScalar");
   const serializePoint = /* @__PURE__ */ __name((p) => p.toBytes(), "serializePoint");
   const validatePublicPoint = /* @__PURE__ */ __name((p) => {
@@ -7938,10 +8116,10 @@ function createFROST(opts2) {
       throw new Error("Invalid identifier " + n);
     return n;
   }, "validateIdentifier");
-  const serializeIdentifier = /* @__PURE__ */ __name((id2) => bytesToHex2(Fn2.toBytes(validateIdentifier(id2))), "serializeIdentifier");
+  const serializeIdentifier = /* @__PURE__ */ __name((id2) => bytesToHex3(Fn2.toBytes(validateIdentifier(id2))), "serializeIdentifier");
   const parseIdentifier = /* @__PURE__ */ __name((id2, title = "identifier") => {
     astring(id2, title);
-    const n = validateIdentifier(Fn2.fromBytes(hexToBytes2(id2)));
+    const n = validateIdentifier(Fn2.fromBytes(hexToBytes3(id2)));
     if (serializeIdentifier(n) !== id2)
       throw new Error("expected canonical identifier hex");
     return n;
@@ -8057,7 +8235,7 @@ function createFROST(opts2) {
     if (secret !== void 0)
       abytes3(secret, Fn2.BYTES, "secret");
     if (coeffs !== void 0)
-      aarray(coeffs, "coeffs");
+      aarray2(coeffs, "coeffs");
     if (typeof rng !== "function")
       throw new TypeError('"rng" expected function, got type=' + typeof rng);
     const secretScalar = secret === void 0 ? randomScalar(rng) : Fn2.fromBytes(secret);
@@ -8209,7 +8387,7 @@ function createFROST(opts2) {
       round2: /* @__PURE__ */ __name((secret, others) => {
         validateObject(secret, { identifier: "bigint", commitment: "object", signers: "object" }, { coefficients: "object", round1Cache: "object", round2Cache: "object", step: "number" }, "secret");
         validateSigners(secret.signers, "secret.signers");
-        aarray(others, "others");
+        aarray2(others, "others");
         if (others.length !== secret.signers.max - 1)
           throw new Error("wrong number of round1 packages");
         if (!secret.coefficients || secret.step === 3)
@@ -8246,8 +8424,8 @@ function createFROST(opts2) {
       round3: /* @__PURE__ */ __name((secret, round1, round2) => {
         validateObject(secret, { identifier: "bigint", commitment: "object", signers: "object" }, { coefficients: "object", round1Cache: "object", round2Cache: "object", step: "number" }, "secret");
         validateSigners(secret.signers, "secret.signers");
-        aarray(round1, "round1");
-        aarray(round2, "round2");
+        aarray2(round1, "round1");
+        aarray2(round2, "round2");
         if (round1.length !== secret.signers.max - 1)
           throw new Error("wrong length of round1 packages");
         if (!secret.coefficients || secret.step !== 2 || !secret.round1Cache)
@@ -8352,7 +8530,7 @@ function createFROST(opts2) {
         for (let i = 1; i <= signers.max; i++)
           identifiers.push(Identifier.fromNumber(i));
       } else {
-        aarray(identifiers, "identifiers");
+        aarray2(identifiers, "identifiers");
         if (identifiers.length !== signers.max)
           throw new Error("identifiers should be array of " + signers.max);
       }
@@ -8394,7 +8572,7 @@ function createFROST(opts2) {
         verifyingShares: "object"
       }, {}, "pub");
       validateSigners(pub.signers, "pub.signers");
-      aarray(pub.commitments, "pub.commitments");
+      aarray2(pub.commitments, "pub.commitments");
       const id2 = parseIdentifier(secret.identifier);
       const commitment = pub.commitments.map(parsePoint);
       const signingShare = Fn2.fromBytes(secret.signingShare);
@@ -8429,11 +8607,11 @@ function createFROST(opts2) {
         verifyingShares: "object"
       }, {}, "pub");
       validateSigners(pub.signers, "pub.signers");
-      aarray(pub.commitments, "pub.commitments");
+      aarray2(pub.commitments, "pub.commitments");
       validateObject(nonces, { hiding: "object", binding: "object" }, {}, "nonces");
       abytes3(nonces.hiding, Fn2.BYTES, "nonces.hiding");
       abytes3(nonces.binding, Fn2.BYTES, "nonces.binding");
-      aarray(commitmentList, "commitmentList");
+      aarray2(commitmentList, "commitmentList");
       abytes3(msg, void 0, "msg");
       validateCommitmentsNum(pub.signers, commitmentList.length);
       const hidingNonce0 = Fn2.fromBytes(nonces.hiding);
@@ -8448,7 +8626,7 @@ function createFROST(opts2) {
       const commitment = commitmentList.find((i) => i.identifier === secret.identifier);
       if (!commitment)
         throw new Error("missing signer commitment");
-      if (bytesToHex2(commitment.hiding) !== bytesToHex2(expectedCommitment.hiding) || bytesToHex2(commitment.binding) !== bytesToHex2(expectedCommitment.binding))
+      if (bytesToHex3(commitment.hiding) !== bytesToHex3(expectedCommitment.hiding) || bytesToHex3(commitment.binding) !== bytesToHex3(expectedCommitment.binding))
         throw new Error("incorrect signer commitment");
       if (adjustSecret)
         secret = adjustSecret(secret, pub);
@@ -8474,8 +8652,8 @@ function createFROST(opts2) {
         verifyingShares: "object"
       }, {}, "pub");
       validateSigners(pub.signers, "pub.signers");
-      aarray(pub.commitments, "pub.commitments");
-      aarray(commitmentList, "commitmentList");
+      aarray2(pub.commitments, "pub.commitments");
+      aarray2(commitmentList, "commitmentList");
       abytes3(msg, void 0, "msg");
       parseIdentifier(identifier);
       abytes3(sigShare, Fn2.BYTES, "sigShare");
@@ -8503,8 +8681,8 @@ function createFROST(opts2) {
         verifyingShares: "object"
       }, {}, "pub");
       validateSigners(pub.signers, "pub.signers");
-      aarray(pub.commitments, "pub.commitments");
-      aarray(commitmentList, "commitmentList");
+      aarray2(pub.commitments, "pub.commitments");
+      aarray2(commitmentList, "commitmentList");
       abytes3(msg, void 0, "msg");
       validateObject(sigShares, {}, {}, "sigShares");
       const rawPub = pub;
@@ -8558,7 +8736,7 @@ function createFROST(opts2) {
     },
     // Combine multiple secret shares to restore secret
     combineSecret(shares, signers) {
-      aarray(shares, "shares");
+      aarray2(shares, "shares");
       validateSigners(signers);
       if (shares.length < signers.min || shares.length > signers.max)
         throw new Error("wrong secret shares array");
@@ -8686,18 +8864,18 @@ function montgomery(curveDef) {
   }
   __name(decodeScalar, "decodeScalar");
   const lowOrderU = new Set(is25519 ? [
-    _0n7,
+    _0n8,
     _1n7,
     P - _1n7,
     BigInt("325606250916557431795983626356110631294008115727848805560023387167927233504"),
     BigInt("39382357235489614581723060781553021112529911719440698176882885853963445705823")
-  ] : [_0n7, _1n7, P - _1n7]);
+  ] : [_0n8, _1n7, P - _1n7]);
   function scalarMult(scalar, u) {
     const pointU = decodeU(u);
     if (lowOrderU.has(pointU))
       throw new Error("invalid private or public key received");
     const pu = montgomeryLadder(pointU, decodeScalar(scalar));
-    if (pu === _0n7)
+    if (pu === _0n8)
       throw new Error("invalid private or public key received");
     return encodeU(pu);
   }
@@ -8708,7 +8886,7 @@ function montgomery(curveDef) {
     const k = decodeScalar(scalar);
     aInRange("scalar", k, minScalar, maxScalar);
     const pu = modP(mulBaseHook(k));
-    if (pu === _0n7)
+    if (pu === _0n8)
       throw new Error("invalid private or public key received");
     return encodeU(pu);
   }
@@ -8716,16 +8894,16 @@ function montgomery(curveDef) {
   const getPublicKey = scalarMultBase;
   const getSharedSecret = scalarMult;
   function montgomeryLadder(u, scalar) {
-    aInRange("u", u, _0n7, P);
+    aInRange("u", u, _0n8, P);
     aInRange("scalar", scalar, minScalar, maxScalar);
     const k = scalar;
     const x_1 = u;
     let x_2 = _1n7;
-    let z_2 = _0n7;
+    let z_2 = _0n8;
     let x_3 = u;
     let z_3 = _1n7;
     const kx = k ^ k >> _1n7;
-    for (let t = BigInt(montgomeryBits - 1); t >= _0n7; t--) {
+    for (let t = BigInt(montgomeryBits - 1); t >= _0n8; t--) {
       const mask2 = cmask(P, kx >> t);
       ({ x_2, x_3 } = swap(mask2, x_2, x_3));
       ({ x_2: z_2, x_3: z_3 } = swap(mask2, z_2, z_3));
@@ -8776,13 +8954,13 @@ function montgomery(curveDef) {
     lengths
   });
 }
-var _0n7, _1n7, _2n5;
+var _0n8, _1n7, _2n5;
 var init_montgomery = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/montgomery.js"() {
     init_utils3();
     init_curve();
     init_modular();
-    _0n7 = /* @__PURE__ */ BigInt(0);
+    _0n8 = /* @__PURE__ */ BigInt(0);
     _1n7 = /* @__PURE__ */ BigInt(1);
     _2n5 = /* @__PURE__ */ BigInt(2);
     __name(cmask, "cmask");
@@ -8812,7 +8990,7 @@ function createOPRF(opts2) {
     if (typeof rng !== "function")
       throw new TypeError('"rng" expected function, got type=' + typeof rng);
     const t = mapHashToField(rng(getMinHashLength(Fn2.ORDER)), Fn2.ORDER, Fn2.isLE);
-    return Fn2.isLE ? bytesToNumberLE(t) : bytesToNumberBE(t);
+    return Fn2.isLE ? bytesToNumberLE(t) : bytesToNumberBE2(t);
   }, "randomScalar");
   const msm = /* @__PURE__ */ __name((points, scalars) => mulAddUnsafe(Point, points, scalars), "msm");
   const getCtx = /* @__PURE__ */ __name((mode) => concatBytes3(asciiToBytes("OPRFV1-"), new Uint8Array([mode]), asciiToBytes("-" + name)), "getCtx");
@@ -8823,12 +9001,12 @@ function createOPRF(opts2) {
     const res2 = [];
     for (const a of args) {
       if (typeof a === "number")
-        res2.push(numberToBytesBE(a, 2));
+        res2.push(numberToBytesBE2(a, 2));
       else if (typeof a === "string")
         res2.push(asciiToBytes(a));
       else {
         abytes3(a);
-        res2.push(numberToBytesBE(a.length, 2), a);
+        res2.push(numberToBytesBE2(a.length, 2), a);
       }
     }
     return concatBytes3(...res2);
@@ -9237,7 +9415,7 @@ function calcElligatorRistrettoMap(r0) {
   const W3 = Fp.add(_1n8, s2);
   return new ed25519_Point(Fp.mul(W0, W3), Fp.mul(W2, W1), Fp.mul(W1, W3), Fp.mul(W0, W2));
 }
-var _0n8, _1n8, _2n6, _3n3, _5n2, _8n3, ed25519_CURVE_p, ed25519_CURVE, ED25519_SQRT_M1, ed25519_Point, Fp, Fn, ed25519, ed25519ctx, ed25519ph, ed25519_FROST, x25519, ELL2_C1, ELL2_C2, ELL2_C3, ELL2_J, ELL2_C1_EDWARDS, ed25519_hasher, SQRT_M1, SQRT_AD_MINUS_ONE, INVSQRT_A_MINUS_D, ONE_MINUS_D_SQ, D_MINUS_ONE_SQ, invertSqrt, MAX_255B, bytes255ToNumberLE, _RistrettoPoint, ristretto255, ristretto255_hasher, ristretto255_oprf, ristretto255_FROST, ED25519_TORSION_SUBGROUP;
+var _0n9, _1n8, _2n6, _3n3, _5n2, _8n3, ed25519_CURVE_p, ed25519_CURVE, ED25519_SQRT_M1, ed25519_Point, Fp, Fn, ed25519, ed25519ctx, ed25519ph, ed25519_FROST, x25519, ELL2_C1, ELL2_C2, ELL2_C3, ELL2_J, ELL2_C1_EDWARDS, ed25519_hasher, SQRT_M1, SQRT_AD_MINUS_ONE, INVSQRT_A_MINUS_D, ONE_MINUS_D_SQ, D_MINUS_ONE_SQ, invertSqrt, MAX_255B, bytes255ToNumberLE, _RistrettoPoint, ristretto255, ristretto255_hasher, ristretto255_oprf, ristretto255_FROST, ED25519_TORSION_SUBGROUP;
 var init_ed25519 = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/ed25519.js"() {
     init_sha2();
@@ -9249,7 +9427,7 @@ var init_ed25519 = __esm({
     init_montgomery();
     init_oprf();
     init_utils3();
-    _0n8 = /* @__PURE__ */ BigInt(0);
+    _0n9 = /* @__PURE__ */ BigInt(0);
     _1n8 = /* @__PURE__ */ BigInt(1);
     _2n6 = /* @__PURE__ */ BigInt(2);
     _3n3 = /* @__PURE__ */ BigInt(3);
@@ -9309,8 +9487,8 @@ var init_ed25519 = __esm({
         // Same construction as libsodium's crypto_scalarmult_curve25519_base.
         scalarMultBase: /* @__PURE__ */ __name((k) => {
           const kn = mod(k, ed25519_Point.Fn.ORDER);
-          if (kn === _0n8)
-            return _0n8;
+          if (kn === _0n9)
+            return _0n9;
           const p = ed25519_Point.BASE.multiply(kn);
           return mod((p.Z + p.Y) * powPminus2(mod(p.Z - p.Y, P)), P);
         }, "scalarMultBase")
@@ -9545,7 +9723,7 @@ var require_age_pqc = __commonJS({
     var { shake256: shake2562, sha3_256: sha3_2562 } = require_sha3();
     var { sha256: sha2562 } = require_sha2();
     var { x25519: x255192 } = require_ed25519();
-    var { utf8ToBytes: utf8ToBytes2, bytesToUtf8 } = require_bytes();
+    var { utf8ToBytes: utf8ToBytes3, bytesToUtf8: bytesToUtf82 } = require_bytes();
     var MLKEM_PK = 1184;
     var MLKEM_CT = 1088;
     var XWING_PK = 1216;
@@ -9563,7 +9741,7 @@ var require_age_pqc = __commonJS({
     }
     __name(concatBytes4, "concatBytes");
     function deriveLabelTag(label) {
-      return sha2562(utf8ToBytes2(label));
+      return sha2562(utf8ToBytes3(label));
     }
     __name(deriveLabelTag, "deriveLabelTag");
     function mlkemKeypairFromSeed(mlkemSeed) {
@@ -9735,7 +9913,7 @@ var require_age_pqc = __commonJS({
       if (typeof label !== "string" || !label) {
         throw new Error("derived identity needs a non-empty label");
       }
-      const payload = concatBytes4(Uint8Array.of(DERIVED_MARKER), utf8ToBytes2(label));
+      const payload = concatBytes4(Uint8Array.of(DERIVED_MARKER), utf8ToBytes3(label));
       return bech32Encode(IDENTITY_HRP, payload).toUpperCase();
     }
     __name(encodeIdentity, "encodeIdentity");
@@ -9760,7 +9938,7 @@ var require_age_pqc = __commonJS({
       const { hrp, data } = bech32Decode(String(s).trim().toLowerCase());
       if (hrp !== IDENTITY_HRP || !data || data.length < 1) return null;
       if (data[0] === DERIVED_MARKER) {
-        return { derived: true, label: bytesToUtf8(data.subarray(1)) };
+        return { derived: true, label: bytesToUtf82(data.subarray(1)) };
       }
       if (data.length === 1) {
         return { derived: false, slot: data[0], fingerprint: null, legacy: true };
@@ -9879,6 +10057,263 @@ var require_public_only = __commonJS({
   }
 });
 
+// node_modules/node-onlykey-lib/src/vendor/exports/@noble/ciphers/utils.js
+var require_utils = __commonJS({
+  "node_modules/node-onlykey-lib/src/vendor/exports/@noble/ciphers/utils.js"(exports, module) {
+    module.exports = (init_utils2(), __toCommonJS(utils_exports));
+  }
+});
+
+// node_modules/node-onlykey-lib/src/crypto/der.js
+var require_der = __commonJS({
+  "node_modules/node-onlykey-lib/src/crypto/der.js"(exports, module) {
+    "use strict";
+    var { concat } = require_bytes();
+    function derLength(n) {
+      if (n < 128) return Uint8Array.of(n);
+      const out = [];
+      for (let v = n; v > 0; v = Math.floor(v / 256)) out.unshift(v & 255);
+      return Uint8Array.of(128 | out.length, ...out);
+    }
+    __name(derLength, "derLength");
+    var tlv = /* @__PURE__ */ __name((tag, content) => concat([Uint8Array.of(tag), derLength(content.length), content]), "tlv");
+    var sequence = /* @__PURE__ */ __name((...items) => tlv(48, concat(items)), "sequence");
+    var octets = /* @__PURE__ */ __name((bytes3) => tlv(4, bytes3), "octets");
+    var NULL = Uint8Array.of(5, 0);
+    function integer(value) {
+      let bytes3;
+      if (typeof value === "bigint" || typeof value === "number") {
+        let v = BigInt(value);
+        const out = [];
+        do {
+          out.unshift(Number(v & 0xffn));
+          v >>= 8n;
+        } while (v > 0n);
+        bytes3 = Uint8Array.from(out);
+      } else {
+        let start = 0;
+        while (start < value.length - 1 && value[start] === 0) start++;
+        bytes3 = value.subarray(start);
+      }
+      if (bytes3[0] & 128) bytes3 = concat([Uint8Array.of(0), bytes3]);
+      return tlv(2, bytes3);
+    }
+    __name(integer, "integer");
+    function oid(dotted) {
+      const parts = dotted.split(".").map(Number);
+      const out = [40 * parts[0] + parts[1]];
+      for (const part of parts.slice(2)) {
+        const groups = [];
+        let v = part;
+        do {
+          groups.unshift(v & 127);
+          v = Math.floor(v / 128);
+        } while (v > 0);
+        for (let i = 0; i < groups.length - 1; i++) groups[i] |= 128;
+        out.push(...groups);
+      }
+      return tlv(6, Uint8Array.from(out));
+    }
+    __name(oid, "oid");
+    module.exports = { derLength, tlv, sequence, octets, NULL, integer, oid };
+  }
+});
+
+// node_modules/node-onlykey-lib/src/crypto/x509.js
+var require_x509 = __commonJS({
+  "node_modules/node-onlykey-lib/src/crypto/x509.js"(exports, module) {
+    "use strict";
+    var { sha256: sha2562, sha512: sha5122 } = require_sha2();
+    var { randomBytes: randomBytes5 } = require_utils();
+    var { concat, utf8ToBytes: utf8ToBytes3, toBase64, fromBase64 } = require_bytes();
+    var { tlv, sequence, NULL, integer, oid } = require_der();
+    var OID = {
+      rsaEncryption: "1.2.840.113549.1.1.1",
+      sha256WithRSAEncryption: "1.2.840.113549.1.1.11",
+      sha512WithRSAEncryption: "1.2.840.113549.1.1.13",
+      countryName: "2.5.4.6",
+      organizationName: "2.5.4.10",
+      organizationalUnitName: "2.5.4.11",
+      commonName: "2.5.4.3"
+    };
+    var HASHES = {
+      sha256: { digest: sha2562, algorithm: OID.sha256WithRSAEncryption },
+      sha512: { digest: sha5122, algorithm: OID.sha512WithRSAEncryption }
+    };
+    var bitString = /* @__PURE__ */ __name((bytes3) => tlv(3, concat([Uint8Array.of(0), bytes3])), "bitString");
+    var unsigned = /* @__PURE__ */ __name((b) => {
+      let i = 0;
+      while (i < b.length - 1 && b[i] === 0) i++;
+      return b.subarray(i);
+    }, "unsigned");
+    function name(n) {
+      if (!n || !String(n.CN || "").trim()) throw new TypeError("x509: a certificate names its subject (CN at least)");
+      const rdn = /* @__PURE__ */ __name((type, value) => tlv(49, sequence(oid(type), value)), "rdn");
+      const parts = [];
+      if (n.C !== void 0) {
+        if (!/^[A-Z]{2}$/.test(String(n.C))) throw new TypeError("x509: C is a two-letter country code");
+        parts.push(rdn(OID.countryName, tlv(19, utf8ToBytes3(n.C))));
+      }
+      if (n.O !== void 0) parts.push(rdn(OID.organizationName, tlv(12, utf8ToBytes3(String(n.O)))));
+      if (n.OU !== void 0) parts.push(rdn(OID.organizationalUnitName, tlv(12, utf8ToBytes3(String(n.OU)))));
+      parts.push(rdn(OID.commonName, tlv(12, utf8ToBytes3(String(n.CN)))));
+      return sequence(...parts);
+    }
+    __name(name, "name");
+    function time(d) {
+      const p = /* @__PURE__ */ __name((n) => String(n).padStart(2, "0"), "p");
+      const y = d.getUTCFullYear();
+      const rest = `${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`;
+      return y < 2050 ? tlv(23, utf8ToBytes3(`${p(y % 100)}${rest}`)) : tlv(24, utf8ToBytes3(`${y}${rest}`));
+    }
+    __name(time, "time");
+    function rsaPublicKeyInfo(modulus, exponent = 65537) {
+      return sequence(sequence(oid(OID.rsaEncryption), NULL), bitString(sequence(integer(unsigned(modulus)), integer(exponent))));
+    }
+    __name(rsaPublicKeyInfo, "rsaPublicKeyInfo");
+    async function selfSigned({ modulus, exponent = 65537, subject, notBefore = /* @__PURE__ */ new Date(), days = 365 * 30, hash, serial, sign }) {
+      const n = unsigned(Uint8Array.from(modulus || []));
+      if (n.length < 128 || n.length > 512) throw new TypeError(`x509: an RSA modulus of 1024 to 4096 bits, not ${n.length * 8}`);
+      const h = HASHES[hash || (n.length > 384 ? "sha512" : "sha256")];
+      if (!h) throw new TypeError(`x509: hash sha256 or sha512, not ${JSON.stringify(hash)}`);
+      if (!Number.isInteger(days) || days < 1) throw new TypeError("x509: days is a whole number, 1 or more");
+      const sn = Uint8Array.from(serial || randomBytes5(16));
+      sn[0] = sn[0] & 127 | 1;
+      const algorithm = sequence(oid(h.algorithm), NULL);
+      const subjectName = name(subject);
+      const notAfter = new Date(notBefore.getTime() + days * 864e5);
+      const tbs = sequence(
+        tlv(160, integer(2)),
+        /* v3 */
+        integer(sn),
+        algorithm,
+        subjectName,
+        sequence(time(notBefore), time(notAfter)),
+        subjectName,
+        rsaPublicKeyInfo(n, exponent)
+      );
+      const signature = Uint8Array.from(await sign(h.digest(tbs)));
+      if (signature.length !== n.length) throw new Error(`x509: the key's signature is ${signature.length} bytes, not ${n.length} (its modulus)`);
+      return sequence(tbs, algorithm, bitString(signature));
+    }
+    __name(selfSigned, "selfSigned");
+    function toPem(der) {
+      const b64 = toBase64(der);
+      return `-----BEGIN CERTIFICATE-----
+${b64.match(/.{1,64}/g).join("\n")}
+-----END CERTIFICATE-----
+`;
+    }
+    __name(toPem, "toPem");
+    function derRead(bytes3, at) {
+      const tag = bytes3[at];
+      let len = bytes3[at + 1];
+      let head = 2;
+      if (len === void 0) throw new Error("x509: a DER element runs past the end");
+      if (len & 128) {
+        const n = len & 127;
+        if (n < 1 || n > 3) throw new Error("x509: a DER length this reader does not take");
+        len = 0;
+        for (let i = 0; i < n; i++) len = len * 256 + bytes3[at + 2 + i];
+        head = 2 + n;
+      }
+      const start = at + head;
+      const end = start + len;
+      if (end > bytes3.length) throw new Error("x509: a DER element runs past the end");
+      return { tag, start, end, all: bytes3.subarray(at, end) };
+    }
+    __name(derRead, "derRead");
+    function derChildren(bytes3, el) {
+      const out = [];
+      for (let at = el.start; at < el.end; ) {
+        const c = derRead(bytes3, at);
+        out.push(c);
+        at = c.end;
+      }
+      return out;
+    }
+    __name(derChildren, "derChildren");
+    function oidText(b) {
+      const parts = [Math.floor(b[0] / 40), b[0] % 40];
+      for (let i = 1, v = 0; i < b.length; i++) {
+        v = v * 128 + (b[i] & 127);
+        if (!(b[i] & 128)) {
+          parts.push(v);
+          v = 0;
+        }
+      }
+      return parts.join(".");
+    }
+    __name(oidText, "oidText");
+    var READ_SIGNATURES = {
+      "1.2.840.113549.1.1.5": "sha1WithRSAEncryption",
+      [OID.sha256WithRSAEncryption]: "sha256WithRSAEncryption",
+      "1.2.840.113549.1.1.12": "sha384WithRSAEncryption",
+      [OID.sha512WithRSAEncryption]: "sha512WithRSAEncryption"
+    };
+    var NAME_KEYS = { [OID.commonName]: "CN", [OID.organizationName]: "O", [OID.organizationalUnitName]: "OU", [OID.countryName]: "C" };
+    function nameOf(bytes3, el) {
+      const out = {};
+      for (const set of derChildren(bytes3, el)) {
+        for (const atv of derChildren(bytes3, set)) {
+          const [type, value] = derChildren(bytes3, atv);
+          const key = NAME_KEYS[oidText(bytes3.subarray(type.start, type.end))];
+          if (key) out[key] = new TextDecoder().decode(bytes3.subarray(value.start, value.end));
+        }
+      }
+      return out;
+    }
+    __name(nameOf, "nameOf");
+    function timeOf(bytes3, el) {
+      const t = new TextDecoder().decode(bytes3.subarray(el.start, el.end));
+      const full = el.tag === 23 ? `${Number(t.slice(0, 2)) < 50 ? "20" : "19"}${t}` : t;
+      return `${full.slice(0, 4)}-${full.slice(4, 6)}-${full.slice(6, 8)}T${full.slice(8, 10)}:${full.slice(10, 12)}:${full.slice(12, 14)}Z`;
+    }
+    __name(timeOf, "timeOf");
+    function read(input) {
+      let der = input;
+      if (typeof input === "string") {
+        const m = /-----BEGIN CERTIFICATE-----([\s\S]+?)-----END CERTIFICATE-----/.exec(input);
+        if (!m) throw new Error("x509: not a PEM certificate (no BEGIN CERTIFICATE block)");
+        der = fromBase64(m[1].replace(/\s+/g, ""));
+      }
+      der = Uint8Array.from(der);
+      const cert = derRead(der, 0);
+      if (cert.tag !== 48 || cert.end !== der.length) throw new Error("x509: not one DER certificate");
+      const [tbsEl, algEl, sigEl] = derChildren(der, cert);
+      if (!tbsEl || !algEl || !sigEl || sigEl.tag !== 3) throw new Error("x509: a certificate is to-be-signed, algorithm, signature");
+      const tbsParts = derChildren(der, tbsEl);
+      const f = tbsParts[0].tag === 160 ? tbsParts.slice(1) : tbsParts;
+      const [, , issuerEl, validityEl, subjectEl, spkiEl] = f;
+      const [nb, na] = derChildren(der, validityEl);
+      const [spkiAlg, spkiBits] = derChildren(der, spkiEl);
+      const keyOid = oidText(der.subarray(derChildren(der, spkiAlg)[0].start, derChildren(der, spkiAlg)[0].end));
+      if (keyOid !== OID.rsaEncryption) throw new Error(`x509: an RSA certificate is read here; its key is ${keyOid}`);
+      const rsaKey = derRead(der, spkiBits.start + 1);
+      const [nEl, eEl] = derChildren(der, rsaKey);
+      const modulus = unsigned(der.subarray(nEl.start, nEl.end));
+      const sigAlg = oidText(der.subarray(derChildren(der, algEl)[0].start, derChildren(der, algEl)[0].end));
+      return {
+        der,
+        subject: nameOf(der, subjectEl),
+        issuer: nameOf(der, issuerEl),
+        notBefore: timeOf(der, nb),
+        notAfter: timeOf(der, na),
+        modulus,
+        exponent: unsigned(der.subarray(eEl.start, eEl.end)),
+        bits: modulus.length * 8,
+        /* by name when known (READ_SIGNATURES - the ones a host may check: Android's debug certificate is SHA-1), else its OID */
+        signatureAlgorithm: READ_SIGNATURES[sigAlg] || sigAlg,
+        tbs: tbsEl.all,
+        signature: der.subarray(sigEl.start + 1, sigEl.end),
+        sha256: Array.from(sha2562(der), (b) => b.toString(16).padStart(2, "0")).join("")
+      };
+    }
+    __name(read, "read");
+    module.exports = { selfSigned, toPem, read, rsaPublicKeyInfo, name, OID };
+  }
+});
+
 // node_modules/node-onlykey-lib/keychain/src/list.js
 var require_list = __commonJS({
   "node_modules/node-onlykey-lib/keychain/src/list.js"(exports, module) {
@@ -9916,6 +10351,12 @@ var require_list = __commonJS({
       }
       if (e.revocation !== void 0 && (typeof e.revocation !== "string" || !/BEGIN PGP PUBLIC KEY BLOCK/.test(e.revocation))) {
         throw new Error("an entry revocation is an armored PUBLIC key block");
+      }
+      if (e.x509 !== void 0) {
+        if (typeof e.x509 !== "string" || !/BEGIN CERTIFICATE/.test(e.x509)) throw new Error("an entry's x509 is a PEM certificate");
+        if (e.type !== "rsa") throw new Error("an entry keeps an x509 certificate for an RSA key");
+        const cert = require_x509().read(e.x509);
+        if (toHex(cert.modulus) !== toHex(e.publicKey)) throw new Error("the certificate's public key is not this entry's key");
       }
       if (!e.artifacts && (e.publicKey.length || e.pgp)) {
         try {
@@ -10193,11 +10634,11 @@ var require_codes = __commonJS({
 });
 
 // node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/der.js
-var _0n9, DERErr, _DER, DER;
+var _0n10, DERErr, _DER, DER;
 var init_der = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/der.js"() {
     init_utils3();
-    _0n9 = /* @__PURE__ */ BigInt(0);
+    _0n10 = /* @__PURE__ */ BigInt(0);
     DERErr = class extends Error {
       static {
         __name(this, "DERErr");
@@ -10271,8 +10712,8 @@ var init_der = __esm({
       _int: {
         encode(num) {
           const { Err: E } = _DER;
-          abignumber(num);
-          if (num < _0n9)
+          abignumber2(num);
+          if (num < _0n10)
             throw new E("integer: negative integers are not allowed");
           let hex2 = numberToHexUnpadded(num);
           if (Number.parseInt(hex2[0], 16) & 8)
@@ -10289,7 +10730,7 @@ var init_der = __esm({
             throw new E("invalid signature integer: negative");
           if (data.length > 1 && data[0] === 0 && !(data[1] & 128))
             throw new E("invalid signature integer: unnecessary leading zero");
-          return bytesToNumberBE(data);
+          return bytesToNumberBE2(data);
         }
       },
       toSig(bytes3, maxScalarBytes) {
@@ -10330,20 +10771,20 @@ var init_der = __esm({
 
 // node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/weierstrass.js
 function _splitEndoScalar(k, basis, n) {
-  aInRange("scalar", k, _0n10, n);
+  aInRange("scalar", k, _0n11, n);
   const [[a1, b1], [a2, b2]] = basis;
   const c1 = divNearest(b2 * k, n);
   const c2 = divNearest(-b1 * k, n);
   let k1 = k - c1 * a1 - c2 * a2;
   let k2 = -c1 * b1 - c2 * b2;
-  const k1neg = k1 < _0n10;
-  const k2neg = k2 < _0n10;
+  const k1neg = k1 < _0n11;
+  const k2neg = k2 < _0n11;
   if (k1neg)
     k1 = -k1;
   if (k2neg)
     k2 = -k2;
   const MAX_NUM = bitMask(Math.ceil(bitLen(n) / 2)) + _1n9;
-  if (k1 < _0n10 || k1 >= MAX_NUM || k2 < _0n10 || k2 >= MAX_NUM) {
+  if (k1 < _0n11 || k1 >= MAX_NUM || k2 < _0n11 || k2 >= MAX_NUM) {
     throw new Error("splitScalar (endomorphism): failed for k");
   }
   return { k1neg, k1, k2neg, k2 };
@@ -10545,7 +10986,7 @@ function weierstrass(params, extraOpts = {}) {
       return P;
     }
     static fromHex(hex2) {
-      return Point.fromBytes(hexToBytes2(hex2));
+      return Point.fromBytes(hexToBytes3(hex2));
     }
     get x() {
       return this.toAffine().x;
@@ -10723,7 +11164,7 @@ function weierstrass(params, extraOpts = {}) {
       const sc = scalar;
       if (!Fn2.isValid(sc))
         throw new RangeError("invalid scalar: out of range");
-      if (sc === _0n10 || p.is0())
+      if (sc === _0n11 || p.is0())
         return Point.ZERO;
       if (sc === _1n9)
         return p;
@@ -10803,7 +11244,7 @@ function weierstrass(params, extraOpts = {}) {
       return encodePoint(Point, this, isCompressed);
     }
     toHex(isCompressed = true) {
-      return bytesToHex2(this.toBytes(isCompressed));
+      return bytesToHex3(this.toBytes(isCompressed));
     }
     toString() {
       return `<Point ${this.is0() ? "ZERO" : this.toHex()}>`;
@@ -11002,7 +11443,7 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
       return new Signature(Fn2.fromBytes(r), Fn2.fromBytes(s), recid);
     }
     static fromHex(hex2, format) {
-      return this.fromBytes(hexToBytes2(hex2), format);
+      return this.fromBytes(hexToBytes3(hex2), format);
     }
     assertRecovery() {
       const { recovery } = this;
@@ -11040,7 +11481,7 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
     toBytes(format = defaultSigOpts.format) {
       validateSigFormat(format);
       if (format === "der")
-        return hexToBytes2(DER.hexFromSig(this));
+        return hexToBytes3(DER.hexFromSig(this));
       const { r, s } = this;
       const rb = Fn2.toBytes(r);
       const sb = Fn2.toBytes(s);
@@ -11051,7 +11492,7 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
       return concatBytes3(rb, sb);
     }
     toHex(format) {
-      return bytesToHex2(this.toBytes(format));
+      return bytesToHex3(this.toBytes(format));
     }
   }
   Object.freeze(Signature.prototype);
@@ -11059,7 +11500,7 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
   const bits2int = opts2.bits2int === void 0 ? /* @__PURE__ */ __name(function bits2int_def(bytes3) {
     if (bytes3.length > 8192)
       throw new Error("input is too large");
-    const num = bytesToNumberBE(bytes3);
+    const num = bytesToNumberBE2(bytes3);
     const delta = bytes3.length * 8 - fnBits;
     return delta > 0 ? num >> BigInt(delta) : num;
   }, "bits2int_def") : opts2.bits2int;
@@ -11068,7 +11509,7 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
   }, "bits2int_modN_def") : opts2.bits2int_modN;
   const ORDER_MASK = bitMask(fnBits);
   function int2octets(num) {
-    aInRange("num < 2^" + fnBits, num, _0n10, ORDER_MASK);
+    aInRange("num < 2^" + fnBits, num, _0n11, ORDER_MASK);
     return Fn2.toBytes(num);
   }
   __name(int2octets, "int2octets");
@@ -11097,11 +11538,11 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
         return;
       const q = Point.BASE.multiply(k).toAffine();
       const r = Fn2.create(q.x);
-      if (r === _0n10)
+      if (r === _0n11)
         return;
       let s;
       if (csprng !== void 0) {
-        const b = bytesToNumberBE(mapHashToField(csprng(blindLength), CURVE_ORDER));
+        const b = bytesToNumberBE2(mapHashToField(csprng(blindLength), CURVE_ORDER));
         const ibk = Fn2.inv(Fn2.mul(b, k));
         const bm = Fn2.mul(b, m);
         const bd = Fn2.mul(b, d);
@@ -11110,7 +11551,7 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
         const ik = invertCt(k, CURVE_ORDER);
         s = Fn2.create(ik * Fn2.create(m + r * d));
       }
-      if (s === _0n10)
+      if (s === _0n11)
         return;
       let recovery = getRecoveryBit(q.x, q.y, r);
       let normS = s;
@@ -11187,7 +11628,7 @@ function ecdsa(Point, hash, ecdsaOpts = {}) {
     hash: hash_
   });
 }
-var divNearest, _0n10, _1n9, _2n7, _3n4, _4n5;
+var divNearest, _0n11, _1n9, _2n7, _3n4, _4n5;
 var init_weierstrass = __esm({
   "node_modules/node-onlykey-lib/src/vendor/node_modules/@noble/curves/abstract/weierstrass.js"() {
     init_hmac();
@@ -11200,7 +11641,7 @@ var init_weierstrass = __esm({
     __name(_splitEndoScalar, "_splitEndoScalar");
     __name(validateSigFormat, "validateSigFormat");
     __name(validateSigOpts2, "validateSigOpts");
-    _0n10 = /* @__PURE__ */ BigInt(0);
+    _0n11 = /* @__PURE__ */ BigInt(0);
     _1n9 = /* @__PURE__ */ BigInt(1);
     _2n7 = /* @__PURE__ */ BigInt(2);
     _3n4 = /* @__PURE__ */ BigInt(3);
@@ -15131,6 +15572,7 @@ import { DurableObject } from "cloudflare:workers";
 // node_modules/node-onlykey-lib/mcp/core/mcp.js
 var import_src = __toESM(require_src(), 1);
 var import_bytes = __toESM(require_bytes(), 1);
+var import_x509 = __toESM(require_x509(), 1);
 var PROTOCOL = "2025-06-18";
 var SUPPORTED = ["2025-06-18", "2025-03-26", "2024-11-05"];
 var SESSION_ID = /^[0-9a-f]{32}$/;
@@ -15140,7 +15582,10 @@ var MAX_DATA = 64 * 1024;
 var MAX_TEXT = 200;
 var WAIT_MAX_S = 60;
 var OPS = ["sign", "decrypt"];
-var KINDS = ["ssh", "gpg"];
+var KINDS = ["ssh", "gpg", "rsa"];
+var MAX_CERTS = 4;
+var LABEL = /^[ -~]{1,64}$/;
+var STATES = ["declined", "running", "done", "failed", "ended"];
 var hex = /* @__PURE__ */ __name((u82) => import_bytes.default.toHex(u82), "hex");
 var randomHex = /* @__PURE__ */ __name((n) => hex(crypto.getRandomValues(new Uint8Array(n))), "randomHex");
 var sha256Hex = /* @__PURE__ */ __name(async (h) => hex(new Uint8Array(await crypto.subtle.digest("SHA-256", import_bytes.default.fromHex(h)))), "sha256Hex");
@@ -15163,19 +15608,47 @@ var identityArg = /* @__PURE__ */ __name((v) => {
   need(HEX64.test(h), "identity: the identity PUBLIC KEY, 64 hex characters (the owner gives it to you)");
   return h;
 }, "identityArg");
+var itemArgs = /* @__PURE__ */ __name((it, n) => {
+  need(it && typeof it === "object", `item ${n}: {op, key, reason, fingerprint}`);
+  need(OPS.includes(it.op), `item ${n}: op ${OPS.join(" or ")}`);
+  const k = it.key || {};
+  need(KINDS.includes(k.kind), `item ${n}: key.kind ${KINDS.join(", ")}`);
+  let key;
+  if (k.kind === "rsa") {
+    const cert = typeof k.cert === "string" ? k.cert.trim().toLowerCase() : "";
+    need(HEX64.test(cert), `item ${n}: an rsa key is named by key.cert - the SHA-256 (64 hex) of a certificate your card holds`);
+    key = { kind: "rsa", cert };
+  } else key = { kind: k.kind, identity: text(k.identity, `item ${n}: key.identity`) };
+  const fingerprint = typeof it.fingerprint === "string" ? it.fingerprint.trim().toLowerCase() : "";
+  need(HEX64.test(fingerprint), `item ${n}: fingerprint - the SHA-256 of its data, 64 hex`);
+  return { op: it.op, key, reason: text(it.reason, `item ${n}: reason`), fingerprint };
+}, "itemArgs");
+var dataArg = /* @__PURE__ */ __name((d) => {
+  const enc = d.encoding || "text";
+  need(enc === "text" || enc === "base64", "encoding: text or base64");
+  need(typeof d.data === "string" && d.data.length > 0 && d.data.length <= MAX_DATA, `data: 1 to ${MAX_DATA} characters`);
+  if (enc === "base64") need(/^[A-Za-z0-9+/]*={0,2}$/.test(d.data) && d.data.length % 4 === 0, "data: not base64");
+  return { data: d.data, encoding: enc };
+}, "dataArg");
+var bytesOf = /* @__PURE__ */ __name((one) => one.encoding === "base64" ? import_bytes.default.fromBase64(one.data) : new TextEncoder().encode(one.data), "bytesOf");
 var KEY_SCHEMA = {
   type: "object",
   properties: {
-    kind: { type: "string", enum: KINDS, description: "ssh or gpg: the agent-derived key Edge uses" },
-    identity: { type: "string", description: `the key's label, e.g. "you@example.com" (gpg) or "ssh://user@host" (ssh)` }
+    kind: { type: "string", enum: KINDS, description: "ssh or gpg: an agent-derived key Edge uses; rsa: a key stored on the OnlyKey" },
+    identity: { type: "string", description: `ssh / gpg: the key's label, e.g. "you@example.com" (gpg) or "ssh://user@host" (ssh)` },
+    cert: { type: "string", description: "rsa: the SHA-256 (64 hex) of the key's X.509 certificate - one your card holds (card_new certs)" }
   },
-  required: ["kind", "identity"]
+  required: ["kind"]
 };
-var ITEM_PROPS = {
-  plan_id: { type: "string" },
-  op: { type: "string", enum: OPS },
-  key: KEY_SCHEMA,
-  reason: { type: "string", description: "why, in a few words - the owner reads it before approving" }
+var ITEM_SCHEMA = {
+  type: "object",
+  properties: {
+    op: { type: "string", enum: OPS },
+    key: KEY_SCHEMA,
+    reason: { type: "string", description: "why, in a few words - the owner reads it before approving" },
+    fingerprint: { type: "string", description: "SHA-256 of the exact bytes this item will sign (64 hex) - its data comes after the approval (plan_data)" }
+  },
+  required: ["op", "key", "reason", "fingerprint"]
 };
 var TOOLS = [
   {
@@ -15189,24 +15662,26 @@ var TOOLS = [
     inputSchema: { type: "object", properties: { identity: { type: "string", description: "an identity public key (64 hex)" } } }
   },
   {
+    name: "card_new",
+    description: "Ask the owner for your agent card: the keys your plans may use, under a label of your choosing. The owner approves it once and their key certifies it at a press; plan_wait on the plan_id it gives says when. Every plan names it.",
+    inputSchema: { type: "object", properties: {
+      identity: { type: "string" },
+      label: { type: "string", description: "the card's label, 1-64 printable characters, fixed for good" },
+      certs: { type: "array", items: { type: "string" }, description: "RSA keys on the OnlyKey, each named by its X.509 certificate (PEM): the owner's device finds the key it certifies - you never name a slot" },
+      ssh: { type: "string", description: "an ssh identity to derive, ssh://user@host" },
+      days: { type: "integer", description: "how long it lasts, in days (0 = until revoked)" },
+      reason: { type: "string", description: "why you need it - the owner reads it" }
+    }, required: ["identity", "label", "reason"] }
+  },
+  {
     name: "plan_new",
-    description: "A new plan for an identity (its public key, 64 hex). Its owner sees it in their web app at once, and every change after.",
-    inputSchema: { type: "object", properties: { identity: { type: "string" }, title: { type: "string" } }, required: ["identity", "title"] }
+    description: "A new plan for an identity (its public key, 64 hex), under your card: every item with the SHA-256 of its data - no data yet. Its owner sees it in their web app at once, and every change after.",
+    inputSchema: { type: "object", properties: { identity: { type: "string" }, title: { type: "string" }, card: { type: "string", description: "your card's label (card_new)" }, items: { type: "array", items: ITEM_SCHEMA } }, required: ["identity", "title", "card", "items"] }
   },
   {
     name: "plan_target",
     description: "Move a draft plan to another identity: withdrawn from the old owner's web app, shown in the new one's.",
     inputSchema: { type: "object", properties: { plan_id: { type: "string" }, identity: { type: "string" } }, required: ["plan_id", "identity"] }
-  },
-  {
-    name: "plan_add",
-    description: 'Add one operation with its data (base64 when it is bytes, set encoding: "base64").',
-    inputSchema: { type: "object", properties: { ...ITEM_PROPS, data: { type: "string" }, encoding: { type: "string", enum: ["text", "base64"] } }, required: ["plan_id", "op", "key", "data", "reason"] }
-  },
-  {
-    name: "plan_hold",
-    description: "Add a PLACEHOLDER: an operation whose data comes later (plan_fill, while the plan runs), counted in the budget - so work that depends on an earlier signature needs no second approval.",
-    inputSchema: { type: "object", properties: ITEM_PROPS, required: ["plan_id", "op", "key", "reason"] }
   },
   {
     name: "plan_remove",
@@ -15220,26 +15695,26 @@ var TOOLS = [
   },
   {
     name: "plan_submit",
-    description: "Ask the owner to approve the plan: one budget sized to it, one press. Refused until the owner has accepted you, or while no owner device is online.",
+    description: "Ask the owner to approve the plan - the item count and their fingerprints: one budget sized to it, one press. Refused until the owner has accepted you, or while no owner device is online.",
     inputSchema: { type: "object", properties: { plan_id: { type: "string" } }, required: ["plan_id"] }
   },
   {
-    name: "plan_fill",
-    description: "While the plan runs: a placeholder's data. It runs inside the open budget, no new press.",
-    inputSchema: { type: "object", properties: { plan_id: { type: "string" }, item: { type: "integer" }, data: { type: "string" }, encoding: { type: "string", enum: ["text", "base64"] } }, required: ["plan_id", "item", "data"] }
+    name: "plan_data",
+    description: `Once the plan runs (its budget is open): the items' data (base64 when it is bytes, encoding: "base64"). Each must match its fingerprint, or nothing is signed.`,
+    inputSchema: { type: "object", properties: { plan_id: { type: "string" }, items: { type: "array", items: { type: "object", properties: { item: { type: "integer" }, data: { type: "string" }, encoding: { type: "string", enum: ["text", "base64"] } }, required: ["item", "data"] } } }, required: ["plan_id", "items"] }
   },
   {
     name: "plan_wait",
-    description: "Wait (up to 60 s) for the plan to move on: its state, each item's result (signature, plaintext or refusal), the placeholders still waiting, the receipts.",
+    description: "Wait (up to 60 s) for the plan to move on: its state, the items whose data it still waits for, and at its end every item's result (signature or refusal) and the receipts.",
     inputSchema: { type: "object", properties: { plan_id: { type: "string" }, seconds: { type: "integer" } }, required: ["plan_id"] }
   },
   {
     name: "plan_finish",
-    description: "End the plan's budget now: unfilled placeholders are dropped, receipts filed.",
+    description: "End the plan's budget now: if its data has not all come, nothing is signed.",
     inputSchema: { type: "object", properties: { plan_id: { type: "string" } }, required: ["plan_id"] }
   }
 ];
-var INSTRUCTIONS = "OnlyKey Edge control. Your owner gives you this URL and their identity public key. Say hello (keep the agent_key you get the first time), build a plan for the identity (plan_new, plan_add, plan_hold for data that comes later), then plan_submit: the owner sees the plan live in their web app, accepts you once, approves the plan and presses their key once. plan_wait gives the results.";
+var INSTRUCTIONS = "OnlyKey Edge control. Your owner gives you this URL and their identity public key. Say hello (keep the agent_key you get the first time); once, ask for your card (card_new) and plan_wait for its approval. Then build a plan under it: plan_new with every item's SHA-256 fingerprint and no data, plan_submit - the owner sees it live in their web app, accepts you once, approves the plan and presses their key once. When plan_wait says running, send the data (plan_data); plan_wait gives every result when the budget ends.";
 var json = /* @__PURE__ */ __name((body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } }), "json");
 var rpcError = /* @__PURE__ */ __name((id2, code, message) => json({ jsonrpc: "2.0", id: id2 ?? null, error: { code, message } }), "rpcError");
 async function handleMcp(request, env) {
@@ -15376,8 +15851,22 @@ var AgentSessionCore = class {
     return this.view(p);
   }
   /* what the owner's web app is shown: everything but the agent's own bookkeeping */
+  /* a plan's items go out with their fingerprints and never their data: the data goes to the device that runs it (plan_data) */
   shown(p, me) {
-    return { id: p.id, room: p.room, title: p.title, agent: { id: me.id, name: me.name }, state: p.state, items: p.items, results: p.results, receipts: p.receipts, why: p.why || null };
+    return {
+      id: p.id,
+      kind: p.kind || "plan",
+      room: p.room,
+      title: p.title,
+      agent: { id: me.id, name: me.name },
+      state: p.state,
+      ...p.card ? { card: p.card } : {},
+      ...p.ask ? { ask: p.ask } : {},
+      items: p.items.map(({ item, op, key, reason, fingerprint }) => ({ item, op, key, reason, fingerprint })),
+      results: p.results,
+      receipts: p.receipts,
+      why: p.why || null
+    };
   }
   async mirror(p) {
     const me = await this.me();
@@ -15403,12 +15892,44 @@ var AgentSessionCore = class {
       }
       return out;
     }
+    if (name === "card_new") {
+      const identity = identityArg(args.identity);
+      const label = text(args.label, "label", { max: 64 });
+      need(LABEL.test(label), "label: 1-64 printable characters");
+      const certs = args.certs === void 0 ? [] : args.certs;
+      need(Array.isArray(certs) && certs.length <= MAX_CERTS, `certs: up to ${MAX_CERTS} PEM certificates`);
+      const read = certs.map((pem, i) => {
+        need(typeof pem === "string" && pem.length <= 8192, `certs[${i}]: a PEM certificate`);
+        try {
+          return { pem: pem.trim(), sha256: import_x509.default.read(pem).sha256 };
+        } catch (e) {
+          throw new Refused(`certs[${i}]: ${e.message}`);
+        }
+      });
+      const ssh = args.ssh === void 0 ? null : text(args.ssh, "ssh");
+      need(ssh === null || /^ssh:\/\/\S+$/.test(ssh), "ssh: ssh://user@host");
+      need(read.length || ssh, "a card names at least one key: certs or ssh");
+      const days = args.days === void 0 ? 0 : Number(args.days);
+      need(Number.isInteger(days) && days >= 0 && days <= 3650, "days: 0 (until revoked) to 3650");
+      const ask = { label, certs: read.filter((c, i) => read.findIndex((x) => x.sha256 === c.sha256) === i), ...ssh ? { ssh } : {}, days, reason: text(args.reason, "reason") };
+      const p2 = { id: randomHex(8), kind: "card", title: `agent card "${label}"`, identity, room: roomOf(identity), state: "draft", ask, items: [], results: {}, receipts: [], created: Date.now() };
+      await this.save(p2);
+      await this.mirror(p2);
+      const r = await ROOM_STUB(this.env, p2.room).submit(this.shown({ ...p2, state: "submitted" }, me));
+      if (r.ok) p2.state = "submitted";
+      else p2.why = r.why;
+      await this.save(p2);
+      return this.view(p2);
+    }
     if (name === "plan_new") {
       const identity = identityArg(args.identity);
-      const p2 = { id: randomHex(8), title: text(args.title, "title"), identity, room: roomOf(identity), state: "draft", items: [], results: {}, receipts: [], created: Date.now() };
+      const card = text(args.card, "card", { max: 64 });
+      need(Array.isArray(args.items) && args.items.length > 0 && args.items.length <= MAX_ITEMS, `items: 1 to ${MAX_ITEMS}, each {op, key, reason, fingerprint}`);
+      const items = args.items.map((it, n) => ({ item: n + 1, ...itemArgs(it, n + 1) }));
+      const p2 = { id: randomHex(8), title: text(args.title, "title"), identity, room: roomOf(identity), card, state: "draft", items, results: {}, receipts: [], created: Date.now() };
       await this.save(p2);
       const seen = await this.mirror(p2);
-      return { plan_id: p2.id, identity, ...seen };
+      return { ...this.view(p2), ...seen };
     }
     const p = await this.plan(String(args.plan_id || ""));
     need(p, `no plan ${args.plan_id} - plan_new makes one`);
@@ -15418,20 +15939,6 @@ var AgentSessionCore = class {
       need(it, `no item ${n} in the plan`);
       return it;
     }, "itemOf");
-    const opArgs = /* @__PURE__ */ __name(() => {
-      need(OPS.includes(args.op), `op: ${OPS.join(" or ")}`);
-      const k = args.key || {};
-      need(KINDS.includes(k.kind), `key.kind: ${KINDS.join(" or ")}`);
-      return { op: args.op, key: { kind: k.kind, identity: text(k.identity, "key.identity") }, reason: text(args.reason, "reason") };
-    }, "opArgs");
-    const dataArg = /* @__PURE__ */ __name(() => {
-      const enc = args.encoding || "text";
-      need(enc === "text" || enc === "base64", "encoding: text or base64");
-      need(typeof args.data === "string" && args.data.length > 0 && args.data.length <= MAX_DATA, `data: 1 to ${MAX_DATA} characters`);
-      if (enc === "base64") need(/^[A-Za-z0-9+/]*={0,2}$/.test(args.data) && args.data.length % 4 === 0, "data: not base64");
-      return { data: args.data, encoding: enc };
-    }, "dataArg");
-    const nextItem = /* @__PURE__ */ __name(() => p.items.reduce((m, x) => Math.max(m, x.item), 0) + 1, "nextItem");
     switch (name) {
       case "plan_show":
         return this.shownToAgent(p);
@@ -15446,16 +15953,6 @@ var AgentSessionCore = class {
         await ROOM_STUB(this.env, old).withdraw(p.id, "moved to another identity");
         return { ...this.view(p), ...await this.mirror(p) };
       }
-      case "plan_add":
-      case "plan_hold": {
-        draft();
-        need(p.items.length < MAX_ITEMS, `a plan holds up to ${MAX_ITEMS} items`);
-        const it = { item: nextItem(), ...opArgs(), ...name === "plan_add" ? dataArg() : { data: null, held: true } };
-        p.items.push(it);
-        await this.save(p);
-        await this.mirror(p);
-        return { item: it.item, ...this.view(p) };
-      }
       case "plan_remove": {
         draft();
         const it = itemOf(args.item);
@@ -15466,25 +15963,36 @@ var AgentSessionCore = class {
       }
       case "plan_submit": {
         draft();
-        need(p.items.length > 0, "an empty plan: add an item first");
-        const r = await ROOM_STUB(this.env, p.room).submit(this.shown({ ...p, state: "submitted" }, me));
+        need(p.kind === "card" || p.items.length > 0, "an empty plan: add an item first");
+        const r = await ROOM_STUB(this.env, p.room).submit(this.shown({ ...p, state: "submitted", why: null }, me));
         need(r.ok, r.why);
         p.state = "submitted";
+        p.why = null;
         await this.save(p);
         return this.view(p);
       }
-      case "plan_fill": {
-        need(p.state === "running" || p.state === "paused", `the plan is ${p.state}: a placeholder is filled while it runs`);
-        const it = itemOf(args.item);
-        need(it.held && it.data === null, `item ${it.item} is not a placeholder waiting for its data`);
-        Object.assign(it, dataArg());
+      case "plan_data": {
+        need(p.kind !== "card", "a card ask takes no data");
+        need(p.state === "running", `the plan is ${p.state}: its data is sent once it runs (its budget is open - plan_wait)`);
+        need(Array.isArray(args.items) && args.items.length > 0, "items: [{item, data, encoding}]");
+        const sent = [];
+        for (const d of args.items) {
+          const it = itemOf(d && d.item);
+          need(!it.sent, `item ${it.item}'s data was sent already`);
+          const one = dataArg(d);
+          need(await sha256Hex(import_bytes.default.toHex(bytesOf(one))) === it.fingerprint, `item ${it.item}'s data does not match its fingerprint ${it.fingerprint.slice(0, 16)} - not sent`);
+          sent.push([it, one]);
+        }
+        for (const [it, one] of sent) {
+          const r = await ROOM_STUB(this.env, p.room).data(p.id, it.item, one);
+          need(r.ok, r.why);
+          it.sent = true;
+        }
         await this.save(p);
-        const r = await ROOM_STUB(this.env, p.room).fill(p.id, it.item, { data: it.data, encoding: it.encoding });
-        need(r.ok, r.why);
         return this.view(p);
       }
       case "plan_finish": {
-        need(["submitted", "running", "paused"].includes(p.state), `the plan is ${p.state}: nothing to finish`);
+        need(["submitted", "running"].includes(p.state), `the plan is ${p.state}: nothing to finish`);
         const r = await ROOM_STUB(this.env, p.room).finish(p.id);
         need(r.ok, r.why);
         p.finishing = true;
@@ -15510,30 +16018,32 @@ var AgentSessionCore = class {
         throw new Refused(`no tool ${name}`);
     }
   }
-  /* what the agent reads: the plan, its results, and the placeholders still waiting for data */
+  /* what the agent reads: the plan, the items whose data the running plan still waits for, and at its end the results */
   view(p) {
     return {
       plan_id: p.id,
+      kind: p.kind || "plan",
       title: p.title,
       identity: p.identity,
       state: p.state,
       why: p.why || null,
-      items: p.items.map(({ item, op, key, reason, held, data }) => ({ item, op, key, reason, ...held ? { placeholder: true, filled: data !== null } : {} })),
+      ...p.card ? { card: p.card } : {},
+      ...p.ask ? { ask: p.ask } : {},
+      items: p.items.map(({ item, op, key, reason, fingerprint, sent }) => ({ item, op, key, reason, fingerprint, sent: !!sent })),
       results: p.results,
-      waiting: p.items.filter((x) => x.held && x.data === null).map((x) => x.item),
+      waiting: p.state === "running" ? p.items.filter((x) => !x.sent).map((x) => x.item) : [],
       receipts: p.receipts
     };
   }
   /**
-   * What the owner did, from their room (index.js, an owner device's mcp-re): the plan's state - declined, running,
-   * paused (waiting for a placeholder), done, failed, ended - with results by item and the receipts. The room has
-   * checked the plan is its own and the device joined; here the plan must be this agent's and past its draft.
+   * What the owner did, from their room (index.js, an owner device's mcp-re): the plan's state - declined, running (its
+   * budget open: the data may come), done, failed, ended - with results by item and the receipts. The room has checked
+   * the plan is its own and the device joined; here the plan must be this agent's and past its draft.
    */
   async fromRoom(roomId, u) {
     const p = await this.plan(String(u.plan || ""));
     if (!p || p.room !== roomId || p.state === "draft") return { ok: false, why: "not a submitted plan of that identity" };
     if (u.state) {
-      const STATES = ["declined", "running", "paused", "done", "failed", "ended"];
       if (!STATES.includes(u.state)) return { ok: false, why: `state: ${STATES.join(" | ")}` };
       p.state = u.state;
     }
@@ -15888,14 +16398,16 @@ var RoomCore = class {
     this.tell({ ev: "submit", plan });
     return { ok: true };
   }
-  async fill(planId, item, data) {
+  /*
+   * AN ITEM'S DATA (plan_data, once its budget is open): passed on to the devices and never kept here - the room's mirror
+   * of the plan holds the fingerprints only (mcp.js shown); the device that runs it checks the data against them.
+   */
+  async data(planId, item, data) {
     const plan = await this.ctx.storage.get(`plan:${planId}`);
-    if (!plan || !["running", "paused"].includes(plan.state)) return { ok: false, why: "the plan is not running here" };
+    if (!plan || plan.state !== "running") return { ok: false, why: "the plan is not running here" };
     if (!this.joined().length) return { ok: false, why: "no owner device is online" };
-    const it = plan.items.find((x) => x.item === item);
-    if (it) Object.assign(it, data);
-    await this.ctx.storage.put(`plan:${planId}`, plan);
-    this.tell({ ev: "fill", plan: planId, item, ...data });
+    if (!plan.items.some((x) => x.item === item)) return { ok: false, why: `no item ${item} in the plan` };
+    this.tell({ ev: "data", plan: planId, item, data: data.data, encoding: data.encoding });
     return { ok: true };
   }
   async finish(planId) {
@@ -15919,7 +16431,7 @@ var RoomCore = class {
       else await this.ctx.storage.put(`agent:${a.id}`, { ...a, state: msg.state });
       if (msg.state !== "accepted") {
         for (const p of await this.plans()) {
-          if (p.agent.id === a.id && !["running", "paused"].includes(p.state)) await this.withdraw(p.id, `agent ${msg.state}`);
+          if (p.agent.id === a.id && p.state !== "running") await this.withdraw(p.id, `agent ${msg.state}`);
         }
       }
       this.tell({ ev: "agent", agent: { ...a, state: msg.state } });

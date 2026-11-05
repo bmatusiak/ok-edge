@@ -1,0 +1,156 @@
+{
+  "name": "ok-edge",
+  "note": "an unofficial research and development version - not an official OnlyKey product",
+  "published": true,
+  "kind": "release",
+  "version": "0.0.15",
+  "code": 1932,
+  "tag": "v0.0.15",
+  "commit": "dc7b402ada5af9343e9ef6842b2d14e71d682bca",
+  "run": "42096461702",
+  "publishedAt": "2026-11-05T20:04:39.426Z",
+  "releaseUrl": "https://github.com/bmatusiak/ok-edge/releases/tag/v0.0.15",
+  "firmware": {
+    "version": "v3.1.0",
+    "release": "v3.1.01",
+    "sources": {
+      "OnlyKey-Firmware": "80e3ba0",
+      "libraries": "fe9e293"
+    },
+    "fixes": [
+      "0012",
+      "0013",
+      "0015",
+      "0016",
+      "0017",
+      "0018",
+      "0019",
+      "0020"
+    ],
+    "plugins": [
+      "edge",
+      "ctap_bridge",
+      "vendor_bridge",
+      "derive_secret",
+      "version_control"
+    ],
+    "emulatorCommit": "39e34882830ae49d3c436f6370e8b922d1a03d5b",
+    "buildHash": "b4c1640f501ae2fc",
+    "builds": [
+      {
+        "flavor": "prod",
+        "file": "v3.1.0-prod-edge-ctap_bridge-vendor_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-0017-0018-0019-0020-bb4c1640f.hex",
+        "sha256": "8939bd2e95f34ad342cacabf001fe7b55ef960fd05a2aab6e7b7ef45aea79322",
+        "debug": false,
+        "tested": false,
+        "url": "https://github.com/bmatusiak/ok-edge/releases/download/v0.0.15/v3.1.0-prod-edge-ctap_bridge-vendor_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-0017-0018-0019-0020-bb4c1640f.hex"
+      },
+      {
+        "flavor": "test",
+        "file": "DANGEROUS-v3.1.0-test-edge-ctap_bridge-vendor_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-0017-0018-0019-0020-bb4c1640f.hex",
+        "sha256": "a4d31387c6da0b6abee98597b484d152cf5c35159844ddf47b33527fffb81ebf",
+        "debug": true,
+        "tested": false,
+        "url": "https://github.com/bmatusiak/ok-edge/releases/download/v0.0.15/DANGEROUS-v3.1.0-test-edge-ctap_bridge-vendor_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-0017-0018-0019-0020-bb4c1640f.hex"
+      }
+    ]
+  },
+  "apps": {
+    "android": {
+      "file": "onlykey-edge-0.0.15-1932.apk",
+      "url": "https://github.com/bmatusiak/ok-edge/releases/download/v0.0.15/onlykey-edge-0.0.15-1932.apk",
+      "sha256": "516763f7711803d090438c4d333ed03a0d4cc7bf14c8661bc850fe9705a849d7",
+      "size": 97795247,
+      "commit": "dc7b402",
+      "certSha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+      "appId": "com.okedge.debug",
+      "softKey": {
+        "version": "v3.1.0",
+        "plugins": [
+          "config",
+          "edge",
+          "key_chain",
+          "ctap_bridge",
+          "vendor_bridge",
+          "derive_secret",
+          "version_control"
+        ],
+        "fixes": [
+          "0012",
+          "0013",
+          "0015",
+          "0016",
+          "0017",
+          "0018",
+          "0019",
+          "0020"
+        ]
+      }
+    },
+    "desktop": {
+      "windows": {
+        "file": "onlykey-edge-desktop-0.0.15-1932-windows-x64.zip",
+        "url": "https://github.com/bmatusiak/ok-edge/releases/download/v0.0.15/onlykey-edge-desktop-0.0.15-1932-windows-x64.zip",
+        "sha256": "3f7aa31060d590e31af7531878c6b56254feb1e24ec046260dc6281dd93d74b1",
+        "size": 201512405,
+        "commit": "dc7b402",
+        "softKey": {
+          "version": "v3.1.0",
+          "plugins": [
+            "config",
+            "edge",
+            "key_chain",
+            "ctap_bridge",
+            "vendor_bridge",
+            "derive_secret",
+            "version_control"
+          ],
+          "fixes": [
+            "0012",
+            "0013",
+            "0015",
+            "0016",
+            "0017",
+            "0018",
+            "0019",
+            "0020"
+          ]
+        }
+      },
+      "linux": {
+        "file": "onlykey-edge-desktop-0.0.15-1932-linux-x64.tar.gz",
+        "url": "https://github.com/bmatusiak/ok-edge/releases/download/v0.0.15/onlykey-edge-desktop-0.0.15-1932-linux-x64.tar.gz",
+        "sha256": "082da3a809b4052dcdc358010b72b67f71bf7db52583314c69ece4f457af323a",
+        "size": 178544850,
+        "commit": "dc7b402",
+        "softKey": {
+          "version": "v3.1.0",
+          "plugins": [
+            "config",
+            "edge",
+            "key_chain",
+            "ctap_bridge",
+            "vendor_bridge",
+            "derive_secret",
+            "version_control"
+          ],
+          "fixes": [
+            "0012",
+            "0013",
+            "0015",
+            "0016",
+            "0017",
+            "0018",
+            "0019",
+            "0020"
+          ]
+        }
+      }
+    },
+    "web": {
+      "build": "dc7b402-mw3yuwof",
+      "commit": "dc7b402ada5af9343e9ef6842b2d14e71d682bca",
+      "at": "2026-11-05T19:56:50.775Z"
+    }
+  }
+}
