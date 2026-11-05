@@ -15,6 +15,12 @@ env:
       true: ${KEY === 'soft'}
     commands:
       - runFlow: desktop-soft-key.yaml
+# a hard key: logged in on it (the card is filed in its identity's bucket)
+- runFlow:
+    when:
+      true: ${KEY === 'hard'}
+    commands:
+      - login: {}
 - runScript: scripts/setup-start.js
 # a hard key: the agent's PGP certificate is signed first - two presses, each approved on this app's sheet before it (a
 # computer's press is approved, then pressed; the soft key's are its own, with no ask) - then the identity's sheet
