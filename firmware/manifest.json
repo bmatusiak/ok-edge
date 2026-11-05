@@ -1,5 +1,5 @@
 {
-  "file": "v3.1.0-test-edge-ctap_bridge-vendor_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-0017-0018-baac72157.hex",
+  "file": "v3.1.0-test-edge-ctap_bridge-vendor_bridge-derive_secret-version_control-fw80e3ba0-libfe9e293-fix0012-0013-0015-0016-0017-0018-0019-0020-bb4c1640f.hex",
   "version": "v3.1.0",
   "release": "v3.1.01",
   "firmware": "80e3ba0",
@@ -10,7 +10,9 @@
     "0015",
     "0016",
     "0017",
-    "0018"
+    "0018",
+    "0019",
+    "0020"
   ],
   "plugins": [
     "edge",
@@ -19,24 +21,24 @@
     "derive_secret",
     "version_control"
   ],
-  "buildHash": "aac72157060f90a0",
+  "buildHash": "b4c1640f501ae2fc",
   "sources": {
     "emulator/scripts/versions/v3.1.0.js": "8bbe16ad44fe",
-    "emulator/scripts/versions/fixes-3.1.0.js": "488f4e6cf39f",
-    "emulator/scripts/versions/patches-3.1.0": "1502feb556a9",
+    "emulator/scripts/versions/fixes-3.1.0.js": "89d1d1084807",
+    "emulator/scripts/versions/patches-3.1.0": "3bb3cae30d71",
     "emulator/package.json": "024ae3bd0f50",
-    "emulator/plugins/edge": "2a8b41c0621b",
+    "emulator/plugins/edge": "892cb8beed01",
     "emulator/plugins/ctap_bridge": "e073994ed56c",
-    "emulator/plugins/vendor_bridge": "4ecb94b16540",
+    "emulator/plugins/vendor_bridge": "42e9b8cf5ae1",
     "emulator/plugins/derive_secret": "ffb51b83a6e1",
-    "emulator/plugins/version_control": "47941247f1d0"
+    "emulator/plugins/version_control": "c40552703fb9"
   },
-  "sourcesFrom": "node-onlykey-emulator becb74f",
-  "emulatorCommit": "becb74ff8475391f13d8fae0bfe7410c1713b873",
+  "sourcesFrom": "node-onlykey-emulator 39e3488",
+  "emulatorCommit": "39e34882830ae49d3c436f6370e8b922d1a03d5b",
   "debug": true,
   "site": "ok-edge.bmatusiak.workers.dev",
   "toolchain": "arduino-1.6.5-r5-teensy_127, the OnlyKey Docker build (emulator/plugins/edge/tools/build-hardkey.sh)",
-  "built": "2026-11-04",
+  "built": "2026-11-05",
   "tested": false,
-  "sha256": "40167c7801987e11e62c8e16cff49936c53d55e700d0d57fd7ad2235d283818f"
+  "sha256": "57a9dfc5d2ab3aa4dea997f22652a6ceb739b1dc7892f93c60f440cd7531e3b9"
 }
