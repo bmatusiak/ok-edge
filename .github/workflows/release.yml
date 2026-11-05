@@ -81,6 +81,17 @@ on:
         type: choice
         options: [build, prerelease, release]
         default: build
+      # THE RELEASE'S SIGNER (Brad, 2026-11-05: "we publish with debug keystore 1 last time just to get the new code, make
+      # sure we can use remote mcp, remote testing, then a real live publish to take over"): rsa3 - com.okedge, signed by
+      # red-key's RSA3 over the remote MCP; debug - the DEBUG channel (com.okedge.debug, the repo debug keystore) published
+      # as the release, once: the Worker that hosts the remote MCP is deployed from the published site, so the first
+      # release on this code cannot sign through it. Never a debug-signed com.okedge (Android refuses an update from
+      # another signer - an install of it could not take the RSA3 release).
+      signer:
+        description: a release's signer - rsa3 (com.okedge, red-key over the remote MCP) | debug (com.okedge.debug, the debug keystore, once)
+        type: choice
+        options: [rsa3, debug]
+        default: rsa3
 
 # NOT ONE RUN AT A TIME: only the publish job is (its own concurrency, below - two publishes would race for the tag and
 # the branch). A whole-workflow queue kept a newer run waiting behind an older test-only one (Brad,
@@ -98,7 +109,7 @@ env:
   # published release (by hand, kind=release) is the release channel - com.okedge, signed by red-key's RSA3, its update
   # notices from the published site; every other run builds the debug channel - com.okedge.debug ("OnlyKey DEBUG"), the
   # repo debug keystore, its update notices from the pre-release site
-  EXPO_PUBLIC_OKEDGE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.kind == 'release' && 'release' || 'debug' }}
+  EXPO_PUBLIC_OKEDGE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.kind == 'release' && inputs.signer != 'debug' && 'release' || 'debug' }}
 
 jobs:
   # WHETHER THE BUILD LINE RUNS, AND WHAT IT PUBLISHES (kind: '' builds nothing, build = artifacts only, prerelease,
@@ -746,8 +757,10 @@ jobs:
           {
             echo "A $KIND, built by the release workflow (run $GITHUB_RUN_ID) from main ${RELEASE_SHA:0:7}."
             echo
-            if [ "$KIND" = release ]; then
+            if [ "$EXPO_PUBLIC_OKEDGE_CHANNEL" = release ]; then
               echo "- Android app: $(basename "$apk") - com.okedge, signed by red-key's RSA3 (the official certificate)"
+            elif [ "$KIND" = release ]; then
+              echo "- Android app: $(basename "$apk") - com.okedge.debug (OnlyKey DEBUG), signed with the repo debug keystore - this release ONCE, to bring the remote MCP its new code; the next release is com.okedge, signed by RSA3"
             else
               echo "- Android app: $(basename "$apk") - com.okedge.debug (OnlyKey DEBUG, installs beside the release), signed with the repo debug keystore"
             fi
