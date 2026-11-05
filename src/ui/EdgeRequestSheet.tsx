@@ -22,7 +22,7 @@ import {theme} from './theme';
 import {consentRefusal} from '../debugGuard';
 import {BudgetCard} from '../screens/EdgeScreen';
 import {SoftKeyEdge} from '../edgeSoftKey';
-import {chainState, type EdgeView} from '../edgeStore';
+import {chainState, onCopySaved, type EdgeView} from '../edgeStore';
 import type {EdgeBudget} from '../edge/types';
 import {budgetStatus} from '../budgetStatus';
 import {openBudget} from '../edgeNav';
@@ -138,8 +138,11 @@ function ApprovedBudget({grantId}: {grantId: number}) {
   const [card, setCard] = useState<{b: EdgeBudget; live: boolean; view: EdgeView | null} | null>(null);
   useEffect(() => {
     let alive = true;
+    /* opened once: a reload reads the stored copy, and an open probes the key (it reloads on every write of the copy now) */
+    let opened: Promise<SoftKeyEdge | null> | null = null;
     const load = async () => {
-      const source = await SoftKeyEdge.open();
+      if (!opened) opened = SoftKeyEdge.open();
+      const source = await opened;
       if (!source || !alive) return;
       const live = await source.budgets(true).catch(() => [] as EdgeBudget[]);
       const now = live.find(x => x.grantId === grantId);
@@ -149,7 +152,9 @@ function ApprovedBudget({grantId}: {grantId: number}) {
     };
     void load();
     const off = chainState.on('checked', () => void load());
-    return () => { alive = false; off(); };
+    /* ...and on every write of the copy: a computer's uses come in its records, with no check against the key (edgeStore onCopySaved) */
+    const offSaved = onCopySaved(() => void load());
+    return () => { alive = false; off(); offSaved(); };
   }, [grantId]);
   if (!card) return <Text style={styles.dim}>{`Budget ${grantId}`}</Text>;
   return (

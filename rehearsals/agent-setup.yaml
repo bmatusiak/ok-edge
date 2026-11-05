@@ -1,20 +1,32 @@
-# THE AGENT IDENTITY ON THIS DESKTOP'S TESTNET SOFT KEY (once - `edge setup`, made by the CLI, kept by this app): the
-# CLI on the app's machine asks it beside the flow; this app's sheet approves it, the drive presses the test key. The
-# ship (ship-proof.yaml) signs and pushes as this identity. Testnet only.
-#   run.js rehearse --app desktop@box agent-setup
-name: The agent identity on the testnet soft key
+# THE AGENT IDENTITY ON THE KEY THIS APP HOLDS (once per key - `edge setup`, made by the CLI, kept by this app): the CLI
+# on the app's machine asks it beside the flow; this app's sheet approves it, the drive presses the test key. The ship
+# (ship.yaml, ship-proof.yaml) signs and pushes as this identity. Testnet / test keys only.
+#   run.js rehearse --app desktop@box agent-setup                   the desktop's own testnet soft key (KEY=soft)
+#   run.js rehearse --app desktop@box agent-setup --env KEY=hard    the test hard key the app holds (blue-key, set up by
+#                                                                   hardkey-setup - a cleared key has no identity yet)
+name: The agent identity on the key the app holds
 tags:
   - edge
+env:
+  KEY: "soft"
 ---
-- runFlow: desktop-soft-key.yaml
+- runFlow:
+    when:
+      true: ${KEY === 'soft'}
+    commands:
+      - runFlow: desktop-soft-key.yaml
 - runScript: scripts/setup-start.js
 - waitForTap:
     what: 'agent identity'
     timeout: 120000
 - tapOn: "Approve"
 - runScript: scripts/setup-end.js
-- machine:
-    action: use-key
-    target: webapp
-    args:
-      key: gadget
+- runFlow:
+    when:
+      true: ${KEY === 'soft'}
+    commands:
+      - machine:
+          action: use-key
+          target: webapp
+          args:
+            key: gadget

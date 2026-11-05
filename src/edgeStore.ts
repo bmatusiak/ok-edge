@@ -268,9 +268,24 @@ export async function anchorAfterLoss(source: EdgeSource, at: {seq: number; head
   console.log(`[edge] copy ${toHex(source.deviceId).slice(0, 8)}: the LOSS at #${at.seq} accepted the unreachable links - the copy goes on from its head`);
 }
 
+/*
+ * THE COPY WRITTEN, SAID (Brad, 2026-11-05, ship 2 on red-key: the budget sheet stayed "0 of 87 uses spent" after every
+ * use was spent and the budget closed - a computer's uses reach the copy in its own records (takeOffline), checked
+ * offline, and only a check against the key (chainState 'checked') redrew the sheet): every write of a copy - a sync,
+ * a computer's records taken, a loss accepted - is told here; what draws from the copy redraws on it.
+ */
+const savedListeners = new Set<(deviceId: string) => void>();
+export function onCopySaved(fn: (deviceId: string) => void): () => void {
+  savedListeners.add(fn);
+  return () => { savedListeners.delete(fn); };
+}
 export async function saveMirror(m: Mirror): Promise<void> {
   const r = await history.save(m);
-  if (!r.outside) return;
+  if (!r.outside) {
+    const id = toHex(m.deviceId);
+    for (const l of [...savedListeners]) { try { l(id); } catch { /* a listener's error is not the save's */ } }
+    return;
+  }
   const id = toHex(m.deviceId);
   console.log(`[edge] the stored copy of ${id.slice(0, 8)} was changed outside this session - not written over; the next sync reads it back and checks it`);
   verifiedNow.delete(id);

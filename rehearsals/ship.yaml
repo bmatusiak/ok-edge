@@ -8,8 +8,10 @@ tags:
   - edge
   - ship
 # COMMITS: how many it ships (--env COMMITS=5): a batch of uses is what left the desktop asking the key ~2,000 times after it
+# USES: the budget's uses - a sign per commit and the push (COMMITS=5 -> USES=6)
 env:
   COMMITS: "1"
+  USES: "2"
 ---
 # the Edge tab open through the ship, as on red-key's Windows desktop: its looks (a computer letting the key go, a trade)
 # run during and after it - and the quiet after the ship counts them
@@ -29,5 +31,11 @@ env:
     timeout: 120000
 - tapOn: "Approve"
 - runScript: scripts/ship-end.js
+# the sheet's card followed the ship (Brad, 2026-11-05, ship 2 on red-key: "0 of 87 uses spent" after every use) - a
+# computer's uses reach the copy in its records, and the copy's every write redraws it (edgeStore onCopySaved)
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "${USES} of ${USES} uses spent"
 # after it, the app asks the key nothing: its copy takes the ship's links against the key's checkpoint, offline
 - runScript: scripts/ship-quiet.js
