@@ -200,7 +200,19 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
     }
   }
 
+  /* the flow stopped its app itself (stopApp / killApp): its going was asked - a later step does not wait for it */
+  let stoppedHere = false;
   async function exec(name, raw, env, dir) {
+    /*
+     * THE APP'S CONNECTION CAME BACK BY ITSELF (box, 2026-11-05, blue-key's config-out: at the replug the desktop's
+     * connection closed and a new one opened the same second; the flow kept reading the closed one - config mode "on" -
+     * while the app, on its new connection, said "off"): a step after an unasked going follows the app's newest
+     * connection (restarted() with nothing to set off takes one already up, else waits for its hello, 30 s)
+     */
+    if (d.app.closed && !stoppedHere && name !== 'launchApp') {
+      d = await d.restarted(null, { life: 30 });
+      say(`${d.app.shell}: its connection came back by itself - this flow follows the new one`);
+    }
     listen();
     prevStart = stepStart;
     stepStart = Date.now();
@@ -209,12 +221,14 @@ function createRunner(d, { say = (t) => d.say(t) } = {}) {
       case 'launchApp': {
         if (a && a.clearState) throw new Error('clearState: not here - the app keeps the key\'s copies; wipe on purpose (machine tool)');
         d = await d.up();
+        stoppedHere = false;
         listen();
         return;
       }
       case 'stopApp':
       case 'killApp':
         await d.stop(d.app.shell);
+        stoppedHere = true;
         return;
       case 'tapOn': {
         const sel = selectorOf(a);
