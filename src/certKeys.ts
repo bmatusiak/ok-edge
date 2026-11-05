@@ -88,8 +88,15 @@ export async function keepCert(k: CertKey, name?: string): Promise<'saved' | 'he
   return r.state;
 }
 
-/** One line for a sheet: the slot, the key's size, the certificate's subject, its end and its fingerprint. */
-export function certLine(k: CertKey): string {
+/*
+ * The key as Key Chain names it - the certificate's subject and its end ("ok-edge release, bmatusiak · until 2056-10-28"),
+ * what the owner sees in On this App - then where it is and which it is: the slot, the size, the fingerprint (Brad,
+ * 2026-11-05: the card should ask "use ok-edge release, bmatusiak · until 2056-10-28 for signing ok-edge").
+ */
+export function certName(k: Pick<CertKey, 'subject' | 'notAfter'>): string {
   const who = [k.subject.CN, k.subject.O].filter(Boolean).join(', ') || 'no name';
-  return `RSA${k.slot} · RSA-${k.bits} · certificate ${who}, until ${k.notAfter.slice(0, 10)} · SHA-256 ${k.sha256.slice(0, 16).toUpperCase()}…`;
+  return `${who} · until ${k.notAfter.slice(0, 10)}`;
+}
+export function certLine(k: CertKey): string {
+  return `${certName(k)}  (RSA${k.slot} · RSA-${k.bits} · SHA-256 ${k.sha256.slice(0, 16).toUpperCase()}…)`;
 }

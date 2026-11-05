@@ -164,6 +164,8 @@ async function runCard(plan: Plan): Promise<void> {
     const r: any = await handleEdgeMessage(agentsLib.buildCreate({info}), `${AGENT_FROM}${plan.agent.id}|${plan.agent.name}`, {
       plan: plan.id,
       keys: keys.map(certLine),
+      /* what the agent says it is for - the sheet's "for" line ("use ... for signing ok-edge") */
+      reason: ask.reason,
       onApprove: async () => {
         try {
           await planClaim(plan.id);

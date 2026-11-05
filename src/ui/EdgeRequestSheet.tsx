@@ -67,7 +67,9 @@ function CardRows({card}: {card: CardAsk}) {
   if (card.derive.gpg !== undefined) rows.push(['gpg', card.derive.gpg]);
   /* stored keys on the key itself (2026-11-04: the release signer's RSA3), and the MCP agent the card is bound to */
   /* named by an agent's certificate (mcpPlans runCard): each certificate and the slot it found - the agent never learns the slot */
-  if (card.keys?.length) card.keys.forEach((k, i) => rows.push([card.keys!.length > 1 ? `key ${i + 1}` : 'key', k]));
+  /* Brad, 2026-11-05: "use ok-edge release, bmatusiak · until 2056-10-28 for signing ok-edge" - the key as Key Chain names it, then what for */
+  if (card.keys?.length) card.keys.forEach((k, i) => rows.push([card.keys!.length > 1 ? `use ${i + 1}` : 'use', k]));
+  if (card.keys?.length && card.reason) rows.push(['for', card.reason]);
   else if (card.slots?.length) rows.push(['stored keys', card.slots.map(s => (s <= 4 ? `RSA${s}` : `ECC${s - 100}`)).join(', ')]);
   if (card.agent) rows.push(['for agent', card.agent.slice(0, 16)]);
   if (card.committer) rows.push(['committer', `${card.committer.name} <${card.committer.email}>`]);
