@@ -13,7 +13,10 @@
 import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {agentsState, onAgents, setAgent, type Agent, type Plan, type PlanItem} from '../mcpAgents';
-import {Btn} from './components';
+import {Btn, Segmented} from './components';
+import {localMcpUrl} from '../localMcp';
+import NativeSecrets from 'okedge-native/specs/NativeSecrets';
+import {CLIPBOARD_TTL_MS} from './sensitive';
 import {theme} from './theme';
 
 const STATE_WORD: Record<Plan['state'], string> = {
@@ -73,14 +76,39 @@ function AgentRow({agent, plans}: {agent: Agent; plans: Plan[]}) {
   );
 }
 
-/* what to give an agent: the address and the identity public key (selectable, to copy) */
+/*
+ * WHAT TO GIVE AN AGENT: the address and the identity public key. LOCAL | REMOTE (Brad, 2026-11-05: "put a local | remote
+ * selector tab, and a copy button to make it easy to copy to clipboard"): Local is this computer's own MCP (the desktop
+ * app's, on its loopback - an agent running on this computer, the release signer's `--server local`); Remote is your
+ * server's (an agent anywhere - the release workflow). The tab shows only where both exist. Copied as the app copies.
+ */
 function GiveAnAgent({identityPublicKey}: {identityPublicKey: string}) {
-  const origin = typeof location !== 'undefined' ? location.origin : null;
+  const local = localMcpUrl();
+  const remote = typeof location !== 'undefined' ? `${location.origin}/mcp` : null;
+  const [where, setWhere] = useState<'Local' | 'Remote'>(local ? 'Local' : 'Remote');
+  const [copied, setCopied] = useState<string | null>(null);
+  const address = where === 'Local' && local ? `${local.replace(/\/$/, '')}/mcp` : remote;
+  const copy = (text: string, what: string) => {
+    NativeSecrets.copySensitive(text, CLIPBOARD_TTL_MS).then(() => setCopied(`${what} copied`), (e: unknown) => setCopied(String((e as Error)?.message ?? e)));
+  };
   return (
     <View style={styles.give}>
       <Text style={styles.dim}>Give an AI agent these two - its plans show here as it writes them:</Text>
-      {origin ? <Text selectable style={styles.mono}>{`${origin}/mcp`}</Text> : null}
-      <Text selectable style={styles.mono}>{identityPublicKey}</Text>
+      {local && remote ? <Segmented options={['Local', 'Remote'] as const} value={where} onChange={w => { setWhere(w); setCopied(null); }} /> : null}
+      {local && remote ? (
+        <Text style={styles.dim}>{where === 'Local' ? 'this computer only - an agent running here' : 'your server - an agent anywhere'}</Text>
+      ) : null}
+      {address ? (
+        <View style={styles.giveRow}>
+          <Text selectable style={[styles.mono, styles.giveText]}>{address}</Text>
+          <Btn title="Copy" label={`Copy the ${where.toLowerCase()} address`} onPress={() => copy(address, 'Address')} />
+        </View>
+      ) : null}
+      <View style={styles.giveRow}>
+        <Text selectable style={[styles.mono, styles.giveText]}>{identityPublicKey}</Text>
+        <Btn title="Copy" label="Copy the identity public key" onPress={() => copy(identityPublicKey, 'Identity public key')} />
+      </View>
+      {copied ? <Text style={styles.dim}>{copied}</Text> : null}
     </View>
   );
 }
@@ -104,6 +132,8 @@ export function AgentsCard() {
 const styles = StyleSheet.create({
   card: {gap: 10, paddingVertical: 4},
   give: {gap: 2},
+  giveRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  giveText: {flex: 1},
   agent: {gap: 4, padding: 10, borderRadius: theme.radius, backgroundColor: theme.surfaceAlt},
   row: {flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap'},
   name: {color: theme.text, fontSize: theme.fontSize, fontWeight: '600'},
