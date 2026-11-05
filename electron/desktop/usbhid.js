@@ -110,6 +110,7 @@ async function connect() {
     p.on('stream', (e) => {
       for (const l of [...sharedStream]) l(e);
       if (e.dir !== DIR.OUT) return;
+      heardFromKey(e);
       send('NativeUsbHid:onData', { iface: e.iface, hex: Buffer.from(e.bytes).toString('hex'), length: e.bytes.length });
     }),
     p.on('close', (err) => {
@@ -153,6 +154,21 @@ async function listDevices() {
  * reading that endpoint - stops every report here while it lasts. Over SLOW_MS, the call, its interface and its time.
  */
 const SLOW_MS = 250;
+/*
+ * ...AND WHEN THE KEY'S REPORTS REACH THIS PROCESS (the same bug): the first report after a silence over GAP_MS is said,
+ * with how long the silence was, its interface and its first 4 bytes (a header, never a payload). A reply that came here
+ * late is hidapi's or the key's; one that came on time and still was not heard is the page's.
+ */
+const GAP_MS = 5000;
+let lastWrite = 0;
+let lastReport = 0;
+function heardFromKey(e) {
+  const now = Date.now();
+  if (lastReport && now - lastReport > GAP_MS) {
+    console.log(`[usbhid] a report after ${now - lastReport} ms of none (last write ${lastWrite ? now - lastWrite : '-'} ms ago): interface ${e.iface}, ${Buffer.from(e.bytes.subarray(0, 4)).toString('hex')}`);
+  }
+  lastReport = now;
+}
 function timed(what, fn) {
   const t = Date.now();
   try { return fn(); } finally {
@@ -164,6 +180,7 @@ function timed(what, fn) {
 async function write(iface, hex) {
   if (!pipe) throw new Error('the OnlyKey is not open');
   const bytes = Uint8Array.from(Buffer.from(String(hex), 'hex'));
+  lastWrite = Date.now();
   return timed(`write on interface ${iface}`, () => pipe.write(iface, bytes));
 }
 
