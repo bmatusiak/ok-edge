@@ -27,8 +27,12 @@ if [ -n "$NO_BUILD" ]; then
   echo "== no build (NO_BUILD): the soft key already in $E/build - $(jq -r '.version + " " + (.plugins | join(",")) + " debug=" + (.debug | tostring)' .stage/build.json 2>/dev/null)"
 else
 rm -rf .stage-src/v3.1.0
-echo "== build (plain): v3.1.0, edge,ctap_bridge,derive_secret, DEBUG"
-OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=edge,ctap_bridge,derive_secret,version_control OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
+# THE WORKFLOW'S PLUGINS, READ FROM IT (2026-11-04: this script still built without vendor_bridge after the workflow
+# gained it - the vendor-bridge kit test failed here alone, and vendor_bridge's own tests skipped past the gate's limit)
+PLUGINS=$(grep -m1 -E '^\s+OKEMU_PLUGINS: ' "$(dirname "$0")/../../.github/workflows/release.yml" | sed -E 's/.*OKEMU_PLUGINS: *//')
+[ -n "$PLUGINS" ] || { echo "== no OKEMU_PLUGINS in the workflow's gate - not building"; exit 1; }
+echo "== build (plain): v3.1.0, $PLUGINS (the workflow's), DEBUG"
+OKEMU_VERSION=v3.1.0 OKEMU_PLUGINS=$PLUGINS OKEMU_DEBUG=1 JOBS=max npm run rebuild > "$OUT/build.log" 2>&1
 echo "build exit $? (sanitizer symbols: $(nm -u build/Release/onlykey_emulator.node | grep -c -E '__(a|t)san_'), must be 0)"
 fi
 cd "$K" || exit 1
