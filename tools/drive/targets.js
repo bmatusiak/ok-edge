@@ -1058,7 +1058,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
    * only these - each refuses a production key by itself (they work through the kit's debug-console unlock and the
    * test hex's Edge requests). Its output live in its own tab; the last lines come back.
    */
-  const BOX_TOOLS = ['hardkey-edge-links.js', 'hardkey-edge-wipe.js', 'hardkey-clear.js', 'owner-key.js', 'ship-proof-commit.js'];
+  const BOX_TOOLS = ['hardkey-edge-links.js', 'hardkey-edge-wipe.js', 'hardkey-clear.js', 'debug-key-hex.js', 'owner-key.js', 'ship-proof-commit.js'];
   async function boxTool({ name, argv = [] } = {}) {
     if (!BOX_TOOLS.includes(name)) return { ok: false, why: `"${name}" is not a rehearsal tool (${BOX_TOOLS.join(', ')})` };
     const r = await streamIn(EDGE, NODE, [path.join(EDGE, 'tools/box', name), ...argv.map(String)], { timeout: 10 * 60000, ...shown(`tool ${name}`) });
