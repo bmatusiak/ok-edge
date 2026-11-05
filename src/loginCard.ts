@@ -101,7 +101,8 @@ export async function fileTop(device: string, top: CardTop): Promise<boolean> {
 export type CardOffer = {identity: string; device: string; state: 'offered' | 'certifying' | 'pressing' | 'failed'; why?: string} | null;
 let offer: CardOffer = null;
 const listeners = new Set<(o: CardOffer) => void>();
-const setOffer = (o: CardOffer) => { offer = o; for (const l of [...listeners]) l(o); };
+/* a drive's 'card' flag follows the offer: open (made, pressed or failed - still the person's) or gone */
+const setOffer = (o: CardOffer) => { offer = o; setDriveFlag('card', o ? 'offered' : 'decided'); for (const l of [...listeners]) l(o); };
 export const cardOffer = () => offer;
 export function onCardOffer(l: (o: CardOffer) => void): () => void {
   listeners.add(l);
@@ -121,7 +122,7 @@ export async function afterLogin(identity: string, device: string): Promise<void
   try {
     await decideCard(identity, device);
   } finally {
-    setDriveFlag('card', 'decided');
+    if (!offer) setDriveFlag('card', 'decided');
   }
 }
 async function decideCard(identity: string, device: string): Promise<void> {

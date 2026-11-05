@@ -45,8 +45,12 @@ function loginState(app) {
    * as "the keypad", it was pressed, which types a slot). Labels only name the moves: the buttons the app offers.
    */
   if (app.has('Enter testing mode')) return 'login screen';
-  /* and its login card decided - taken, or offered (2026-11-05: an offer 2 s later covered the next flow's Approve) */
-  if (f.phase === 'main' && f.passed && !f.busy && f.card !== 'deciding' && (!app.top || app.has('Make the card'))) return 'in';
+  /*
+   * and its login card decided - taken, or offered with its sheet up (2026-11-05: an offer 2 s later covered the next
+   * flow's Approve; then the offer was made the same instant "in" was read, before its sheet drew)
+   */
+  const cardSettled = f.card !== 'deciding' && (f.card !== 'offered' || app.has('Make the card') || app.has('Try again'));
+  if (f.phase === 'main' && f.passed && !f.busy && cardSettled && (!app.top || app.has('Make the card'))) return 'in';
   /*
    * a menu or drawer a stopped run left open goes nowhere by itself (2026-10-31, the Pixel: the menu stayed open and the
    * login waited out its watchdog): closing it is the move - never a sheet, which may be a press being answered
