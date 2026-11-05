@@ -25,6 +25,7 @@ import {KeyChainWizard, WIZARD_SAVE_KEY} from './keychain/KeyChainWizard';
 import {KeyChainRemove} from './keychain/KeyChainRemove';
 import {AdoptComposite} from './keychain/AdoptComposite';
 import {CLIPBOARD_TTL_MS} from '../ui/sensitive';
+import {checkCert, keepCert, certLine, type CertKey} from '../certKeys';
 
 /*
  * KEY CHAIN - generate, keep track of, derive and export keys (owner,
@@ -82,11 +83,12 @@ type PgpTodo = {userId: string; signSlot: number; ecdhSlot: number; tag: string 
 type Copy = {id: string; title: string; file: string; mime: string; text: string; made: string; where: string};
 
 /* Which ways of adding each panel offers. */
-type AddPath = 'In the Key' | 'In the App' | 'Derive' | 'Import PGP key';
+type AddPath = 'In the Key' | 'In the App' | 'Derive' | 'Import PGP key' | 'Import certificate';
 const PATHS = {
   key: ['In the Key', 'In the App'] as AddPath[],
   /* Import PGP key (owner, 2026-10-03): a restored OnlyKey has its PGP private keys back; the certificate comes from its .asc */
-  app: ['Derive', 'In the App', 'Import PGP key'] as AddPath[],
+  /* Import certificate (2026-11-05): a slot key's X.509 certificate - public, so On this App's, naming the slot its private key is in */
+  app: ['Derive', 'In the App', 'Import PGP key', 'Import certificate'] as AddPath[],
 };
 /*
  * ADDED TO, never replaced: one config-mode visit can write a queue AND a
@@ -140,8 +142,9 @@ export function KeyChainScreen({
   /* The remove Wizard, while one is open (KeyChainRemove). */
   const [removing, setRemoving] = useState<RemoveTarget | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  /* a pasted X.509 certificate per RSA slot, before it is kept (certRows) */
-  const [certDrafts, setCertDrafts] = useState<Record<number, string>>({});
+  /* Import certificate (On this App): the PEM picked or pasted, and what checking it found (certKeys checkCert) */
+  const [certText, setCertText] = useState('');
+  const [certCheck, setCertCheck] = useState<{key: CertKey; signature: 'checked' | 'unchecked'} | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -920,73 +923,71 @@ export function KeyChainScreen({
   };
 
   /*
-   * AN RSA SLOT'S X.509 CERTIFICATE, KEPT HERE (Brad, 2026-11-04: RSA3's code-signing certificate - "store the pub cert in
-   * the key chain in the desktop app", beside its copy in the repo). Kept on the slot's entry (lib list.js x509), and only
-   * one whose public key is the slot's: read here first, its key compared, its signature checked where the page has
-   * WebCrypto (the desktop, the web app) - a phone without it says so. Shown with its subject, end date and fingerprint;
-   * the PEM copied or shared as a .crt.pem.
+   * A KEPT X.509 CERTIFICATE (Brad, 2026-11-04: RSA3's code-signing certificate - "store the pub cert in the key chain";
+   * 2026-11-05: "I was expecting it to be added to On this App"). It lives on its slot's entry (lib list.js x509) - shown
+   * in On this App with the other kept keys, and under its slot's row once the slots are read. Added by On this App's
+   * Import certificate (or kept by itself when an agent's card is approved - certKeys.ts), never typed into a slot's row.
    */
-  const keptCert = (p: Probe) => (p.kind === 'rsa' && p.publicKey
-    ? entries.find(x => x.x509 && x.kind === 'slot' && x.slot === p.slot && hexOf(x.publicKey) === hexOf(p.publicKey))
-    : undefined);
-  const keepCert = async (p: Probe) => {
+  const certView = (pem: string, fallbackName: string) => {
+    const c = keychain.x509.read(pem);
+    const who = [c.subject.CN, c.subject.O].filter(Boolean).join(', ');
+    const base = (who || fallbackName).replace(/[^A-Za-z0-9._-]+/g, '-');
+    return (
+      <View style={styles.detail}>
+        <CopyRow title="X.509" value={`${who || 'no name'} · until ${c.notAfter.slice(0, 10)}`} onCopy={() => copy(pem, 'Certificate')} />
+        <CopyRow title="cert SHA-256" value={c.sha256.toUpperCase().replace(/(.{4})/g, '$1 ').trim()} onCopy={() => copy(c.sha256.toUpperCase(), 'Certificate fingerprint')} />
+        <Btn title="Share certificate" onPress={() => void NativeShare.shareFile(`${base}.crt.pem`, pem, 'application/x-pem-file', 'Certificate')} />
+      </View>
+    );
+  };
+  const certRows = (p: Probe) => {
+    if (p.kind !== 'rsa' || !p.publicKey) return null;
+    const e = entries.find(x => x.x509 && x.kind === 'slot' && x.slot === p.slot && hexOf(x.publicKey) === hexOf(p.publicKey));
+    return e?.x509 ? certView(e.x509, slotName(p.slot)) : null;
+  };
+
+  /* Import certificate (On this App): picked or pasted, checked - the slot its key is in, its signature - then kept */
+  const pickCertFile = async () => {
     setError(null);
-    setStatus(null);
     try {
-      const pem = (certDrafts[p.slot] || '').trim();
-      const c = keychain.x509.read(pem);
-      if (hexOf(c.modulus) !== hexOf(p.publicKey)) throw new Error(`this certificate's public key is not the one in ${slotName(p.slot)}`);
-      const subtle = (globalThis as any).crypto?.subtle;
-      let checked = 'its signature not checked on this device';
-      if (subtle) {
-        const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        const hash = c.signatureAlgorithm === 'sha512WithRSAEncryption' ? 'SHA-512' : c.signatureAlgorithm === 'sha256WithRSAEncryption' ? 'SHA-256' : null;
-        if (!hash) throw new Error(`a certificate signed with ${c.signatureAlgorithm} is not kept here (SHA-256 or SHA-512 with RSA)`);
-        const key = await subtle.importKey('jwk', {kty: 'RSA', n: b64u(c.modulus), e: b64u(c.exponent), ext: true}, {name: 'RSASSA-PKCS1-v1_5', hash}, false, ['verify']);
-        if (!(await subtle.verify('RSASSA-PKCS1-v1_5', key, c.signature, c.tbs))) throw new Error('this certificate\'s signature does not check out with its own key');
-        checked = 'its signature checked';
-      }
-      const tag = keychain.tag.parseTag(p.label);
-      const made = keychain.list.createEntry({kind: 'slot', slot: p.slot, type: 'rsa', publicKey: p.publicKey, name: tag ? tag.name : slotName(p.slot), x509: pem});
-      await saveEntries(cur => keychain.list.merge(cur, [made]).entries);
-      setCertDrafts(d => ({...d, [p.slot]: ''}));
-      setStatus(`Kept ${slotName(p.slot)}'s certificate (${c.subject.CN || 'no name'}): its key is the slot's, ${checked}.`);
+      const picked = await NativeShare.pickTextFile('*/*');
+      if (!picked.picked) return;
+      setCertText(picked.content);
+      setCertCheck(null);
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
     }
   };
-  const certRows = (p: Probe) => {
-    if (p.kind !== 'rsa') return null;
-    const e = keptCert(p);
-    if (e?.x509) {
-      const c = keychain.x509.read(e.x509);
-      const who = [c.subject.CN, c.subject.O].filter(Boolean).join(', ');
-      const base = (who || slotName(p.slot)).replace(/[^A-Za-z0-9._-]+/g, '-');
-      return (
-        <View style={styles.detail}>
-          <CopyRow title="X.509" value={`${who} · until ${c.notAfter.slice(0, 10)}`} onCopy={() => copy(e.x509 as string, 'Certificate')} />
-          <CopyRow title="cert SHA-256" value={c.sha256.toUpperCase().replace(/(.{4})/g, '$1 ').trim()} onCopy={() => copy(c.sha256.toUpperCase(), 'Certificate fingerprint')} />
-          <Btn title="Share certificate" onPress={() => void NativeShare.shareFile(`${base}.crt.pem`, e.x509 as string, 'application/x-pem-file', 'Certificate')} />
-        </View>
-      );
+  const checkCertText = async () => {
+    setError(null);
+    setStatus(null);
+    setCertCheck(null);
+    setBusy('cert');
+    try {
+      setCertCheck(await checkCert(certText));
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(null);
     }
-    return (
-      <View style={styles.detail}>
-        <Text style={styles.note}>An X.509 certificate for this key (a .crt.pem) can be kept here - paste it:</Text>
-        <TextInput
-          style={[styles.input, styles.pgpInput]}
-          accessibilityLabel={`X.509 certificate for ${slotName(p.slot)}`}
-          placeholder="-----BEGIN CERTIFICATE-----"
-          placeholderTextColor={theme.textDim}
-          value={certDrafts[p.slot] || ''}
-          onChangeText={t => setCertDrafts(d => ({...d, [p.slot]: t}))}
-          multiline
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-        <Btn title="Keep certificate" disabled={busy !== null || !/BEGIN CERTIFICATE/.test(certDrafts[p.slot] || '')} onPress={() => void keepCert(p)} />
-      </View>
-    );
+  };
+  const keepCertText = async () => {
+    if (!certCheck) return;
+    setError(null);
+    setBusy('cert');
+    try {
+      const k = certCheck.key;
+      const slot = (slots || []).find(p => p.slot === k.slot);
+      const tag = slot?.label ? keychain.tag.parseTag(slot.label) : null;
+      const state = await keepCert(k, tag ? tag.name : undefined);
+      setStatus(`Kept the certificate ${k.subject.CN || ''} for ${slotName(k.slot)} in "On this App"${state === 'held' ? ` (on this ${DEVICE_WORD} until the bucket opens)` : ''}.`);
+      setCertText('');
+      setCertCheck(null);
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const slotRows = (slots || []).filter(p => p.kind !== 'empty' || p.label);
@@ -1085,6 +1086,47 @@ export function KeyChainScreen({
                 disabled={busy !== null || locked || !deriveLabel.trim()}
                 onPress={() => void derive()}
               />
+            </>
+          ) : null}
+
+          {path === 'Import certificate' ? (
+            <>
+              <Text style={styles.body}>
+                An X.509 certificate (.crt.pem) for one of this OnlyKey's RSA keys - public data, kept here in On this App,
+                naming the slot its private key is in. Before it is kept, Key Chain finds that slot (it reads the RSA
+                slots' public keys - no press) and checks the certificate's signature.
+              </Text>
+              <Btn title="Pick a file" onPress={() => void pickCertFile()} disabled={busy !== null} />
+              <TextInput
+                value={certText}
+                onChangeText={t => {
+                  setCertText(t);
+                  setCertCheck(null);
+                }}
+                accessibilityLabel="X.509 certificate"
+                multiline
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="-----BEGIN CERTIFICATE-----"
+                placeholderTextColor={theme.textDim}
+                style={[styles.input, styles.pgpInput]}
+              />
+              <Btn
+                title={busy === 'cert' && !certCheck ? 'Checking…' : 'Check it'}
+                tone="primary"
+                disabled={busy !== null || locked || !/BEGIN CERTIFICATE/.test(certText)}
+                onPress={() => void checkCertText()}
+              />
+              {certCheck ? (
+                <>
+                  <Text style={styles.body}>{certLine(certCheck.key)}</Text>
+                  <Text style={styles.note}>{`✓ its key is in ${slotName(certCheck.key.slot)} - where its private key lives`}</Text>
+                  <Text style={styles.note}>
+                    {certCheck.signature === 'checked' ? '✓ its signature checks with its own key' : `its signature is not checked on this ${DEVICE_WORD}`}
+                  </Text>
+                  <Btn title={busy === 'cert' ? 'Keeping…' : 'Keep it'} tone="primary" disabled={busy !== null} onPress={() => void keepCertText()} />
+                </>
+              ) : null}
             </>
           ) : null}
 
@@ -1522,6 +1564,7 @@ export function KeyChainScreen({
               {open === e.id ? (
                 <>
                   {artifactRows(e.artifacts, {name: e.label || e.name || 'key', pgp: e.pgp, id: e.id})}
+                  {e.x509 ? certView(e.x509, e.label || e.name || 'key') : null}
                   <Btn title="Remove…" tone="danger" disabled={busy !== null} onPress={() => setRemoving(targetForEntry(e))} />
                 </>
               ) : null}

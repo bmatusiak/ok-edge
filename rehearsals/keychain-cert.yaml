@@ -1,0 +1,27 @@
+# A SLOT KEY'S CERTIFICATE IMPORTED INTO ON THIS APP (Brad, 2026-11-05: "I was expecting it to be added to On this App" -
+# public data there, the private key On this Key). Key Chain -> On this App -> + Add -> Import certificate: the
+# certificate for the key in one of this OnlyKey's RSA slots (the test key's debug keystore key) checked - its slot
+# found by the key's own public keys, its signature - then kept, and shown in On this App.
+#   run.js rehearse --app desktop@box keychain-cert --env CERT=<the certificate's file on the app's machine>
+name: A certificate imported into On this App
+tags:
+  - keychain
+---
+- runScript: scripts/require-test-key.js
+- login: {}
+- goto: Key Chain
+- tapOn: "Add a key to this App"
+- tapOn: "Import certificate"
+- inputFile:
+    field: "X.509 certificate"
+    file: ${CERT}
+- tapOn: "Check it"
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "✓ its key is in RSA"
+- tapOn: "Keep it"
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "Kept the certificate"

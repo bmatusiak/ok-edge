@@ -54,6 +54,32 @@ export async function slotOfCertHash(sha256: string): Promise<CertKey | null> {
   return null;
 }
 
+/*
+ * ITS SIGNATURE, where the page has WebCrypto (the desktop, the web app): a certificate signed by its own key, as one
+ * made by `onlykey-js cert` is. 'unchecked' on a device without WebCrypto - said, not hidden; 'bad' refuses it.
+ */
+export async function signatureOf(pem: string): Promise<'checked' | 'unchecked' | 'bad'> {
+  const subtle = (globalThis as any).crypto?.subtle;
+  if (!subtle) return 'unchecked';
+  const c = keychain.x509.read(pem);
+  const hash = c.signatureAlgorithm === 'sha512WithRSAEncryption' ? 'SHA-512' : c.signatureAlgorithm === 'sha256WithRSAEncryption' ? 'SHA-256' : null;
+  if (!hash) return 'bad';
+  const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const key = await subtle.importKey('jwk', {kty: 'RSA', n: b64u(c.modulus), e: b64u(c.exponent), ext: true}, {name: 'RSASSA-PKCS1-v1_5', hash}, false, ['verify']);
+  return (await subtle.verify('RSASSA-PKCS1-v1_5', key, c.signature, c.tbs)) ? 'checked' : 'bad';
+}
+
+/*
+ * IMPORTED BY THE OWNER (Key Chain, On this App - Import certificate; Brad, 2026-11-05: "I was expecting it to be added to
+ * On this App"): the slot its key is in, and its signature - both before anything is kept.
+ */
+export async function checkCert(pem: string): Promise<{key: CertKey; signature: 'checked' | 'unchecked'}> {
+  const key = await slotOfCert(pem);
+  const signature = await signatureOf(pem);
+  if (signature === 'bad') throw new Error('this certificate\'s signature does not check out with its own key');
+  return {key, signature};
+}
+
 /** Keep the certificate on its slot's Key Chain entry (merged with the entry that is there) - in the bucket. */
 export async function keepCert(k: CertKey, name?: string): Promise<'saved' | 'held' | 'same'> {
   const made = keychain.list.createEntry({kind: 'slot', slot: k.slot, type: 'rsa', publicKey: k.publicKey, name: name || `RSA${k.slot}`, x509: k.pem});
