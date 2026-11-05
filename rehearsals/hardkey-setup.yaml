@@ -19,4 +19,6 @@ tags:
     target: firmware
     args:
       name: hardkey-setup.js
+# the app back first: a login judged on the stopped app's last screen waits for a page nobody starts
+- launchApp
 - login: {}
