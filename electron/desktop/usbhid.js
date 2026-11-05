@@ -133,7 +133,7 @@ async function disconnect() {
 
 /* the real keys hidapi lists, one entry per vendor interface (the emulator driver's are left out) */
 async function listDevices() {
-  const found = findOnlyKeys(loadNodeHid());
+  const found = timed('the device listing', () => findOnlyKeys(loadNodeHid()));
   return found.vendor.filter(isUsb).map((d) => ({
     deviceName: d.path,
     vendorId: d.vendorId,
@@ -146,9 +146,25 @@ async function listDevices() {
   }));
 }
 
+/*
+ * A CALL THAT HOLDS THIS PROCESS, said (Brad, 2026-11-04 20:11, red-key on Windows, reproduced on blue-key: after a
+ * lockout restart and an unlock the key pushed its answer and the page heard NO report for 30 s - the reader's 'data'
+ * runs on this process's loop). node-hid's write and its device listing are synchronous: one that blocks - a key not
+ * reading that endpoint - stops every report here while it lasts. Over SLOW_MS, the call, its interface and its time.
+ */
+const SLOW_MS = 250;
+function timed(what, fn) {
+  const t = Date.now();
+  try { return fn(); } finally {
+    const ms = Date.now() - t;
+    if (ms > SLOW_MS) console.log(`[usbhid] ${what} held this process ${ms} ms`);
+  }
+}
+
 async function write(iface, hex) {
   if (!pipe) throw new Error('the OnlyKey is not open');
-  return pipe.write(iface, Uint8Array.from(Buffer.from(String(hex), 'hex')));
+  const bytes = Uint8Array.from(Buffer.from(String(hex), 'hex'));
+  return timed(`write on interface ${iface}`, () => pipe.write(iface, bytes));
 }
 
 module.exports = {
