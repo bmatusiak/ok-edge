@@ -10,7 +10,7 @@ tags:
   - hard-key
   - sabotage
 env:
-  PIN: "1111111"
+  PIN: "1234561"
   LINKS: "10"
 ---
 # a test key only: its debug console answers (a production key has none - the rehearsal stops here)

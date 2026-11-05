@@ -5,7 +5,7 @@ tags:
   - edge
   - budget
 env:
-  PIN: "1111111"
+  PIN: "1234561"
 ---
 - runFlow: login.yaml
 - budget

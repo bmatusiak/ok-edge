@@ -3,8 +3,9 @@ appId: com.okedge.debug
 name: Log in
 tags:
   - login
+# The app's PIN, 1234561 - every button pressed once (Brad, 2026-11-05); 1111111 is only the testing kit's keys.
 env:
-  PIN: "1111111"
+  PIN: "1234561"
 ---
 - launchApp
 - login:

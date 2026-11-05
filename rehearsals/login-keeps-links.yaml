@@ -9,7 +9,7 @@ tags:
   - login
   - hard-key
 env:
-  PIN: "1111111"
+  PIN: "1234561"
 ---
 - runScript: scripts/require-test-key.js
 
