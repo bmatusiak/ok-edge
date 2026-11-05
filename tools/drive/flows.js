@@ -232,7 +232,10 @@ async function loginMoves(d, { pin: named = null, life = 180, key = null } = {})
     }
     else if (now === 'login screen') {
       /* the web app's chain is its key's - the gadget is a testnet key: unlocked from its machine, then Log in */
-      if (d.app.shell === 'webapp' || await gadget(d)) { await unlockOutsideKey(d, pin); await d.tap('Log in'); } else await d.tap('Enter testing mode');
+      if (d.app.shell === 'webapp' || await gadget(d)) { await unlockOutsideKey(d, pin); await d.tap('Log in'); }
+      /* a test key on the USB (its console answers) is logged in as itself - Log in, then its keypad; never the soft key */
+      else if (key !== 'soft' && d.app.flags.consoleAnswers === true) await d.tap('Log in');
+      else await d.tap('Enter testing mode');
     }
     else if (now === 'bypass' && pin !== TEST_PIN) {
       /* the bypass types TEST_PIN, not this key's: the keypad with its own PIN */
@@ -280,6 +283,13 @@ async function loginMoves(d, { pin: named = null, life = 180, key = null } = {})
      * answers, so the kit set it up (1111111) - unless the flow names its PIN. A key still locked after it stops the run.
      */
     else if (now === 'keypad') {
+      /*
+       * NOT ON A SCREEN STILL COMING UP (box desktop, 2026-11-04: at the app's start the key read locked on the remembered
+       * This Key tab an instant before the Log in panel drew - "keypad", then no Button 1): its buttons live first; the
+       * state moved instead - judged again, nothing typed
+       */
+      await d.until((app) => app.controls.some((c) => c.label === 'Button 1' && c.enabled) || loginState(app) !== 'keypad', { life: 30, fail: [] });
+      if (loginState(d.app) !== 'keypad') { seen.delete(now); continue; }
       const typed = !named && d.app.flags.consoleAnswers === true ? KIT_PIN : pin;
       for (const n of typed) await d.tap(`Button ${n}`);
       await d.until((app) => app.flags.key !== 'locked', { life: 60, fail: [] }).catch(() => {
