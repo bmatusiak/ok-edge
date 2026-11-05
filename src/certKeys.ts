@@ -62,8 +62,9 @@ export async function signatureOf(pem: string): Promise<'checked' | 'unchecked' 
   const subtle = (globalThis as any).crypto?.subtle;
   if (!subtle) return 'unchecked';
   const c = keychain.x509.read(pem);
-  const hash = c.signatureAlgorithm === 'sha512WithRSAEncryption' ? 'SHA-512' : c.signatureAlgorithm === 'sha256WithRSAEncryption' ? 'SHA-256' : null;
-  if (!hash) return 'bad';
+  /* RSA with SHA-1 (Android's debug certificate), -256, -384, -512; any other algorithm is not checked - never called bad */
+  const hash = ({sha1WithRSAEncryption: 'SHA-1', sha256WithRSAEncryption: 'SHA-256', sha384WithRSAEncryption: 'SHA-384', sha512WithRSAEncryption: 'SHA-512'} as Record<string, string>)[c.signatureAlgorithm];
+  if (!hash) return 'unchecked';
   const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const key = await subtle.importKey('jwk', {kty: 'RSA', n: b64u(c.modulus), e: b64u(c.exponent), ext: true}, {name: 'RSASSA-PKCS1-v1_5', hash}, false, ['verify']);
   return (await subtle.verify('RSASSA-PKCS1-v1_5', key, c.signature, c.tbs)) ? 'checked' : 'bad';
