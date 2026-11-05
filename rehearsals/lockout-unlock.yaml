@@ -1,8 +1,7 @@
 # THE FIRST READS AFTER A LOCKOUT RESTART, THEN AN UNLOCK (Brad, 2026-11-04 20:11, red-key on Windows, twice that day:
 # the idle lockout restarted the key at 13:31, it sat locked, the unlock at 20:11 - then the identity read had "no answer
 # in 30000 ms" twice and a reply that failed transit authentication). On a test key: logged in, the key off the USB and
-# back as the lockout's restart is (its own restart, locked), then Log in and the PIN on the key's own buttons, as a
-# person unlocks - pressed from the key's machine - and the identity read, which must answer. A failed key request fails
+# back as the lockout's restart is (its own restart, locked), then the login's unlock and the identity read, which must answer. A failed key request fails
 # the wait at once.
 #   run.js rehearse --app desktop@box lockout-unlock
 name: The first reads after a lockout restart
@@ -19,8 +18,9 @@ tags:
 - waitForLog:
     pattern: '\[hardkey\] state: locked'
     timeout: 20000
-- tapOn: "Log in"
-- runScript: scripts/pin-on-key.js
+# the app's own login unlocks it (its keypad presses the key) - with the PIN on the key's buttons instead
+# (scripts/pin-on-key.js) the app did not go on to its identity read at all, 2026-11-04: a lead of its own
+- login: {}
 - waitForLog:
     pattern: '\[timeline\] \d+ end #\d+ reading a public key steps=\d+ ok'
     # the identity read's own failure; Edge's reads asked while the key was still locked fail as they should
