@@ -19,7 +19,7 @@
  * away (the pipe's 'close': unplugged, restarted), 'error' when it cannot be opened.
  */
 const { createHidPipe, loadNodeHid, findOnlyKeys } = require('node-onlykey-lib/cli/transport-hid');
-const { DIR, usb: { describe } } = require('node-onlykey-lib/transport');
+const { DIR, IFACE, usb: { describe } } = require('node-onlykey-lib/transport');
 
 let send = () => {};
 let pipe = null;
@@ -163,6 +163,8 @@ const GAP_MS = 5000;
 let lastWrite = 0;
 let lastReport = 0;
 function heardFromKey(e) {
+  /* the vendor and FIDO interfaces only: a test hex's debug console prints all the time, and would hide every silence */
+  if (e.iface !== IFACE.VENDOR && e.iface !== IFACE.FIDO) return;
   const now = Date.now();
   if (lastReport && now - lastReport > GAP_MS) {
     console.log(`[usbhid] a report after ${now - lastReport} ms of none (last write ${lastWrite ? now - lastWrite : '-'} ms ago): interface ${e.iface}, ${Buffer.from(e.bytes.subarray(0, 4)).toString('hex')}`);
