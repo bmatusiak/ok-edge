@@ -1362,6 +1362,16 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
       }
       if (action === 'key-state') return t.keyState ? { ok: true, what: await t.keyState() } : { ok: false, why: `${target}'s key is in the app: its flags say its state` };
       if (action === 'press') return t.press ? { ok: true, what: await t.press(args) } : { ok: false, why: `${target}'s key is in the app: the drive taps its own button` };
+      /*
+       * THE HARD KEY'S OWN WORD, FROM ITS HELD CONSOLE (box, 2026-11-04: in config mode the key holds back its UNLOCKED
+       * broadcast, so the app cannot say the PIN was taken - the key's DEBUG console does): a line matching args.re since
+       * args.sinceAge ms ago (an age - the caller's clock is not this machine's), or the next one within args.life s
+       */
+      if (action === 'console-said') {
+        if (!consoleProc || exited(consoleProc)) return { ok: false, why: 'no hard key\'s console is held on this machine (use-key hard)' };
+        const seen = await consoleSaid(new RegExp(String(args.re)), Date.now() - (Number(args.sinceAge) || 0), (Number(args.life) || 20) * 1000);
+        return seen ? { ok: true, what: seen.l.trim() } : { ok: false, why: `the key's console did not say /${args.re}/ within ${Number(args.life) || 20} s` };
+      }
       return { ok: false, why: `no action "${action}"` };
     },
   };

@@ -2,10 +2,12 @@
  * THE PIN AGAIN, THEN "Check config mode" (config-pin-set.yaml): the key locked itself on its way into config mode (PRE -
  * the app's PIN screen with "Check config mode" beside the pad). The PIN goes in on the key's buttons from the machine
  * that holds it - the gadget's socket, or a test hard key's debug console - then the app says the key unlocked, and its
- * own check (the next step, config-expect "on") proves config mode.
+ * own check (the next steps: "Check config mode", config-expect "on") proves config mode.
  *
- * NEVER THE LED (Brad, 2026-11-04: "the led should not be a trigger for testing"): the app's flags say locked or not; the
- * check says config mode.
+ * NEVER THE LED (Brad, 2026-11-04: "the led should not be a trigger for testing"). Nor the app's flags after the PIN: in
+ * config mode the key holds back its UNLOCKED broadcast (MainApp.tsx checkConfig), so the app learns it only from its
+ * check. That the PIN went in: the gadget's press returns once it took every digit; a hard key's DEBUG console says
+ * "UNLOCKED" (box, 2026-11-04, blue-key: "GUESSED PROFILE 1 PIN ... UNLOCKED").
  *
  * PIN: the key's own - the flow's PIN, else the kit's 1111111 on a test hard key (its console answers;
  * tools/box/hardkey-setup.js), else the drive's testing PIN (the gadget).
@@ -17,11 +19,11 @@ if (!hard && !/\btestnet\b/.test(s.what)) throw new Error(`the key is not a test
 const pin = String(typeof PIN !== 'undefined' ? PIN : hard ? '1111111' : '1234561');
 /* pressed only while locked: a press on a locked key is a PIN attempt, on an unlocked one it types a slot */
 if (drive.app.flags.key !== 'locked') throw new Error(`the app does not say the key is locked for its PIN ("${drive.app.flags.key}") - nothing pressed`);
+const pressedAt = Date.now();
 const r = await drive.machine('press', drive.app.shell, { buttons: pin.split('') });
 if (!r.ok) throw new Error(`the PIN was not pressed: ${r.why}`);
-const until = Date.now() + 20000;
-while (drive.app.flags.key === 'locked') {
-  if (Date.now() > until) throw new Error('the key stayed locked 20 s after its PIN - one wrong attempt; not tried again');
-  await new Promise((ok) => setTimeout(ok, 500));
-}
-drive.say(`the key unlocked after its PIN (the app says "${drive.app.flags.key}") - its check says config mode next`);
+if (hard) {
+  const said = await drive.machine('console-said', drive.app.shell, { re: 'UNLOCKED', sinceAge: Date.now() - pressedAt, life: 20 });
+  if (!said.ok) throw new Error(`the key did not take its PIN (${said.why}) - one wrong attempt; not tried again`);
+  drive.say(`the key took its PIN (its console: "${said.what}") - its check says config mode next`);
+} else drive.say(`the PIN went in (${r.what}) - its check says config mode next`);
