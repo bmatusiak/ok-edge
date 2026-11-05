@@ -1,0 +1,68 @@
+/*
+ * AN RSA KEY NAMED BY ITS CERTIFICATE (Brad, 2026-11-04: "we upload the pubcert as the label to select RSA3"; "the ai does
+ * not need to know the slot"). An agent's card asks for RSA keys by their X.509 certificates (lib mcp.js card_new certs),
+ * and its plan items name one by the certificate's SHA-256. This device turns a certificate into the slot that holds its
+ * key: the owner's Key Chain first (the list in the bucket - no key request), else the key's own RSA1-4 public keys (reads,
+ * no press). Approving the card keeps the certificate on that slot's Key Chain entry, so it is in the bucket - for the next
+ * plan's lookup, and for recovery.
+ */
+import {keychainList, saveKeyChainList} from './keyChainRecorder';
+import {getOnlyKey} from './onlykey';
+import {activeBackend} from './hooks/KeyContext';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const keychain = require('node-onlykey-lib/keychain');
+
+export type CertKey = {slot: number; bits: number; sha256: string; pem: string; subject: Record<string, string>; notAfter: string; publicKey: Uint8Array};
+
+const RSA_SLOTS = [1, 2, 3, 4];
+const hexOf = (b: Uint8Array) => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+
+async function entries(): Promise<any[]> {
+  try {
+    const raw = await keychainList.getItem('list');
+    return raw ? keychain.list.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The slot whose key this certificate certifies - Key Chain first, then the key's RSA slots. Throws when none is. */
+export async function slotOfCert(pem: string): Promise<CertKey> {
+  const c = keychain.x509.read(pem);
+  const want = hexOf(c.modulus);
+  const base = {bits: c.bits, sha256: c.sha256, pem: pem.trim(), subject: c.subject, notAfter: c.notAfter, publicKey: c.modulus};
+  const kept = (await entries()).find(e => e.kind === 'slot' && e.type === 'rsa' && hexOf(e.publicKey) === want);
+  if (kept && RSA_SLOTS.includes(kept.slot)) return {...base, slot: kept.slot};
+  const {device} = await getOnlyKey(activeBackend());
+  for (const slot of RSA_SLOTS) {
+    const p = await device.probeKeySlot(slot).catch(() => null);
+    if (p?.kind === 'rsa' && p.publicKey && hexOf(p.publicKey) === want) return {...base, slot};
+  }
+  throw new Error(`the certificate "${c.subject.CN || c.sha256.slice(0, 16)}" is for a key in none of this OnlyKey's RSA slots`);
+}
+
+/** The slot of a certificate the Key Chain keeps, by its SHA-256 (a plan item's key.cert) - null when none is kept. */
+export async function slotOfCertHash(sha256: string): Promise<CertKey | null> {
+  for (const e of await entries()) {
+    if (e.kind !== 'slot' || e.type !== 'rsa' || !e.x509) continue;
+    const c = keychain.x509.read(e.x509);
+    if (c.sha256 === sha256.toLowerCase() && RSA_SLOTS.includes(e.slot)) {
+      return {slot: e.slot, bits: c.bits, sha256: c.sha256, pem: e.x509, subject: c.subject, notAfter: c.notAfter, publicKey: c.modulus};
+    }
+  }
+  return null;
+}
+
+/** Keep the certificate on its slot's Key Chain entry (merged with the entry that is there) - in the bucket. */
+export async function keepCert(k: CertKey, name?: string): Promise<'saved' | 'held' | 'same'> {
+  const made = keychain.list.createEntry({kind: 'slot', slot: k.slot, type: 'rsa', publicKey: k.publicKey, name: name || `RSA${k.slot}`, x509: k.pem});
+  const r = await saveKeyChainList(cur => keychain.list.merge(cur, [made]).entries);
+  return r.state;
+}
+
+/** One line for a sheet: the slot, the key's size, the certificate's subject, its end and its fingerprint. */
+export function certLine(k: CertKey): string {
+  const who = [k.subject.CN, k.subject.O].filter(Boolean).join(', ') || 'no name';
+  return `RSA${k.slot} · RSA-${k.bits} · certificate ${who}, until ${k.notAfter.slice(0, 10)} · SHA-256 ${k.sha256.slice(0, 16).toUpperCase()}…`;
+}

@@ -78,7 +78,7 @@ export async function pickCard(label: string): Promise<any> {
 }
 
 /* what a computer's new card shows on the sheet before the press (lib agents.answer's approve) */
-export type CardAsk = {label: string; created: number; expires: number; derive: {ssh?: string; gpg?: string}; slots: number[]; agent: string | null; committer: {name: string; email: string} | null; fingerprint: string | null};
+export type CardAsk = {label: string; created: number; expires: number; derive: {ssh?: string; gpg?: string}; slots: number[]; agent: string | null; committer: {name: string; email: string} | null; fingerprint: string | null; keys?: string[]};
 
 /*
  * A COMPUTER'S AGENT-CARD MESSAGES (Brad, 2026-11-03: "the ai agent creates the card over cli/mcp, providing the label it

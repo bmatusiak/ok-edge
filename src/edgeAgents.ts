@@ -263,7 +263,8 @@ async function computerOf(from: string): Promise<{id: string; name: string} | nu
  * press (null to go on, or why not - then it is declined here), and the plan id lets withdrawSheet take the sheet down
  * when another device of the identity claimed it first.
  */
-export type PlanAsk = {plan: string; onApprove: () => Promise<string | null>};
+/* keys: an agent card's keys as its sheet shows them (mcpPlans runCard - each certificate and the slot it found; the owner's eyes only) */
+export type PlanAsk = {plan: string; onApprove: () => Promise<string | null>; keys?: string[]};
 let withdrawnPlan: string | null = null;
 /** Another device of the identity runs this plan: its sheet here goes, unanswered by the person (no refusal shown). */
 export function withdrawSheet(plan: string): void {
@@ -411,7 +412,7 @@ async function handleCard(msg: any, seen: Set<string>, from: string, planAsk?: P
     /* an MCP agent's card is bound to it (lib agents.answer): its id from who asks, never from the message */
     agent: computer.id.startsWith('agent:') ? computer.id.slice('agent:'.length) : null,
     approve: async (card: CardAsk) => {
-      asked = {kind: 'card', computer: computer.name, card, blocked: null, at: Date.now(), ...(planAsk ? {plan: planAsk.plan} : {})};
+      asked = {kind: 'card', computer: computer.name, card: planAsk?.keys ? {...card, keys: planAsk.keys} : card, blocked: null, at: Date.now(), ...(planAsk ? {plan: planAsk.plan} : {})};
       if ((await askPerson(asked)) !== 'approve') return false;
       if (planAsk) {
         notClaimed = await planAsk.onApprove().catch((e: unknown) => String((e as Error)?.message ?? e));

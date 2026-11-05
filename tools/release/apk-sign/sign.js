@@ -6,9 +6,12 @@
  * app ... at the end of the budget, the results are sent back"; "i want to be able to run the process locally, sign the
  * apk not in the cloud, like we can do with the debug keystore, using the redkey").
  *
- *   node tools/release/apk-sign/sign.js card --server <url|local> --identity <hex> [--slot 3] [--card "release signer"]
+ *   node tools/release/apk-sign/sign.js card --cert <cert.pem> --server <url|local> --identity <hex> [--card "release signer"]
  *   node tools/release/apk-sign/sign.js <in.apk> --out <out.apk> --cert <cert.pem> --server <url|local> --identity <hex>
- *       [--slot 3] [--card "release signer"] [--name <agent name>] [--minutes 30]
+ *       [--card "release signer"] [--name <agent name>] [--minutes 30]
+ * The key is named by its certificate only (Brad, 2026-11-04: "protect the actual slot ids from the random ai agent - it's only
+ * asking for the cert it's presenting"): the card asks for it by the PEM, each item by its SHA-256; the owner's device knows
+ * which slot that is, and this script never does.
  *   node tools/release/apk-sign/sign.js record <in.apk> --cert <cert.pem>     the digests apksigner asks for (no key)
  *   node tools/release/apk-sign/sign.js verify <apk> [--cert <cert.pem>]      its signer; with --cert, it must be that one
  *
@@ -176,7 +179,6 @@ function identityArg() {
   if (!/^[0-9a-f]{64}$/.test(id)) die('--identity <the identity public key, 64 hex> (the Edge tab gives it: "Give an AI agent these two")');
   return id;
 }
-const slotArg = () => { const s = Number(flag('--slot', '3')); if (![1, 2, 3, 4].includes(s)) die('--slot 1-4 (an RSA slot)'); return s; };
 const CARD = () => flag('--card', 'release signer');
 const deadline = () => Date.now() + Number(flag('--minutes', '30')) * 60000;
 
@@ -214,10 +216,12 @@ async function card() {
   const tool = await mcp(serverUrl());
   await agent(tool);
   const end = deadline();
-  const r = await tool('card_new', { identity: identityArg(), label: CARD(), slots: [slotArg()], reason: 'sign ok-edge release APKs' });
+  certOf(flag('--cert')); /* an RSA certificate, or it stops here */
+  const pem = fs.readFileSync(flag('--cert'), 'utf8');
+  const r = await tool('card_new', { identity: identityArg(), label: CARD(), certs: [pem], reason: 'sign ok-edge release APKs' });
   if (r.refused) die(`card_new: ${r.refused}`);
   if (r.state === 'draft') await submitted(tool, r.plan_id, end);
-  say(`the card "${CARD()}" (slot ${slotArg()}) asked - approve it on your desktop, then press the key once`);
+  say(`the card "${CARD()}" (the key of certificate ${certOf(flag('--cert')).sha256.slice(0, 16)}…) asked - approve it on your desktop, then press the key once`);
   const w = await until(tool, r.plan_id, end);
   if (w.state !== 'done') die(`the card: ${w.state}${w.why ? ` - ${w.why}` : ''}`);
   say(`the card "${CARD()}" is certified`);
@@ -228,20 +232,19 @@ async function sign() {
   const out = flag('--out');
   if (!apk || !fs.existsSync(apk) || !out) die('sign.js <in.apk> --out <out.apk> --cert <cert.pem> --server <url|local> --identity <hex>');
   const cert = certOf(flag('--cert'));
-  const slot = slotArg();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'apk-sign-'));
   try {
     /* 1 */
     const digests = record(apk, flag('--cert'), tmp);
     const fp = (d) => crypto.createHash('sha256').update(Buffer.from(d, 'hex')).digest('hex');
-    say(`${digests.length} signature(s) for ${path.basename(apk)} with RSA-${cert.bits} slot ${slot} (${cert.subject}): ${digests.map((d) => fp(d).slice(0, 16)).join(', ')}`);
+    say(`${digests.length} signature(s) for ${path.basename(apk)} with the RSA-${cert.bits} key of certificate ${cert.sha256.slice(0, 16)}… (${cert.subject}): ${digests.map((d) => fp(d).slice(0, 16)).join(', ')}`);
     /* 2 */
     const tool = await mcp(serverUrl());
     await agent(tool);
     const end = deadline();
     const p = await tool('plan_new', {
       identity: identityArg(), title: `sign ${path.basename(apk)}`, card: CARD(),
-      items: digests.map((d, i) => ({ op: 'sign', key: { kind: 'rsa', slot, bits: cert.bits }, reason: `APK signature ${i + 1} of ${digests.length} (${path.basename(apk)})`, fingerprint: fp(d) })),
+      items: digests.map((d, i) => ({ op: 'sign', key: { kind: 'rsa', cert: cert.sha256 }, reason: `APK signature ${i + 1} of ${digests.length} (${path.basename(apk)})`, fingerprint: fp(d) })),
     });
     if (p.refused) die(`plan_new: ${p.refused}`);
     await submitted(tool, p.plan_id, end);

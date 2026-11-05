@@ -27,7 +27,8 @@ const STATE_WORD: Record<Plan['state'], string> = {
 };
 
 function ItemRow({item, result}: {item: PlanItem; result?: Plan['results'][string]}) {
-  const what = `${item.item}  ${item.op}  ${item.key.kind === 'rsa' ? `slot ${item.key.slot} (RSA-${item.key.bits})` : `${item.key.kind} ${item.key.identity}`}`;
+  /* an RSA item as the agent named it: its certificate (the slot is this device's, set only when it runs - mcpPlans) */
+  const what = `${item.item}  ${item.op}  ${item.key.kind === 'rsa' ? `RSA key of certificate ${String(item.key.cert || '').slice(0, 16).toUpperCase()}…` : `${item.key.kind} ${item.key.identity}`}`;
   const outcome = !result ? null : result.refusal ? `refused: ${result.refusal}` : result.signature ? 'signed ✓' : result.plaintext !== undefined ? 'decrypted ✓' : null;
   return (
     <View style={styles.item}>

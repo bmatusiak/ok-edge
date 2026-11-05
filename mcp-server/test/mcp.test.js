@@ -175,13 +175,14 @@ test('the run: the fingerprints approved, then the data - each checked first, pa
   const ownerA = await owner(A);
   const s = await session();
   const { agent_id } = await s.tool('hello', { name: 'Claude' });
-  const rsa = { kind: 'rsa', slot: 3, bits: 4096 };
+  /* an rsa key named by its certificate's SHA-256 - never a slot (the agent does not know one) */
+  const rsa = { kind: 'rsa', cert: fp('a certificate') };
   const digest = Buffer.alloc(64, 9);
   const p = await s.tool('plan_new', { identity: hexOf(A.identityPublicKey), title: 'sign the APK', card: 'release signer', items: [
     { op: 'sign', key: rsa, reason: 'APK v2', fingerprint: require('crypto').createHash('sha256').update(digest).digest('hex') },
     item('commit A', 'repo A'),
   ] });
-  assert.match((await s.tool('plan_new', { identity: hexOf(A.identityPublicKey), title: 'x', card: 'c', items: [{ op: 'sign', key: { kind: 'rsa', slot: 3 }, reason: 'r', fingerprint: fp('x') }] })).refused, /bits are/);
+  assert.match((await s.tool('plan_new', { identity: hexOf(A.identityPublicKey), title: 'x', card: 'c', items: [{ op: 'sign', key: { kind: 'rsa', slot: 3, bits: 4096 }, reason: 'r', fingerprint: fp('x') }] })).refused, /key.cert/);
   assert.match((await s.tool('plan_new', { identity: hexOf(A.identityPublicKey), title: 'x', card: 'c', items: [{ op: 'sign', key: rsa, reason: 'r' }] })).refused, /fingerprint/);
   await ownerA.re({ op: 'agent', agent: agent_id, state: 'accepted' });
   assert.match((await s.tool('plan_data', { plan_id: p.plan_id, items: [{ item: 2, data: 'commit A' }] })).refused, /draft/);
@@ -231,12 +232,15 @@ test('card_new: the agent asks for its card - a card request submitted at once, 
   const ownerA = await owner(A);
   const s = await session();
   const { agent_id } = await s.tool('hello', { name: 'release workflow' });
-  const ask = { identity: hexOf(A.identityPublicKey), label: 'release signer', slots: [3], reason: 'sign ok-edge releases' };
-  assert.match((await s.tool('card_new', { ...ask, slots: [5] })).refused, /stored RSA slots/);
-  assert.match((await s.tool('card_new', { ...ask, slots: [] })).refused, /at least one key/);
+  /* the key by the certificate the agent presents (the repo's debug one here) - the owner's device finds its slot */
+  const pem = require('fs').readFileSync(require('path').join(__dirname, '../../signing/debug.crt.pem'), 'utf8');
+  const sha = require('crypto').createHash('sha256').update(new (require('crypto').X509Certificate)(pem).raw).digest('hex');
+  const ask = { identity: hexOf(A.identityPublicKey), label: 'release signer', certs: [pem], reason: 'sign ok-edge releases' };
+  assert.match((await s.tool('card_new', { ...ask, certs: ['not a certificate'] })).refused, /certs[0]/);
+  assert.match((await s.tool('card_new', { ...ask, certs: [] })).refused, /at least one key/);
   /* not accepted yet: shown to the owner, kept a draft with the reason; plan_submit sends it once they accept */
   const c = await s.tool('card_new', ask);
-  assert.deepEqual([c.kind, c.state, c.ask], ['card', 'draft', { label: 'release signer', slots: [3], days: 0, reason: 'sign ok-edge releases' }]);
+  assert.deepEqual([c.kind, c.state, c.ask], ['card', 'draft', { label: 'release signer', certs: [{ pem: pem.trim(), sha256: sha }], days: 0, reason: 'sign ok-edge releases' }]);
   assert.match(c.why, /not accepted you yet/);
   assert.equal((await ownerA.until((m) => m.ev === 'agent')).agent.state, 'pending', 'the owner sees who asks');
   assert.match((await s.tool('plan_submit', { plan_id: c.plan_id })).refused, /not accepted you yet/);
@@ -244,7 +248,7 @@ test('card_new: the agent asks for its card - a card request submitted at once, 
   const sub = await s.tool('plan_submit', { plan_id: c.plan_id });
   assert.deepEqual([sub.state, sub.why], ['submitted', null]);
   const asked = await ownerA.until((m) => m.ev === 'submit');
-  assert.deepEqual([asked.plan.kind, asked.plan.agent.id, asked.plan.ask.slots], ['card', agent_id, [3]]);
+  assert.deepEqual([asked.plan.kind, asked.plan.agent.id, asked.plan.ask.certs[0].sha256], ['card', agent_id, sha]);
   assert.match((await s.tool('plan_data', { plan_id: c.plan_id, items: [{ item: 1, data: 'x' }] })).refused, /a card ask takes no data/);
   await ownerA.re({ op: 'plan-claim', plan: c.plan_id });
   await ownerA.re({ op: 'plan', plan: c.plan_id, state: 'done' });

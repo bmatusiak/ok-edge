@@ -24,7 +24,8 @@ export type PlanItem = {
   item: number;
   op: 'sign' | 'decrypt';
   /* ssh / gpg: an agent-derived key by its label; rsa: a stored slot and its size */
-  key: {kind: 'ssh' | 'gpg'; identity: string} | {kind: 'rsa'; slot: number; bits: number};
+  /* rsa: named by its certificate's SHA-256 (cert); slot and bits are this device's own, set from its Key Chain (mcpPlans) */
+  key: {kind: 'ssh' | 'gpg'; identity: string} | {kind: 'rsa'; cert: string; slot?: number; bits?: number};
   reason: string;
   /* the SHA-256 of the data it will sign: the data itself comes once the budget is open (plan_data), never kept here;
      none on a plan the room kept from before fingerprints */
@@ -33,7 +34,8 @@ export type PlanItem = {
 export type PlanResult = {item?: number; signature?: string; plaintext?: string; refusal?: string; encoding?: string};
 export type PlanState = 'draft' | 'submitted' | 'running' | 'done' | 'declined' | 'failed' | 'ended';
 /* an agent's card request (mcp.js card_new): run as a plan of kind 'card' - the card sheet, a press, no budget */
-export type CardAsk = {label: string; slots: number[]; ssh?: string; days: number; reason: string};
+/* certs: the RSA keys the agent asks for, each by its certificate (PEM) and the certificate's SHA-256 - never a slot */
+export type CardAsk = {label: string; certs?: {pem: string; sha256: string}[]; ssh?: string; days: number; reason: string};
 export type Plan = {
   id: string;
   kind?: 'plan' | 'card';

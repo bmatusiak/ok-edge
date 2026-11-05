@@ -27,6 +27,7 @@ import {activeBackend} from './hooks/KeyContext';
 import {loadIdentity} from './edgeIdentity';
 import {openpgpFork} from './pgpOps';
 import {keyTask} from './keyBusy';
+import {certLine, keepCert, slotOfCert, slotOfCertHash, type CertKey} from './certKeys';
 
 /* the plans running here, each with what its runner listens to (its fills and finish) */
 const running = new Map<string, Set<(e: PlanEvent) => void>>();
@@ -61,6 +62,17 @@ async function runOne(plan: Plan): Promise<void> {
   const say = (line: string) => console.log(`[mcp] ${line}`);
   say(`plan ${plan.id}: "${plan.title}" from ${plan.agent.name} - ${plan.items.length} item(s), waiting for your approval`);
   try {
+    /*
+     * AN RSA ITEM NAMES ITS KEY BY ITS CERTIFICATE (key.cert, its SHA-256 - mcp.js): the slot comes from the owner's Key
+     * Chain, where approving the card kept the certificate. Not kept here: this device does not run it (another of the
+     * owner's devices may), and says why only in its own log - the agent never sees a slot.
+     */
+    for (const it of plan.items) {
+      if (it.key?.kind !== 'rsa') continue;
+      const k = it.key.cert ? await slotOfCertHash(it.key.cert) : null;
+      if (!k) { say(`plan ${plan.id}: not run here - item ${it.item}'s certificate ${String(it.key.cert || '').slice(0, 16)}… is in no Key Chain entry of this device`); return; }
+      it.key = {...it.key, slot: k.slot, bits: k.bits};
+    }
     const app = await getOnlyKey(activeBackend());
     /* the sheet names the agent that built the plan, as a computer's request names that computer */
     const from = `${AGENT_FROM}${plan.agent.id}|${plan.agent.name}`;
@@ -130,12 +142,28 @@ async function runCard(plan: Plan): Promise<void> {
   try {
     if (!ask) { await told({state: 'failed', why: 'a card request names no card'}); return; }
     say(`plan ${plan.id}: ${plan.agent.name} asks for the agent card "${ask.label}" - waiting for your approval`);
+    /*
+     * ITS RSA KEYS BY THEIR CERTIFICATES (Brad, 2026-11-04: "protect the actual slot ids from the random ai agent - it's
+     * only asking for the cert it's presenting"): each certificate turned into the slot whose key it certifies, here, on
+     * the owner's device (certKeys.ts). The card sheet shows the certificate and that slot to the owner; nothing told back
+     * to the agent names a slot. A certificate for no key of this OnlyKey is refused before any sheet.
+     */
+    const keys: CertKey[] = [];
+    for (const c of ask.certs || []) {
+      try {
+        keys.push(await slotOfCert(c.pem));
+      } catch (e) {
+        say(`plan ${plan.id}: the card "${ask.label}" - ${String((e as Error)?.message ?? e)}`);
+        return void (await planUpdate(plan.id, {state: 'failed', why: String((e as Error)?.message ?? e)}).catch(() => {}));
+      }
+    }
     const info = {
       label: ask.label, created: Math.floor(Date.now() / 1000), expires: ask.days * 86400,
-      derive: ask.ssh ? {ssh: ask.ssh} : {}, slots: ask.slots, committer: null,
+      derive: ask.ssh ? {ssh: ask.ssh} : {}, slots: [...new Set(keys.map(k => k.slot))].sort(), committer: null,
     };
     const r: any = await handleEdgeMessage(agentsLib.buildCreate({info}), `${AGENT_FROM}${plan.agent.id}|${plan.agent.name}`, {
       plan: plan.id,
+      keys: keys.map(certLine),
       onApprove: async () => {
         try {
           await planClaim(plan.id);
@@ -149,6 +177,13 @@ async function runCard(plan: Plan): Promise<void> {
     });
     const state = r?.ok ? 'done' : r?.refusal === 'declined' ? 'declined' : 'failed';
     say(`plan ${plan.id}: the card "${ask.label}" - ${state}${r?.detail ? ` (${r.detail})` : ''}`);
+    /* approved: each certificate kept on its slot's Key Chain entry - in the bucket, for the plans' lookup and for recovery */
+    if (r?.ok) {
+      for (const k of keys) {
+        const kept = await keepCert(k).catch((e: unknown) => `not kept (${String((e as Error)?.message ?? e)})`);
+        say(`plan ${plan.id}: the certificate ${k.sha256.slice(0, 16)}… in the Key Chain: ${kept}`);
+      }
+    }
     await told({state, why: r?.ok ? '' : r?.refusal === 'declined' ? 'the owner declined it' : String(r?.detail ?? r?.refusal ?? 'no answer')});
   } catch (e) {
     say(`plan ${plan.id}: not run - ${String((e as Error)?.message ?? e)}`);

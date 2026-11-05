@@ -1334,7 +1334,9 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         if (!/^[0-9a-f]{64}$/i.test(String(args.identity || ''))) return { ok: false, why: 'apk-sign: the identity public key (64 hex)' };
         const server = String(args.server || 'local') === 'standin' ? `http://127.0.0.1:${STANDIN_PLAIN}` : String(args.server || 'local');
         const name = String(args.name || 'apk-sign dry run');
-        const common = ['--server', server, '--identity', String(args.identity), '--slot', String(args.slot || 2), '--card', `${name} card`, '--name', name,
+        /* the key named by its certificate - the agent never names a slot (the owner's device finds it: certKeys.ts) */
+        const certFile = String(args.cert || path.join(EDGE, 'signing/debug.crt.pem'));
+        const common = ['--server', server, '--identity', String(args.identity), '--cert', certFile, '--card', `${name} card`, '--name', name,
           '--key-file', path.join(os.tmpdir(), `apk-sign-${name.replace(/[^\w-]/g, '_')}.json`), '--minutes', String(args.minutes || 10)];
         const sign = path.join(EDGE, 'tools/release/apk-sign/sign.js');
         const card = await streamIn(EDGE, NODE, [sign, 'card', ...common], { timeout: 15 * 60000, ...shown('apk-sign') });
@@ -1345,7 +1347,7 @@ function createTargets(line = () => {}, out = () => {}, cmd = () => {}) {
         const apk = args.apk ? String(args.apk) : apks.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
         if (!apk) return { ok: false, why: 'apk-sign: no APK named and none built here (android/app/build/outputs/apk)' };
         const out = path.join(os.tmpdir(), `apk-sign-${Date.now()}.apk`);
-        const r = await streamIn(EDGE, NODE, [sign, apk, '--out', out, '--cert', String(args.cert || path.join(EDGE, 'signing/debug.crt.pem')), ...common], { timeout: 15 * 60000, ...shown('apk-sign') });
+        const r = await streamIn(EDGE, NODE, [sign, apk, '--out', out, ...common], { timeout: 15 * 60000, ...shown('apk-sign') });
         const tail = r.out.split(/\r?\n/).filter(Boolean).slice(-4).join(' | ');
         return r.ok ? { ok: true, what: tail } : { ok: false, why: `apk-sign: ${tail}` };
       }

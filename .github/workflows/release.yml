@@ -456,7 +456,7 @@ jobs:
           zipalign=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)zipalign
           "$zipalign" -c 4 "$out/app-release-unsigned.apk"
           node tools/release/apk-sign/sign.js "$out/app-release-unsigned.apk" --out "$out/app-release.apk" --cert signing/release.crt.pem \
-            --server "$OKEDGE_MCP" --identity "$OKEDGE_IDENTITY" --slot 3 --minutes 30
+            --server "$OKEDGE_MCP" --identity "$OKEDGE_IDENTITY" --minutes 30
           echo "signed by red-key's RSA3: $(node -p "new (require('crypto').X509Certificate)(require('fs').readFileSync('signing/release.crt.pem')).fingerprint256")" >> "$GITHUB_STEP_SUMMARY"
 
       # WHAT A RELEASE MUST NOT CARRY (ok-rn's tools/release-guards.js, the same three): the soft key's DEBUG console

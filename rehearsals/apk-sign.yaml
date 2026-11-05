@@ -5,14 +5,13 @@
 # certificate. Here the owner's side: accept the agent, approve its card (the drive presses the test key to certify it),
 # approve its plan's budget (one press). The test key's SLOT holds the debug keystore's key, so the certificate is the
 # debug one (signing/debug.crt.pem) - nothing new is made for a dry run.
-#   run.js rehearse --app desktop@box apk-sign [--env SERVER=standin] [--env SLOT=2]
+#   run.js rehearse --app desktop@box apk-sign [--env SERVER=standin]
 name: An APK signed by a key's RSA slot
 tags:
   - edge
   - signing
 env:
   SERVER: "local"
-  SLOT: "2"
 ---
 - runScript: scripts/require-test-key.js
 - login: {}
@@ -22,7 +21,7 @@ env:
 - tapOn:
     text: "Accept ${output.agentName}"
     timeout: 60
-# its card: the stored slot it may use - Approve, then the drive presses the test key to certify it
+# its card: the key its certificate names (the app finds the slot; the agent never does) - Approve, then the drive presses the test key to certify it
 - waitForTap:
     what: 'agent card'
     timeout: 120000
