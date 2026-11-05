@@ -15,6 +15,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {currentNet, edgeKey} from './net';
+import {setDriveFlag} from './drive/registry';
 
 /* top: the newest checkpoint and the links after it (lib certify.top) - beside the owner-signed part, rebuilt without a press */
 /* gate: the checkpoint's gate token (WARM_GATE firmware) - with it a top may have no head (a host that never held the chain) */
@@ -112,6 +113,18 @@ export function onCardOffer(l: (o: CardOffer) => void): () => void {
  * to make it. Runs once per login; nothing asked of the key until the person says Make it.
  */
 export async function afterLogin(identity: string, device: string): Promise<void> {
+  /*
+   * DECIDING, SAID TO A DRIVE (the Pixel, 2026-11-05: the card was offered 2 s after the login looked done - the drive had
+   * moved on, and the offer's sheet then covered the next flow's Approve): the login is not over until this is
+   */
+  setDriveFlag('card', 'deciding');
+  try {
+    await decideCard(identity, device);
+  } finally {
+    setDriveFlag('card', 'decided');
+  }
+}
+async function decideCard(identity: string, device: string): Promise<void> {
   if (await localCard(identity, device)) return;
   /* bounded: a server that never answers does not keep the offer away for good */
   await Promise.race([require('./serverRoom').afterFirstSync(), new Promise<void>(r => setTimeout(r, 60_000))]);
