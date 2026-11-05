@@ -57,7 +57,7 @@ function followCopy(): Promise<void> {
     do {
       followAgain = false;
       await syncAgentsCopy().catch((e: unknown) => {
-        console.log(`[mcp] the Edge copy did not follow the plan: ${String((e as Error)?.stack ?? e).split('\n').slice(0, 4).join(' | ')}`);
+        console.log(`[mcp] the Edge copy did not follow the plan: ${String((e as Error)?.stack ?? e).replace(/\(?\S*\/[^/\s]+:(\d+):(\d+)\)?/g, '$1:$2').split('\n').slice(0, 14).join(' | ')}`);
       });
     } while (followAgain);
     for (const l of [...movedListeners]) l();
