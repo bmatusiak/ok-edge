@@ -1,0 +1,22 @@
+# A FRESHLY FLASHED TEST KEY, SET UP AND LOGGED IN (box, 2026-11-04: blue-key flashed with patch 0019 for the signing
+# dry run on a hard key). A developer flash wipes the key: the gadget goes off (one OnlyKey on the USB), the app stops
+# (it holds the hard key's replies), the kit's 'initialized' state is typed through the key's debug console
+# (tools/box/hardkey-setup.js - PIN 1111111), then the app logs in on it. Test hex only.
+#   run.js rehearse --app desktop@box hardkey-setup
+name: A flashed test key set up
+tags:
+  - config
+---
+- machine:
+    action: use-key
+    target: webapp
+    args:
+      key: hard
+- runScript: scripts/require-test-key.js
+- stopApp
+- machine:
+    action: tool
+    target: firmware
+    args:
+      name: hardkey-setup.js
+- login: {}
