@@ -202,7 +202,15 @@ function runIn(cwd, cmd, args, timeout) {
  */
 /* which key the web app uses - switched at run time with useKey (run.js key use hard|gadget); DRIVE_WEBAPP_KEY sets the start */
 /* Windows has no gadget (a Linux USB gadget): its web app always uses the hard key on its USB */
-let KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' || !LINUX ? 'hard' : 'gadget';
+/*
+ * ...AND KEPT ACROSS A RESTART (2026-11-05: sync-to-box restarts this remote when the drive's code changes; the fresh one
+ * fell back to the gadget while blue-key was the key - a flow's unplugKey then stopped the gadget, and blue-key stayed
+ * in config mode): the last use-key is kept in ~/.onlykey-drive-key and read at the start
+ */
+const KEY_FILE = path.join(os.homedir(), '.onlykey-drive-key');
+const keptKey = (() => { try { return fs.readFileSync(KEY_FILE, 'utf8').trim(); } catch { return ''; } })();
+let KEY = process.env.DRIVE_WEBAPP_KEY === 'hard' || !LINUX || keptKey === 'hard' ? 'hard' : 'gadget';
+const keepKey = (k) => { try { fs.writeFileSync(KEY_FILE, k); } catch { /* not kept: the next start falls back to its default */ } };
 /* the site the box's keys carry (ctap_bridge's default) - where "Go to <site>" sends the web app */
 const KEY_SITE = process.env.DRIVE_KEY_SITE || 'ok-edge.bmatusiak.workers.dev';
 /* the web app's processes, by their command lines: its browser profile, its local Worker (wrangler dev, workerd) */
@@ -212,7 +220,7 @@ const GADGET_STORE = path.join(ROOT, 'webapp-softkey');
 const GADGET_SRC = path.join(os.homedir(), '.config/Electron-test/okemu/plugins-config.edge-test');
 const GADGET_SOCK = '/tmp/okemu-webapp.sock';
 let gadgetChild = null;
-let gadgetStopping = false;
+let gadgetStopping = KEY === 'hard';
 function gadgetElsewhere() {
   if (!LINUX) return [];
   return fs.readdirSync('/proc').filter((d) => /^\d+$/.test(d)).filter((d) => {
@@ -227,6 +235,7 @@ function gadgetElsewhere() {
 async function useKey(which, line, onOut) {
   if (which === 'hard') {
     KEY = 'hard';
+    keepKey(KEY);
     gadgetStopping = true;
     const r = [];
     if (gadgetChild && !exited(gadgetChild)) r.push(await stopChild(gadgetChild, line, 'gadget'));
@@ -238,6 +247,7 @@ async function useKey(which, line, onOut) {
   }
   if (which === 'gadget') {
     KEY = 'gadget';
+    keepKey(KEY);
     gadgetStopping = false;
     /* the gadget's console lines go to the same list (holdGadget): the hard key's are not mixed in */
     dropConsole();
