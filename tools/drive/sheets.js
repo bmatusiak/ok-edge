@@ -22,6 +22,8 @@
  *   no code            the key wants a 3-button code and no sheet shows it within NO_SHEET_MS (a hard key's; the soft
  *                      key's own buttons take its presses)
  *   sheet jumps        a sheet goes back to a height it just left (A -> B -> A) within JUMP_MS - a bar coming and going
+ *   press covered      the progress sheet opens while a press sheet shows - opened later, it lies on top, and the press
+ *                      asked under it cannot be given (Brad, 2026-11-05: "sheets that need actions are on top")
  * The lines it reads: "[request] press asked: <what> - code d d d|a press" and "[request] press done: <what> -
  * answered|no answer" (the truth), "[press] icon up|down" (src/ui/PressIcon.tsx - on every press sheet, nowhere else),
  * "[sheet] progress up|down" (KeyBusySheet), "[sheet] height N: <title>" (Sheet), "[timeline] <ms> begin|end #N <what>"
@@ -131,6 +133,11 @@ function createSheetInspector({ fail, event = () => {}, now = Date.now }) {
     if (/^\[press\] icon down/.test(l)) { icons = Math.max(0, icons - 1); if (!icons) afterAnswer = null; changed(); return; }
     let m = /^\[sheet\] progress up: ?(.*)$/.exec(l);
     if (m) {
+      /*
+       * OVER A PRESS SHEET (the Pixel, 2026-11-05: the login's bucket press - "Press the soft key" under "Working with your
+       * key", the press never given, the key's 18 s ran out): a sheet that opens later lies on top (each is its own window)
+       */
+      if (icons > 0) fail(`press covered: the progress sheet (${m[1].replace(/ - why: .*$/, '')}) opened while a press sheet was up - it lies on top of the press`);
       progress = true;
       /* "<step> - why: <tasks>" (KeyBusySheet): the step is what the other rules name; the tasks must be said */
       progressWhat = m[1].replace(/ - why: .*$/, '');

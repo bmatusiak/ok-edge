@@ -112,6 +112,16 @@ test('press sheet swapped: one press shows "Press your OnlyKey", takes it away, 
   assert.match(fails[0], /^press sheet swapped/);
 });
 
+test('press covered: the progress sheet opens while a press sheet shows - the Pixel login, "Press the soft key" under it', () => {
+  const { j, fails, say } = inspector();
+  const DERIVE = 'deriving a secret';
+  say(`[request] press asked: ${DERIVE} - a press`, '[press] icon up (embedded)',
+    `[sheet] progress up: ${DERIVE} - why: Logging in: opening your bucket`);
+  j.stop();
+  assert.equal(fails.length, 1);
+  assert.match(fails[0], /^press covered/);
+});
+
 test('one press, one sheet: no swap', () => {
   const { j, fails, say } = inspector();
   say(`[request] press asked: ${BUDGET} - a press`, '[press] icon up (usb)', `[request] press done: ${BUDGET} - answered`, '[press] icon down');

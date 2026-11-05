@@ -33,6 +33,39 @@ import {DriveLayer, DriveTap} from '../drive/registry';
 export type SheetTone = 'edge' | 'guestbook' | 'press' | 'neutral';
 
 const TONE_COLOR: Record<SheetTone, string | null> = {edge: theme.warn, guestbook: theme.accentHover, press: theme.error, neutral: null};
+/*
+ * SHEETS THAT NEED AN ACTION ARE ON TOP (Brad, 2026-11-05: "first thing is to z-index order the sheets, so sheets that need
+ * actions are on top"; the Pixel's login: the bucket's press sheet was up, "Working with your key" opened after it, and
+ * the press under it could not be given - the key's 18 s ran out). Every sheet is a Modal, and a Modal is its own window
+ * (on the web, its own layer at the end of the page): the one opened LAST is on top, whatever the order in the tree, so
+ * the order is kept by when each opens. Two layers:
+ *   action    every sheet that asks something of the person - a press, an approval, a choice, a dismiss (the default)
+ *   progress  "Working with your key" (KeyBusySheet): nothing to tap
+ * A progress sheet does not open while an action sheet is up - it waits, and opens when they have closed. Once open it
+ * stays where it is: an action sheet that opens after it lies on top by itself.
+ */
+export type SheetLayer = 'action' | 'progress';
+const actionsUp = new Set<number>();
+const layerListeners = new Set<() => void>();
+let sheetSeq = 0;
+function setActionUp(id: number, up: boolean): void {
+  const had = actionsUp.has(id);
+  if (up === had) return;
+  if (up) actionsUp.add(id); else actionsUp.delete(id);
+  for (const l of [...layerListeners]) l();
+}
+/* how many action sheets are up now */
+function useActionsUp(): number {
+  const [n, setN] = React.useState(actionsUp.size);
+  React.useEffect(() => {
+    const l = () => setN(actionsUp.size);
+    layerListeners.add(l);
+    l();
+    return () => { layerListeners.delete(l); };
+  }, []);
+  return n;
+}
+
 /* room left above a full-height sheet, under the status bar */
 const TOP_GAP = 24;
 
@@ -47,9 +80,15 @@ export function Sheet({
   flush = false,
   extraBottom = 0,
   countdown,
+  layer = 'action',
+  onShown,
   children,
 }: {
   visible?: boolean;
+  /* which layer it opens in (above): 'progress' only for the key's progress, which never covers an action sheet */
+  layer?: SheetLayer;
+  /* told when it really shows and goes - a progress sheet may wait under an action sheet (KeyBusySheet's log) */
+  onShown?: (shown: boolean) => void;
   tone?: SheetTone;
   title?: string;
   /* a title colour other than the tone's (the press sheet's TESTNET) */
@@ -85,7 +124,16 @@ export function Sheet({
   React.useEffect(() => require('../onlykey').onIdentityForgotten(() => setForgotten(true)), []);
   React.useEffect(() => { if (forgotten) onClose?.(); }, [forgotten]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => { if (!visible) setForgotten(false); }, [visible]);
-  const shown = visible && !forgotten;
+  const wanted = visible && !forgotten;
+  const id = React.useRef(0);
+  if (!id.current) id.current = ++sheetSeq;
+  const actions = useActionsUp();
+  const [up, setUp] = React.useState(false);
+  /* a progress sheet opens only with no action sheet up; once up, it stays until its owner hides it */
+  const shown = layer === 'action' ? wanted : wanted && (up || actions === 0);
+  React.useEffect(() => { setUp(shown); onShown?.(shown); }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { setActionUp(id.current, layer === 'action' && shown); }, [layer, shown]);
+  React.useEffect(() => { const mine = id.current; return () => setActionUp(mine, false); }, []);
   /*
    * A SHEET'S HEIGHT, SAID AS IT CHANGES (Brad, 2026-11-02: the progress sheet rose and fell as its time bar came and
    * went - "causing it to flicker"): the drive's sheet inspector fails a sheet that keeps changing size (tools/drive/sheets.js)

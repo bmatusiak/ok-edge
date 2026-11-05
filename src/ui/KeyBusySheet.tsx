@@ -29,7 +29,10 @@ export function KeyBusySheet() {
    * THE PROGRESS SHEET, SAID WHEN IT SHOWS AND GOES (Brad, 2026-11-02: "the rehearsals should be looking at this as a
    * fail"): the drive's sheet inspector (tools/drive/sheets.js) checks that requests running after a press have it
    */
-  const progressUp = !!b && !hostSheetShows(c, b) && !b.asks;
+  /* ...as it really shows: under an action sheet it waits to open (Sheet's layers), and "up" is said only once it opened */
+  const [sheetShown, setSheetShown] = useState(false);
+  useEffect(() => { if (!b || hostSheetShows(c, b)) setSheetShown(false); }, [b, c]);
+  const progressUp = !!b && !hostSheetShows(c, b) && !b.asks && sheetShown;
   const wasUp = React.useRef(false);
   useEffect(() => {
     if (progressUp === wasUp.current) return;
@@ -54,7 +57,9 @@ export function KeyBusySheet() {
   /* what the work is for, first (Brad, 2026-11-03: "why is it working with my key?") - every task running, when they overlap */
   const why = b.why.length === 1 ? b.why[0] : b.why.length > 1 ? `${b.why.length} things: ${b.why.join(' · ')}` : null;
   return (
-    <Sheet title={b.asks ? 'Press your OnlyKey' : 'Working with your key'} countdown={pressSince !== null ? {since: pressSince, seconds: 25}
+    <Sheet title={b.asks ? 'Press your OnlyKey' : 'Working with your key'}
+      /* its press (a hard key's) is an action; its progress is the layer under every action sheet (Sheet.tsx) */
+      layer={b.asks ? 'action' : 'progress'} onShown={setSheetShown} countdown={pressSince !== null ? {since: pressSince, seconds: 25}
       /* the request's own limit while it runs (Brad, 2026-11-01: the sheet sat "just inactive" while a read hung 30 s; "if it has a timer it gets a timer progress bar") */
       : !b.done && b.limitMs ? {since: b.since, seconds: Math.max(1, Math.round(b.limitMs / 1000))} : null}>
       {b.asks ? <PressIcon /> : null}
