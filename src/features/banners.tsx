@@ -67,10 +67,26 @@ export const testBuildBanner = bannerPlugin({
  * shows a banner like test build ... the banner will be called unofficial release"). A repackaged APK runs under someone
  * else's certificate; said in red on every screen, like the TEST BUILD banner (src/appSignature.ts).
  */
+/*
+ * ...AND PERMANENT (Brad, 2026-11-04: the app may carry the OnlyKey name with OnlyKey's permission only if it says
+ * unofficial release; 2026-11-05: "unofficial banner is a permanent banner and never goes away"): ok-edge is unofficial
+ * R&D, not an OnlyKey product - on every build, every platform, whoever signed it. Signed with our own release key is
+ * still unofficial; that signature is a different question (releaseKeyBanner below).
+ */
 export const unofficialBanner = bannerPlugin({
   name: 'unofficial', order: 30,
-  /* the desktop and the web app have no official signing at all (src/appSignature.ts): theirs says so plainly */
-  render: () => (appSignature.unofficial ? <Line color={theme.error}>{appSignature.sha256 ? 'UNOFFICIAL RELEASE - this app is not signed with the OnlyKey release key' : 'UNOFFICIAL RELEASE - not an official OnlyKey release'}</Line> : null),
+  render: () => <Line color={theme.error}>UNOFFICIAL RELEASE - not an official OnlyKey release</Line>,
+});
+
+/*
+ * NOT SIGNED WITH THE ok-edge RELEASE KEY (Brad, 2026-11-05: "if the apk is signed by debug keystore, it shows a
+ * banner"): the phone's APK checked against the pinned release certificate (red-key's RSA3, src/appSignature.ts) - the
+ * debug keystore's APK, or one someone repackaged, says so; the release APK does not. The desktop and the web app are
+ * not signed, so they never show it.
+ */
+export const releaseKeyBanner = bannerPlugin({
+  name: 'release key', order: 31,
+  render: () => (appSignature.notReleaseSigned ? <Line color={theme.error}>NOT RELEASE SIGNED - this app is not signed with the ok-edge release key</Line> : null),
 });
 
 /*
@@ -160,7 +176,7 @@ export const haltedBanner = bannerPlugin({
 });
 
 /* every platform's banners; the web app's list adds otherTabsBanner */
-export const commonBanners = [testBuildBanner, unofficialBanner, testnetBanner, testingBanner, configModeBanner, haltedBanner];
+export const commonBanners = [testBuildBanner, unofficialBanner, releaseKeyBanner, testnetBanner, testingBanner, configModeBanner, haltedBanner];
 
 const styles = StyleSheet.create({
   box: {
