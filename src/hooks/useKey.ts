@@ -208,9 +208,19 @@ export function useKey({
 
     void look();
     const timer = setInterval(look, POLL_MS);
+    /*
+     * ...AND AT THE PIPE'S OWN "disconnected" (box desktop, 2026-11-04: blue-key, restarted through its debug console, was
+     * off the USB for 2 s - between two looks, so no unplug was seen and its session and config mode stayed; red-key's
+     * sub-second idle-lockout restart was the same blind spot). The event looks at once, while the key is gone; the
+     * timer stays for a key that leaves with no word.
+     */
+    const offStatus = UsbPipe.on('status', event => {
+      if (event.state === 'disconnected') void look();
+    });
     return () => {
       alive = false;
       clearInterval(timer);
+      offStatus();
     };
   }, []);
 
