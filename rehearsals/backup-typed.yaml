@@ -1,0 +1,33 @@
+# THE TYPED BACKUP ON THE DESKTOP (Brad, 2026-11-04: "for prod keys, an input box for the key to type in the backup, then
+# an auto verify when a backup is pasted in, and a save button"; as the classic App 5.x's Backup panel). Settings ->
+# Backup/Restore: a good backup into the box -> "Verified"; a damaged one -> "Not a good backup"; half of one (no END
+# line) -> "Receiving", nothing checked yet. Save itself opens the person's own Save As - not pressed here.
+#   run.js rehearse --app desktop@box backup-typed --env GOOD=<file on the app's machine> --env BAD=<file> --env HALF=<file>
+name: The typed backup checked in its box
+tags:
+  - backup
+---
+- login: {}
+- goto: Settings
+- tapOn: "Open Backup/Restore"
+- inputFile:
+    field: "Backup data"
+    file: ${GOOD}
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "Verified: the backup's SHA-256 chain matches"
+- inputFile:
+    field: "Backup data"
+    file: ${BAD}
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "Not a good backup"
+- inputFile:
+    field: "Backup data"
+    file: ${HALF}
+- runScript:
+    file: scripts/screen-says.js
+    env:
+      WANT: "Receiving"
