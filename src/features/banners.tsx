@@ -86,7 +86,8 @@ export const unofficialBanner = bannerPlugin({
  */
 export const releaseKeyBanner = bannerPlugin({
   name: 'release key', order: 31,
-  render: () => (appSignature.notReleaseSigned ? <Line color={theme.error}>NOT RELEASE SIGNED - this app is not signed with the ok-edge release key</Line> : null),
+  /* Brad's words, 2026-11-05: "App Installed is Not From bmatusiak" - the release key's owner (the certificate's O) */
+  render: () => (appSignature.notReleaseSigned ? <Line color={theme.error}>App Installed is Not From bmatusiak</Line> : null),
 });
 
 /*
